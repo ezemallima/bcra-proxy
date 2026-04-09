@@ -2,6 +2,7 @@ from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 import requests
 import urllib3
+import os
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -11,6 +12,10 @@ CORS(app)
 @app.route("/")
 def index():
     return send_from_directory('static', 'index.html')
+
+@app.route("/whatsapp_index.json")
+def wsp_index():
+    return send_from_directory(os.getcwd(), 'whatsapp_index.json')
 
 @app.route("/deudas/<cuit>")
 def get_deudas(cuit):
