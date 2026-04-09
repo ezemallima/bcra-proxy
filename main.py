@@ -118,7 +118,17 @@ def procesar_veraz():
     try:
         body = request.get_json(force=True)
         pdf_base64 = body.get('pdf', '')
-        prompt = 'Extraé los datos de este informe Veraz/Equifax y respondé SOLO en JSON sin markdown ni texto adicional: {"nombre":"","cuit":"","score":0,"situacion_bcra":"","cheques_rechazados":0,"monto_cheques":"","saldo_vencido":"","deuda_sistema_financiero":"","maximo_atraso":"","entidades_problema":[],"resumen":"","socios_directores":[{"nombre":"","cuit_dni":"","cargo":"","score":0,"situacion":""}]}. El campo socios_directores debe incluir todos los socios, directores o representantes legales que aparezcan en el informe con su score e información crediticia individual. Si no hay socios informados dejar array vacío.'
+        prompt = (
+            'Extraé los datos de este informe Veraz/Equifax. '
+            'Respondé SOLO con un objeto JSON válido, sin markdown, sin texto adicional. '
+            'Estructura exacta: '
+            '{"nombre":"","cuit":"","score":0,"situacion_bcra":"","cheques_rechazados":0,'
+            '"monto_cheques":"","saldo_vencido":"","deuda_sistema_financiero":"",'
+            '"maximo_atraso":"","entidades_problema":[],"resumen":"",'
+            '"socios_directores":[{"nombre":"","cuit_dni":"","cargo":"","score":0,"situacion":""}]} '
+            'El array socios_directores debe incluir todos los socios, directores o representantes '
+            'legales con su informacion crediticia. Si no hay, dejar array vacio [].'
+        )
         payload = {"contents": [{"parts": [
             {"inline_data": {"mime_type": "application/pdf", "data": pdf_base64}},
             {"text": prompt}
