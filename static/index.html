@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Piattelli Créditos</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f0; color: #1a1a1a; font-size: 15px; }
+  .topbar { background: #fff; border-bottom: 1px solid #e0e0d8; padding: 0 1.5rem; display: flex; align-items: center; justify-content: space-between; height: 52px; position: sticky; top: 0; z-index: 10; }
+  .logo { font-size: 16px; font-weight: 600; color: #1a1a1a; }
+  .logo span { color: #9b2020; }
+  .proxy-status { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #888; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #ccc; flex-shrink: 0; }
+  .dot.online { background: #22c55e; }
+  .dot.offline { background: #ef4444; }
+  .container { max-width: 860px; margin: 0 auto; padding: 1.5rem 1rem; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 1.5rem; background: #fff; border: 1px solid #e0e0d8; border-radius: 10px; padding: 4px; }
+  .tab { flex: 1; padding: 8px; font-size: 13px; border: none; border-radius: 7px; cursor: pointer; background: transparent; color: #666; font-weight: 500; transition: all 0.15s; }
+  .tab.active { background: #9b2020; color: #fff; }
+  .section { display: none; }
+  .section.active { display: block; }
+  .card { background: #fff; border: 1px solid #e0e0d8; border-radius: 12px; padding: 1.25rem; margin-bottom: 1rem; }
+  .card-title { font-size: 12px; color: #888; margin-bottom: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .input-row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  input, select, textarea { font-family: inherit; font-size: 14px; padding: 9px 12px; border: 1px solid #e0e0d8; border-radius: 8px; background: #fff; color: #1a1a1a; outline: none; transition: border-color 0.15s; }
+  input:focus, select:focus, textarea:focus { border-color: #9b2020; }
+  input { flex: 1; min-width: 120px; }
+  textarea { width: 100%; resize: vertical; }
+  button { font-family: inherit; font-size: 14px; padding: 9px 18px; border: 1px solid #e0e0d8; border-radius: 8px; background: #fff; color: #1a1a1a; cursor: pointer; font-weight: 500; transition: all 0.15s; white-space: nowrap; }
+  button:hover { background: #f5f5f0; }
+  button.primary { background: #9b2020; color: #fff; border-color: #9b2020; }
+  button.primary:hover { background: #7d1a1a; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .badge { display: inline-block; font-size: 11px; padding: 3px 10px; border-radius: 6px; font-weight: 600; }
+  .badge-success { background: #dcfce7; color: #166534; }
+  .badge-warning { background: #fef9c3; color: #854d0e; }
+  .badge-danger { background: #fee2e2; color: #991b1b; }
+  .verdict-box { border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1rem; border: 1px solid; }
+  .verdict-box.aprobar { background: #f0fdf4; border-color: #86efac; }
+  .verdict-box.revisar { background: #fefce8; border-color: #fde047; }
+  .verdict-box.rechazar { background: #fff1f2; border-color: #fca5a5; }
+  .verdict-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .verdict-title.aprobar { color: #166534; }
+  .verdict-title.revisar { color: #854d0e; }
+  .verdict-title.rechazar { color: #991b1b; }
+  .verdict-detail { font-size: 13px; color: #555; line-height: 1.6; }
+  .bcra-table { width: 100%; font-size: 13px; border-collapse: collapse; }
+  .bcra-table th { text-align: left; padding: 7px 10px; color: #888; border-bottom: 1px solid #f0f0e8; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px; }
+  .bcra-table td { padding: 8px 10px; border-bottom: 1px solid #f0f0e8; }
+  .bcra-table tr:last-child td { border-bottom: none; }
+  .sit-1 { color: #166534; font-weight: 600; }
+  .sit-2 { color: #854d0e; font-weight: 600; }
+  .sit-3, .sit-4, .sit-5, .sit-6 { color: #991b1b; font-weight: 600; }
+  .client-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 1rem; background: #fff; border: 1px solid #e0e0d8; border-radius: 10px; margin-bottom: 6px; gap: 8px; flex-wrap: wrap; }
+  .client-name { font-size: 14px; font-weight: 600; }
+  .client-meta { font-size: 12px; color: #888; margin-top: 2px; }
+  .client-right { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .alert-card { border-left: 3px solid #ef4444; border-radius: 0 10px 10px 0; background: #fff; border-top: 1px solid #e0e0d8; border-right: 1px solid #e0e0d8; border-bottom: 1px solid #e0e0d8; padding: 1rem 1.25rem; margin-bottom: 8px; }
+  .empty-state { text-align: center; padding: 2.5rem; color: #aaa; font-size: 13px; line-height: 1.8; }
+  .loading-msg { text-align: center; padding: 2rem; color: #888; font-size: 13px; }
+  .progress-msg { font-size: 12px; color: #888; margin-top: 8px; min-height: 18px; }
+  .avatar { width: 44px; height: 44px; border-radius: 50%; background: #f0e8e8; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 16px; color: #9b2020; flex-shrink: 0; }
+  .field-label { font-size: 12px; color: #888; margin-bottom: 4px; font-weight: 500; }
+  .field-group { margin-bottom: 12px; }
+  .hint { font-size: 12px; color: #aaa; margin-top: 6px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">Piattelli <span>Créditos</span></div>
+  <div class="proxy-status">
+    <div class="dot" id="proxy-dot"></div>
+    <span id="proxy-label">Conectando con BCRA...</span>
+  </div>
+</div>
+
+<div class="container">
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('consulta', this)">Consultar cliente</button>
+    <button class="tab" onclick="switchTab('cartera', this)">Cartera activa</button>
+    <button class="tab" onclick="switchTab('alertas', this)">Alertas</button>
+  </div>
+
+  <div id="consulta" class="section active">
+    <div class="card">
+      <div class="card-title">Consulta por CUIT</div>
+      <div class="input-row">
+        <input type="text" id="cuit-input" placeholder="Ej: 20-21310600-8" maxlength="13" onkeydown="if(event.key==='Enter') consultarCliente()" />
+        <button class="primary" onclick="consultarCliente()">Consultar BCRA →</button>
+      </div>
+      <div class="hint">Los datos se consultan en tiempo real desde el BCRA, sin costo.</div>
+    </div>
+
+    <div id="loading-state" class="loading-msg" style="display:none;">Consultando BCRA...</div>
+
+    <div id="resultado" style="display:none;">
+      <div id="cliente-header" class="card" style="margin-bottom:8px;"></div>
+      <div id="verdict-container"></div>
+
+      <div class="card">
+        <div class="card-title">Situación en el sistema financiero (BCRA)</div>
+        <div id="bcra-data"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Datos adicionales para análisis completo</div>
+        <div class="field-group">
+          <div class="field-label">Score Veraz (si lo tenés disponible)</div>
+          <div style="display:flex;gap:8px;">
+            <input type="number" id="score-veraz" placeholder="1 a 9" min="1" max="9" style="width:90px;flex:none;" />
+            <select id="cheques" style="flex:1;">
+              <option value="">Cheques rechazados...</option>
+              <option value="no">Sin cheques rechazados</option>
+              <option value="si">Tiene cheques rechazados</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-group">
+          <div class="field-label">Info del grupo de bodegas (WhatsApp)</div>
+          <textarea id="wsp-info" rows="3" placeholder="Pegá acá los mensajes relevantes del grupo sobre este cliente..."></textarea>
+        </div>
+        <div class="field-group">
+          <div class="field-label">Historial con Piattelli</div>
+          <textarea id="piattelli-info" rows="2" placeholder="Ej: Cliente desde 2018, siempre pagó a 30 días. / Deuda incobrable $12M desde julio 2025."></textarea>
+        </div>
+        <div id="analisis-resultado" style="display:none;" class="card" style="margin-top:12px;background:#f9f9f7;"></div>
+        <button class="primary" onclick="analizarCliente()" id="btn-analizar" style="width:100%;margin-top:4px;">Analizar riesgo crediticio →</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="cartera" class="section">
+    <div class="card">
+      <div class="card-title">Agregar cliente a seguimiento</div>
+      <div class="input-row">
+        <input type="text" id="nuevo-cuit" placeholder="CUIT (sin guiones)" style="max-width:180px;" />
+        <input type="text" id="nuevo-nombre" placeholder="Razón social" style="flex:2;" />
+        <button onclick="agregarCliente()">Agregar</button>
+      </div>
+    </div>
+    <div id="lista-clientes">
+      <div class="empty-state">No hay clientes en seguimiento.<br>Agregá un CUIT para empezar.</div>
+    </div>
+  </div>
+
+  <div id="alertas" class="section">
+    <div class="card">
+      <div class="card-title">Monitoreo automático BCRA</div>
+      <p style="font-size:13px;color:#666;line-height:1.6;margin-bottom:12px;">
+        Compara la situación BCRA actual de cada cliente con el último registro guardado. Si alguien empeoró su situación, aparece una alerta.
+      </p>
+      <button class="primary" onclick="verificarTodos()" id="btn-verificar" style="width:100%;">Verificar toda la cartera →</button>
+      <div class="progress-msg" id="verificar-progress"></div>
+    </div>
+    <div id="alertas-lista">
+      <div class="empty-state">No hay alertas activas.<br>Agregá clientes a la cartera y ejecutá la verificación.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const PROXY = '';
+
+let cartera = JSON.parse(localStorage.getItem('piat_cartera') || '[]');
+let situaciones = JSON.parse(localStorage.getItem('piat_situaciones') || '{}');
+let alertas = JSON.parse(localStorage.getItem('piat_alertas') || '[]');
+
+async function checkProxy() {
+  try {
+    const r = await fetch('/health', {signal: AbortSignal.timeout(8000)});
+    if (r.ok) {
+      document.getElementById('proxy-dot').classList.add('online');
+      document.getElementById('proxy-label').textContent = 'BCRA conectado';
+    } else throw new Error();
+  } catch {
+    document.getElementById('proxy-dot').classList.add('offline');
+    document.getElementById('proxy-label').textContent = 'Sin conexión al BCRA';
+  }
+}
+checkProxy();
+
+function switchTab(tab, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById(tab).classList.add('active');
+  if (tab === 'cartera') renderCartera();
+  if (tab === 'alertas') renderAlertas();
+}
+
+async function consultarCliente() {
+  const raw = document.getElementById('cuit-input').value.replace(/-/g,'').trim();
+  if (!raw || raw.length < 10) { alert('Ingresá un CUIT válido'); return; }
+  document.getElementById('resultado').style.display = 'none';
+  document.getElementById('loading-state').style.display = 'block';
+  document.getElementById('analisis-resultado').style.display = 'none';
+  try {
+    const r = await fetch(`/deudas/${raw}`, {signal: AbortSignal.timeout(20000)});
+    const data = await r.json();
+    document.getElementById('loading-state').style.display = 'none';
+    document.getElementById('resultado').style.display = 'block';
+    mostrarResultado(raw, data);
+  } catch(e) {
+    document.getElementById('loading-state').style.display = 'none';
+    document.getElementById('resultado').style.display = 'block';
+    document.getElementById('cliente-header').innerHTML = `<p style="color:#888;font-size:13px;">Error al conectar. El servidor puede estar iniciando — esperá 30 segundos e intentá de nuevo.</p>`;
+    document.getElementById('verdict-container').innerHTML = '';
+    document.getElementById('bcra-data').innerHTML = '';
+  }
+}
+
+function mostrarResultado(cuit, data) {
+  const res = data?.results;
+  const entidades = res?.periodos?.[0]?.entidades || [];
+  const nombre = res?.denominacion || 'Sin denominación';
+  const maxSit = entidades.length ? entidades.reduce((m,e) => Math.max(m, e.situacion||1), 1) : 1;
+
+  document.getElementById('cliente-header').innerHTML = `
+    <div style="display:flex;align-items:center;gap:14px;">
+      <div class="avatar">${nombre.charAt(0)}</div>
+      <div style="flex:1;">
+        <div style="font-size:16px;font-weight:600;">${nombre}</div>
+        <div style="font-size:12px;color:#888;margin-top:2px;">CUIT: ${cuit}</div>
+      </div>
+      ${getBadge(maxSit)}
+    </div>`;
+
+  let verdict = '';
+  if (maxSit === 1) {
+    verdict = `<div class="verdict-box aprobar"><div class="verdict-title aprobar">✓ Situación normal en BCRA</div><div class="verdict-detail">El cliente está en situación 1 en el sistema financiero. Sin alertas de riesgo en BCRA. Completá los datos adicionales para un análisis más completo.</div></div>`;
+  } else if (maxSit === 2) {
+    verdict = `<div class="verdict-box revisar"><div class="verdict-title revisar">⚠ Revisar — Seguimiento especial</div><div class="verdict-detail">El cliente presenta situación 2 en al menos una entidad financiera. Se recomienda solicitar el informe Veraz completo antes de otorgar crédito.</div></div>`;
+  } else {
+    verdict = `<div class="verdict-box rechazar"><div class="verdict-title rechazar">✗ Alerta — Situación crítica en BCRA</div><div class="verdict-detail">El cliente figura en situación ${maxSit} (${sitNombre(maxSit)}) en el sistema financiero. Alto riesgo crediticio según los criterios de Piattelli.</div></div>`;
+  }
+  document.getElementById('verdict-container').innerHTML = verdict;
+
+  if (!entidades.length) {
+    document.getElementById('bcra-data').innerHTML = `<div class="empty-state">Sin deudas registradas en el BCRA para este CUIT.</div>`;
+  } else {
+    let t = `<table class="bcra-table"><thead><tr><th>Entidad</th><th>Monto</th><th>Situación</th><th>Días atraso</th></tr></thead><tbody>`;
+    entidades.forEach(e => {
+      t += `<tr><td>${e.entidad||'-'}</td><td>$${(e.monto||0).toLocaleString('es-AR')}</td><td class="sit-${e.situacion}">${e.situacion} — ${sitNombre(e.situacion)}</td><td>${e.diasAtrasoPago||0}</td></tr>`;
+    });
+    t += `</tbody></table>`;
+    document.getElementById('bcra-data').innerHTML = t;
+  }
+}
+
+function getBadge(s) {
+  if (s===1) return `<span class="badge badge-success">Sit. 1 — Normal</span>`;
+  if (s===2) return `<span class="badge badge-warning">Sit. 2 — Seguimiento</span>`;
+  return `<span class="badge badge-danger">Sit. ${s} — Crítico</span>`;
+}
+
+function sitNombre(s) {
+  return {1:'Normal',2:'Seguimiento especial',3:'Con problemas',4:'Alto riesgo de insolvencia',5:'Irrecuperable',6:'Irrecuperable'}[s]||'-';
+}
+
+async function analizarCliente() {
+  const cuit = document.getElementById('cuit-input').value.trim();
+  const score = document.getElementById('score-veraz').value;
+  const cheques = document.getElementById('cheques').value;
+  const wsp = document.getElementById('wsp-info').value;
+  const piat = document.getElementById('piattelli-info').value;
+  const bcra = document.getElementById('bcra-data').innerText;
+
+  const btn = document.getElementById('btn-analizar');
+  const res = document.getElementById('analisis-resultado');
+  btn.disabled = true;
+  btn.textContent = 'Analizando...';
+  res.style.display = 'none';
+
+  let prompt = `Sos un analista de riesgo crediticio para Bodega Piattelli. Analizá este cliente y dá un veredicto claro: APROBAR, REVISAR o RECHAZAR.\n\nCUIT: ${cuit}\n`;
+  if (score) prompt += `Score Veraz: ${score}/9\n`;
+  if (cheques) prompt += `Cheques rechazados: ${cheques==='si'?'SÍ tiene cheques rechazados':'Sin cheques rechazados'}\n`;
+  if (bcra) prompt += `\nDatos BCRA:\n${bcra}\n`;
+  if (wsp) prompt += `\nInfo grupo de bodegas:\n${wsp}\n`;
+  if (piat) prompt += `\nHistorial con Piattelli:\n${piat}\n`;
+  prompt += `\nCriterios de Piattelli: score Veraz alto, sin cheques rechazados, sin deudas informadas por otras empresas, situación 1 en BCRA.\n\nDá el veredicto con los motivos principales en 3-4 líneas.`;
+
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    const data = await r.json();
+    const texto = data?.content?.[0]?.text || 'No se pudo obtener el análisis.';
+    res.style.display = 'block';
+    res.innerHTML = `<div style="font-size:13px;line-height:1.7;white-space:pre-wrap;color:#333;">${texto}</div>`;
+  } catch(e) {
+    res.style.display = 'block';
+    res.innerHTML = `<div style="font-size:13px;color:#888;">No se pudo conectar con el motor de análisis.</div>`;
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Analizar riesgo crediticio →';
+}
+
+function agregarCliente() {
+  const cuit = document.getElementById('nuevo-cuit').value.replace(/-/g,'').trim();
+  const nombre = document.getElementById('nuevo-nombre').value.trim();
+  if (!cuit || !nombre) { alert('Completá CUIT y razón social'); return; }
+  if (cartera.find(c=>c.cuit===cuit)) { alert('Este cliente ya está en la cartera'); return; }
+  cartera.push({cuit, nombre, fechaAlta: new Date().toLocaleDateString('es-AR'), ultimaSit: null, ultimaVerif: null});
+  localStorage.setItem('piat_cartera', JSON.stringify(cartera));
+  document.getElementById('nuevo-cuit').value = '';
+  document.getElementById('nuevo-nombre').value = '';
+  renderCartera();
+}
+
+function eliminarCliente(i) {
+  if (!confirm('¿Eliminar este cliente del seguimiento?')) return;
+  cartera.splice(i,1);
+  localStorage.setItem('piat_cartera', JSON.stringify(cartera));
+  renderCartera();
+}
+
+function renderCartera() {
+  const el = document.getElementById('lista-clientes');
+  if (!cartera.length) {
+    el.innerHTML = `<div class="empty-state">No hay clientes en seguimiento.<br>Agregá un CUIT para empezar.</div>`;
+    return;
+  }
+  el.innerHTML = cartera.map((c,i) => `
+    <div class="client-row">
+      <div>
+        <div class="client-name">${c.nombre}</div>
+        <div class="client-meta">CUIT: ${c.cuit} · Alta: ${c.fechaAlta}${c.ultimaVerif ? ` · Verificado: ${c.ultimaVerif}` : ''}</div>
+      </div>
+      <div class="client-right">
+        ${c.ultimaSit ? getBadge(c.ultimaSit) : `<span style="font-size:11px;color:#aaa;">Sin verificar</span>`}
+        <button onclick="verCliente('${c.cuit}')" style="font-size:12px;padding:5px 12px;">Ver BCRA</button>
+        <button onclick="eliminarCliente(${i})" style="font-size:12px;padding:5px 10px;color:#991b1b;">×</button>
+      </div>
+    </div>`).join('');
+}
+
+function verCliente(cuit) {
+  document.querySelectorAll('.tab')[0].click();
+  document.getElementById('cuit-input').value = cuit;
+  consultarCliente();
+}
+
+async function verificarTodos() {
+  if (!cartera.length) { alert('No hay clientes en la cartera'); return; }
+  const btn = document.getElementById('btn-verificar');
+  const prog = document.getElementById('verificar-progress');
+  btn.disabled = true;
+  const nuevasAlertas = [];
+
+  for (let i=0; i<cartera.length; i++) {
+    const c = cartera[i];
+    prog.textContent = `Verificando ${i+1}/${cartera.length}: ${c.nombre}...`;
+    try {
+      const r = await fetch(`/deudas/${c.cuit}`, {signal: AbortSignal.timeout(20000)});
+      const data = await r.json();
+      const entidades = data?.results?.periodos?.[0]?.entidades || [];
+      const maxSit = entidades.length ? entidades.reduce((m,e)=>Math.max(m,e.situacion||1),1) : 1;
+      const sitAnterior = situaciones[c.cuit] || c.ultimaSit || 1;
+      if (maxSit > sitAnterior) {
+        nuevasAlertas.push({nombre:c.nombre, cuit:c.cuit, sitAnterior, sitActual:maxSit, fecha:new Date().toLocaleDateString('es-AR')});
+      }
+      situaciones[c.cuit] = maxSit;
+      cartera[i].ultimaSit = maxSit;
+      cartera[i].ultimaVerif = new Date().toLocaleDateString('es-AR');
+    } catch(e) {}
+    await new Promise(r=>setTimeout(r,600));
+  }
+
+  localStorage.setItem('piat_situaciones', JSON.stringify(situaciones));
+  localStorage.setItem('piat_cartera', JSON.stringify(cartera));
+  alertas = [...nuevasAlertas, ...alertas].slice(0, 30);
+  localStorage.setItem('piat_alertas', JSON.stringify(alertas));
+  btn.disabled = false;
+
+  if (nuevasAlertas.length === 0) {
+    prog.textContent = `✓ Verificación completada. Sin cambios en la cartera.`;
+  } else {
+    prog.textContent = `⚠ Verificación completada. ${nuevasAlertas.length} cliente(s) con cambios.`;
+  }
+  renderAlertas();
+}
+
+function renderAlertas() {
+  const el = document.getElementById('alertas-lista');
+  if (!alertas.length) {
+    el.innerHTML = `<div class="empty-state">No hay alertas activas.<br>Ejecutá la verificación para monitorear la cartera.</div>`;
+    return;
+  }
+  el.innerHTML = alertas.map(a => `
+    <div class="alert-card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+        <div>
+          <div style="font-size:14px;font-weight:600;">${a.nombre}</div>
+          <div style="font-size:12px;color:#888;margin-top:2px;">CUIT: ${a.cuit} · ${a.fecha}</div>
+          <div style="font-size:13px;margin-top:8px;color:#991b1b;font-weight:500;">
+            Situación BCRA cambió: ${a.sitAnterior} → ${a.sitActual} (${sitNombre(a.sitActual)})
+          </div>
+        </div>
+        <span class="badge badge-danger" style="flex-shrink:0;">Alerta</span>
+      </div>
+    </div>`).join('');
+}
+</script>
+</body>
+</html>
+
+from flask import Flask, jsonify, send_from_directory
+from flask_cors import CORS
+import requests
+import urllib3
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+app = Flask(__name__, static_folder='static')
+CORS(app)
+
+@app.route("/")
+def index():
+    return send_from_directory('static', 'index.html')
+
+BCRA_BASE = "https://api.bcra.gob.ar/centraldedeudores/v1.0"
+
+@app.route("/deudas/<cuit>")
+def get_deudas(cuit):
+    try:
+        r = requests.get(f"{BCRA_BASE}/Deudas/{cuit}", timeout=10, verify=False)
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/deudas/<cuit>/historial")
+def get_historial(cuit):
+    try:
+        r = requests.get(f"{BCRA_BASE}/Deudas/{cuit}/Historial", timeout=10, verify=False)
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/health")
+def health():
+    return jsonify({"status": "ok"})
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8080)
