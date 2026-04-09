@@ -746,6 +746,31 @@ function renderAlertas() {
   }).join('');
 }
 
+async function consultarBCRA(cuit) {
+  // Intento 1: directo desde el navegador
+  try {
+    const r = await fetch(`https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/${cuit}`, {
+      signal: AbortSignal.timeout(12000)
+    });
+    if (r.ok) return await r.json();
+  } catch(e) {}
+  // Intento 2: via proxy del servidor
+  try {
+    const r = await fetch(`/deudas/${cuit}`, {signal: AbortSignal.timeout(20000)});
+    return await r.json();
+  } catch(e) {}
+  return null;
+}
+
+async function obtenerNombre(cuit) {
+  try {
+    const r = await fetch(`/afip/${cuit}`, {signal: AbortSignal.timeout(8000)});
+    const data = await r.json();
+    if (data.nombre && !data.error) return data.nombre;
+  } catch(e) {}
+  return '';
+}
+
 init();
 </script>
 </body>
