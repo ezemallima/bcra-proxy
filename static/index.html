@@ -36,6 +36,7 @@
   .badge-success { background: #dcfce7; color: #166534; }
   .badge-warning { background: #fef9c3; color: #854d0e; }
   .badge-danger { background: #fee2e2; color: #991b1b; }
+  .badge-wsp { background: #dcfce7; color: #166534; }
   .verdict-box { border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1rem; border: 1px solid; }
   .verdict-box.aprobar { background: #f0fdf4; border-color: #86efac; }
   .verdict-box.revisar { background: #fefce8; border-color: #fde047; }
@@ -64,15 +65,27 @@
   .field-label { font-size: 12px; color: #888; margin-bottom: 4px; font-weight: 500; }
   .field-group { margin-bottom: 12px; }
   .hint { font-size: 12px; color: #aaa; margin-top: 6px; }
+  .wsp-section { border-top: 1px solid #e0e0d8; padding-top: 12px; margin-top: 4px; }
+  .wsp-thread { border-left: 3px solid #25d366; padding: 8px 12px; margin-bottom: 8px; background: #f0fdf4; border-radius: 0 8px 8px 0; }
+  .wsp-thread-fecha { font-size: 11px; color: #888; margin-bottom: 6px; font-weight: 600; }
+  .wsp-msg { font-size: 13px; color: #333; margin-bottom: 3px; line-height: 1.5; }
+  .wsp-autor { font-weight: 600; color: #166534; }
+  .wsp-no-data { font-size: 13px; color: #aaa; padding: 8px 0; }
 </style>
 </head>
 <body>
 
 <div class="topbar">
   <div class="logo">Piattelli <span>Créditos</span></div>
-  <div class="proxy-status">
-    <div class="dot" id="proxy-dot"></div>
-    <span id="proxy-label">Conectando con BCRA...</span>
+  <div style="display:flex;align-items:center;gap:16px;">
+    <div class="proxy-status">
+      <div class="dot" id="wsp-dot" style="background:#25d366;"></div>
+      <span id="wsp-label">Cargando datos bodegas...</span>
+    </div>
+    <div class="proxy-status">
+      <div class="dot" id="proxy-dot"></div>
+      <span id="proxy-label">Conectando BCRA...</span>
+    </div>
   </div>
 </div>
 
@@ -90,7 +103,7 @@
         <input type="text" id="cuit-input" placeholder="Ej: 20-21310600-8" maxlength="13" onkeydown="if(event.key==='Enter') consultarCliente()" />
         <button class="primary" onclick="consultarCliente()">Consultar BCRA →</button>
       </div>
-      <div class="hint">Los datos se consultan en tiempo real desde el BCRA, sin costo.</div>
+      <div class="hint">Datos en tiempo real del BCRA + historial del grupo de bodegas.</div>
     </div>
 
     <div id="loading-state" class="loading-msg" style="display:none;">Consultando BCRA...</div>
@@ -105,9 +118,14 @@
       </div>
 
       <div class="card">
-        <div class="card-title">Datos adicionales para análisis completo</div>
+        <div class="card-title">Historial en grupo de bodegas</div>
+        <div id="wsp-data"><div class="wsp-no-data">Cargando datos del grupo...</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Datos adicionales</div>
         <div class="field-group">
-          <div class="field-label">Score Veraz (si lo tenés disponible)</div>
+          <div class="field-label">Score Veraz (opcional)</div>
           <div style="display:flex;gap:8px;">
             <input type="number" id="score-veraz" placeholder="1 a 9" min="1" max="9" style="width:90px;flex:none;" />
             <select id="cheques" style="flex:1;">
@@ -118,15 +136,11 @@
           </div>
         </div>
         <div class="field-group">
-          <div class="field-label">Info del grupo de bodegas (WhatsApp)</div>
-          <textarea id="wsp-info" rows="3" placeholder="Pegá acá los mensajes relevantes del grupo sobre este cliente..."></textarea>
-        </div>
-        <div class="field-group">
           <div class="field-label">Historial con Piattelli</div>
           <textarea id="piattelli-info" rows="2" placeholder="Ej: Cliente desde 2018, siempre pagó a 30 días. / Deuda incobrable $12M desde julio 2025."></textarea>
         </div>
-        <div id="analisis-resultado" style="display:none;" class="card" style="margin-top:12px;background:#f9f9f7;"></div>
-        <button class="primary" onclick="analizarCliente()" id="btn-analizar" style="width:100%;margin-top:4px;">Analizar riesgo crediticio →</button>
+        <div id="analisis-resultado" style="display:none;margin-bottom:12px;padding:12px;background:#f9f9f7;border-radius:8px;border:1px solid #e0e0d8;"></div>
+        <button class="primary" onclick="analizarCliente()" id="btn-analizar" style="width:100%;">Analizar riesgo crediticio →</button>
       </div>
     </div>
   </div>
@@ -149,7 +163,7 @@
     <div class="card">
       <div class="card-title">Monitoreo automático BCRA</div>
       <p style="font-size:13px;color:#666;line-height:1.6;margin-bottom:12px;">
-        Compara la situación BCRA actual de cada cliente con el último registro guardado. Si alguien empeoró su situación, aparece una alerta.
+        Compara la situación BCRA actual de cada cliente con el último registro. Si alguien empeoró su situación, aparece una alerta.
       </p>
       <button class="primary" onclick="verificarTodos()" id="btn-verificar" style="width:100%;">Verificar toda la cartera →</button>
       <div class="progress-msg" id="verificar-progress"></div>
@@ -161,11 +175,15 @@
 </div>
 
 <script>
-const PROXY = '';
-
+let wspIndex = null;
 let cartera = JSON.parse(localStorage.getItem('piat_cartera') || '[]');
 let situaciones = JSON.parse(localStorage.getItem('piat_situaciones') || '{}');
 let alertas = JSON.parse(localStorage.getItem('piat_alertas') || '[]');
+
+async function init() {
+  checkProxy();
+  await cargarWSP();
+}
 
 async function checkProxy() {
   try {
@@ -176,10 +194,47 @@ async function checkProxy() {
     } else throw new Error();
   } catch {
     document.getElementById('proxy-dot').classList.add('offline');
-    document.getElementById('proxy-label').textContent = 'Sin conexión al BCRA';
+    document.getElementById('proxy-label').textContent = 'BCRA sin conexión';
   }
 }
-checkProxy();
+
+async function cargarWSP() {
+  try {
+    const r = await fetch('/whatsapp_index.json');
+    wspIndex = await r.json();
+    const total = Object.keys(wspIndex).length;
+    document.getElementById('wsp-dot').style.background = '#25d366';
+    document.getElementById('wsp-label').textContent = `Bodegas: ${total} clientes indexados`;
+  } catch(e) {
+    document.getElementById('wsp-dot').style.background = '#ef4444';
+    document.getElementById('wsp-label').textContent = 'Datos bodegas no disponibles';
+  }
+}
+
+function buscarEnWSP(cuit) {
+  if (!wspIndex) return null;
+  const cuitClean = cuit.replace(/-/g, '');
+  return wspIndex[cuitClean] || null;
+}
+
+function mostrarWSP(cuit) {
+  const el = document.getElementById('wsp-data');
+  const threads = buscarEnWSP(cuit);
+  if (!threads || threads.length === 0) {
+    el.innerHTML = `<div class="wsp-no-data">Este cliente no aparece en el historial del grupo de bodegas.</div>`;
+    return;
+  }
+  let html = `<div style="margin-bottom:8px;"><span class="badge badge-wsp">${threads.length} mención(es) en el grupo</span></div>`;
+  threads.forEach(thread => {
+    html += `<div class="wsp-thread">`;
+    html += `<div class="wsp-thread-fecha">${thread.fecha} — CUIT mencionado: ${thread.cuit_mencionado}</div>`;
+    thread.mensajes.slice(0, 8).forEach(msg => {
+      html += `<div class="wsp-msg"><span class="wsp-autor">${msg.autor}:</span> ${msg.texto}</div>`;
+    });
+    html += `</div>`;
+  });
+  el.innerHTML = html;
+}
 
 function switchTab(tab, el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -202,12 +257,14 @@ async function consultarCliente() {
     document.getElementById('loading-state').style.display = 'none';
     document.getElementById('resultado').style.display = 'block';
     mostrarResultado(raw, data);
+    mostrarWSP(raw);
   } catch(e) {
     document.getElementById('loading-state').style.display = 'none';
     document.getElementById('resultado').style.display = 'block';
-    document.getElementById('cliente-header').innerHTML = `<p style="color:#888;font-size:13px;">Error al conectar. El servidor puede estar iniciando — esperá 30 segundos e intentá de nuevo.</p>`;
+    document.getElementById('cliente-header').innerHTML = `<p style="color:#888;font-size:13px;">Error al conectar con el BCRA. El servidor puede estar iniciando — esperá 30 segundos e intentá de nuevo.</p>`;
     document.getElementById('verdict-container').innerHTML = '';
     document.getElementById('bcra-data').innerHTML = '';
+    mostrarWSP(raw);
   }
 }
 
@@ -229,11 +286,11 @@ function mostrarResultado(cuit, data) {
 
   let verdict = '';
   if (maxSit === 1) {
-    verdict = `<div class="verdict-box aprobar"><div class="verdict-title aprobar">✓ Situación normal en BCRA</div><div class="verdict-detail">El cliente está en situación 1 en el sistema financiero. Sin alertas de riesgo en BCRA. Completá los datos adicionales para un análisis más completo.</div></div>`;
+    verdict = `<div class="verdict-box aprobar"><div class="verdict-title aprobar">✓ Situación normal en BCRA</div><div class="verdict-detail">El cliente está en situación 1 en el sistema financiero. Sin alertas de riesgo en BCRA.</div></div>`;
   } else if (maxSit === 2) {
-    verdict = `<div class="verdict-box revisar"><div class="verdict-title revisar">⚠ Revisar — Seguimiento especial</div><div class="verdict-detail">El cliente presenta situación 2 en al menos una entidad financiera. Se recomienda solicitar el informe Veraz completo antes de otorgar crédito.</div></div>`;
+    verdict = `<div class="verdict-box revisar"><div class="verdict-title revisar">⚠ Revisar — Seguimiento especial</div><div class="verdict-detail">El cliente presenta situación 2 en al menos una entidad. Se recomienda solicitar Veraz completo.</div></div>`;
   } else {
-    verdict = `<div class="verdict-box rechazar"><div class="verdict-title rechazar">✗ Alerta — Situación crítica en BCRA</div><div class="verdict-detail">El cliente figura en situación ${maxSit} (${sitNombre(maxSit)}) en el sistema financiero. Alto riesgo crediticio según los criterios de Piattelli.</div></div>`;
+    verdict = `<div class="verdict-box rechazar"><div class="verdict-title rechazar">✗ Alerta — Situación crítica en BCRA</div><div class="verdict-detail">El cliente figura en situación ${maxSit} (${sitNombre(maxSit)}) en el sistema financiero. Alto riesgo crediticio.</div></div>`;
   }
   document.getElementById('verdict-container').innerHTML = verdict;
 
@@ -260,26 +317,31 @@ function sitNombre(s) {
 }
 
 async function analizarCliente() {
-  const cuit = document.getElementById('cuit-input').value.trim();
+  const cuit = document.getElementById('cuit-input').value.replace(/-/g,'').trim();
   const score = document.getElementById('score-veraz').value;
   const cheques = document.getElementById('cheques').value;
-  const wsp = document.getElementById('wsp-info').value;
   const piat = document.getElementById('piattelli-info').value;
   const bcra = document.getElementById('bcra-data').innerText;
+  const wspThreads = buscarEnWSP(cuit);
 
   const btn = document.getElementById('btn-analizar');
-  const res = document.getElementById('analisis-resultado');
+  const resEl = document.getElementById('analisis-resultado');
   btn.disabled = true;
   btn.textContent = 'Analizando...';
-  res.style.display = 'none';
+  resEl.style.display = 'none';
 
-  let prompt = `Sos un analista de riesgo crediticio para Bodega Piattelli. Analizá este cliente y dá un veredicto claro: APROBAR, REVISAR o RECHAZAR.\n\nCUIT: ${cuit}\n`;
+  let prompt = `Sos analista de riesgo crediticio de Bodega Piattelli. Analizá este cliente y dá un veredicto: APROBAR, REVISAR o RECHAZAR.\n\nCUIT: ${cuit}\n`;
   if (score) prompt += `Score Veraz: ${score}/9\n`;
-  if (cheques) prompt += `Cheques rechazados: ${cheques==='si'?'SÍ tiene cheques rechazados':'Sin cheques rechazados'}\n`;
+  if (cheques) prompt += `Cheques: ${cheques==='si'?'CON cheques rechazados':'Sin cheques rechazados'}\n`;
   if (bcra) prompt += `\nDatos BCRA:\n${bcra}\n`;
-  if (wsp) prompt += `\nInfo grupo de bodegas:\n${wsp}\n`;
-  if (piat) prompt += `\nHistorial con Piattelli:\n${piat}\n`;
-  prompt += `\nCriterios de Piattelli: score Veraz alto, sin cheques rechazados, sin deudas informadas por otras empresas, situación 1 en BCRA.\n\nDá el veredicto con los motivos principales en 3-4 líneas.`;
+  if (wspThreads && wspThreads.length > 0) {
+    prompt += `\nInfo del grupo de bodegas:\n`;
+    wspThreads.forEach(t => {
+      t.mensajes.slice(0,6).forEach(m => { prompt += `${m.autor}: ${m.texto}\n`; });
+    });
+  }
+  if (piat) prompt += `\nHistorial Piattelli:\n${piat}\n`;
+  prompt += `\nCriterios: score Veraz alto, sin cheques rechazados, sin deudas informadas, situación 1 en BCRA.\nDá el veredicto con los motivos en 3-4 líneas.`;
 
   try {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
@@ -293,13 +355,12 @@ async function analizarCliente() {
     });
     const data = await r.json();
     const texto = data?.content?.[0]?.text || 'No se pudo obtener el análisis.';
-    res.style.display = 'block';
-    res.innerHTML = `<div style="font-size:13px;line-height:1.7;white-space:pre-wrap;color:#333;">${texto}</div>`;
+    resEl.style.display = 'block';
+    resEl.innerHTML = `<div style="font-size:13px;line-height:1.7;white-space:pre-wrap;color:#333;">${texto}</div>`;
   } catch(e) {
-    res.style.display = 'block';
-    res.innerHTML = `<div style="font-size:13px;color:#888;">No se pudo conectar con el motor de análisis.</div>`;
+    resEl.style.display = 'block';
+    resEl.innerHTML = `<div style="font-size:13px;color:#888;">No se pudo conectar con el motor de análisis.</div>`;
   }
-
   btn.disabled = false;
   btn.textContent = 'Analizar riesgo crediticio →';
 }
@@ -337,6 +398,7 @@ function renderCartera() {
       </div>
       <div class="client-right">
         ${c.ultimaSit ? getBadge(c.ultimaSit) : `<span style="font-size:11px;color:#aaa;">Sin verificar</span>`}
+        ${buscarEnWSP(c.cuit) ? `<span class="badge badge-wsp">En bodegas</span>` : ''}
         <button onclick="verCliente('${c.cuit}')" style="font-size:12px;padding:5px 12px;">Ver BCRA</button>
         <button onclick="eliminarCliente(${i})" style="font-size:12px;padding:5px 10px;color:#991b1b;">×</button>
       </div>
@@ -380,12 +442,9 @@ async function verificarTodos() {
   alertas = [...nuevasAlertas, ...alertas].slice(0, 30);
   localStorage.setItem('piat_alertas', JSON.stringify(alertas));
   btn.disabled = false;
-
-  if (nuevasAlertas.length === 0) {
-    prog.textContent = `✓ Verificación completada. Sin cambios en la cartera.`;
-  } else {
-    prog.textContent = `⚠ Verificación completada. ${nuevasAlertas.length} cliente(s) con cambios.`;
-  }
+  prog.textContent = nuevasAlertas.length === 0
+    ? `✓ Verificación completada. Sin cambios en la cartera.`
+    : `⚠ Verificación completada. ${nuevasAlertas.length} cliente(s) con cambios.`;
   renderAlertas();
 }
 
@@ -409,6 +468,8 @@ function renderAlertas() {
       </div>
     </div>`).join('');
 }
+
+init();
 </script>
 </body>
 </html>
@@ -417,6 +478,7 @@ from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 import requests
 import urllib3
+import os
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -427,12 +489,14 @@ CORS(app)
 def index():
     return send_from_directory('static', 'index.html')
 
-BCRA_BASE = "https://api.bcra.gob.ar/centraldedeudores/v1.0"
+@app.route("/whatsapp_index.json")
+def wsp_index():
+    return send_from_directory(os.getcwd(), 'whatsapp_index.json')
 
 @app.route("/deudas/<cuit>")
 def get_deudas(cuit):
     try:
-        r = requests.get(f"{BCRA_BASE}/Deudas/{cuit}", timeout=10, verify=False)
+        r = requests.get(f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/{cuit}", timeout=10, verify=False)
         return jsonify(r.json()), r.status_code
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -440,7 +504,7 @@ def get_deudas(cuit):
 @app.route("/deudas/<cuit>/historial")
 def get_historial(cuit):
     try:
-        r = requests.get(f"{BCRA_BASE}/Deudas/{cuit}/Historial", timeout=10, verify=False)
+        r = requests.get(f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/{cuit}/Historial", timeout=10, verify=False)
         return jsonify(r.json()), r.status_code
     except Exception as e:
         return jsonify({"error": str(e)}), 500
