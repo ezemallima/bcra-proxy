@@ -747,12 +747,17 @@ function renderAlertas() {
 }
 
 async function consultarBCRA(cuit) {
-  // Intento 1: directo desde el navegador
+  // Intento 1: via allorigins (proxy CORS gratuito)
   try {
-    const r = await fetch(`https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/${cuit}`, {
-      signal: AbortSignal.timeout(12000)
+    const url = encodeURIComponent(`https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/${cuit}`);
+    const r = await fetch(`https://api.allorigins.win/get?url=${url}`, {
+      signal: AbortSignal.timeout(15000)
     });
-    if (r.ok) return await r.json();
+    if (r.ok) {
+      const wrapper = await r.json();
+      const data = JSON.parse(wrapper.contents);
+      if (data.status === 200) return data;
+    }
   } catch(e) {}
   // Intento 2: via proxy del servidor
   try {
