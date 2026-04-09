@@ -4,13 +4,15 @@ import requests
 import urllib3
 import os
 import json
+import base64
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 app = Flask(__name__, static_folder='static')
 CORS(app)
 
-ANTHROPIC_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
+GEMINI_KEY = os.environ.get('GEMINI_API_KEY', '')
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
 
 @app.route("/")
 def index():
@@ -40,77 +42,44 @@ def get_historial(cuit):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/afip/<cuit>")
-def get_afip(cuit):
-    try:
-        url = f"https://soa.afip.gob.ar/sr-padron/v2/persona/{cuit}"
-        r = requests.get(url, headers={"accept": "application/json"}, timeout=8, verify=False)
-        data = r.json()
-        persona = data.get('data', {})
-        if not persona:
-            return jsonify({"error": "No encontrado"}), 404
-        actividades = persona.get('actividades', [])
-        act_principal = actividades[0].get('descripcion', '-') if actividades else '-'
-        impuestos = persona.get('impuestos', [])
-        condicion_iva = '-'
-        for imp in impuestos:
-            if imp.get('idImpuesto') == 30:
-                condicion_iva = imp.get('descripcionImpuesto', '-')
-                break
-        monotributo = persona.get('categoriasMonotributo', [])
-        cat_mono = monotributo[0].get('descripcionCategoria', '') if monotributo else ''
-        domicilio = persona.get('domicilioFiscal', {})
-        dom_str = f"{domicilio.get('direccion','')}, {domicilio.get('localidad','')}, {domicilio.get('descripcionProvincia','')}".strip(', ')
-        return jsonify({
-            "nombre": persona.get('razonSocial') or f"{persona.get('apellido','')} {persona.get('nombre','')}".strip(),
-            "estadoClave": persona.get('estadoClave', '-'),
-            "tipoClave": persona.get('tipoClave', '-'),
-            "condicionIva": condicion_iva,
-            "categoriaMono": cat_mono,
-            "actividad": act_principal,
-            "domicilioFiscal": dom_str or '-'
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
 @app.route("/analizar", methods=["POST"])
 def analizar():
-    if not ANTHROPIC_KEY:
+    if not GEMINI_KEY:
         return jsonify({"error": "API key no configurada"}), 500
     try:
         body = request.get_json()
         prompt = body.get('prompt', '')
         r = requests.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={"Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01"},
-            json={"model": "claude-sonnet-4-20250514", "max_tokens": 1000, "messages": [{"role": "user", "content": prompt}]},
+            f"{GEMINI_URL}?key={GEMINI_KEY}",
+            headers={"Content-Type": "application/json"},
+            json={"contents": [{"parts": [{"text": prompt}]}]},
             timeout=30
         )
         data = r.json()
-        texto = data.get('content', [{}])[0].get('text', 'Sin respuesta')
+        texto = data['candidates'][0]['content']['parts'][0]['text']
         return jsonify({"texto": texto})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @app.route("/procesar-veraz", methods=["POST"])
 def procesar_veraz():
-    if not ANTHROPIC_KEY:
+    if not GEMINI_KEY:
         return jsonify({"error": "API key no configurada"}), 500
     try:
         body = request.get_json()
         pdf_base64 = body.get('pdf', '')
-        prompt = 'Extraé los datos de este informe Veraz/Equifax y respondé SOLO en JSON sin markdown: {"nombre":"","cuit":"","score":0,"situacion_bcra":"","cheques_rechazados":0,"monto_cheques":"","saldo_vencido":"","deuda_sistema_financiero":"","maximo_atraso":"","entidades_problema":[],"resumen":""}'
+        prompt = 'Extraé los datos de este informe Veraz/Equifax y respondé SOLO en JSON sin markdown ni texto adicional: {"nombre":"","cuit":"","score":0,"situacion_bcra":"","cheques_rechazados":0,"monto_cheques":"","saldo_vencido":"","deuda_sistema_financiero":"","maximo_atraso":"","entidades_problema":[],"resumen":""}'
         r = requests.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={"Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01"},
-            json={"model": "claude-sonnet-4-20250514", "max_tokens": 1000, "messages": [{"role": "user", "content": [
-                {"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": pdf_base64}},
-                {"type": "text", "text": prompt}
+            f"{GEMINI_URL}?key={GEMINI_KEY}",
+            headers={"Content-Type": "application/json"},
+            json={"contents": [{"parts": [
+                {"inline_data": {"mime_type": "application/pdf", "data": pdf_base64}},
+                {"text": prompt}
             ]}]},
             timeout=30
         )
         data = r.json()
-        texto = data.get('content', [{}])[0].get('text', '{}')
+        texto = data['candidates'][0]['content']['parts'][0]['text']
         resultado = json.loads(texto.replace('```json','').replace('```','').strip())
         return jsonify(resultado)
     except Exception as e:
@@ -118,7 +87,7 @@ def procesar_veraz():
 
 @app.route("/health")
 def health():
-    return jsonify({"status": "ok"})
+    return jsonify({"status": "ok", "gemini": bool(GEMINI_KEY)})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
