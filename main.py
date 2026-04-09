@@ -104,7 +104,7 @@ def analizar():
         body = request.get_json()
         prompt = body.get('prompt', '')
         payload = {"contents": [{"parts": [{"text": prompt}]}]}
-        texto, error = gemini_request(payload)
+        texto, error = gemini_request(payload, timeout=90)
         if error:
             return jsonify({"error": error}), 500
         return jsonify({"texto": texto})
@@ -159,4 +159,4 @@ def health():
     return jsonify({"status": "ok", "gemini": bool(GEMINI_KEY)})
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080)
+    app.run(host="0.0.0.0", port=8080, timeout=120)
