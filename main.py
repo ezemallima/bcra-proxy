@@ -12,7 +12,7 @@ CORS(app)
 app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024
 
 GEMINI_KEY = os.environ.get('GEMINI_API_KEY', '')
-GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent"
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
 
 @app.route("/")
 def index():
@@ -47,14 +47,17 @@ def test_gemini():
     if not GEMINI_KEY:
         return jsonify({"error": "No hay API key configurada"}), 500
     try:
-        # Listar modelos disponibles
-        r = requests.get(
-            f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_KEY}",
-            timeout=10
+        r = requests.post(
+            f"{GEMINI_URL}?key={GEMINI_KEY}",
+            headers={"Content-Type": "application/json"},
+            json={"contents": [{"parts": [{"text": "Respondé solo con la palabra OK"}]}]},
+            timeout=15
         )
         data = r.json()
-        modelos = [m['name'] for m in data.get('models', []) if 'generateContent' in m.get('supportedGenerationMethods', [])]
-        return jsonify({"modelos_disponibles": modelos})
+        if 'error' in data:
+            return jsonify({"error": data['error'].get('message',''), "modelo": GEMINI_URL})
+        texto = data['candidates'][0]['content']['parts'][0]['text']
+        return jsonify({"ok": True, "respuesta": texto, "modelo": GEMINI_URL})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
