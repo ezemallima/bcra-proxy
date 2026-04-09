@@ -321,10 +321,22 @@ function mostrarResultado(cuit, data, esTimeout) {
   const entidades = res?.periodos?.[0]?.entidades || [];
   const nombre = res?.denominacion || 'Sin denominación';
   const maxSit = entidades.length ? entidades.reduce((m,e) => Math.max(m, e.situacion||1), 1) : 1;
+  // Si BCRA no trajo nombre, intentar con AFIP
+  let nombreFinal = nombre;
+  if (!nombreFinal || nombreFinal === 'Sin denominación') {
+    obtenerNombre(cuit).then(n => {
+      if (n) {
+        const el = document.querySelector('#cliente-header .nombre-cliente');
+        if (el) el.textContent = n;
+        const av = document.querySelector('#cliente-header .avatar');
+        if (av) av.textContent = n.charAt(0).toUpperCase();
+      }
+    });
+  }
   document.getElementById('cliente-header').innerHTML = `
     <div style="display:flex;align-items:center;gap:14px;">
-      <div class="avatar">${nombre.charAt(0)}</div>
-      <div style="flex:1;"><div style="font-size:16px;font-weight:600;">${nombre}</div><div style="font-size:12px;color:#888;margin-top:2px;">CUIT: ${cuit}</div></div>
+      <div class="avatar">${(nombreFinal && nombreFinal !== 'Sin denominación') ? nombreFinal.charAt(0) : '?'}</div>
+      <div style="flex:1;"><div style="font-size:16px;font-weight:600;" class="nombre-cliente">${(nombreFinal && nombreFinal !== 'Sin denominación') ? nombreFinal : 'Cargando razón social...'}</div><div style="font-size:12px;color:#888;margin-top:2px;">CUIT: ${cuit}</div></div>
       ${getBadge(maxSit)}
     </div>`;
   let v = '';
