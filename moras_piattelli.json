@@ -1,0 +1,282 @@
+{
+  "27215440759": {
+    "nombre": "GONZALEZ, SONIA",
+    "cuit": "27215440759",
+    "fecha_mora": "22/10/2025",
+    "saldo": 318211.0,
+    "estado": "NO PUBLICADO",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "30718613996": {
+    "nombre": "KOVASA, KOVASA",
+    "cuit": "30718613996",
+    "fecha_mora": "18/07/2025",
+    "saldo": 400899.0,
+    "estado": "NO PUBLICADO",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "20286801839": {
+    "nombre": "HERRERA, JUAN",
+    "cuit": "20286801839",
+    "fecha_mora": "17/10/2023",
+    "saldo": 227212.0,
+    "estado": "PUBLICADO",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "20439437880": {
+    "nombre": "BAREA, TOMAS",
+    "cuit": "20439437880",
+    "fecha_mora": "09/04/2024",
+    "saldo": 54000.0,
+    "estado": "PUBLICADO",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "27262365773": {
+    "nombre": "ROMERO, PAOLA",
+    "cuit": "27262365773",
+    "fecha_mora": "24/06/2025",
+    "saldo": 459030.0,
+    "estado": "PUBLICADO",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "30717957098": {
+    "nombre": "TIENDA, TIENDA",
+    "cuit": "30717957098",
+    "fecha_mora": "14/10/2025",
+    "saldo": 577429.0,
+    "estado": "PUBLICADO",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "20203477679": {
+    "nombre": "LIZARRAGA, CEFERINO",
+    "cuit": "20203477679",
+    "fecha_mora": "04/04/2022",
+    "saldo": 1401190.0,
+    "estado": "PUBLICADO",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "20305090590": {
+    "nombre": "MISETICH, ARMANDO",
+    "cuit": "20305090590",
+    "fecha_mora": "03/06/2025",
+    "saldo": 183449.0,
+    "estado": "PUBLICADO",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "30717549615": {
+    "nombre": "FERAL, FERAL",
+    "cuit": "30717549615",
+    "fecha_mora": "31/12/2022",
+    "saldo": 702149.0,
+    "estado": "PUBLICADO",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "27235363408": {
+    "nombre": "MARTIN, MARIA",
+    "cuit": "27235363408",
+    "fecha_mora": "31/07/2025",
+    "saldo": 184976.0,
+    "estado": "PUBLICADO",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "20243975558": {
+    "nombre": "DIAZ, WALTER",
+    "cuit": "20243975558",
+    "fecha_mora": "23/07/2025",
+    "saldo": 1117580.0,
+    "estado": "PUBLICADO",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "30717138100": {
+    "nombre": "ZANZARONA, ZANZARONA",
+    "cuit": "30717138100",
+    "fecha_mora": "03/12/2024",
+    "saldo": 75601.0,
+    "estado": "PUBLICADO",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "20228087786": {
+    "nombre": "DUDKEVICH, JAVIER",
+    "cuit": "20228087786",
+    "fecha_mora": "31/12/2022",
+    "saldo": 12671.0,
+    "estado": "PUBLICADO",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "27267011171": {
+    "nombre": "IVETICH, MAIA",
+    "cuit": "27267011171",
+    "fecha_mora": "08/08/2025",
+    "saldo": 394633.0,
+    "estado": "PUBLICADO",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "30715408542": {
+    "nombre": "BARCLA, BARCLA",
+    "cuit": "30715408542",
+    "fecha_mora": "31/12/2022",
+    "saldo": 27291.0,
+    "estado": "PUBLICADO",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "30717492931": {
+    "nombre": "DON, DON",
+    "cuit": "30717492931",
+    "fecha_mora": "03/07/2025",
+    "saldo": 3604364.0,
+    "estado": "PUBLICADO",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "30711910464": {
+    "nombre": "JUMAJO, JUMAJO",
+    "cuit": "30711910464",
+    "fecha_mora": "03/11/2025",
+    "saldo": 1161316.0,
+    "estado": "PUBLICADO",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "30718224574": {
+    "nombre": "CAFE, CAFE",
+    "cuit": "30718224574",
+    "fecha_mora": "17/07/2025",
+    "saldo": 248937.0,
+    "estado": "PUBLICADO",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "30717824918": {
+    "nombre": "PEPITO, PEPITO",
+    "cuit": "30717824918",
+    "fecha_mora": "13/10/2025",
+    "saldo": 1000049.0,
+    "estado": "PUBLICADO",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "20368279723": {
+    "nombre": "ALVAREZ, LEONARDO",
+    "cuit": "20368279723",
+    "fecha_mora": "17/10/2025",
+    "saldo": 261305.0,
+    "estado": "PUBLICADO",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "27415875423": {
+    "nombre": "COMPIANO, MARIA",
+    "cuit": "27415875423",
+    "fecha_mora": "10/11/2025",
+    "saldo": 137589.0,
+    "estado": "PUBLICADO",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "27111363221": {
+    "nombre": "LIMA, MARIA",
+    "cuit": "27111363221",
+    "fecha_mora": "13/06/2025",
+    "saldo": 369571.0,
+    "estado": "PUBLICADO",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "20312899699": {
+    "nombre": "RIAL, LEANDRO",
+    "cuit": "20312899699",
+    "fecha_mora": "07/10/2025",
+    "saldo": 272790.0,
+    "estado": "PUBLICADO",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "30718141601": {
+    "nombre": "LA, LA",
+    "cuit": "30718141601",
+    "fecha_mora": "21/03/2024",
+    "saldo": 269972.0,
+    "estado": "PUBLICADO",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "27163256539": {
+    "nombre": "LAMM, CLAUDIA ADRIANA",
+    "cuit": "27163256539",
+    "fecha_mora": "26/12/2025",
+    "saldo": 6739042.0,
+    "estado": "PUBLICADO",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "20213106008": {
+    "nombre": "VIDELA, ALEJANDRO",
+    "cuit": "20213106008",
+    "fecha_mora": "18/11/2025",
+    "saldo": 901199.0,
+    "estado": "NO PUBLICADO",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "27320095447": {
+    "nombre": "ROMERO, ANDREA VANESA",
+    "cuit": "27320095447",
+    "fecha_mora": "18/11/2025",
+    "saldo": 5755238.0,
+    "estado": "PUBLICADO",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "20924704722": {
+    "nombre": "FERREIRA, JUAN",
+    "cuit": "20924704722",
+    "fecha_mora": "18/08/2025",
+    "saldo": 256713.0,
+    "estado": "PUBLICADO",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "27284413542": {
+    "nombre": "AGUILERA, MARIA NOELIA",
+    "cuit": "27284413542",
+    "fecha_mora": "18/11/2025",
+    "saldo": 496114.0,
+    "estado": "INTIMADO_EN_ESPERA_DE_PUBLICACION",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "30719074797": {
+    "nombre": "CHIC PALERMO, CHIC PALERMO",
+    "cuit": "30719074797",
+    "fecha_mora": "30/11/2025",
+    "saldo": 619210.0,
+    "estado": "INTIMADO_EN_ESPERA_DE_PUBLICACION",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "30716859904": {
+    "nombre": "CHRIFSA S.A.S., CHRIFSA S.A.S.",
+    "cuit": "30716859904",
+    "fecha_mora": "09/12/2025",
+    "saldo": 1543031.0,
+    "estado": "INTIMADO_EN_ESPERA_DE_PUBLICACION",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "30615302658": {
+    "nombre": "SANTA ISABEL SRL, SANTA ISABEL SRL",
+    "cuit": "30615302658",
+    "fecha_mora": "17/12/2025",
+    "saldo": 436383.0,
+    "estado": "INTIMADO_EN_ESPERA_DE_PUBLICACION",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "20326315371": {
+    "nombre": "ESPECHE, CRISTIAN DANIEL",
+    "cuit": "20326315371",
+    "fecha_mora": "17/12/2025",
+    "saldo": 402771.0,
+    "estado": "INTIMADO_EN_ESPERA_DE_PUBLICACION",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "30654940955": {
+    "nombre": "MADACILO S R L, MADACILO S R L",
+    "cuit": "30654940955",
+    "fecha_mora": "15/12/2025",
+    "saldo": 524858.0,
+    "estado": "INTIMADO_EN_ESPERA_DE_PUBLICACION",
+    "tipo": "FACTURA/S IMPAGA/S"
+  },
+  "20278462790": {
+    "nombre": "VARAS TOLEDO, SEBASTIAN",
+    "cuit": "20278462790",
+    "fecha_mora": "12/12/2025",
+    "saldo": 236305.0,
+    "estado": "INTIMADO_EN_ESPERA_DE_PUBLICACION",
+    "tipo": "FACTURA/S IMPAGA/S"
+  }
+}
