@@ -400,7 +400,7 @@ async function procesarVeraz(input) {
           <div class="full"><span class="lbl">Máximo atraso 24 meses:</span> <strong>${verazData.maximo_atraso||'-'}</strong></div>
           ${verazData.resumen?`<div class="full" style="padding-top:8px;border-top:1px solid #e0e0d8;color:#555;line-height:1.5;">${verazData.resumen}</div>`:''}
         </div>`;
-    } catch(e) { statusEl.textContent = 'No se pudo procesar el PDF. Configurá la API key de Anthropic en Render para usar esta función.'; }
+    } catch(e) { statusEl.textContent = 'No se pudo procesar el PDF. Intentá de nuevo en unos segundos.'; }
   };
   reader.readAsDataURL(file);
 }
@@ -440,7 +440,7 @@ async function analizarCliente() {
     document.getElementById('btn-export').style.display = 'inline-block';
   } catch(e) {
     resEl.style.display = 'block';
-    resEl.innerHTML = `<div style="font-size:13px;color:#888;">No se pudo conectar con el motor de análisis. Configurá la API key de Anthropic en Render para usar esta función.</div>`;
+    resEl.innerHTML = `<div style="font-size:13px;color:#888;">No se pudo conectar con el motor de análisis. Intentá de nuevo en unos segundos.</div>`;
   }
   btn.disabled = false; btn.textContent = 'Analizar riesgo crediticio →';
 }
