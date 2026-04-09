@@ -39,7 +39,6 @@
   .badge-danger { background: #fee2e2; color: #991b1b; }
   .badge-wsp { background: #dcfce7; color: #166534; }
   .badge-mora { background: #fee2e2; color: #991b1b; }
-  .badge-afip { background: #e0f2fe; color: #075985; }
   .verdict-box { border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1rem; border: 1px solid; }
   .verdict-box.aprobar { background: #f0fdf4; border-color: #86efac; }
   .verdict-box.revisar { background: #fefce8; border-color: #fde047; }
@@ -83,6 +82,8 @@
   .info-grid .full { grid-column: 1/-1; }
   .lbl { color: #888; }
   .afip-box { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; font-size: 13px; }
+  .afip-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 13px; margin-top: 8px; }
+  .afip-full { grid-column: 1/-1; }
 </style>
 </head>
 <body>
@@ -104,7 +105,6 @@
     <button class="tab" onclick="switchTab('configuracion',this)">Config</button>
   </div>
 
-  <!-- CONSULTA -->
   <div id="consulta" class="section active">
     <div class="card">
       <div class="card-title">Consulta por CUIT</div>
@@ -121,7 +121,11 @@
       <div id="mora-alert-container"></div>
       <div id="cliente-header" class="card" style="margin-bottom:8px;"></div>
       <div id="verdict-container"></div>
-      <div id="afip-container"></div>
+
+      <div class="card">
+        <div class="card-title">AFIP</div>
+        <div id="afip-container"><div style="font-size:13px;color:#aaa;">Consultando AFIP...</div></div>
+      </div>
 
       <div class="card">
         <div class="card-title">Situación BCRA</div>
@@ -153,12 +157,11 @@
 
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="primary" onclick="analizarCliente()" id="btn-analizar" style="flex:1;">Analizar riesgo crediticio →</button>
-        <button onclick="exportarReporte()" id="btn-export" style="display:none;">Exportar reporte PDF</button>
+        <button onclick="exportarReporte()" id="btn-export" style="display:none;">Exportar PDF</button>
       </div>
     </div>
   </div>
 
-  <!-- CARTERA -->
   <div id="cartera" class="section">
     <div class="card">
       <div class="card-title">Agregar cliente a seguimiento</div>
@@ -171,7 +174,6 @@
     <div id="lista-clientes"><div class="empty-state">No hay clientes en seguimiento.</div></div>
   </div>
 
-  <!-- ALERTAS -->
   <div id="alertas" class="section">
     <div class="card">
       <div class="card-title">Monitoreo automático BCRA</div>
@@ -182,12 +184,11 @@
     <div id="alertas-lista"><div class="empty-state">No hay alertas activas.</div></div>
   </div>
 
-  <!-- CONFIGURACION -->
   <div id="configuracion" class="section">
     <div class="card">
       <div class="card-title">Actualizar historial de bodegas (WhatsApp)</div>
       <p style="font-size:13px;color:#666;line-height:1.6;margin-bottom:12px;">
-        Exportá el chat desde WhatsApp (sin archivos multimedia) y subí el archivo .txt. El sistema detecta solo los mensajes nuevos y actualiza el índice automáticamente.
+        Exportá el chat desde WhatsApp (sin archivos multimedia) y subí el archivo .txt. Solo se agregan los mensajes nuevos.
       </p>
       <div class="upload-area" id="wsp-area" onclick="document.getElementById('wsp-file').click()">
         <div style="font-size:13px;color:#888;">Hacé clic para subir el chat exportado (.txt)</div>
@@ -195,19 +196,6 @@
       </div>
       <input type="file" id="wsp-file" accept=".txt" style="display:none;" onchange="actualizarWSP(this)" />
       <div id="wsp-update-status" style="font-size:13px;color:#888;margin-top:8px;"></div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Actualizar lista de moras Piattelli</div>
-      <p style="font-size:13px;color:#666;line-height:1.6;margin-bottom:12px;">
-        Subí la planilla Excel actualizada de clientes en mora para que aparezca la alerta automáticamente al consultarlos.
-      </p>
-      <div id="mora-stats" style="font-size:13px;color:#888;margin-bottom:10px;"></div>
-      <div class="upload-area" id="mora-area" onclick="document.getElementById('mora-file').click()">
-        <div style="font-size:13px;color:#888;">Subir nueva planilla de moras (.xlsx o .csv)</div>
-      </div>
-      <input type="file" id="mora-file" accept=".xlsx,.csv" style="display:none;" onchange="actualizarMoras(this)" />
-      <div id="mora-update-status" style="font-size:13px;color:#888;margin-top:8px;"></div>
     </div>
   </div>
 </div>
@@ -221,7 +209,6 @@ let ultimoAnalisis = null;
 let cartera = JSON.parse(localStorage.getItem('piat_cartera') || '[]');
 let situaciones = JSON.parse(localStorage.getItem('piat_situaciones') || '{}');
 let alertas = JSON.parse(localStorage.getItem('piat_alertas') || '[]');
-let wspFechaMax = localStorage.getItem('piat_wsp_fecha') || null;
 
 async function init() {
   checkProxy();
@@ -253,19 +240,11 @@ async function cargarMoras() {
     const total = Object.keys(morasIndex).length;
     document.getElementById('mora-dot').style.background = '#ef4444';
     document.getElementById('mora-label').textContent = `${total} clientes en mora`;
-    document.getElementById('mora-stats').textContent = `Actualmente: ${total} clientes en la lista de moras.`;
   } catch { document.getElementById('mora-label').textContent = 'Moras no disponible'; }
 }
 
-function buscarEnWSP(cuit) {
-  if (!wspIndex) return null;
-  return wspIndex[cuit.replace(/-/g,'')] || null;
-}
-
-function buscarEnMoras(cuit) {
-  if (!morasIndex) return null;
-  return morasIndex[cuit.replace(/-/g,'')] || null;
-}
+function buscarEnWSP(cuit) { return wspIndex ? wspIndex[cuit.replace(/-/g,'')] || null : null; }
+function buscarEnMoras(cuit) { return morasIndex ? morasIndex[cuit.replace(/-/g,'')] || null : null; }
 
 function switchTab(tab, el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -292,10 +271,7 @@ async function consultarCliente() {
   document.getElementById('mora-alert-container').innerHTML = mora ? `
     <div class="mora-alert">
       <div class="mora-alert-title">⚠ Cliente en mora con Piattelli</div>
-      <div class="mora-alert-detail">
-        <strong>${mora.nombre}</strong> tiene facturas impagas desde <strong>${mora.fecha_mora}</strong>.<br>
-        Saldo adeudado: <strong>$${mora.saldo.toLocaleString('es-AR')}</strong> — Estado: ${mora.estado}
-      </div>
+      <div class="mora-alert-detail"><strong>${mora.nombre}</strong> tiene facturas impagas desde <strong>${mora.fecha_mora}</strong>.<br>Saldo adeudado: <strong>$${mora.saldo.toLocaleString('es-AR')}</strong> — Estado: ${mora.estado}</div>
     </div>` : '';
 
   try {
@@ -305,19 +281,18 @@ async function consultarCliente() {
     ]);
     document.getElementById('loading-state').style.display = 'none';
     document.getElementById('resultado').style.display = 'block';
-
     const bcraData = bcraRes.status === 'fulfilled' ? await bcraRes.value.json() : null;
     const afipData = afipRes.status === 'fulfilled' ? await afipRes.value.json() : null;
-
     mostrarResultado(raw, bcraData);
     mostrarAFIP(afipData);
     mostrarWSP(raw);
   } catch(e) {
     document.getElementById('loading-state').style.display = 'none';
     document.getElementById('resultado').style.display = 'block';
-    document.getElementById('cliente-header').innerHTML = `<p style="color:#888;font-size:13px;">Error al conectar. El servidor puede estar iniciando — esperá 30 segundos e intentá de nuevo.</p>`;
+    document.getElementById('cliente-header').innerHTML = `<p style="color:#888;font-size:13px;">Error al conectar. Esperá 30 segundos e intentá de nuevo.</p>`;
     document.getElementById('verdict-container').innerHTML = '';
     document.getElementById('bcra-data').innerHTML = '';
+    document.getElementById('afip-container').innerHTML = '';
     mostrarWSP(raw);
   }
 }
@@ -327,20 +302,17 @@ function mostrarResultado(cuit, data) {
   const entidades = res?.periodos?.[0]?.entidades || [];
   const nombre = res?.denominacion || 'Sin denominación';
   const maxSit = entidades.length ? entidades.reduce((m,e) => Math.max(m, e.situacion||1), 1) : 1;
-
   document.getElementById('cliente-header').innerHTML = `
     <div style="display:flex;align-items:center;gap:14px;">
       <div class="avatar">${nombre.charAt(0)}</div>
       <div style="flex:1;"><div style="font-size:16px;font-weight:600;">${nombre}</div><div style="font-size:12px;color:#888;margin-top:2px;">CUIT: ${cuit}</div></div>
       ${getBadge(maxSit)}
     </div>`;
-
   let v = '';
-  if (maxSit === 1) v = `<div class="verdict-box aprobar"><div class="verdict-title aprobar">✓ Situación normal en BCRA</div><div class="verdict-detail">El cliente está en situación 1. Sin alertas financieras en BCRA.</div></div>`;
+  if (maxSit === 1) v = `<div class="verdict-box aprobar"><div class="verdict-title aprobar">✓ Situación normal en BCRA</div><div class="verdict-detail">El cliente está en situación 1. Sin alertas financieras.</div></div>`;
   else if (maxSit === 2) v = `<div class="verdict-box revisar"><div class="verdict-title revisar">⚠ Revisar — Seguimiento especial</div><div class="verdict-detail">Situación 2 en al menos una entidad. Recomendable solicitar Veraz completo.</div></div>`;
   else v = `<div class="verdict-box rechazar"><div class="verdict-title rechazar">✗ Alerta — Situación crítica</div><div class="verdict-detail">Situación ${maxSit} (${sitNombre(maxSit)}) en el sistema financiero. Alto riesgo.</div></div>`;
   document.getElementById('verdict-container').innerHTML = v;
-
   if (!entidades.length) {
     document.getElementById('bcra-data').innerHTML = `<div class="empty-state">Sin deudas registradas en el BCRA.</div>`;
   } else {
@@ -353,16 +325,20 @@ function mostrarResultado(cuit, data) {
 
 function mostrarAFIP(data) {
   const el = document.getElementById('afip-container');
-  if (!data || data.error) { el.innerHTML = ''; return; }
+  if (!data || data.error) {
+    el.innerHTML = `<div style="font-size:13px;color:#aaa;">No se pudo obtener información de AFIP para este CUIT.</div>`;
+    return;
+  }
   const activo = data.estadoClave === 'ACTIVO' || data.estadoClave === 'ACT';
-  el.innerHTML = `<div class="afip-box">
-    <div style="font-size:12px;color:#075985;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">AFIP</div>
-    <div class="info-grid">
+  el.innerHTML = `
+    <div class="afip-grid">
       <div><span class="lbl">Estado:</span> <strong style="color:${activo?'#166534':'#991b1b'}">${data.estadoClave||'-'}</strong></div>
       <div><span class="lbl">Tipo:</span> <strong>${data.tipoClave||'-'}</strong></div>
-      <div class="full"><span class="lbl">Actividad:</span> <strong>${data.actividad||'-'}</strong></div>
-    </div>
-  </div>`;
+      <div><span class="lbl">Condición IVA:</span> <strong>${data.condicionIva||'-'}</strong></div>
+      ${data.categoriaMono ? `<div><span class="lbl">Cat. Monotributo:</span> <strong>${data.categoriaMono}</strong></div>` : '<div></div>'}
+      <div class="afip-full"><span class="lbl">Actividad principal:</span> <strong>${data.actividad||'-'}</strong></div>
+      <div class="afip-full"><span class="lbl">Domicilio fiscal:</span> <strong>${data.domicilioFiscal||'-'}</strong></div>
+    </div>`;
 }
 
 function mostrarWSP(cuit) {
@@ -398,18 +374,13 @@ async function procesarVeraz(input) {
   reader.onload = async (e) => {
     const base64 = e.target.result.split(',')[1];
     try {
-      const r = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:1000,
-          messages:[{role:'user',content:[
-            {type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}},
-            {type:'text',text:`Extraé estos datos del informe Veraz/Equifax y respondé SOLO en JSON sin markdown:
-{"nombre":"","cuit":"","score":0,"situacion_bcra":"","cheques_rechazados":0,"monto_cheques":"","saldo_vencido":"","deuda_sistema_financiero":"","maximo_atraso":"","entidades_problema":[],"resumen":""}`}
-          ]}]
-        })
+      const r = await fetch('/procesar-veraz', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ pdf: base64 })
       });
       const data = await r.json();
-      verazData = JSON.parse(data?.content?.[0]?.text.replace(/```json|```/g,'').trim() || '{}');
+      if (data.error) throw new Error(data.error);
+      verazData = data;
       document.getElementById('veraz-area').className = 'upload-area success';
       document.getElementById('veraz-area').innerHTML = `<div style="font-size:13px;color:#166534;font-weight:600;">✓ PDF procesado — ${file.name}</div>`;
       statusEl.style.display = 'none';
@@ -425,7 +396,7 @@ async function procesarVeraz(input) {
           <div class="full"><span class="lbl">Máximo atraso 24 meses:</span> <strong>${verazData.maximo_atraso||'-'}</strong></div>
           ${verazData.resumen?`<div class="full" style="padding-top:8px;border-top:1px solid #e0e0d8;color:#555;line-height:1.5;">${verazData.resumen}</div>`:''}
         </div>`;
-    } catch(e) { statusEl.textContent = 'Error al procesar el PDF. Intentá de nuevo.'; }
+    } catch(e) { statusEl.textContent = 'No se pudo procesar el PDF. Configurá la API key de Anthropic en Render para usar esta función.'; }
   };
   reader.readAsDataURL(file);
 }
@@ -443,28 +414,29 @@ async function analizarCliente() {
   let prompt = `Sos analista de riesgo crediticio de Bodega Piattelli. Analizá este cliente y dá un veredicto: APROBAR, REVISAR o RECHAZAR.\n\nCUIT: ${cuit}\n`;
   if (mora) prompt += `\n⚠ MORA CON PIATTELLI: ${mora.nombre} debe $${mora.saldo.toLocaleString('es-AR')} desde ${mora.fecha_mora} (Estado: ${mora.estado})\n`;
   if (verazData) {
-    prompt += `\nDatos Veraz:\n- Score: ${verazData.score}/9\n- Cheques rechazados: ${verazData.cheques_rechazados} (${verazData.monto_cheques||'s/d'})\n- Situación BCRA: ${verazData.situacion_bcra}\n- Saldo vencido: ${verazData.saldo_vencido}\n- Deuda total: ${verazData.deuda_sistema_financiero}\n- Máximo atraso 24m: ${verazData.maximo_atraso}\n`;
-    if (verazData.entidades_problema?.length) prompt += `- Entidades con problemas: ${verazData.entidades_problema.join(', ')}\n`;
+    prompt += `\nDatos Veraz:\n- Score: ${verazData.score}/9\n- Cheques rechazados: ${verazData.cheques_rechazados}\n- Situación BCRA: ${verazData.situacion_bcra}\n- Saldo vencido: ${verazData.saldo_vencido}\n- Deuda total: ${verazData.deuda_sistema_financiero}\n- Máximo atraso: ${verazData.maximo_atraso}\n`;
   }
+  const afipEl = document.getElementById('afip-container');
+  if (afipEl.innerText) prompt += `\nDatos AFIP:\n${afipEl.innerText}\n`;
   if (bcra) prompt += `\nDatos BCRA:\n${bcra}\n`;
   if (wspThreads?.length) { prompt += `\nInfo grupo bodegas:\n`; wspThreads.forEach(t => t.mensajes.slice(0,5).forEach(m => { prompt += `${m.autor}: ${m.texto}\n`; })); }
   if (piat) prompt += `\nHistorial Piattelli:\n${piat}\n`;
   prompt += `\nCriterios: score alto, sin cheques, sin deudas informadas, situación 1 BCRA, sin mora con Piattelli.\nDá el veredicto con los motivos en 4-5 líneas.`;
 
   try {
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({model:'claude-sonnet-4-20250514', max_tokens:1000, messages:[{role:'user',content:prompt}]})
+    const r = await fetch('/analizar', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ prompt })
     });
     const data = await r.json();
-    const texto = data?.content?.[0]?.text || 'Sin respuesta.';
-    ultimoAnalisis = { cuit, texto, fecha: new Date().toLocaleDateString('es-AR') };
+    if (data.error) throw new Error(data.error);
+    ultimoAnalisis = { cuit, texto: data.texto, fecha: new Date().toLocaleDateString('es-AR') };
     resEl.style.display = 'block';
-    resEl.innerHTML = `<div style="font-size:12px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Análisis de riesgo</div><div style="font-size:13px;line-height:1.7;white-space:pre-wrap;color:#333;">${texto}</div>`;
+    resEl.innerHTML = `<div style="font-size:12px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Análisis de riesgo</div><div style="font-size:13px;line-height:1.7;white-space:pre-wrap;color:#333;">${data.texto}</div>`;
     document.getElementById('btn-export').style.display = 'inline-block';
   } catch(e) {
     resEl.style.display = 'block';
-    resEl.innerHTML = `<div style="font-size:13px;color:#888;">No se pudo conectar con el motor de análisis.</div>`;
+    resEl.innerHTML = `<div style="font-size:13px;color:#888;">No se pudo conectar con el motor de análisis. Configurá la API key de Anthropic en Render para usar esta función.</div>`;
   }
   btn.disabled = false; btn.textContent = 'Analizar riesgo crediticio →';
 }
@@ -474,43 +446,37 @@ function exportarReporte() {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
   const cuit = document.getElementById('cuit-input').value.trim();
-  const nombre = document.getElementById('cliente-header').querySelector('div > div > div')?.textContent || cuit;
+  const headerEl = document.getElementById('cliente-header');
+  const nombre = headerEl.querySelector('div > div > div')?.textContent || cuit;
   const mora = buscarEnMoras(cuit.replace(/-/g,''));
-
+  let y = 20;
   doc.setFontSize(18); doc.setTextColor(155, 32, 32);
-  doc.text('Piattelli Creditos', 20, 20);
+  doc.text('Piattelli Creditos', 20, y); y += 8;
   doc.setFontSize(11); doc.setTextColor(100);
-  doc.text(`Reporte de riesgo crediticio — ${ultimoAnalisis.fecha}`, 20, 28);
-  doc.setDrawColor(220); doc.line(20, 32, 190, 32);
-
+  doc.text(`Reporte de riesgo crediticio — ${ultimoAnalisis.fecha}`, 20, y); y += 6;
+  doc.setDrawColor(220); doc.line(20, y, 190, y); y += 10;
   doc.setFontSize(13); doc.setTextColor(30);
-  doc.text(`Cliente: ${nombre}`, 20, 42);
+  doc.text(`Cliente: ${nombre}`, 20, y); y += 8;
   doc.setFontSize(11); doc.setTextColor(100);
-  doc.text(`CUIT: ${cuit}`, 20, 50);
-
+  doc.text(`CUIT: ${cuit}`, 20, y); y += 10;
   if (mora) {
-    doc.setFontSize(11); doc.setTextColor(153, 27, 27);
-    doc.text(`MORA CON PIATTELLI: $${mora.saldo.toLocaleString('es-AR')} desde ${mora.fecha_mora}`, 20, 60);
+    doc.setTextColor(153, 27, 27);
+    doc.text(`MORA: $${mora.saldo.toLocaleString('es-AR')} desde ${mora.fecha_mora} (${mora.estado})`, 20, y); y += 10;
   }
-
   if (verazData) {
-    doc.setFontSize(12); doc.setTextColor(30);
-    doc.text('Datos Veraz:', 20, mora ? 72 : 62);
+    doc.setTextColor(30); doc.setFontSize(12);
+    doc.text('Datos Veraz:', 20, y); y += 7;
     doc.setFontSize(10); doc.setTextColor(80);
-    const y = mora ? 80 : 70;
-    doc.text(`Score: ${verazData.score}/9 | Cheques rechazados: ${verazData.cheques_rechazados}`, 20, y);
-    doc.text(`Situación BCRA: ${verazData.situacion_bcra} | Saldo vencido: ${verazData.saldo_vencido}`, 20, y+7);
-    doc.text(`Deuda total: ${verazData.deuda_sistema_financiero}`, 20, y+14);
+    doc.text(`Score: ${verazData.score}/9 | Cheques rechazados: ${verazData.cheques_rechazados}`, 20, y); y += 6;
+    doc.text(`Situación: ${verazData.situacion_bcra} | Saldo vencido: ${verazData.saldo_vencido}`, 20, y); y += 6;
+    doc.text(`Deuda total: ${verazData.deuda_sistema_financiero}`, 20, y); y += 10;
   }
-
-  const yAnalisis = mora && verazData ? 115 : mora || verazData ? 100 : 65;
   doc.setFontSize(12); doc.setTextColor(30);
-  doc.text('Análisis de riesgo:', 20, yAnalisis);
+  doc.text('Análisis de riesgo:', 20, y); y += 8;
   doc.setFontSize(10); doc.setTextColor(60);
   const lines = doc.splitTextToSize(ultimoAnalisis.texto, 170);
-  doc.text(lines, 20, yAnalisis + 8);
-
-  doc.save(`Piattelli_Creditos_${cuit}_${ultimoAnalisis.fecha.replace(/\//g,'-')}.pdf`);
+  doc.text(lines, 20, y);
+  doc.save(`Piattelli_${cuit}_${ultimoAnalisis.fecha.replace(/\//g,'-')}.pdf`);
 }
 
 async function actualizarWSP(input) {
@@ -528,7 +494,7 @@ async function actualizarWSP(input) {
   const newIndex = wspIndex ? {...wspIndex} : {};
   let nuevos = 0;
   messages.forEach((msg, i) => {
-    for (const match of msg.texto.matchAll(cuitPattern)) {
+    for (const match of msg.texto.matchAll(new RegExp(cuitPattern.source, 'g'))) {
       const cuit = match[1].replace(/[-\s]/g,'');
       if (cuit.length === 11) {
         if (!newIndex[cuit]) { newIndex[cuit] = []; nuevos++; }
@@ -543,11 +509,7 @@ async function actualizarWSP(input) {
   document.getElementById('wsp-area').innerHTML = `<div style="font-size:13px;color:#166534;font-weight:600;">✓ Chat actualizado</div>`;
   document.getElementById('wsp-dot').style.background = '#25d366';
   document.getElementById('wsp-label').textContent = `Bodegas: ${total} clientes`;
-  statusEl.textContent = `Actualización completada. ${nuevos} CUITs nuevos agregados. Total: ${total} clientes indexados.`;
-}
-
-async function actualizarMoras(input) {
-  document.getElementById('mora-update-status').textContent = 'Por ahora subí la planilla al repositorio de GitHub para actualizar. Próximamente se podrá hacer desde acá.';
+  statusEl.textContent = `Listo. ${nuevos} CUITs nuevos. Total: ${total} clientes indexados.`;
 }
 
 function agregarCliente() {
@@ -643,16 +605,19 @@ init();
 </body>
 </html>
 
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify, send_from_directory, request
 from flask_cors import CORS
 import requests
 import urllib3
 import os
+import json
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 app = Flask(__name__, static_folder='static')
 CORS(app)
+
+ANTHROPIC_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 
 @app.route("/")
 def index():
@@ -685,17 +650,76 @@ def get_historial(cuit):
 @app.route("/afip/<cuit>")
 def get_afip(cuit):
     try:
-        r = requests.get(f"https://soa.afip.gob.ar/sr-padron/v2/persona/{cuit}", timeout=8, verify=False)
+        url = f"https://soa.afip.gob.ar/sr-padron/v2/persona/{cuit}"
+        r = requests.get(url, headers={"accept": "application/json"}, timeout=8, verify=False)
         data = r.json()
         persona = data.get('data', {})
+        if not persona:
+            return jsonify({"error": "No encontrado"}), 404
         actividades = persona.get('actividades', [])
         act_principal = actividades[0].get('descripcion', '-') if actividades else '-'
+        impuestos = persona.get('impuestos', [])
+        condicion_iva = '-'
+        for imp in impuestos:
+            if imp.get('idImpuesto') == 30:
+                condicion_iva = imp.get('descripcionImpuesto', '-')
+                break
+        monotributo = persona.get('categoriasMonotributo', [])
+        cat_mono = monotributo[0].get('descripcionCategoria', '') if monotributo else ''
+        domicilio = persona.get('domicilioFiscal', {})
+        dom_str = f"{domicilio.get('direccion','')}, {domicilio.get('localidad','')}, {domicilio.get('descripcionProvincia','')}".strip(', ')
         return jsonify({
+            "nombre": persona.get('razonSocial') or f"{persona.get('apellido','')} {persona.get('nombre','')}".strip(),
             "estadoClave": persona.get('estadoClave', '-'),
             "tipoClave": persona.get('tipoClave', '-'),
+            "condicionIva": condicion_iva,
+            "categoriaMono": cat_mono,
             "actividad": act_principal,
-            "nombre": persona.get('nombre', '') or f"{persona.get('apellido','')} {persona.get('nombre','')}".strip()
+            "domicilioFiscal": dom_str or '-'
         })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/analizar", methods=["POST"])
+def analizar():
+    if not ANTHROPIC_KEY:
+        return jsonify({"error": "API key no configurada"}), 500
+    try:
+        body = request.get_json()
+        prompt = body.get('prompt', '')
+        r = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={"Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01"},
+            json={"model": "claude-sonnet-4-20250514", "max_tokens": 1000, "messages": [{"role": "user", "content": prompt}]},
+            timeout=30
+        )
+        data = r.json()
+        texto = data.get('content', [{}])[0].get('text', 'Sin respuesta')
+        return jsonify({"texto": texto})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/procesar-veraz", methods=["POST"])
+def procesar_veraz():
+    if not ANTHROPIC_KEY:
+        return jsonify({"error": "API key no configurada"}), 500
+    try:
+        body = request.get_json()
+        pdf_base64 = body.get('pdf', '')
+        prompt = 'Extraé los datos de este informe Veraz/Equifax y respondé SOLO en JSON sin markdown: {"nombre":"","cuit":"","score":0,"situacion_bcra":"","cheques_rechazados":0,"monto_cheques":"","saldo_vencido":"","deuda_sistema_financiero":"","maximo_atraso":"","entidades_problema":[],"resumen":""}'
+        r = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={"Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01"},
+            json={"model": "claude-sonnet-4-20250514", "max_tokens": 1000, "messages": [{"role": "user", "content": [
+                {"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": pdf_base64}},
+                {"type": "text", "text": prompt}
+            ]}]},
+            timeout=30
+        )
+        data = r.json()
+        texto = data.get('content', [{}])[0].get('text', '{}')
+        resultado = json.loads(texto.replace('```json','').replace('```','').strip())
+        return jsonify(resultado)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -705,286 +729,3 @@ def health():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
-
-{
-  "27215440759": {
-    "nombre": "GONZALEZ, SONIA",
-    "cuit": "27215440759",
-    "fecha_mora": "22/10/2025",
-    "saldo": 318211.0,
-    "estado": "NO PUBLICADO",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "30718613996": {
-    "nombre": "KOVASA, KOVASA",
-    "cuit": "30718613996",
-    "fecha_mora": "18/07/2025",
-    "saldo": 400899.0,
-    "estado": "NO PUBLICADO",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "20286801839": {
-    "nombre": "HERRERA, JUAN",
-    "cuit": "20286801839",
-    "fecha_mora": "17/10/2023",
-    "saldo": 227212.0,
-    "estado": "PUBLICADO",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "20439437880": {
-    "nombre": "BAREA, TOMAS",
-    "cuit": "20439437880",
-    "fecha_mora": "09/04/2024",
-    "saldo": 54000.0,
-    "estado": "PUBLICADO",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "27262365773": {
-    "nombre": "ROMERO, PAOLA",
-    "cuit": "27262365773",
-    "fecha_mora": "24/06/2025",
-    "saldo": 459030.0,
-    "estado": "PUBLICADO",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "30717957098": {
-    "nombre": "TIENDA, TIENDA",
-    "cuit": "30717957098",
-    "fecha_mora": "14/10/2025",
-    "saldo": 577429.0,
-    "estado": "PUBLICADO",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "20203477679": {
-    "nombre": "LIZARRAGA, CEFERINO",
-    "cuit": "20203477679",
-    "fecha_mora": "04/04/2022",
-    "saldo": 1401190.0,
-    "estado": "PUBLICADO",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "20305090590": {
-    "nombre": "MISETICH, ARMANDO",
-    "cuit": "20305090590",
-    "fecha_mora": "03/06/2025",
-    "saldo": 183449.0,
-    "estado": "PUBLICADO",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "30717549615": {
-    "nombre": "FERAL, FERAL",
-    "cuit": "30717549615",
-    "fecha_mora": "31/12/2022",
-    "saldo": 702149.0,
-    "estado": "PUBLICADO",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "27235363408": {
-    "nombre": "MARTIN, MARIA",
-    "cuit": "27235363408",
-    "fecha_mora": "31/07/2025",
-    "saldo": 184976.0,
-    "estado": "PUBLICADO",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "20243975558": {
-    "nombre": "DIAZ, WALTER",
-    "cuit": "20243975558",
-    "fecha_mora": "23/07/2025",
-    "saldo": 1117580.0,
-    "estado": "PUBLICADO",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "30717138100": {
-    "nombre": "ZANZARONA, ZANZARONA",
-    "cuit": "30717138100",
-    "fecha_mora": "03/12/2024",
-    "saldo": 75601.0,
-    "estado": "PUBLICADO",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "20228087786": {
-    "nombre": "DUDKEVICH, JAVIER",
-    "cuit": "20228087786",
-    "fecha_mora": "31/12/2022",
-    "saldo": 12671.0,
-    "estado": "PUBLICADO",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "27267011171": {
-    "nombre": "IVETICH, MAIA",
-    "cuit": "27267011171",
-    "fecha_mora": "08/08/2025",
-    "saldo": 394633.0,
-    "estado": "PUBLICADO",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "30715408542": {
-    "nombre": "BARCLA, BARCLA",
-    "cuit": "30715408542",
-    "fecha_mora": "31/12/2022",
-    "saldo": 27291.0,
-    "estado": "PUBLICADO",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "30717492931": {
-    "nombre": "DON, DON",
-    "cuit": "30717492931",
-    "fecha_mora": "03/07/2025",
-    "saldo": 3604364.0,
-    "estado": "PUBLICADO",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "30711910464": {
-    "nombre": "JUMAJO, JUMAJO",
-    "cuit": "30711910464",
-    "fecha_mora": "03/11/2025",
-    "saldo": 1161316.0,
-    "estado": "PUBLICADO",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "30718224574": {
-    "nombre": "CAFE, CAFE",
-    "cuit": "30718224574",
-    "fecha_mora": "17/07/2025",
-    "saldo": 248937.0,
-    "estado": "PUBLICADO",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "30717824918": {
-    "nombre": "PEPITO, PEPITO",
-    "cuit": "30717824918",
-    "fecha_mora": "13/10/2025",
-    "saldo": 1000049.0,
-    "estado": "PUBLICADO",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "20368279723": {
-    "nombre": "ALVAREZ, LEONARDO",
-    "cuit": "20368279723",
-    "fecha_mora": "17/10/2025",
-    "saldo": 261305.0,
-    "estado": "PUBLICADO",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "27415875423": {
-    "nombre": "COMPIANO, MARIA",
-    "cuit": "27415875423",
-    "fecha_mora": "10/11/2025",
-    "saldo": 137589.0,
-    "estado": "PUBLICADO",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "27111363221": {
-    "nombre": "LIMA, MARIA",
-    "cuit": "27111363221",
-    "fecha_mora": "13/06/2025",
-    "saldo": 369571.0,
-    "estado": "PUBLICADO",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "20312899699": {
-    "nombre": "RIAL, LEANDRO",
-    "cuit": "20312899699",
-    "fecha_mora": "07/10/2025",
-    "saldo": 272790.0,
-    "estado": "PUBLICADO",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "30718141601": {
-    "nombre": "LA, LA",
-    "cuit": "30718141601",
-    "fecha_mora": "21/03/2024",
-    "saldo": 269972.0,
-    "estado": "PUBLICADO",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "27163256539": {
-    "nombre": "LAMM, CLAUDIA ADRIANA",
-    "cuit": "27163256539",
-    "fecha_mora": "26/12/2025",
-    "saldo": 6739042.0,
-    "estado": "PUBLICADO",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "20213106008": {
-    "nombre": "VIDELA, ALEJANDRO",
-    "cuit": "20213106008",
-    "fecha_mora": "18/11/2025",
-    "saldo": 901199.0,
-    "estado": "NO PUBLICADO",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "27320095447": {
-    "nombre": "ROMERO, ANDREA VANESA",
-    "cuit": "27320095447",
-    "fecha_mora": "18/11/2025",
-    "saldo": 5755238.0,
-    "estado": "PUBLICADO",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "20924704722": {
-    "nombre": "FERREIRA, JUAN",
-    "cuit": "20924704722",
-    "fecha_mora": "18/08/2025",
-    "saldo": 256713.0,
-    "estado": "PUBLICADO",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "27284413542": {
-    "nombre": "AGUILERA, MARIA NOELIA",
-    "cuit": "27284413542",
-    "fecha_mora": "18/11/2025",
-    "saldo": 496114.0,
-    "estado": "INTIMADO_EN_ESPERA_DE_PUBLICACION",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "30719074797": {
-    "nombre": "CHIC PALERMO, CHIC PALERMO",
-    "cuit": "30719074797",
-    "fecha_mora": "30/11/2025",
-    "saldo": 619210.0,
-    "estado": "INTIMADO_EN_ESPERA_DE_PUBLICACION",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "30716859904": {
-    "nombre": "CHRIFSA S.A.S., CHRIFSA S.A.S.",
-    "cuit": "30716859904",
-    "fecha_mora": "09/12/2025",
-    "saldo": 1543031.0,
-    "estado": "INTIMADO_EN_ESPERA_DE_PUBLICACION",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "30615302658": {
-    "nombre": "SANTA ISABEL SRL, SANTA ISABEL SRL",
-    "cuit": "30615302658",
-    "fecha_mora": "17/12/2025",
-    "saldo": 436383.0,
-    "estado": "INTIMADO_EN_ESPERA_DE_PUBLICACION",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "20326315371": {
-    "nombre": "ESPECHE, CRISTIAN DANIEL",
-    "cuit": "20326315371",
-    "fecha_mora": "17/12/2025",
-    "saldo": 402771.0,
-    "estado": "INTIMADO_EN_ESPERA_DE_PUBLICACION",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "30654940955": {
-    "nombre": "MADACILO S R L, MADACILO S R L",
-    "cuit": "30654940955",
-    "fecha_mora": "15/12/2025",
-    "saldo": 524858.0,
-    "estado": "INTIMADO_EN_ESPERA_DE_PUBLICACION",
-    "tipo": "FACTURA/S IMPAGA/S"
-  },
-  "20278462790": {
-    "nombre": "VARAS TOLEDO, SEBASTIAN",
-    "cuit": "20278462790",
-    "fecha_mora": "12/12/2025",
-    "saldo": 236305.0,
-    "estado": "INTIMADO_EN_ESPERA_DE_PUBLICACION",
-    "tipo": "FACTURA/S IMPAGA/S"
-  }
-}
