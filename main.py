@@ -4,6 +4,7 @@ import requests
 import urllib3
 import os
 import json
+import time
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -12,7 +13,34 @@ CORS(app)
 app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024
 
 GEMINI_KEY = os.environ.get('GEMINI_API_KEY', '')
-GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
+GEMINI_MODELS = [
+    "gemini-flash-latest",
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+]
+
+def gemini_request(payload, timeout=45):
+    """Intenta con múltiples modelos y reintentos automáticos."""
+    for modelo in GEMINI_MODELS:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent?key={GEMINI_KEY}"
+        for intento in range(3):
+            try:
+                r = requests.post(url, headers={"Content-Type": "application/json"}, json=payload, timeout=timeout)
+                data = r.json()
+                if 'error' in data:
+                    code = data['error'].get('code', 0)
+                    msg = data['error'].get('message', '')
+                    if code in [429, 503] or 'demanda' in msg.lower() or 'quota' in msg.lower():
+                        time.sleep(3 * (intento + 1))
+                        continue
+                    break
+                texto = data['candidates'][0]['content']['parts'][0]['text']
+                return texto, None
+            except Exception as e:
+                if intento < 2:
+                    time.sleep(2)
+                continue
+    return None, "No se pudo conectar con el motor de análisis. Intentá de nuevo en unos minutos."
 
 @app.route("/")
 def index():
@@ -42,25 +70,6 @@ def get_historial(cuit):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/test-gemini")
-def test_gemini():
-    if not GEMINI_KEY:
-        return jsonify({"error": "No hay API key configurada"}), 500
-    try:
-        r = requests.post(
-            f"{GEMINI_URL}?key={GEMINI_KEY}",
-            headers={"Content-Type": "application/json"},
-            json={"contents": [{"parts": [{"text": "Respondé solo con la palabra OK"}]}]},
-            timeout=15
-        )
-        data = r.json()
-        if 'error' in data:
-            return jsonify({"error": data['error'].get('message',''), "modelo": GEMINI_URL})
-        texto = data['candidates'][0]['content']['parts'][0]['text']
-        return jsonify({"ok": True, "respuesta": texto, "modelo": GEMINI_URL})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
 @app.route("/analizar", methods=["POST"])
 def analizar():
     if not GEMINI_KEY:
@@ -68,16 +77,10 @@ def analizar():
     try:
         body = request.get_json()
         prompt = body.get('prompt', '')
-        r = requests.post(
-            f"{GEMINI_URL}?key={GEMINI_KEY}",
-            headers={"Content-Type": "application/json"},
-            json={"contents": [{"parts": [{"text": prompt}]}]},
-            timeout=30
-        )
-        data = r.json()
-        if 'error' in data:
-            return jsonify({"error": data['error'].get('message', str(data['error']))}), 500
-        texto = data['candidates'][0]['content']['parts'][0]['text']
+        payload = {"contents": [{"parts": [{"text": prompt}]}]}
+        texto, error = gemini_request(payload)
+        if error:
+            return jsonify({"error": error}), 500
         return jsonify({"texto": texto})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -90,24 +93,30 @@ def procesar_veraz():
         body = request.get_json(force=True)
         pdf_base64 = body.get('pdf', '')
         prompt = 'Extraé los datos de este informe Veraz/Equifax y respondé SOLO en JSON sin markdown: {"nombre":"","cuit":"","score":0,"situacion_bcra":"","cheques_rechazados":0,"monto_cheques":"","saldo_vencido":"","deuda_sistema_financiero":"","maximo_atraso":"","entidades_problema":[],"resumen":""}'
-        r = requests.post(
-            f"{GEMINI_URL}?key={GEMINI_KEY}",
-            headers={"Content-Type": "application/json"},
-            json={"contents": [{"parts": [
-                {"inline_data": {"mime_type": "application/pdf", "data": pdf_base64}},
-                {"text": prompt}
-            ]}]},
-            timeout=60
-        )
-        data = r.json()
-        if 'error' in data:
-            return jsonify({"error": data['error'].get('message', str(data['error']))}), 500
-        texto = data['candidates'][0]['content']['parts'][0]['text']
+        payload = {"contents": [{"parts": [
+            {"inline_data": {"mime_type": "application/pdf", "data": pdf_base64}},
+            {"text": prompt}
+        ]}]}
+        texto, error = gemini_request(payload, timeout=60)
+        if error:
+            return jsonify({"error": error}), 500
         texto_limpio = texto.strip().replace('```json','').replace('```','').strip()
         resultado = json.loads(texto_limpio)
         return jsonify(resultado)
+    except json.JSONDecodeError:
+        return jsonify({"error": "Error al procesar el PDF. Intentá de nuevo."}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route("/test-gemini")
+def test_gemini():
+    if not GEMINI_KEY:
+        return jsonify({"error": "No hay API key"}), 500
+    payload = {"contents": [{"parts": [{"text": "Respondé solo con la palabra OK"}]}]}
+    texto, error = gemini_request(payload)
+    if error:
+        return jsonify({"error": error}), 500
+    return jsonify({"ok": True, "respuesta": texto})
 
 @app.route("/health")
 def health():
