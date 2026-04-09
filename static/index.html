@@ -83,6 +83,10 @@
   .lbl { color: #888; }
   .afip-box { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; font-size: 13px; }
   .afip-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 13px; margin-top: 8px; }
+  .hist-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 1rem; background: #fff; border: 1px solid #e0e0d8; border-radius: 10px; margin-bottom: 6px; gap: 8px; flex-wrap: wrap; cursor: pointer; transition: background 0.15s; }
+  .hist-row:hover { background: #f9f9f7; }
+  .hist-nombre { font-size: 14px; font-weight: 600; color: #1a1a1a; }
+  .hist-meta { font-size: 12px; color: #888; margin-top: 2px; }
   .afip-full { grid-column: 1/-1; }
 </style>
 </head>
@@ -100,6 +104,7 @@
 <div class="container">
   <div class="tabs">
     <button class="tab active" onclick="switchTab('consulta',this)">Consultar</button>
+    <button class="tab" onclick="switchTab('historial',this)">Historial</button>
     <button class="tab" onclick="switchTab('cartera',this)">Cartera</button>
     <button class="tab" onclick="switchTab('alertas',this)">Alertas</button>
     <button class="tab" onclick="switchTab('configuracion',this)">Config</button>
@@ -162,6 +167,17 @@
     </div>
   </div>
 
+  <div id="historial" class="section">
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <div class="card-title" style="margin-bottom:0;">Clientes consultados</div>
+        <button onclick="limpiarHistorial()" style="font-size:12px;padding:4px 10px;color:#991b1b;">Limpiar</button>
+      </div>
+      <div style="font-size:12px;color:#aaa;">Se guardan automáticamente las últimas 50 consultas.</div>
+    </div>
+    <div id="historial-lista"><div class="empty-state">Todavía no consultaste ningún cliente.</div></div>
+  </div>
+
   <div id="cartera" class="section">
     <div class="card">
       <div class="card-title">Agregar cliente a seguimiento</div>
@@ -206,6 +222,7 @@ let wspIndex = null;
 let morasIndex = null;
 let verazData = null;
 let ultimoAnalisis = null;
+let historialConsultas = JSON.parse(localStorage.getItem('piat_historial') || '[]');
 let cartera = JSON.parse(localStorage.getItem('piat_cartera') || '[]');
 let situaciones = JSON.parse(localStorage.getItem('piat_situaciones') || '{}');
 let alertas = JSON.parse(localStorage.getItem('piat_alertas') || '[]');
@@ -251,6 +268,7 @@ function switchTab(tab, el) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   el.classList.add('active');
   document.getElementById(tab).classList.add('active');
+  if (tab === 'historial') renderHistorial();
   if (tab === 'cartera') renderCartera();
   if (tab === 'alertas') renderAlertas();
 }
@@ -284,6 +302,7 @@ async function consultarCliente() {
     const bcraData = bcraRes.status === 'fulfilled' ? await bcraRes.value.json() : null;
     const afipData = afipRes.status === 'fulfilled' ? await afipRes.value.json() : null;
     mostrarResultado(raw, bcraData);
+    guardarEnHistorial(raw, bcraData);
     mostrarAFIP(raw);
     mostrarWSP(raw);
   } catch(e) {
@@ -514,6 +533,55 @@ async function actualizarWSP(input) {
   document.getElementById('wsp-dot').style.background = '#25d366';
   document.getElementById('wsp-label').textContent = `Bodegas: ${total} clientes`;
   statusEl.textContent = `Listo. ${nuevos} CUITs nuevos. Total: ${total} clientes indexados.`;
+}
+
+function guardarEnHistorial(cuit, bcraData) {
+  const entidades = bcraData?.results?.periodos?.[0]?.entidades || [];
+  const nombre = bcraData?.results?.denominacion || 'Sin denominación';
+  const maxSit = entidades.length ? entidades.reduce((m,e) => Math.max(m, e.situacion||1), 1) : 1;
+  const mora = buscarEnMoras(cuit);
+  const entrada = {
+    cuit,
+    nombre,
+    situacion: maxSit,
+    tieneMora: !!mora,
+    fecha: new Date().toLocaleDateString('es-AR'),
+    hora: new Date().toLocaleTimeString('es-AR', {hour:'2-digit', minute:'2-digit'})
+  };
+  historialConsultas = [entrada, ...historialConsultas.filter(h => h.cuit !== cuit)].slice(0, 50);
+  localStorage.setItem('piat_historial', JSON.stringify(historialConsultas));
+}
+
+function renderHistorial() {
+  const el = document.getElementById('historial-lista');
+  if (!historialConsultas.length) {
+    el.innerHTML = `<div class="empty-state">Todavía no consultaste ningún cliente.</div>`;
+    return;
+  }
+  el.innerHTML = historialConsultas.map(h => `
+    <div class="hist-row" onclick="verClienteHistorial('${h.cuit}')">
+      <div>
+        <div class="hist-nombre">${h.nombre}</div>
+        <div class="hist-meta">CUIT: ${h.cuit} · ${h.fecha} ${h.hora}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+        ${h.tieneMora ? '<span class="badge badge-mora">Mora</span>' : ''}
+        ${getBadge(h.situacion)}
+      </div>
+    </div>`).join('');
+}
+
+function verClienteHistorial(cuit) {
+  document.querySelectorAll('.tab')[0].click();
+  document.getElementById('cuit-input').value = cuit;
+  consultarCliente();
+}
+
+function limpiarHistorial() {
+  if (!confirm('¿Limpiar todo el historial de consultas?')) return;
+  historialConsultas = [];
+  localStorage.setItem('piat_historial', JSON.stringify(historialConsultas));
+  renderHistorial();
 }
 
 function agregarCliente() {
