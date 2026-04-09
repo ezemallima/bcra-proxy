@@ -133,11 +133,6 @@
       </div>
 
       <div class="card">
-        <div class="card-title">Situación BCRA</div>
-        <div id="bcra-data"></div>
-      </div>
-
-      <div class="card">
         <div class="card-title">Historial grupo de bodegas</div>
         <div id="wsp-data"><div class="wsp-no-data">Buscando en historial...</div></div>
       </div>
@@ -151,11 +146,6 @@
         <input type="file" id="veraz-pdf" accept=".pdf" style="display:none;" onchange="procesarVeraz(this)" />
         <div id="veraz-status" style="display:none;font-size:13px;color:#888;margin-bottom:8px;"></div>
         <div id="veraz-datos" style="display:none;padding:12px;background:#f9f9f7;border-radius:8px;border:1px solid #e0e0d8;margin-bottom:12px;"></div>
-      </div>
-
-      <div class="card">
-        <div class="card-title">Historial con Piattelli</div>
-        <textarea id="piattelli-info" rows="2" placeholder="Ej: Cliente desde 2018, paga a 30 días. Límite actual $2M."></textarea>
       </div>
 
       <div id="analisis-resultado" style="display:none;margin-bottom:1rem;padding:1.25rem;background:#fff;border-radius:12px;border:1px solid #e0e0d8;"></div>
@@ -192,12 +182,29 @@
 
   <div id="alertas" class="section">
     <div class="card">
-      <div class="card-title">Monitoreo automático BCRA</div>
-      <p style="font-size:13px;color:#666;line-height:1.6;margin-bottom:12px;">Detecta cambios en la situación BCRA de todos los clientes de la cartera.</p>
-      <button class="primary" onclick="verificarTodos()" id="btn-verificar" style="width:100%;">Verificar toda la cartera →</button>
+      <div class="card-title">Monitoreo BCRA — Cartera activa</div>
+      <p style="font-size:13px;color:#666;line-height:1.6;margin-bottom:8px;">
+        Verificá la situación BCRA de todos tus clientes. Se hacen pausas entre consultas para no ser bloqueado por el BCRA. Ejecutá una vez por mes.
+      </p>
+      <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+        <button class="primary" onclick="verificarTodos()" id="btn-verificar" style="flex:1;">Verificar toda la cartera →</button>
+        <button onclick="limpiarAlertas()" style="font-size:13px;color:#991b1b;">Limpiar alertas</button>
+      </div>
       <div class="progress-msg" id="verificar-progress"></div>
     </div>
-    <div id="alertas-lista"><div class="empty-state">No hay alertas activas.</div></div>
+
+    <div id="alertas-nuevas" style="display:none;margin-bottom:1rem;">
+      <div style="font-size:12px;color:#991b1b;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">⚠ Cambios detectados</div>
+      <div id="alertas-lista"></div>
+    </div>
+
+    <div class="card" style="margin-bottom:8px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <div class="card-title" style="margin-bottom:0;">Estado actual de la cartera</div>
+        <div style="font-size:12px;color:#888;" id="ultima-verificacion"></div>
+      </div>
+      <div id="cartera-bcra-lista"><div class="empty-state">No hay clientes en la cartera.<br>Agregá clientes en la pestaña Cartera.</div></div>
+    </div>
   </div>
 
   <div id="configuracion" class="section">
@@ -641,50 +648,110 @@ function verCliente(cuit) {
 }
 
 async function verificarTodos() {
-  if (!cartera.length) { alert('No hay clientes en la cartera'); return; }
+  if (!cartera.length) { alert('No hay clientes en la cartera. Agregá clientes en la pestaña Cartera.'); return; }
   const btn = document.getElementById('btn-verificar');
   const prog = document.getElementById('verificar-progress');
   btn.disabled = true;
   const nuevasAlertas = [];
+
   for (let i=0; i<cartera.length; i++) {
     const c = cartera[i];
     prog.textContent = `Verificando ${i+1}/${cartera.length}: ${c.nombre}...`;
     try {
-      const r = await fetch(`/deudas/${c.cuit}`, {signal: AbortSignal.timeout(20000)});
-      const data = await r.json();
-      const entidades = data?.results?.periodos?.[0]?.entidades || [];
-      const maxSit = entidades.length ? entidades.reduce((m,e)=>Math.max(m,e.situacion||1),1) : 1;
-      const sitAnterior = situaciones[c.cuit] || c.ultimaSit || 1;
-      if (maxSit > sitAnterior) nuevasAlertas.push({nombre:c.nombre,cuit:c.cuit,sitAnterior,sitActual:maxSit,fecha:new Date().toLocaleDateString('es-AR')});
-      situaciones[c.cuit] = maxSit;
-      cartera[i].ultimaSit = maxSit;
-      cartera[i].ultimaVerif = new Date().toLocaleDateString('es-AR');
+      // Consultar BCRA con pausa generosa para no ser bloqueado
+      const bcraData = await consultarBCRA(c.cuit);
+      if (bcraData && !bcraData.error) {
+        const entidades = bcraData?.results?.periodos?.[0]?.entidades || [];
+        const maxSit = entidades.length ? entidades.reduce((m,e)=>Math.max(m,e.situacion||1),1) : 1;
+        const sitAnterior = situaciones[c.cuit] || c.ultimaSit || 1;
+        if (maxSit > sitAnterior) {
+          nuevasAlertas.push({nombre:c.nombre, cuit:c.cuit, sitAnterior, sitActual:maxSit, fecha:new Date().toLocaleDateString('es-AR')});
+        }
+        situaciones[c.cuit] = maxSit;
+        cartera[i].ultimaSit = maxSit;
+        cartera[i].ultimaVerif = new Date().toLocaleDateString('es-AR');
+        cartera[i].ultimaBcraData = entidades;
+      }
     } catch(e) {}
-    await new Promise(r=>setTimeout(r,600));
+    // Pausa de 4 segundos entre consultas para no ser bloqueado por el BCRA
+    if (i < cartera.length - 1) {
+      prog.textContent = `Verificando ${i+1}/${cartera.length}: ${c.nombre}... (esperando ${4}s)`;
+      await new Promise(r=>setTimeout(r,4000));
+    }
   }
+
+  const ahora = new Date().toLocaleDateString('es-AR') + ' ' + new Date().toLocaleTimeString('es-AR', {hour:'2-digit',minute:'2-digit'});
   localStorage.setItem('piat_situaciones', JSON.stringify(situaciones));
   localStorage.setItem('piat_cartera', JSON.stringify(cartera));
+  localStorage.setItem('piat_ultima_verif', ahora);
   alertas = [...nuevasAlertas, ...alertas].slice(0,30);
   localStorage.setItem('piat_alertas', JSON.stringify(alertas));
   btn.disabled = false;
-  prog.textContent = nuevasAlertas.length===0 ? `✓ Sin cambios en la cartera.` : `⚠ ${nuevasAlertas.length} cliente(s) con cambios.`;
+
+  if (nuevasAlertas.length===0) {
+    prog.textContent = `✓ Verificación completada el ${ahora}. Sin cambios en la cartera.`;
+  } else {
+    prog.textContent = `⚠ Verificación completada. ${nuevasAlertas.length} cliente(s) con cambios de situación.`;
+  }
+  renderAlertas();
+}
+
+function limpiarAlertas() {
+  if (!confirm('¿Limpiar todas las alertas?')) return;
+  alertas = [];
+  localStorage.setItem('piat_alertas', JSON.stringify(alertas));
   renderAlertas();
 }
 
 function renderAlertas() {
-  const el = document.getElementById('alertas-lista');
-  if (!alertas.length) { el.innerHTML = `<div class="empty-state">No hay alertas activas.</div>`; return; }
-  el.innerHTML = alertas.map(a => `
-    <div class="alert-card">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-        <div>
-          <div style="font-size:14px;font-weight:600;">${a.nombre}</div>
-          <div style="font-size:12px;color:#888;margin-top:2px;">CUIT: ${a.cuit} · ${a.fecha}</div>
-          <div style="font-size:13px;margin-top:8px;color:#991b1b;font-weight:500;">Situación BCRA: ${a.sitAnterior} → ${a.sitActual} (${sitNombre(a.sitActual)})</div>
+  // Mostrar alertas nuevas
+  const alertasEl = document.getElementById('alertas-lista');
+  const alertasNuevasDiv = document.getElementById('alertas-nuevas');
+  
+  if (alertas.length) {
+    alertasNuevasDiv.style.display = 'block';
+    alertasEl.innerHTML = alertas.map(a => `
+      <div class="alert-card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+          <div>
+            <div style="font-size:14px;font-weight:600;">${a.nombre}</div>
+            <div style="font-size:12px;color:#888;margin-top:2px;">CUIT: ${a.cuit} · ${a.fecha}</div>
+            <div style="font-size:13px;margin-top:8px;color:#991b1b;font-weight:500;">Situación BCRA: ${a.sitAnterior} → ${a.sitActual} (${sitNombre(a.sitActual)})</div>
+          </div>
+          <span class="badge badge-danger">Alerta</span>
         </div>
-        <span class="badge badge-danger">Alerta</span>
+      </div>`).join('');
+  } else {
+    alertasNuevasDiv.style.display = 'none';
+  }
+
+  // Mostrar estado actual de toda la cartera
+  const listaEl = document.getElementById('cartera-bcra-lista');
+  const ultimaVerif = localStorage.getItem('piat_ultima_verif');
+  if (ultimaVerif) {
+    document.getElementById('ultima-verificacion').textContent = `Última verificación: ${ultimaVerif}`;
+  }
+
+  if (!cartera.length) {
+    listaEl.innerHTML = `<div class="empty-state">No hay clientes en la cartera.<br>Agregá clientes en la pestaña Cartera.</div>`;
+    return;
+  }
+
+  listaEl.innerHTML = cartera.map((c,i) => {
+    const mora = buscarEnMoras(c.cuit);
+    return `
+    <div class="client-row" style="cursor:pointer;" onclick="verCliente('${c.cuit}')">
+      <div>
+        <div class="client-name">${c.nombre}</div>
+        <div class="client-meta">CUIT: ${c.cuit}${c.ultimaVerif ? ` · Verificado: ${c.ultimaVerif}` : ' · Sin verificar'}</div>
       </div>
-    </div>`).join('');
+      <div class="client-right">
+        ${mora ? '<span class="badge badge-mora">Mora</span>' : ''}
+        ${buscarEnWSP(c.cuit) ? '<span class="badge badge-wsp">En bodegas</span>' : ''}
+        ${c.ultimaSit ? getBadge(c.ultimaSit) : '<span style="font-size:11px;color:#aaa;">Pendiente</span>'}
+      </div>
+    </div>`;
+  }).join('');
 }
 
 init();
