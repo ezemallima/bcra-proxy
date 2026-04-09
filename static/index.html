@@ -432,6 +432,21 @@ async function procesarVeraz(input) {
           <div class="full"><span class="lbl">Deuda sistema financiero:</span> <strong>${verazData.deuda_sistema_financiero||'-'}</strong></div>
           <div class="full"><span class="lbl">Máximo atraso 24 meses:</span> <strong>${verazData.maximo_atraso||'-'}</strong></div>
           ${verazData.resumen?`<div class="full" style="padding-top:8px;border-top:1px solid #e0e0d8;color:#555;line-height:1.5;">${verazData.resumen}</div>`:''}
+          ${verazData.socios_directores?.length ? `
+            <div class="full" style="padding-top:8px;border-top:1px solid #e0e0d8;">
+              <div style="font-size:11px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Socios / Directores</div>
+              ${verazData.socios_directores.map(s => `
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f0e8;flex-wrap:wrap;gap:4px;">
+                  <div>
+                    <div style="font-size:13px;font-weight:600;">${s.nombre}</div>
+                    <div style="font-size:11px;color:#888;">${s.cargo||''} ${s.cuit_dni?'· '+s.cuit_dni:''}</div>
+                  </div>
+                  <div style="display:flex;gap:6px;align-items:center;">
+                    ${s.score ? `<span style="font-size:12px;font-weight:600;color:${s.score<=3?'#991b1b':s.score<=5?'#854d0e':'#166534'}">Score: ${s.score}/9</span>` : ''}
+                    ${s.situacion ? `<span style="font-size:11px;padding:2px 8px;background:#f9f9f7;border:1px solid #e0e0d8;border-radius:20px;">${s.situacion}</span>` : ''}
+                  </div>
+                </div>`).join('')}
+            </div>` : ''}
         </div>`;
     } catch(e) { statusEl.textContent = 'No se pudo procesar el PDF. Intentá de nuevo en unos segundos.'; }
   };
@@ -462,7 +477,7 @@ Este antecedente es determinante para el análisis.
 
 `;
   if (verazData) {
-    prompt += `INFORME VERAZ/EQUIFAX:
+    prompt += `INFORME VERAZ/EQUIFAX — EMPRESA:
 - Score crediticio: ${verazData.score}/9 ${verazData.score <= 3 ? '(MUY BAJO - alto riesgo)' : verazData.score <= 5 ? '(MEDIO - revisar)' : '(BUENO)'}
 - Cheques rechazados: ${verazData.cheques_rechazados} ${verazData.cheques_rechazados > 0 ? '⚠️ ATENCIÓN' : '✓'}
 - Situación BCRA: ${verazData.situacion_bcra}
@@ -472,6 +487,15 @@ Este antecedente es determinante para el análisis.
 - Entidades con problemas: ${verazData.entidades_problema?.join(', ') || 'Ninguna'}
 
 `;
+    if (verazData.socios_directores?.length) {
+      prompt += `SOCIOS / DIRECTORES (información de contexto — NO son el cliente principal):
+IMPORTANTE: El análisis principal debe basarse en el CUIT de la empresa. Los datos de socios son señales de alerta secundarias.
+${verazData.socios_directores.map(s => `- ${s.nombre} (${s.cargo||'socio'}): Score ${s.score||'N/D'}/9 | Situación: ${s.situacion||'N/D'} | ID: ${s.cuit_dni||'N/D'}`).join('\n')}
+
+Si algún socio/director tiene score bajo o situación crítica, mencionarlo como alerta secundaria en el análisis pero sin que sea determinante para el veredicto final si la empresa está bien.
+
+`;
+    }
   }
   if (wspThreads?.length) {
     prompt += `HISTORIAL EN GRUPO DE BODEGAS (referencia del mercado):
