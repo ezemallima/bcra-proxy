@@ -47,13 +47,14 @@ def test_gemini():
     if not GEMINI_KEY:
         return jsonify({"error": "No hay API key configurada"}), 500
     try:
-        r = requests.post(
-            f"{GEMINI_URL}?key={GEMINI_KEY}",
-            headers={"Content-Type": "application/json"},
-            json={"contents": [{"parts": [{"text": "Respondé solo con la palabra: OK"}]}]},
-            timeout=15
+        # Listar modelos disponibles
+        r = requests.get(
+            f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_KEY}",
+            timeout=10
         )
-        return jsonify({"status": r.status_code, "respuesta": r.json()})
+        data = r.json()
+        modelos = [m['name'] for m in data.get('models', []) if 'generateContent' in m.get('supportedGenerationMethods', [])]
+        return jsonify({"modelos_disponibles": modelos})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
