@@ -1,16 +1,21 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 import requests
+import urllib3
 
-app = Flask(__name__)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+app = Flask(__name__, static_folder='static')
 CORS(app)
 
-BCRA_BASE = "https://api.bcra.gob.ar/centraldedeudores/v1.0"
+@app.route("/")
+def index():
+    return send_from_directory('static', 'index.html')
 
 @app.route("/deudas/<cuit>")
 def get_deudas(cuit):
     try:
-        r = requests.get(f"{BCRA_BASE}/Deudas/{cuit}", timeout=10, verify=False)
+        r = requests.get(f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/{cuit}", timeout=10, verify=False)
         return jsonify(r.json()), r.status_code
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -18,7 +23,7 @@ def get_deudas(cuit):
 @app.route("/deudas/<cuit>/historial")
 def get_historial(cuit):
     try:
-        r = requests.get(f"{BCRA_BASE}/Deudas/{cuit}/Historial", timeout=10, verify=False)
+        r = requests.get(f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/{cuit}/Historial", timeout=10, verify=False)
         return jsonify(r.json()), r.status_code
     except Exception as e:
         return jsonify({"error": str(e)}), 500
