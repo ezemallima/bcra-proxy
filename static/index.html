@@ -308,7 +308,7 @@ async function consultarCliente() {
   } catch(e) {
     document.getElementById('loading-state').style.display = 'none';
     document.getElementById('resultado').style.display = 'block';
-    document.getElementById('cliente-header').innerHTML = `<p style="color:#888;font-size:13px;">Error al conectar. Esperá 30 segundos e intentá de nuevo.</p>`;
+    document.getElementById('cliente-header').innerHTML = `<p style="font-size:13px;color:#854d0e;padding:8px;background:#fefce8;border-radius:8px;border:1px solid #fde047;">El BCRA no respondió. Puede que el cliente no tenga deudas registradas o el servicio esté temporalmente caído. Podés subir el PDF de Veraz igual y hacer el análisis.</p>`;
     document.getElementById('verdict-container').innerHTML = '';
     document.getElementById('bcra-data').innerHTML = '';
     mostrarAFIP(raw);
