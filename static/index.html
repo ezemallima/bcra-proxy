@@ -448,17 +448,70 @@ async function analizarCliente() {
   const resEl = document.getElementById('analisis-resultado');
   btn.disabled = true; btn.textContent = 'Analizando...'; resEl.style.display = 'none';
 
-  let prompt = `Sos analista de riesgo crediticio de Bodega Piattelli. Analizá este cliente y dá un veredicto: APROBAR, REVISAR o RECHAZAR.\n\nCUIT: ${cuit}\n`;
-  if (mora) prompt += `\n⚠ MORA CON PIATTELLI: ${mora.nombre} debe $${mora.saldo.toLocaleString('es-AR')} desde ${mora.fecha_mora} (Estado: ${mora.estado})\n`;
+  let prompt = `Sos un analista de riesgo crediticio senior especializado en el sector vitivinícola argentino. Tu trabajo es evaluar clientes para Bodega Piattelli y emitir un informe completo de riesgo crediticio.
+
+CUIT consultado: ${cuit}
+
+`;
+  if (mora) prompt += `⚠️ ALERTA CRÍTICA - MORA CON PIATTELLI:
+${mora.nombre} tiene deuda impaga desde ${mora.fecha_mora}.
+Saldo adeudado: $${mora.saldo.toLocaleString('es-AR')} — Estado: ${mora.estado}
+Este antecedente es determinante para el análisis.
+
+`;
   if (verazData) {
-    prompt += `\nDatos Veraz:\n- Score: ${verazData.score}/9\n- Cheques rechazados: ${verazData.cheques_rechazados}\n- Situación BCRA: ${verazData.situacion_bcra}\n- Saldo vencido: ${verazData.saldo_vencido}\n- Deuda total: ${verazData.deuda_sistema_financiero}\n- Máximo atraso: ${verazData.maximo_atraso}\n`;
+    prompt += `INFORME VERAZ/EQUIFAX:
+- Score crediticio: ${verazData.score}/9 ${verazData.score <= 3 ? '(MUY BAJO - alto riesgo)' : verazData.score <= 5 ? '(MEDIO - revisar)' : '(BUENO)'}
+- Cheques rechazados: ${verazData.cheques_rechazados} ${verazData.cheques_rechazados > 0 ? '⚠️ ATENCIÓN' : '✓'}
+- Situación BCRA: ${verazData.situacion_bcra}
+- Saldo vencido: ${verazData.saldo_vencido}
+- Deuda total en sistema financiero: ${verazData.deuda_sistema_financiero}
+- Máximo atraso últimos 24 meses: ${verazData.maximo_atraso}
+- Entidades con problemas: ${verazData.entidades_problema?.join(', ') || 'Ninguna'}
+
+`;
   }
-  const afipEl = document.getElementById('afip-container');
-  if (afipEl.innerText) prompt += `\nDatos AFIP:\n${afipEl.innerText}\n`;
-  if (bcra) prompt += `\nDatos BCRA:\n${bcra}\n`;
-  if (wspThreads?.length) { prompt += `\nInfo grupo bodegas:\n`; wspThreads.forEach(t => t.mensajes.slice(0,5).forEach(m => { prompt += `${m.autor}: ${m.texto}\n`; })); }
-  if (piat) prompt += `\nHistorial Piattelli:\n${piat}\n`;
-  prompt += `\nCriterios: score alto, sin cheques, sin deudas informadas, situación 1 BCRA, sin mora con Piattelli.\nDá el veredicto con los motivos en 4-5 líneas.`;
+  if (wspThreads?.length) {
+    prompt += `HISTORIAL EN GRUPO DE BODEGAS (referencia del mercado):
+`;
+    wspThreads.forEach(t => t.mensajes.slice(0,5).forEach(m => { prompt += `${m.autor}: ${m.texto}\n`; }));
+    prompt += `\n`;
+  }
+  if (piat) prompt += `HISTORIAL CON PIATTELLI:
+${piat}
+
+`;
+  prompt += `CRITERIOS DE EVALUACIÓN:
+- Situación BCRA ideal: 1 (Normal). Situación 2 requiere garantías. Situación 3+ es rechazo automático.
+- Score Veraz ideal: 7 o más. Entre 5-6 requiere condiciones. Menos de 5 es rechazo.
+- Cheques rechazados: cualquier antecedente reciente es señal de alerta grave.
+- Mora con Piattelli: es condición de rechazo automático hasta regularización.
+- Historial en grupo de bodegas: referencias negativas de colegas del sector pesan mucho.
+
+MODALIDADES DE VENTA DISPONIBLES:
+1. CUENTA CORRIENTE 30/60/90 días — para clientes AAA sin antecedentes
+2. CHEQUE A 30/60 DÍAS — para clientes buenos con alguna observación menor  
+3. CHEQUE CONTRA ENTREGA — para clientes nuevos o con historial mixto
+4. PAGO ANTICIPADO — para clientes con antecedentes negativos pero con potencial
+5. RECHAZO TOTAL — para clientes con mora activa, situación 3+ o cheques rechazados recientes
+
+FORMATO DE RESPUESTA REQUERIDO:
+**VEREDICTO: [APROBAR / APROBAR CON CONDICIONES / REVISAR / RECHAZAR]**
+
+**MODALIDAD DE VENTA RECOMENDADA:** [elegí una de las 5 opciones y justificá]
+
+**LÍMITE DE CRÉDITO SUGERIDO:** $[monto en pesos] — [justificación breve]
+
+**ANÁLISIS DE RIESGO:**
+[3-4 líneas con los puntos más importantes del perfil crediticio]
+
+**SEÑALES DE ALERTA:**
+[listá las alertas encontradas, o "Sin alertas" si el perfil es limpio]
+
+**CONDICIONES ESPECIALES (si aplica):**
+[cualquier condición adicional que recomendés, como garantías, avales, límite de plazo, etc.]
+
+Sé directo, profesional y específico. El equipo de ventas va a usar este informe para tomar decisiones comerciales reales.`;
 
   try {
     const r = await fetch('/analizar', {
