@@ -440,8 +440,10 @@ async function procesarVeraz(input) {
 
 async function analizarCliente() {
   const cuit = document.getElementById('cuit-input').value.replace(/-/g,'').trim();
-  const piat = document.getElementById('piattelli-info').value;
-  const bcra = document.getElementById('bcra-data').innerText;
+  const piatEl = document.getElementById('piattelli-info');
+  const piat = piatEl ? piatEl.value : '';
+  const bcraEl = document.getElementById('bcra-data');
+  const bcra = bcraEl ? bcraEl.innerText : '';
   const wspThreads = buscarEnWSP(cuit);
   const mora = buscarEnMoras(cuit);
   const btn = document.getElementById('btn-analizar');
