@@ -236,7 +236,30 @@ let alertas = JSON.parse(localStorage.getItem('piat_alertas') || '[]');
 
 async function init() {
   checkProxy();
-  await Promise.all([cargarWSP(), cargarMoras()]);
+  await Promise.all([cargarWSP(), cargarMoras(), cargarCarteraServidor()]);
+}
+
+async function cargarCarteraServidor() {
+  // Si ya hay cartera en localStorage, usarla
+  if (cartera.length > 0) {
+    renderCartera();
+    renderAlertas();
+    return;
+  }
+  // Si no hay cartera local, cargar del servidor
+  try {
+    const r = await fetch('/cartera_inicial.json');
+    const data = await r.json();
+    if (data && data.length > 0) {
+      cartera = data;
+      localStorage.setItem('piat_cartera', JSON.stringify(cartera));
+      renderCartera();
+      renderAlertas();
+      console.log(`Cartera cargada del servidor: ${cartera.length} clientes`);
+    }
+  } catch(e) {
+    console.log('No se pudo cargar cartera del servidor:', e);
+  }
 }
 
 async function checkProxy() {
