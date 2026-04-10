@@ -1,0 +1,3523 @@
+[
+  {
+    "cuit": "30714840203",
+    "nombre": "PANESSIDI S.R.L.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30714844462",
+    "nombre": "Tu Bebida S.A.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30687310434",
+    "nombre": "Inc S. A.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30590360763",
+    "nombre": "Cencosud S A",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20258410336",
+    "nombre": "Ortega Sebastian Ramon Horacio",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717706281",
+    "nombre": "MARKEN DRINKS SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30548083156",
+    "nombre": "COTO CENTRO INTEGRAL DE COMERCIALIZACION S.A.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30715410261",
+    "nombre": "LAS LUCIAS SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30715323539",
+    "nombre": "Compañia Argentina De Bebidas S.A.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20213106008",
+    "nombre": "VIDELA ALEJANDRO MARTIN",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20274042029",
+    "nombre": "YANZI MARIANO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718287495",
+    "nombre": "WYPRA SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718910559",
+    "nombre": "RUSTICO VINOS SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30621630225",
+    "nombre": "H C A Sau",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20116816408",
+    "nombre": "Pandolfi Edgardo",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718144104",
+    "nombre": "Vinacho S.R.L.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718214072",
+    "nombre": "MATINA DITIES S.R.L",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20278612393",
+    "nombre": "DE GREGORIO FEDERICO MARTIN (LAVIRON)",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30655719160",
+    "nombre": "EL MIRASOL DE LA RECOVA SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20224682701",
+    "nombre": "CARDOZO FEDERICO JOSE",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27168991822",
+    "nombre": "LLANOS MIRTA YOLANDA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30711379521",
+    "nombre": "Rovlan S.A.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20251151440",
+    "nombre": "ABRIANI JUAN MANUEL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30714275670",
+    "nombre": "PLA GROUP SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30708140216",
+    "nombre": "PATAGONIA VINOS SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27065534628",
+    "nombre": "BOADA MARIA SUSANA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30715812742",
+    "nombre": "EL TUFFI SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30629325588",
+    "nombre": "INTERNACIONAL PANAMERICANA SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30701589773",
+    "nombre": "LOYDIS S.A.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30711549478",
+    "nombre": "SANTA BARBARA FOOD S.A.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716109220",
+    "nombre": "PABLO GABRIEL CAPPUCCIO Y LUIS DARIO ARCIDIACONO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20132775053",
+    "nombre": "SCALLY TOMAS KEVIN",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717516431",
+    "nombre": "VINOTECAS ROMA WINE SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30527225988",
+    "nombre": "Alvear Palace Hotel Sa I",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20208931742",
+    "nombre": "BONETTI GUILLERMO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20265639721",
+    "nombre": "CAMPOT RAFAEL GUSTAVO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30715127616",
+    "nombre": "PRIMERA ESQUINA SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717550842",
+    "nombre": "PROYECTO VALLE SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30649635389",
+    "nombre": "LA BRIGADA SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20218501010",
+    "nombre": "SGRINIERO FRANCISCO JAVIER",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718155025",
+    "nombre": "AZARI WINES SEL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30715541323",
+    "nombre": "DISTRIBUIDORA FIORELLA SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "23126405219",
+    "nombre": "FERNANDEZ JOSE ANTONIO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20366883879",
+    "nombre": "VACCARI DARIO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30711786887",
+    "nombre": "VINOTECA QUILMES SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30712476539",
+    "nombre": "DISTRIBUIDORA ENERGY NORTE SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30712108173",
+    "nombre": "DISTRIBUIDORA FERRARI SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717042499",
+    "nombre": "PORTAL DE LOS ANDES SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20201508720",
+    "nombre": "QUINTERO HUGO NORMANDO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716441373",
+    "nombre": "ROMA NOC S.A.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30548102444",
+    "nombre": "TELESA VICENTE Y TELESA FILOMENA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30714715522",
+    "nombre": "ALMACEN 1249 S.R.L.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30678624361",
+    "nombre": "ELISABEL SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20304962829",
+    "nombre": "FERNANDEZ JUAN MANUEL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30708285788",
+    "nombre": "GIMARAL SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27283213868",
+    "nombre": "PEÑA CATALINA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20359760052",
+    "nombre": "ACUÑA MARTIN",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716006367",
+    "nombre": "ALMACEN JABUGO S.R.L.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30698744177",
+    "nombre": "CAR SECURITY SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27129998941",
+    "nombre": "FRANCO JUANA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716230704",
+    "nombre": "HAPPY PEOPLE SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716738570",
+    "nombre": "HI1208 SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718059212",
+    "nombre": "SATTA SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717221709",
+    "nombre": "TANAG SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30682584617",
+    "nombre": "CONAMER SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30714965340",
+    "nombre": "DISTRIBUIDORA ZETA SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716274086",
+    "nombre": "Gcm S.A.S.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "33710920929",
+    "nombre": "JOSERAL SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "33717861979",
+    "nombre": "MMC SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20128782932",
+    "nombre": "WALTER DARUICH",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716974185",
+    "nombre": "ANDES DRIFTERS",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716212978",
+    "nombre": "Bolsa De Gatos S.A.S.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27257053631",
+    "nombre": "CZIMENT SABRINA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20203291052",
+    "nombre": "D ALOISIO CAMILO GUILLERMO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30714434590",
+    "nombre": "EL CHARRUA SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20160680904",
+    "nombre": "FRIGONI GONZALO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20296007049",
+    "nombre": "Gimenez Fernando David",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717436497",
+    "nombre": "LAZARTE Y LEZA SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716676427",
+    "nombre": "LOBSO SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30663448567",
+    "nombre": "PIEGARI SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716485559",
+    "nombre": "VMLR SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20207336875",
+    "nombre": "ABDENUR CARLOS ENRIQUE",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716688573",
+    "nombre": "ALVAVE SAS",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20436862297",
+    "nombre": "Abdenur Cristian Maximiliano",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20329454763",
+    "nombre": "BARBA MARCELO FEDERICO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20222222223",
+    "nombre": "ConsumidorFinal AV",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30715640313",
+    "nombre": "ESPACIOVINO SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30714639427",
+    "nombre": "GASTRO GROUP SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20217398992",
+    "nombre": "LONGONE CARLOS DANIEL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30692844927",
+    "nombre": "MARCACION E IDENTIFICACION SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30715696602",
+    "nombre": "MERCEDES 3939 SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "33712310729",
+    "nombre": "SAN JUAN S.R.L",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20259696934",
+    "nombre": "Sanfelice Sergio Dario",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717106543",
+    "nombre": "TAMTRUM SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20200637373",
+    "nombre": "ALEJANDRO GABRIEL COXE",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20292478551",
+    "nombre": "ARTESE ANDRES DAVID",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20270273743",
+    "nombre": "BASERGA MATIAS ADRIAN",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30707939113",
+    "nombre": "BAUMOL SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20317029188",
+    "nombre": "Berardinelli Alejandro",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718364457",
+    "nombre": "EDN SAS EN FORMACION",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20169232084",
+    "nombre": "FERNANDEZ NEGRON EDUARDO ADRIAN",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717982254",
+    "nombre": "JBJ SAS",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30686525607",
+    "nombre": "LIGIER S.A.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20927898145",
+    "nombre": "Melo Fabian Ignacio",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30714435007",
+    "nombre": "NEVART SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20265889701",
+    "nombre": "ORTEGA ADRIAN LEONARDO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20254624749",
+    "nombre": "ROMERO NOGUERA GUILLERMO ANDRES",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718166345",
+    "nombre": "RUCAWINE DISTRIBUIDORA SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30609539069",
+    "nombre": "T S R TIME SHARING RESORTS SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718279735",
+    "nombre": "VSL DISTRIBUCIONES SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20360864376",
+    "nombre": "AIROLDES MAURO HERNAN",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30708626305",
+    "nombre": "BOX 22 SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30651767772",
+    "nombre": "CONSULTORA INTEGRAL EMPRESARIA SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20933808867",
+    "nombre": "FATUROS TEMISTOCLES",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30709201278",
+    "nombre": "FIVIC SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20252952188",
+    "nombre": "LIBONATI MARIANO JOSE",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717045390",
+    "nombre": "ROGELIO SERV. JURIDICOS Y GASTRONOMICOS SAS",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20229932749",
+    "nombre": "ZORREGUIETA MARTIN",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716929120",
+    "nombre": "ALMACEN MUCHO GUSTO SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20368279723",
+    "nombre": "ALVAREZ LEONARDO RAUL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20228424944",
+    "nombre": "BRUM BERTOLO JULIO CESAR",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20246953172",
+    "nombre": "Bartolotti, Gustavo David",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30715454234",
+    "nombre": "Bingo Fuel Wines Sociedad Anonima",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717984087",
+    "nombre": "Bondeno S. A. S.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20295946815",
+    "nombre": "CASTILLO SEBASTIAN ALEJANDRO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27137926690",
+    "nombre": "FERNANDEZ GLADYS BEATRIZ",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20120826604",
+    "nombre": "GRAÑA SERGIO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30680780257",
+    "nombre": "JOLUGIA S.R.L.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20264908583",
+    "nombre": "LAMPERT SILVIO GABRIEL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717280039",
+    "nombre": "Marclas S. A. S.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717140628",
+    "nombre": "NCB SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30709348686",
+    "nombre": "NEKAY SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "23239741339",
+    "nombre": "NOBLE JOSE ERASMO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "23186333934",
+    "nombre": "Rodriguez Claudia Mabel",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20348420713",
+    "nombre": "SAEZ LUCIANO NAHUEL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30658150673",
+    "nombre": "TUR LYFE SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20277718120",
+    "nombre": "TuranoDiego Abel",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30709839957",
+    "nombre": "VINOS DEL SUR SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27369809119",
+    "nombre": "CARRO DANIELA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30711469946",
+    "nombre": "CENTRAL DE COMERCIO SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30711881847",
+    "nombre": "CREPS S.G. S.A.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30715537601",
+    "nombre": "Ch44 Bowling S.A",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717779211",
+    "nombre": "DU VIN COLECCION",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30531017362",
+    "nombre": "FEDERACION ARGENTINA DE TRABAJADORES CERVECEROS Y AFINES",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30710213735",
+    "nombre": "FVW SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20251543195",
+    "nombre": "GAMBALE GERARDO GERMAN",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717497127",
+    "nombre": "GRAN VALLE DE YARETAS S. A. S.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30715538322",
+    "nombre": "JEMMA S.R.L.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717309975",
+    "nombre": "MIL480 BEBIDAS SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717824918",
+    "nombre": "PEPITO BODEGON SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "23217569494",
+    "nombre": "REYNOSO SILVIA CARINA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "33715576789",
+    "nombre": "THE BAR SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717072614",
+    "nombre": "TIENDA LA COLORADA SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20240342155",
+    "nombre": "ADOBATTO MAXIMILIANO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30578411174",
+    "nombre": "ALBERDI S.A.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20293182419",
+    "nombre": "AQUILINO JUAN CARLOS",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30715958992",
+    "nombre": "Alpes Energy Sa",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20469904521",
+    "nombre": "Battistoni Marco",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27415875423",
+    "nombre": "COMPIANO ANGELINETTA MARIA SOL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20258249144",
+    "nombre": "CONTI GABRIEL SEBASTIAN",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "33718825259",
+    "nombre": "Casa Pueblo S. R. L.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30678533463",
+    "nombre": "Consultrade Sa",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717429865",
+    "nombre": "Convenience Retailing  S. A.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20259838798",
+    "nombre": "FATUROS CONSTANTINO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27222309420",
+    "nombre": "FESTA CARINA PAOLA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27215440759",
+    "nombre": "GONZALEZ SONIA GRACIELA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20300283609",
+    "nombre": "HEREDIA JOSE DANIEL GUSTAVO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20270504788",
+    "nombre": "INNELLA WALTER GASTON",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30711910464",
+    "nombre": "JUMAJO SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718092627",
+    "nombre": "LA CALDERA GASTRONOMICA SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "23368579084",
+    "nombre": "LISSA NAZARENA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30719057264",
+    "nombre": "La Caldera Mitre S.R.L.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20228242021",
+    "nombre": "Lange, Adrian",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30714192163",
+    "nombre": "MLCD SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "23319632689",
+    "nombre": "Macaya Manuel",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27291746778",
+    "nombre": "NATALIA SARAVIA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716352702",
+    "nombre": "Norte Emprendimientos Sas",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716133431",
+    "nombre": "Pan Con Tomate Srl",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30709224901",
+    "nombre": "RAC S.R.L",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20312899699",
+    "nombre": "RIAL LEANDRO DIEGO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718473965",
+    "nombre": "SAUSALITO WINES S.R.L.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "33715943269",
+    "nombre": "TIENDAS DEL NORTE SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20229621646",
+    "nombre": "VACCA SERGIO MARIO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717444635",
+    "nombre": "VWT EXPERIENCE SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20954482716",
+    "nombre": "WANG GONGFEI",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30715391895",
+    "nombre": "ALIMENTOS ALELU SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20230893889",
+    "nombre": "ALVAREZ MATIAS NICOLAS",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "33645949639",
+    "nombre": "BAR QUERANDI SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718428986",
+    "nombre": "BEBIDAMENTAAA SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "33718759469",
+    "nombre": "BEEF CURCUMA S.A.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20318697931",
+    "nombre": "BONDI MARCELO LEONARDO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27200024740",
+    "nombre": "BURONE MABEL ANDREA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20365295116",
+    "nombre": "CATENA NICOLAS ARIEL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "33716243759",
+    "nombre": "CIMEIRA SAS",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718724135",
+    "nombre": "DAHNA PINOT S.R.L.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27047242644",
+    "nombre": "DE DOMINICIS NELIDA CARMEN",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27203186490",
+    "nombre": "DI NOIA MARCELA ALEJANDRA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20246917702",
+    "nombre": "Davicino Martin",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20244452842",
+    "nombre": "FERMI FACUNDO MARIANO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20203839422",
+    "nombre": "FUENTES JOSE LUIS",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718157729",
+    "nombre": "Farallon S. A. S.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20132327093",
+    "nombre": "GUILLERMO CRUZ",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27282502920",
+    "nombre": "Hansen, Elisa Maria",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718124138",
+    "nombre": "INTUIZIONE S. A. S.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30525322749",
+    "nombre": "IRSA INVERSIONES Y REPRESENTACIONES S.A",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20280932281",
+    "nombre": "JARA JUAN MANUEL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717643247",
+    "nombre": "JASMIN PASEO SAN FRANCISCO SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717280594",
+    "nombre": "LEPETITVINS SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30584627006",
+    "nombre": "LIBERTAD 431 SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20381510914",
+    "nombre": "MOBILIA NICOLAS EZEQUIEL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717513556",
+    "nombre": "MOM AGENCIA CREATIVA SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30714829617",
+    "nombre": "NORTHMARKET SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20330525461",
+    "nombre": "Navarrete, Rodrigo Emmanuel",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20309470916",
+    "nombre": "OBARRIO GABRIEL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20404402405",
+    "nombre": "PASTORAK PARRA TOMAS AUGUSTO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20353455835",
+    "nombre": "RIO GONZALO GERMAN",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718405862",
+    "nombre": "SAN DONA S. R. L.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20172876030",
+    "nombre": "SERRES RAUL ALFREDO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716918498",
+    "nombre": "SI SOLUCIONES INTEGRALES SAS",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30715260251",
+    "nombre": "SOLTIZ S.R.L.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20932069475",
+    "nombre": "SU HAOWEN",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30707783229",
+    "nombre": "Summit Agro Argentina S A",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717957098",
+    "nombre": "TIENDA DE SABORES SAS",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30710731507",
+    "nombre": "VITIS SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718974573",
+    "nombre": "YARDA 51 S.R.L.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "33715266879",
+    "nombre": "ALMACEN DEMARIA 4677 S.R.L.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717292312",
+    "nombre": "Alma Tinta S. R. L.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20227844184",
+    "nombre": "Alvarez Pablo",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20230736643",
+    "nombre": "BARTILOTTA MAXIMILIANO ESTEBAN",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20248819880",
+    "nombre": "BAUCIS ALEJANDRO FELIPE",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716637456",
+    "nombre": "BENDICIONES SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30712497110",
+    "nombre": "Bebidas Del Sur S.A.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30719163064",
+    "nombre": "Black Sushi S. A. S.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30541034036",
+    "nombre": "COLEGIO DE ABOGADOS DE SAN ISIDRO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27330044867",
+    "nombre": "CREDIDIO MARIA CELESTE",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27168166163",
+    "nombre": "Chalier, Stella Maris",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "33718138189",
+    "nombre": "Cristomax S. A. S.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718253612",
+    "nombre": "DE AVACCO SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30715332880",
+    "nombre": "DISTRIBUIDORA MAESTRO SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30678138300",
+    "nombre": "DORINKA SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30709935328",
+    "nombre": "Direcciona S.A.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716994925",
+    "nombre": "EL FOGON CRIOLLO SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30709437611",
+    "nombre": "ESTACION DE SERVICIO INDEPENDENCIA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718586700",
+    "nombre": "El Coihual Del Tigre S.R.L.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30715836331",
+    "nombre": "FIDEICOMISO DE ADMINISTRACION NEUQUEN SOHO I",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718137205",
+    "nombre": "GASTRONOMIC SKILLS S. A. S",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20140338762",
+    "nombre": "JALIL CLAUDIO ALFEDO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20248755246",
+    "nombre": "Koehle Fabian Adolfo",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20116751861",
+    "nombre": "LEDEZMA RAUL ANTONIO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30712385797",
+    "nombre": "LICENSED MERCHANDISING GROUP SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20356573359",
+    "nombre": "LUNA RODRIGO EZEQUIEL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717922790",
+    "nombre": "Loma  S. A. S.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27224553833",
+    "nombre": "Londero Fabiana Margarita",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717532410",
+    "nombre": "MADERO TOWN S.R.L",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "33718542699",
+    "nombre": "MAIDER PLUS I.P.A. S. A.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716090953",
+    "nombre": "MALAVA GROUP S.A.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27235363408",
+    "nombre": "MARTIN MARIA ELIANA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718239415",
+    "nombre": "MARTINEZ GULLOTTA SAS",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30711269033",
+    "nombre": "MOLINO CERRILOS S.R.L.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27202708442",
+    "nombre": "MONTERO LAURA NOEMI",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20228253031",
+    "nombre": "MONTIEL CARLOS EDUARDO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27291512408",
+    "nombre": "MUSCHIETTI PAULA MARIA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717713385",
+    "nombre": "NOTABLES PORTEÑOS SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717261050",
+    "nombre": "NOVO MUNDO SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20173019840",
+    "nombre": "OTERO CARLOS ALBERTO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20232056844",
+    "nombre": "PLAVNICK PABLO FABIAN",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30604898419",
+    "nombre": "RIVADAVIA 5353 S A",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27320095447",
+    "nombre": "ROMERO ANDREA VANESA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716857162",
+    "nombre": "SBJOTA SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27291632152",
+    "nombre": "SILVA SONIA ANDREA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30624586766",
+    "nombre": "Sacred Ground S.A.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30710383533",
+    "nombre": "Tokio Gastronomia S.R.L.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27214718672",
+    "nombre": "VEGA VERONICA ANDREA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20278462790",
+    "nombre": "Varas Toledo, Sebastian",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30719015049",
+    "nombre": "WINEFLASH S.R.L.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27322446824",
+    "nombre": "ZAPATA MARIA ELENA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "23399110564",
+    "nombre": "ANA CAUTORINO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716700123",
+    "nombre": "ANDINA DISTRIBUCIONES SAS",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717604195",
+    "nombre": "AV. CORRIENTES 1454 S. R. L",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "23161798029",
+    "nombre": "BARRERA OSCAR SERGIO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20121142571",
+    "nombre": "BERNHARDT ALFREDO CARLOS",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20200261438",
+    "nombre": "BIANCO LEONARDO JAVIER",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718078586",
+    "nombre": "BLACK MERINO SAS",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20301492678",
+    "nombre": "Baimler Alejo Ignacio",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20264176213",
+    "nombre": "CABRERA DIEGO MATIAS",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20126012641",
+    "nombre": "CAFICI VICTOR DANIEL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717054330",
+    "nombre": "CASA INTELIGENTE SAS",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20236821715",
+    "nombre": "CHILLEMI ARIEL ADRIAN",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716969718",
+    "nombre": "CHINVENGUENCHA SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27299639865",
+    "nombre": "Caballero Maria Victoria",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716859904",
+    "nombre": "Chrifsa S.A.S.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716543699",
+    "nombre": "Crowdfarming.Wine S.A.S",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30711985766",
+    "nombre": "DELIVERY HERO E-COMMERCE S. A",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20243975558",
+    "nombre": "DIAZ WALTER NICOLAS",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27184828621",
+    "nombre": "DRI STELLA MARIS",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30711650446",
+    "nombre": "EL NUEVO TONEL S.R.L.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30715652532",
+    "nombre": "ENCISO AD 3909 SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20250845988",
+    "nombre": "EXPOSITO DIEGO HERNAN",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30640855572",
+    "nombre": "EZIO DELL AVO E HIJOS SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30678269154",
+    "nombre": "Expendedoras Automaticas Italo Argentinasrl",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718957997",
+    "nombre": "Factory Wines S.R.L.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20111225851",
+    "nombre": "Fraticelli Roberto Juan",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "23319330399",
+    "nombre": "GARATE JORGE RUBEN",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "33715954309",
+    "nombre": "GIFTMENT SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716896028",
+    "nombre": "GRANERO AUTENTICO SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20259664714",
+    "nombre": "GROSSO EMILIANO DANIEL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27051587508",
+    "nombre": "HEINE SILVINA SUSANA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20447551552",
+    "nombre": "INSUA GONZALO JOSE",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "33715525459",
+    "nombre": "Intelma S.A.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30642313637",
+    "nombre": "JOSE ALBERTO CHAGRA SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30684174440",
+    "nombre": "LA MARCHI S.R.L.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30711341540",
+    "nombre": "LA MASIA SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20312478367",
+    "nombre": "LAROCCA ADRIAN ANTONIO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717933296",
+    "nombre": "LAS TIPAS S. R. L.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27111363221",
+    "nombre": "LIMA MARIA CUSTODIA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27163256539",
+    "nombre": "Lamm Claudia Adriana",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "33710662849",
+    "nombre": "Lh Locane S.R.L.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30713386703",
+    "nombre": "MALCOM OVERSEAS SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20286704620",
+    "nombre": "MARTIRE JAVIER FERNANDO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27316393654",
+    "nombre": "MASTELLONE MARILINA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20409421475",
+    "nombre": "MONTOYA FRANCISCO DE LA CRUZ",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20280766314",
+    "nombre": "MURACA LEANDRO JAVIER",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20271820683",
+    "nombre": "Marletta, Leandro Guido De La Cruz",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718007735",
+    "nombre": "NO USAR!! 55 DE SCORE LAS TANAS",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30694370701",
+    "nombre": "PARRILLA PEÑA SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30715139568",
+    "nombre": "POSADAS 1089 SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20277469597",
+    "nombre": "Pias Facundo Joaquin",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20221322046",
+    "nombre": "RODRIGUEZ GASTON DARIO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20341215499",
+    "nombre": "RUGGIERI GAROFALO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20313031080",
+    "nombre": "SALAVERRIA PABLO JAVIER",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27216478938",
+    "nombre": "SALAZAR MARIELA JUDITH",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20400018171",
+    "nombre": "SANDEZ VALENTIN",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20224746653",
+    "nombre": "SARTORI GONZALO ERNESTO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20389455920",
+    "nombre": "SUAREZ NUÑEZ PATRICIO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717545628",
+    "nombre": "TAVELLA FEDERICO DI GIROLAMO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30711185905",
+    "nombre": "TRATENFU S.A.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717704734",
+    "nombre": "Uco Wine & Food  S. A. S.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717674959",
+    "nombre": "VINOTECA EZEQUIEL SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718270657",
+    "nombre": "VITVIN S. R. L",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27275127863",
+    "nombre": "ARAMAYO MARIA JULIETA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27291936771",
+    "nombre": "ARRAYGADA LAURA CAROLINA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20926302982",
+    "nombre": "AURRECOCHEA GUSTAVO FERNANDO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "33718478729",
+    "nombre": "BAQUIANO MALABIA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "33715706569",
+    "nombre": "BAQUIANO MALVINAS SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718748751",
+    "nombre": "BAR PORTEÑO SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20130345116",
+    "nombre": "BATISTELLI HECTOR ALFREDO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717438775",
+    "nombre": "BIEN DE VINOS SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20232533383",
+    "nombre": "BLANCO RUBEN ARIEL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20302780499",
+    "nombre": "BORLANDELLI ALEJANDRO JOAQUIN",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30714415952",
+    "nombre": "BOTARGA S.R.L.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718342933",
+    "nombre": "BREE SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716353679",
+    "nombre": "BRUNCH SAS",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20168760826",
+    "nombre": "BRUSATIN FLAVIO ALDO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30710519818",
+    "nombre": "BUENAVIDA EMPRENDIMIENTOS",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27395586403",
+    "nombre": "Baldi Antonella Laura",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718846079",
+    "nombre": "Baw Co Srl",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718224574",
+    "nombre": "CAFE DEL CONVENTO S. R. L",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20925880699",
+    "nombre": "CANO ARGENTINO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20353652835",
+    "nombre": "CANTERO JULIO CESAR",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20270836802",
+    "nombre": "CAPRIA SEBASTIAN CESAR",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716289482",
+    "nombre": "CARNES TIERRA DEL FUEGO SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717483037",
+    "nombre": "CASA PUJOL SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20955821654",
+    "nombre": "CHEN DAQIANG",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20255120507",
+    "nombre": "CHIMENO ZOTH FERNANDO MANUEL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20329455239",
+    "nombre": "CIAPANNA GABRIEL MATIAS",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718047648",
+    "nombre": "CIMPROSA S.R.L",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20122872697",
+    "nombre": "CISILOTTO RUBEN ARISTIDES",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30714223131",
+    "nombre": "CORDILLERANOS SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20322848375",
+    "nombre": "CORSI FRANCO JOSE",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20341804834",
+    "nombre": "COSTERA MARTIN ALBERTO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27065374957",
+    "nombre": "CRESPIN OLGA IRENE",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716702150",
+    "nombre": "CRU SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20323657468",
+    "nombre": "Carpi Lucas Roberto",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30719074797",
+    "nombre": "Chic Palermo",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30712424369",
+    "nombre": "Consorcio Club De Campo La Estancia De Cafayate Wine & Golf",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20178199146",
+    "nombre": "DEL POZO CLAUDIO MARCELO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30714426814",
+    "nombre": "DON HOTELES ARGENTINA SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718946073",
+    "nombre": "Dos Tiempos Patagonia S. R. L.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716471264",
+    "nombre": "EEP S.A",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30521919279",
+    "nombre": "EL IMPARCIAL SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717782468",
+    "nombre": "ESTUDIO ADUANERO REG S. R. L.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "23140597694",
+    "nombre": "FERNANDEZ MONICA PATRICIA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30637677043",
+    "nombre": "FUNDACION OSDE",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20248465620",
+    "nombre": "Figueroa Hernan Diego",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718251334",
+    "nombre": "Francisco Puga Y Familia S. Cap I Secc Iv",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20248938006",
+    "nombre": "GABRIEL DOMINGUEZ IVAN OSVALDO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27925405405",
+    "nombre": "GAUSSET ANGEL IRENE",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27054153010",
+    "nombre": "GERONIMO MARIA LUISA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "33716473029",
+    "nombre": "GRUPO DB SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20124561664",
+    "nombre": "GULISANO GRACIELA MATIA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20214800897",
+    "nombre": "Guerra Martin",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30710805993",
+    "nombre": "IRTEC AUTOMATISMOS SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27267011171",
+    "nombre": "IVETICH MAIA DANISA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20144290330",
+    "nombre": "KERBS ERNESTO GERARDO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718613996",
+    "nombre": "KOVASA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716025639",
+    "nombre": "LA FINCA DEL 13 S.A.S",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718764730",
+    "nombre": "LA FINCA DEL 4 S. A. S.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716476177",
+    "nombre": "LA TRINCHERA WINE AND BEER SAS",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716913593",
+    "nombre": "LACTEOS BALLESTER SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "23081180229",
+    "nombre": "LEGARDON HORACIO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30710833083",
+    "nombre": "LEGARDON SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20208435567",
+    "nombre": "LUJAN MARCELO ALEJANDRO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20291684255",
+    "nombre": "La Porta Juan Pablo",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20103994323",
+    "nombre": "MADEO FRANCISCO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27211217966",
+    "nombre": "MARINELLI SILVANA GRACIELA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30715400428",
+    "nombre": "MARUCHA S.R.L.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27310593236",
+    "nombre": "MAYBANK BERNARDETTE LOURDES",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716021854",
+    "nombre": "MIGEFE SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30711180490",
+    "nombre": "MITRE FUTBOL SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20125426256",
+    "nombre": "MORTOLA OSVALDO CARLOS",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30714247588",
+    "nombre": "MUSTERS S.R.L.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27223622491",
+    "nombre": "Margheritis Maria Eugenia",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717492931",
+    "nombre": "NO USALR!!!! DON ANSELMO SAS",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716041553",
+    "nombre": "NUEVO GLOBO SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30709602043",
+    "nombre": "Nativos De La Patagonia S.A.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30714818399",
+    "nombre": "Nutranat S.A.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30708081112",
+    "nombre": "OLEIROS S.A.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30673161797",
+    "nombre": "OSCAR DANIEL SANZ SOCIEDAD CAP. I SECC IV",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716312093",
+    "nombre": "PARANA ON THE FLY S.A.S.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27343913139",
+    "nombre": "POSSE ELIANA CELESTE",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30715740806",
+    "nombre": "PRESTOR SAS",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20272156965",
+    "nombre": "Palacios Juan Manuel",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20371711075",
+    "nombre": "Polo Matias",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20177449777",
+    "nombre": "QUILES FLAVIO GABRIEL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20271751436",
+    "nombre": "QUILODRAN LLAMAS RAUL GONZALO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20420237813",
+    "nombre": "RAGGHIANTI JUAN CRUZ",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20120583582",
+    "nombre": "RAZETO RAUL JUAN",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27275276222",
+    "nombre": "RIZO ANALIA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20180035665",
+    "nombre": "RODRIGUEZ GABRIEL DARIO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30707211942",
+    "nombre": "ROLCAR SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30701945049",
+    "nombre": "SALLABERRY VALIENTE HERMANOS SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30713774606",
+    "nombre": "SALO SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20210034332",
+    "nombre": "Silverschmidt Andres",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27239007975",
+    "nombre": "Solaliga Mariela Silvina",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20299750176",
+    "nombre": "TRANCHINI JUAN CRUZ",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716171864",
+    "nombre": "Tres Pintas Srl",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716504049",
+    "nombre": "VINOS BARREL SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20400151955",
+    "nombre": "WANG ESTEBAN DAVID",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27174086902",
+    "nombre": "YACOMELLI GLADYS B",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27243606387",
+    "nombre": "YOUNG YEMINA ANDREA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27290717782",
+    "nombre": "ZARATE ROMINA ANALIA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20207336875",
+    "nombre": "ABDENUR CARLOS ENRIQUE, entrega",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20251151440",
+    "nombre": "ABRIANI JUAN MANUEL, contacto 1",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20251151440",
+    "nombre": "ABRIANI JUAN MANUEL, contacto2",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718488180",
+    "nombre": "AGÜERPAZ S. A. S.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30714715522",
+    "nombre": "ALMACEN 1249 S.R.L., almacen 1249",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20316396616",
+    "nombre": "ALVAREZ LIONEL PABLO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27284413542",
+    "nombre": "Aguilera Maria Noelia",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30527225988",
+    "nombre": "Alvear Palace Hotel Sa I, alvear contacto",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27065534628",
+    "nombre": "BOADA MARIA SUSANA, boada 1",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27065534628",
+    "nombre": "BOADA MARIA SUSANA, boada 2",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30719036682",
+    "nombre": "BOTTEGA DEL GUSTO S.R.L",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20228424944",
+    "nombre": "BRUM BERTOLO JULIO CESAR, BRUM BERTOLO JULIO CESAR - ENTREGAR",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30715156497",
+    "nombre": "Broda S.A.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27322120724",
+    "nombre": "Bustos Cecilia Beatriz",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20264176213",
+    "nombre": "CABRERA DIEGO MATIAS, José Enrique Rodó 4170 CABA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20353652835",
+    "nombre": "CANTERO JULIO CESAR, CANTERO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20293354783",
+    "nombre": "CAPALBI JOSE EDUARDO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20295946815",
+    "nombre": "CASTILLO SEBASTIAN ALEJANDRO, CASTILLO SEBASTIAN",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30682584617",
+    "nombre": "CONAMER SA, Conamer Aeroparque",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27280232667",
+    "nombre": "CONTRERAS ALICIA JUDITH",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718133498",
+    "nombre": "Copados S.R.L.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30712108173",
+    "nombre": "DISTRIBUIDORA FERRARI SA, ferrari",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20205678086",
+    "nombre": "DOEBLIN HERNAN HORACIO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30615302658",
+    "nombre": "EESS YPF SANTA ISABEL S.R.L",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30678624361",
+    "nombre": "ELISABEL SRL, elisabel",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "33712504809",
+    "nombre": "ESCODIAZ SEEDS S.R.L",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30709437611",
+    "nombre": "ESTACION DE SERVICIO INDEPENDENCIA, ENTREGA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20326315371",
+    "nombre": "Espeche Cristian Daniel",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30715037714",
+    "nombre": "Estacion de Bebidas SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20924704722",
+    "nombre": "FERREIRA PFEIFFER,JUAN CARLOS ANTONIO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "23260060309",
+    "nombre": "GARCIA JUAN CRUZ",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27214402667",
+    "nombre": "GARCIA PITA MARIA SILVA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "23321650899",
+    "nombre": "Genovese Zerdan Matias Federico",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27940826492",
+    "nombre": "HE JINGWEN",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "33714759669",
+    "nombre": "Hubeal Srl",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20324041827",
+    "nombre": "IBARRA PABLO GUILLERMO",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27278186429",
+    "nombre": "LACOSTE DELFINA MARIA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20264908583",
+    "nombre": "LAMPERT SILVIO GABRIEL, contacto lampert silvio",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30708217197",
+    "nombre": "LAS ACACIAS S.R.L.",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717706281",
+    "nombre": "MARKEN DRINKS SA, MARKEN DRINKS",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30715696602",
+    "nombre": "MERCEDES 3939 SRL, mercedes 3939",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30654940955",
+    "nombre": "Madacilo S R L",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20305090590",
+    "nombre": "Misetich Armando Hernan",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20305412822",
+    "nombre": "Moreno Verde Lucas Santiago",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30716598426",
+    "nombre": "NOBUCO S.A.S",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20230862800",
+    "nombre": "PIRCIO CHRISTIAN RUBEN",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27937644499",
+    "nombre": "PRADO SAVALLA LIDIA RAQUEL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30715127616",
+    "nombre": "PRIMERA ESQUINA SRL, comercial",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30715127616",
+    "nombre": "PRIMERA ESQUINA SRL, primera esquina",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20272156965",
+    "nombre": "Palacios Juan Manuel, PALACIO JUAN MANUEL ENTREGAR",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30618147238",
+    "nombre": "Poi Pellin Sociedad Anonima",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717591913",
+    "nombre": "RAYUELA BEBIDAS",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20337535659",
+    "nombre": "RESTOM LEONARDO JOHN",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30717752593",
+    "nombre": "REY DE COPA SRL",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "27262365773",
+    "nombre": "ROMERO PAOLA EDITH",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30711379521",
+    "nombre": "Rovlan S.A., contacto 2",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30711379521",
+    "nombre": "Rovlan S.A., contacto1",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30711379521",
+    "nombre": "Rovlan S.A., contacto3",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20392121146",
+    "nombre": "Serres Gaston",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "20299750176",
+    "nombre": "TRANCHINI JUAN CRUZ, tranchini",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30711786887",
+    "nombre": "VINOTECA QUILMES SA, contacto vinoteca quilmes",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  },
+  {
+    "cuit": "30718287495",
+    "nombre": "WYPRA SA, WYPRA SA",
+    "fechaAlta": "10/4/2026",
+    "ultimaSit": null,
+    "ultimaVerif": null
+  }
+]
