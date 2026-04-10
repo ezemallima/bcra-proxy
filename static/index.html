@@ -104,6 +104,7 @@
 <div class="container">
   <div class="tabs">
     <button class="tab active" onclick="switchTab('consulta',this)">Consultar</button>
+    <button class="tab" onclick="switchTab('cheques',this)">Cheques</button>
     <button class="tab" onclick="switchTab('historial',this)">Historial</button>
     <button class="tab" onclick="switchTab('cartera',this)">Cartera</button>
     <button class="tab" onclick="switchTab('alertas',this)">Alertas</button>
@@ -154,6 +155,35 @@
         <button class="primary" onclick="analizarCliente()" id="btn-analizar" style="flex:1;">Analizar riesgo crediticio →</button>
         <button onclick="exportarReporte()" id="btn-export" style="display:none;">Exportar PDF</button>
       </div>
+    </div>
+  </div>
+
+  <div id="cheques" class="section">
+    <div class="card">
+      <div class="card-title">Consultar cheque de tercero</div>
+      <p style="font-size:13px;color:#666;line-height:1.6;margin-bottom:12px;">Ingresá el CUIT del librador para saber si conviene aceptar el cheque.</p>
+      <div class="input-row">
+        <input type="text" id="cuit-cheque" placeholder="CUIT del librador (sin guiones)" style="flex:1;" onkeydown="if(event.key==='Enter') consultarCheque()" />
+        <button class="primary" onclick="consultarCheque()">Consultar →</button>
+      </div>
+    </div>
+    <div id="cheque-loading" style="display:none;text-align:center;padding:2rem;color:#888;font-size:13px;">Consultando BCRA y grupo de bodegas...</div>
+    <div id="cheque-resultado" style="display:none;">
+      <div id="cheque-veredicto" style="margin-bottom:8px;"></div>
+      <div id="cheque-header" class="card" style="margin-bottom:8px;"></div>
+      <div class="card" style="margin-bottom:8px;">
+        <div class="card-title">Cheques rechazados — BCRA</div>
+        <div id="cheque-bcra-data"></div>
+      </div>
+      <div class="card" style="margin-bottom:8px;">
+        <div class="card-title">Historial grupo de bodegas</div>
+        <div id="cheque-bodegas-data"></div>
+      </div>
+      <div id="cheque-analisis-card" class="card" style="margin-bottom:8px;display:none;">
+        <div class="card-title">Análisis IA</div>
+        <div id="cheque-analisis-data"></div>
+      </div>
+      <button class="primary" onclick="analizarCheque()" id="btn-analizar-cheque" style="width:100%;display:none;">Analizar con IA →</button>
     </div>
   </div>
 
@@ -298,6 +328,7 @@ function switchTab(tab, el) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   el.classList.add('active');
   document.getElementById(tab).classList.add('active');
+  if (tab === 'cheques') { document.getElementById('cheque-resultado').style.display='none'; }
   if (tab === 'historial') renderHistorial();
   if (tab === 'cartera') renderCartera();
   if (tab === 'alertas') renderAlertas();
@@ -908,6 +939,183 @@ function renderAlertas() {
       </div>
     </div>`;
   }).join('');
+}
+
+
+function mostrarVeredicto(sinLevantar, totalCheques, tieneNegativo) {
+  var veredicto, color, bg;
+  if (sinLevantar > 0) {
+    veredicto = '✗ RECHAZAR — Tiene cheques sin levantar';
+    color = '#991b1b'; bg = '#fee2e2';
+  } else if (totalCheques > 0 || tieneNegativo) {
+    veredicto = '⚠ REVISAR — Tiene antecedentes, evaluar con cuidado';
+    color = '#854d0e'; bg = '#fefce8';
+  } else {
+    veredicto = '✓ ACEPTAR — Sin antecedentes negativos';
+    color = '#166534'; bg = '#dcfce7';
+  }
+  var html = '<div style="padding:1rem 1.25rem;background:' + bg + ';border-radius:12px;border:1px solid ' + color + '20;margin-bottom:8px;">';
+  html += '<div style="font-size:16px;font-weight:700;color:' + color + ';">' + veredicto + '</div>';
+  html += '<div style="font-size:12px;color:' + color + ';margin-top:4px;opacity:0.8;">Basado en datos del BCRA y grupo de bodegas</div>';
+  html += '</div>';
+  document.getElementById('cheque-veredicto').innerHTML = html;
+}
+
+async function consultarCheque() {
+  var raw = document.getElementById('cuit-cheque').value.replace(/-/g,'').trim();
+  if (!raw || raw.length < 10) { alert('Ingresá un CUIT válido'); return; }
+  document.getElementById('cheque-resultado').style.display = 'none';
+  document.getElementById('cheque-loading').style.display = 'block';
+
+  var chequesData = null;
+  var nombre = '';
+
+  try {
+    var url1 = encodeURIComponent('https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/' + raw);
+    var r1 = await fetch('https://api.allorigins.win/get?url=' + url1, {signal: AbortSignal.timeout(15000)});
+    if (r1.ok) {
+      var w1 = await r1.json();
+      chequesData = JSON.parse(w1.contents);
+    }
+  } catch(e) {}
+
+  try {
+    var url2 = encodeURIComponent('https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/' + raw);
+    var r2 = await fetch('https://api.allorigins.win/get?url=' + url2, {signal: AbortSignal.timeout(10000)});
+    if (r2.ok) {
+      var w2 = await r2.json();
+      var d2 = JSON.parse(w2.contents);
+      nombre = d2 && d2.results ? (d2.results.denominacion || '') : '';
+    }
+  } catch(e) {}
+
+  document.getElementById('cheque-loading').style.display = 'none';
+  document.getElementById('cheque-resultado').style.display = 'block';
+
+  var cuitFmt = raw.slice(0,2) + '-' + raw.slice(2,10) + '-' + raw.slice(10);
+  document.getElementById('cheque-header').innerHTML = '<div style="display:flex;align-items:center;gap:14px;"><div class="avatar">' + (nombre ? nombre.charAt(0) : '?') + '</div><div><div style="font-size:16px;font-weight:600;">' + (nombre || 'Sin denominación') + '</div><div style="font-size:12px;color:#888;">CUIT: ' + cuitFmt + '</div></div></div>';
+
+  var cheques = chequesData && chequesData.results ? (chequesData.results.cheques || []) : [];
+  var sinLevantar = cheques.filter(function(c) { return !c.fechaPago; });
+  var levantados = cheques.filter(function(c) { return c.fechaPago; });
+
+  var bcraHtml = '';
+  if (!cheques.length) {
+    bcraHtml = '<div class="empty-state" style="color:#166534;">✓ Sin cheques rechazados en el BCRA.</div>';
+  } else {
+    bcraHtml = '<div style="font-size:13px;margin-bottom:8px;"><strong style="color:' + (sinLevantar.length > 0 ? '#991b1b' : '#166534') + '">' + cheques.length + ' cheque(s) rechazado(s)</strong>';
+    if (levantados.length) bcraHtml += ' · <span style="color:#166534;">' + levantados.length + ' levantado(s)</span>';
+    if (sinLevantar.length) bcraHtml += ' · <span style="color:#991b1b;font-weight:600;">' + sinLevantar.length + ' SIN levantar ⚠️</span>';
+    bcraHtml += '</div>';
+    bcraHtml += '<table class="bcra-table"><thead><tr><th>Entidad</th><th>Monto</th><th>Fecha</th><th>Motivo</th><th>Estado</th></tr></thead><tbody>';
+    cheques.forEach(function(c) {
+      var estado = c.fechaPago ? ('✓ Levantado ' + c.fechaPago) : '<span style="color:#991b1b;font-weight:600;">Sin levantar</span>';
+      bcraHtml += '<tr><td>' + (c.entidad||'-') + '</td><td>$' + ((c.monto||0).toLocaleString('es-AR')) + '</td><td>' + (c.fechaRechazo||'-') + '</td><td>' + (c.causal||'-') + '</td><td>' + estado + '</td></tr>';
+    });
+    bcraHtml += '</tbody></table>';
+  }
+  document.getElementById('cheque-bcra-data').innerHTML = bcraHtml;
+
+  var threads = buscarEnWSP(raw);
+  var palabrasNeg = ['rechaz','no pag','cuidado','debe','moroso','rebotado','sin fondos','incobrable','problema'];
+  var tieneNegativo = false;
+  var bodegasHtml = '';
+  if (!threads || !threads.length) {
+    bodegasHtml = '<div class="empty-state">No aparece en el historial del grupo de bodegas.</div>';
+  } else {
+    bodegasHtml = '<div style="margin-bottom:8px;"><span class="badge badge-wsp">' + threads.length + ' mención(es)</span></div>';
+    threads.forEach(function(t) {
+      bodegasHtml += '<div class="wsp-thread"><div class="wsp-thread-fecha">' + t.fecha + '</div>';
+      t.mensajes.slice(0,6).forEach(function(m) {
+        var esNeg = palabrasNeg.some(function(p) { return m.texto.toLowerCase().includes(p); });
+        if (esNeg) tieneNegativo = true;
+        var bg2 = esNeg ? 'background:#fee2e2;border-radius:6px;padding:4px 8px;' : '';
+        bodegasHtml += '<div class="wsp-msg" style="' + bg2 + '"><span class="wsp-autor">' + m.autor + ':</span> ' + m.texto + '</div>';
+      });
+      bodegasHtml += '</div>';
+    });
+    if (tieneNegativo) {
+      bodegasHtml = '<div style="padding:8px;background:#fee2e2;border-radius:8px;margin-bottom:8px;font-size:13px;color:#991b1b;font-weight:600;">⚠️ Comentarios negativos detectados en el grupo</div>' + bodegasHtml;
+    }
+  }
+  document.getElementById('cheque-bodegas-data').innerHTML = bodegasHtml;
+
+  mostrarVeredicto(sinLevantar.length, cheques.length, tieneNegativo);
+
+  window.chequeActual = {cuit: raw, nombre: nombre, cheques: cheques, threads: threads};
+  document.getElementById('btn-analizar-cheque').style.display = 'block';
+}
+
+async function analizarCheque() {
+  var datos = window.chequeActual || {};
+  if (!datos.cuit) return;
+  var btn = document.getElementById('btn-analizar-cheque');
+  var card = document.getElementById('cheque-analisis-card');
+  var dataEl = document.getElementById('cheque-analisis-data');
+  btn.disabled = true;
+  btn.textContent = 'Analizando...';
+  card.style.display = 'block';
+  dataEl.innerHTML = '<div style="color:#888;font-size:13px;">Consultando motor de análisis...</div>';
+
+  var sinLevantar = datos.cheques.filter(function(c) { return !c.fechaPago; });
+  var palabrasNeg = ['rechaz','no pag','cuidado','debe','moroso','rebotado','sin fondos','incobrable'];
+  var mensNeg = [];
+  if (datos.threads) {
+    datos.threads.forEach(function(t) {
+      t.mensajes.forEach(function(m) {
+        if (palabrasNeg.some(function(p) { return m.texto.toLowerCase().includes(p); })) {
+          mensNeg.push(m.autor + ': ' + m.texto);
+        }
+      });
+    });
+  }
+
+  var prompt = 'Sos analista de riesgo de Bodega Piattelli. Evaluá si conviene ACEPTAR un cheque de tercero.
+
+';
+  prompt += 'CUIT: ' + datos.cuit + '
+';
+  prompt += 'Nombre: ' + (datos.nombre || 'Sin denominación') + '
+
+';
+  prompt += 'CHEQUES RECHAZADOS BCRA:
+';
+  prompt += '- Total: ' + datos.cheques.length + '
+';
+  prompt += '- Sin levantar: ' + sinLevantar.length + (sinLevantar.length > 0 ? ' CRITICO' : ' OK') + '
+';
+  prompt += '- Levantados: ' + (datos.cheques.length - sinLevantar.length) + '
+
+';
+  if (mensNeg.length > 0) {
+    prompt += 'COMENTARIOS NEGATIVOS EN GRUPO DE BODEGAS:
+' + mensNeg.join('
+') + '
+
+';
+  } else {
+    prompt += 'GRUPO DE BODEGAS: Sin comentarios negativos
+
+';
+  }
+  prompt += 'CRITERIOS: cheques sin levantar = RECHAZAR siempre. Levantados hace mas de 6 meses = puede aceptar con precaucion. Comentarios negativos = REVISAR.
+
+';
+  prompt += 'Responde con este formato:
+VEREDICTO: [ACEPTAR / REVISAR / RECHAZAR]
+MOTIVO: [2-3 lineas]
+RECOMENDACION: [que hacer concretamente]';
+
+  try {
+    var r = await fetch('/analizar', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({prompt: prompt})});
+    var data = await r.json();
+    if (data.error) throw new Error(data.error);
+    dataEl.innerHTML = '<div style="font-size:13px;line-height:1.7;white-space:pre-wrap;color:#333;">' + data.texto + '</div>';
+  } catch(e) {
+    dataEl.innerHTML = '<div style="font-size:13px;color:#888;">No se pudo conectar. Intentá de nuevo.</div>';
+  }
+  btn.disabled = false;
+  btn.textContent = 'Analizar con IA →';
 }
 
 async function consultarBCRA(cuit) {
