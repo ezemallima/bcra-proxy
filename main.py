@@ -79,6 +79,10 @@ def wsp_index():
 def moras():
     return send_from_directory(os.getcwd(), 'moras_piattelli.json')
 
+@app.route("/cartera_inicial.json")
+def cartera_inicial():
+    return send_from_directory(os.getcwd(), 'cartera_inicial.json')
+
 @app.route("/deudas/<cuit>")
 def get_deudas(cuit):
     data, error = consultar_bcra(cuit)
