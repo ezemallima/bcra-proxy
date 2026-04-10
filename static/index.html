@@ -93,7 +93,7 @@
 <body>
 
 <div class="topbar">
-  <div class="logo">Piattelli <span>Créditos</span></div>
+  <div class="logo">Vender <span style="color:#9b2020">Seguros</span></div>
   <div class="status-bar">
     <div class="proxy-status"><div class="dot" id="wsp-dot" style="background:#25d366;"></div><span id="wsp-label">Cargando bodegas...</span></div>
     <div class="proxy-status"><div class="dot" id="mora-dot" style="background:#ccc;"></div><span id="mora-label">Cargando moras...</span></div>
@@ -591,7 +591,7 @@ function exportarReporte() {
   const mora = buscarEnMoras(cuit.replace(/-/g,''));
   let y = 20;
   doc.setFontSize(18); doc.setTextColor(155, 32, 32);
-  doc.text('Piattelli Creditos', 20, y); y += 8;
+  doc.text('Vender Seguros', 20, y); y += 8;
   doc.setFontSize(11); doc.setTextColor(100);
   doc.text(`Reporte de riesgo crediticio — ${ultimoAnalisis.fecha}`, 20, y); y += 6;
   doc.setDrawColor(220); doc.line(20, y, 190, y); y += 10;
@@ -616,7 +616,7 @@ function exportarReporte() {
   doc.setFontSize(10); doc.setTextColor(60);
   const lines = doc.splitTextToSize(ultimoAnalisis.texto, 170);
   doc.text(lines, 20, y);
-  doc.save(`Piattelli_${cuit}_${ultimoAnalisis.fecha.replace(/\//g,'-')}.pdf`);
+  doc.save(`VenderSeguros_${cuit}_${ultimoAnalisis.fecha.replace(/\//g,'-')}.pdf`);
 }
 
 async function actualizarWSP(input) {
