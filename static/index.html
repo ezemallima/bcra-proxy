@@ -459,6 +459,26 @@ function getBadge(s) {
 }
 function sitNombre(s) { return {1:'Normal',2:'Seguimiento especial',3:'Con problemas',4:'Alto riesgo',5:'Irrecuperable',6:'Irrecuperable'}[s]||'-'; }
 
+function renderSocios(socios) {
+  if (!socios || !socios.length) return '';
+  let html = '<div class="full" style="padding-top:8px;border-top:1px solid #e0e0d8;">';
+  html += '<div style="font-size:11px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Socios / Directores</div>';
+  socios.forEach(s => {
+    const scoreColor = s.score <= 3 ? '#991b1b' : s.score <= 5 ? '#854d0e' : '#166534';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f0e8;flex-wrap:wrap;gap:4px;">';
+    html += '<div>';
+    html += '<div style="font-size:13px;font-weight:600;">' + (s.nombre||'') + '</div>';
+    html += '<div style="font-size:11px;color:#888;">' + (s.cargo||'') + (s.cuit_dni ? ' · ' + s.cuit_dni : '') + '</div>';
+    html += '</div>';
+    html += '<div style="display:flex;gap:6px;align-items:center;">';
+    if (s.score) html += '<span style="font-size:12px;font-weight:600;color:' + scoreColor + '">Score: ' + s.score + '/9</span>';
+    if (s.situacion) html += '<span style="font-size:11px;padding:2px 8px;background:#f9f9f7;border:1px solid #e0e0d8;border-radius:20px;">' + s.situacion + '</span>';
+    html += '</div></div>';
+  });
+  html += '</div>';
+  return html;
+}
+
 async function procesarVeraz(input) {
   const file = input.files[0];
   if (!file) return;
@@ -493,21 +513,7 @@ async function procesarVeraz(input) {
           <div class="full"><span class="lbl">Deuda sistema financiero:</span> <strong>${verazData.deuda_sistema_financiero||'-'}</strong></div>
           <div class="full"><span class="lbl">Máximo atraso 24 meses:</span> <strong>${verazData.maximo_atraso||'-'}</strong></div>
           ${verazData.resumen?`<div class="full" style="padding-top:8px;border-top:1px solid #e0e0d8;color:#555;line-height:1.5;">${verazData.resumen}</div>`:''}
-          ${verazData.socios_directores?.length ? `
-            <div class="full" style="padding-top:8px;border-top:1px solid #e0e0d8;">
-              <div style="font-size:11px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Socios / Directores</div>
-              ${verazData.socios_directores.map(s => `
-                <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f0e8;flex-wrap:wrap;gap:4px;">
-                  <div>
-                    <div style="font-size:13px;font-weight:600;">${s.nombre}</div>
-                    <div style="font-size:11px;color:#888;">${s.cargo||''} ${s.cuit_dni?'· '+s.cuit_dni:''}</div>
-                  </div>
-                  <div style="display:flex;gap:6px;align-items:center;">
-                    ${s.score ? `<span style="font-size:12px;font-weight:600;color:${s.score<=3?'#991b1b':s.score<=5?'#854d0e':'#166534'}">Score: ${s.score}/9</span>` : ''}
-                    ${s.situacion ? `<span style="font-size:11px;padding:2px 8px;background:#f9f9f7;border:1px solid #e0e0d8;border-radius:20px;">${s.situacion}</span>` : ''}
-                  </div>
-                </div>`).join('')}
-            </div>` : ''}
+          ${renderSocios(verazData.socios_directores)}
         </div>`;
     } catch(e) { statusEl.textContent = 'No se pudo procesar el PDF. Intentá de nuevo en unos segundos.'; }
   };
