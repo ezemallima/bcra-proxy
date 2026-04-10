@@ -512,9 +512,11 @@ async function procesarVeraz(input) {
           <div><span class="lbl">Saldo vencido:</span> <strong>${verazData.saldo_vencido||'-'}</strong></div>
           <div class="full"><span class="lbl">Deuda sistema financiero:</span> <strong>${verazData.deuda_sistema_financiero||'-'}</strong></div>
           <div class="full"><span class="lbl">Máximo atraso 24 meses:</span> <strong>${verazData.maximo_atraso||'-'}</strong></div>
-          ${verazData.resumen?`<div class="full" style="padding-top:8px;border-top:1px solid #e0e0d8;color:#555;line-height:1.5;">${verazData.resumen}</div>`:''}
-          ${renderSocios(verazData.socios_directores)}
+          <div id="veraz-resumen-container"></div>
+          <div id="veraz-socios-container"></div>
         </div>`;
+      if (verazData.resumen) document.getElementById('veraz-resumen-container').innerHTML = '<div style="padding-top:8px;border-top:1px solid #e0e0d8;color:#555;line-height:1.5;">' + verazData.resumen + '</div>';
+      document.getElementById('veraz-socios-container').innerHTML = renderSocios(verazData.socios_directores);
     } catch(e) { statusEl.textContent = 'No se pudo procesar el PDF. Intentá de nuevo en unos segundos.'; }
   };
   reader.readAsDataURL(file);
@@ -537,12 +539,7 @@ async function analizarCliente() {
 CUIT consultado: ${cuit}
 
 `;
-  if (mora) prompt += `⚠️ ALERTA CRÍTICA - MORA CON PIATTELLI:
-${mora.nombre} tiene deuda impaga desde ${mora.fecha_mora}.
-Saldo adeudado: $${mora.saldo.toLocaleString('es-AR')} — Estado: ${mora.estado}
-Este antecedente es determinante para el análisis.
-
-`;
+  if (mora) prompt += '⚠️ ALERTA CRÍTICA - MORA CON PIATTELLI:\n' + mora.nombre + ' tiene deuda impaga desde ' + mora.fecha_mora + '.\nSaldo adeudado: $' + mora.saldo.toLocaleString('es-AR') + ' — Estado: ' + mora.estado + '\nEste antecedente es determinante para el análisis.\n\n';
   if (verazData) {
     prompt += `INFORME VERAZ/EQUIFAX — EMPRESA:
 - Score crediticio: ${verazData.score}/9 ${verazData.score <= 3 ? '(MUY BAJO - alto riesgo)' : verazData.score <= 5 ? '(MEDIO - revisar)' : '(BUENO)'}
@@ -555,13 +552,12 @@ Este antecedente es determinante para el análisis.
 
 `;
     if (verazData.socios_directores?.length) {
-      prompt += `SOCIOS / DIRECTORES (información de contexto — NO son el cliente principal):
-IMPORTANTE: El análisis principal debe basarse en el CUIT de la empresa. Los datos de socios son señales de alerta secundarias.
-${verazData.socios_directores.map(s => `- ${s.nombre} (${s.cargo||'socio'}): Score ${s.score||'N/D'}/9 | Situación: ${s.situacion||'N/D'} | ID: ${s.cuit_dni||'N/D'}`).join('\n')}
-
-Si algún socio/director tiene score bajo o situación crítica, mencionarlo como alerta secundaria en el análisis pero sin que sea determinante para el veredicto final si la empresa está bien.
-
-`;
+      const sociosTexto = verazData.socios_directores.map(function(s) {
+        return '- ' + s.nombre + ' (' + (s.cargo||'socio') + '): Score ' + (s.score||'N/D') + '/9 | Situación: ' + (s.situacion||'N/D') + ' | ID: ' + (s.cuit_dni||'N/D');
+      }).join('\n');
+      prompt += 'SOCIOS / DIRECTORES (información de contexto — NO son el cliente principal):\n';
+      prompt += 'IMPORTANTE: El análisis principal debe basarse en el CUIT de la empresa.\n';
+      prompt += sociosTexto + '\n\n';
     }
   }
   if (wspThreads?.length) {
