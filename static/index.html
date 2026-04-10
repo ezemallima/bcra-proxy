@@ -927,7 +927,7 @@ function renderAlertas() {
   listaEl.innerHTML = cartera.map(function(c) {
     var mora = buscarEnMoras(c.cuit);
     var verificadoTxt = c.ultimaVerif ? ' · Verificado: ' + c.ultimaVerif : ' · Sin verificar';
-    var html = '<div class="client-row" style="cursor:pointer;" onclick="verCliente('' + c.cuit + '')">';
+    var html = '<div class="client-row" style="cursor:pointer;" onclick="verCliente(\'' + c.cuit + '\')">';
     html += '<div><div class="client-name">' + c.nombre + '</div>';
     html += '<div class="client-meta">CUIT: ' + c.cuit + verificadoTxt + '</div></div>';
     html += '<div class="client-right">';
