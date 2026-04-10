@@ -828,21 +828,26 @@ async function verificarTodos() {
         cartera[i].ultimaBcraData = entidades;
       }
 
-      // Analizar menciones en grupo de bodegas
-      const threads = buscarEnWSP(c.cuit);
+      // Analizar menciones negativas en grupo de bodegas
+      var threads = buscarEnWSP(c.cuit);
       if (threads && threads.length > 0) {
-        const mensajes = threads.flatMap(t => t.mensajes).map(m => m.texto.toLowerCase());
-        const palabrasClave = ['rechaz', 'no paga', 'cuidado', 'mora', 'deuda', 'problema', 'incobrable', 'estafa', 'desapareci', 'fuga', 'no respond', 'mal pagador', 'atraso', 'impago', 'quiebra', 'concurso'];
-        const alertasBodegas = mensajes.filter(m => palabrasClave.some(p => m.includes(p)));
-        if (alertasBodegas.length > 0) {
-          // Verificar que no hayamos agregado ya esta alerta de bodegas
-          const yaExiste = nuevasAlertas.some(a => a.cuit === c.cuit && a.tipo === 'bodegas');
+        var palabrasClave = ['rechaz', 'no paga', 'cuidado', 'mora', 'deuda', 'problema', 'incobrable', 'estafa', 'desapareci', 'fuga', 'no respond', 'mal pagador', 'atraso', 'impago', 'quiebra', 'concurso', 'sin fondos', 'rebotado'];
+        var mensajesNegativos = [];
+        threads.forEach(function(t) {
+          t.mensajes.forEach(function(m) {
+            if (palabrasClave.some(function(p) { return m.texto.toLowerCase().includes(p); })) {
+              mensajesNegativos.push(m.autor + ': ' + m.texto);
+            }
+          });
+        });
+        if (mensajesNegativos.length > 0) {
+          var yaExiste = nuevasAlertas.some(function(a) { return a.cuit === c.cuit && a.tipo === 'bodegas'; });
           if (!yaExiste) {
             nuevasAlertas.push({
               nombre: c.nombre, cuit: c.cuit,
               fecha: new Date().toLocaleDateString('es-AR'),
               tipo: 'bodegas',
-              mensajes: alertasBodegas.slice(0, 3)
+              mensajes: mensajesNegativos.slice(0, 3)
             });
           }
         }
@@ -885,29 +890,33 @@ function renderAlertas() {
   
   if (alertas.length) {
     alertasNuevasDiv.style.display = 'block';
-    alertasEl.innerHTML = alertas.map(a => `
-      <div class="alert-card">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-          <div style="flex:1;">
-            <div style="font-size:14px;font-weight:600;">${a.nombre}</div>
-            <div style="font-size:12px;color:#888;margin-top:2px;">CUIT: ${a.cuit} · ${a.fecha}</div>
-            ${a.tipo === 'bcra' ? `
-              <div style="font-size:13px;margin-top:8px;color:#991b1b;font-weight:500;">
-                🏦 BCRA: Situación ${a.sitAnterior} → ${a.sitActual} (${sitNombre(a.sitActual)})
-              </div>` : ''}
-            ${a.tipo === 'bodegas' ? `
-              <div style="font-size:13px;margin-top:8px;color:#854d0e;font-weight:500;">
-                ⚠️ Grupo bodegas: comentarios negativos detectados
-              </div>
-              <div style="font-size:12px;color:#666;margin-top:4px;font-style:italic;">
-                "${a.mensajes?.[0] || ''}"
-              </div>` : ''}
-          </div>
-          <span class="badge ${a.tipo === 'bodegas' ? 'badge-warning' : 'badge-danger'}" style="${a.tipo === 'bodegas' ? 'background:#fef9c3;color:#713f12;' : ''}">
-            ${a.tipo === 'bodegas' ? '⚠ Bodegas' : 'BCRA'}
-          </span>
-        </div>
-      </div>`).join('');
+    alertasEl.innerHTML = alertas.map(function(a) {
+      var badgeClass = a.tipo === 'bodegas' ? 'badge-warning' : 'badge-danger';
+      var badgeStyle = a.tipo === 'bodegas' ? 'background:#fef9c3;color:#713f12;' : '';
+      var badgeText = a.tipo === 'bodegas' ? '⚠ Bodegas' : 'BCRA';
+      var html = '<div class="alert-card">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">';
+      html += '<div style="flex:1;">';
+      html += '<div style="font-size:14px;font-weight:600;">' + a.nombre + '</div>';
+      html += '<div style="font-size:12px;color:#888;margin-top:2px;">CUIT: ' + a.cuit + ' · ' + a.fecha + '</div>';
+      if (a.tipo === 'bcra') {
+        html += '<div style="font-size:13px;margin-top:8px;color:#991b1b;font-weight:500;">';
+        html += 'BCRA: Situación ' + a.sitAnterior + ' → ' + a.sitActual + ' (' + sitNombre(a.sitActual) + ')';
+        html += '</div>';
+      }
+      if (a.tipo === 'bodegas') {
+        html += '<div style="font-size:13px;margin-top:8px;color:#854d0e;font-weight:500;">Grupo bodegas: comentarios negativos detectados</div>';
+        if (a.mensajes && a.mensajes.length > 0) {
+          a.mensajes.forEach(function(msg) {
+            html += '<div style="font-size:12px;color:#666;margin-top:4px;padding:4px 8px;background:#fefce8;border-radius:6px;font-style:italic;">"' + msg + '"</div>';
+          });
+        }
+      }
+      html += '</div>';
+      html += '<span class="badge ' + badgeClass + '" style="' + badgeStyle + '">' + badgeText + '</span>';
+      html += '</div></div>';
+      return html;
+    }).join('');
   } else {
     alertasNuevasDiv.style.display = 'none';
   }
