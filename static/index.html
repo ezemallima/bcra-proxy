@@ -503,20 +503,20 @@ async function procesarVeraz(input) {
       document.getElementById('veraz-area').innerHTML = `<div style="font-size:13px;color:#166534;font-weight:600;">✓ PDF procesado — ${file.name}</div>`;
       statusEl.style.display = 'none';
       datosEl.style.display = 'block';
-      datosEl.innerHTML = `
-        <div style="font-size:12px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Datos extraídos del Veraz</div>
-        <div class="info-grid">
-          <div><span class="lbl">Score:</span> <strong style="color:${verazData.score<=3?'#991b1b':verazData.score<=5?'#854d0e':'#166534'}">${verazData.score}/9</strong></div>
-          <div><span class="lbl">Cheques rechazados:</span> <strong style="color:${verazData.cheques_rechazados>0?'#991b1b':'#166534'}">${verazData.cheques_rechazados}</strong></div>
-          <div><span class="lbl">Situación BCRA:</span> <strong>${verazData.situacion_bcra||'-'}</strong></div>
-          <div><span class="lbl">Saldo vencido:</span> <strong>${verazData.saldo_vencido||'-'}</strong></div>
-          <div class="full"><span class="lbl">Deuda sistema financiero:</span> <strong>${verazData.deuda_sistema_financiero||'-'}</strong></div>
-          <div class="full"><span class="lbl">Máximo atraso 24 meses:</span> <strong>${verazData.maximo_atraso||'-'}</strong></div>
-          <div id="veraz-resumen-container"></div>
-          <div id="veraz-socios-container"></div>
-        </div>`;
-      if (verazData.resumen) document.getElementById('veraz-resumen-container').innerHTML = '<div style="padding-top:8px;border-top:1px solid #e0e0d8;color:#555;line-height:1.5;">' + verazData.resumen + '</div>';
-      document.getElementById('veraz-socios-container').innerHTML = renderSocios(verazData.socios_directores);
+      const scoreColor = verazData.score<=3 ? '#991b1b' : verazData.score<=5 ? '#854d0e' : '#166534';
+      const chequeColor = verazData.cheques_rechazados>0 ? '#991b1b' : '#166534';
+      let verazHtml = '<div style="font-size:12px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Datos extraídos del Veraz</div>';
+      verazHtml += '<div class="info-grid">';
+      verazHtml += '<div><span class="lbl">Score:</span> <strong style="color:' + scoreColor + '">' + verazData.score + '/9</strong></div>';
+      verazHtml += '<div><span class="lbl">Cheques rechazados:</span> <strong style="color:' + chequeColor + '">' + verazData.cheques_rechazados + '</strong></div>';
+      verazHtml += '<div><span class="lbl">Situación BCRA:</span> <strong>' + (verazData.situacion_bcra||'-') + '</strong></div>';
+      verazHtml += '<div><span class="lbl">Saldo vencido:</span> <strong>' + (verazData.saldo_vencido||'-') + '</strong></div>';
+      verazHtml += '<div class="full"><span class="lbl">Deuda sistema financiero:</span> <strong>' + (verazData.deuda_sistema_financiero||'-') + '</strong></div>';
+      verazHtml += '<div class="full"><span class="lbl">Máximo atraso 24 meses:</span> <strong>' + (verazData.maximo_atraso||'-') + '</strong></div>';
+      if (verazData.resumen) verazHtml += '<div class="full" style="padding-top:8px;border-top:1px solid #e0e0d8;color:#555;line-height:1.5;">' + verazData.resumen + '</div>';
+      verazHtml += renderSocios(verazData.socios_directores);
+      verazHtml += '</div>';
+      datosEl.innerHTML = verazHtml;
     } catch(e) { statusEl.textContent = 'No se pudo procesar el PDF. Intentá de nuevo en unos segundos.'; }
   };
   reader.readAsDataURL(file);
