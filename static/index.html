@@ -924,20 +924,18 @@ function renderAlertas() {
     return;
   }
 
-  listaEl.innerHTML = cartera.map((c,i) => {
-    const mora = buscarEnMoras(c.cuit);
-    return `
-    <div class="client-row" style="cursor:pointer;" onclick="verCliente('${c.cuit}')">
-      <div>
-        <div class="client-name">${c.nombre}</div>
-        <div class="client-meta">CUIT: ${c.cuit}${c.ultimaVerif ? ` · Verificado: ${c.ultimaVerif}` : ' · Sin verificar'}</div>
-      </div>
-      <div class="client-right">
-        ${mora ? '<span class="badge badge-mora">Mora</span>' : ''}
-        ${buscarEnWSP(c.cuit) ? '<span class="badge badge-wsp">En bodegas</span>' : ''}
-        ${c.ultimaSit ? getBadge(c.ultimaSit) : '<span style="font-size:11px;color:#aaa;">Pendiente</span>'}
-      </div>
-    </div>`;
+  listaEl.innerHTML = cartera.map(function(c) {
+    var mora = buscarEnMoras(c.cuit);
+    var verificadoTxt = c.ultimaVerif ? ' · Verificado: ' + c.ultimaVerif : ' · Sin verificar';
+    var html = '<div class="client-row" style="cursor:pointer;" onclick="verCliente('' + c.cuit + '')">';
+    html += '<div><div class="client-name">' + c.nombre + '</div>';
+    html += '<div class="client-meta">CUIT: ' + c.cuit + verificadoTxt + '</div></div>';
+    html += '<div class="client-right">';
+    if (mora) html += '<span class="badge badge-mora">Mora</span>';
+    if (buscarEnWSP(c.cuit)) html += '<span class="badge badge-wsp">En bodegas</span>';
+    html += c.ultimaSit ? getBadge(c.ultimaSit) : '<span style="font-size:11px;color:#aaa;">Pendiente</span>';
+    html += '</div></div>';
+    return html;
   }).join('');
 }
 
@@ -1070,41 +1068,20 @@ async function analizarCheque() {
     });
   }
 
-  var prompt = 'Sos analista de riesgo de Bodega Piattelli. Evaluá si conviene ACEPTAR un cheque de tercero.
-
-';
-  prompt += 'CUIT: ' + datos.cuit + '
-';
-  prompt += 'Nombre: ' + (datos.nombre || 'Sin denominación') + '
-
-';
-  prompt += 'CHEQUES RECHAZADOS BCRA:
-';
-  prompt += '- Total: ' + datos.cheques.length + '
-';
-  prompt += '- Sin levantar: ' + sinLevantar.length + (sinLevantar.length > 0 ? ' CRITICO' : ' OK') + '
-';
-  prompt += '- Levantados: ' + (datos.cheques.length - sinLevantar.length) + '
-
-';
+  var prompt = 'Sos analista de riesgo de Bodega Piattelli. Evaluá si conviene ACEPTAR un cheque de tercero.\n\n';
+  prompt += 'CUIT: ' + datos.cuit + '\n';
+  prompt += 'Nombre: ' + (datos.nombre || 'Sin denominacion') + '\n\n';
+  prompt += 'CHEQUES RECHAZADOS BCRA:\n';
+  prompt += '- Total: ' + datos.cheques.length + '\n';
+  prompt += '- Sin levantar: ' + sinLevantar.length + (sinLevantar.length > 0 ? ' CRITICO' : ' OK') + '\n';
+  prompt += '- Levantados: ' + (datos.cheques.length - sinLevantar.length) + '\n\n';
   if (mensNeg.length > 0) {
-    prompt += 'COMENTARIOS NEGATIVOS EN GRUPO DE BODEGAS:
-' + mensNeg.join('
-') + '
-
-';
+    prompt += 'COMENTARIOS NEGATIVOS EN GRUPO DE BODEGAS:\n' + mensNeg.join('\n') + '\n\n';
   } else {
-    prompt += 'GRUPO DE BODEGAS: Sin comentarios negativos
-
-';
+    prompt += 'GRUPO DE BODEGAS: Sin comentarios negativos\n\n';
   }
-  prompt += 'CRITERIOS: cheques sin levantar = RECHAZAR siempre. Levantados hace mas de 6 meses = puede aceptar con precaucion. Comentarios negativos = REVISAR.
-
-';
-  prompt += 'Responde con este formato:
-VEREDICTO: [ACEPTAR / REVISAR / RECHAZAR]
-MOTIVO: [2-3 lineas]
-RECOMENDACION: [que hacer concretamente]';
+  prompt += 'CRITERIOS: cheques sin levantar = RECHAZAR siempre. Levantados hace mas de 6 meses = puede aceptar con precaucion. Comentarios negativos = REVISAR.\n\n';
+  prompt += 'Responde con este formato:\nVEREDICTO: [ACEPTAR / REVISAR / RECHAZAR]\nMOTIVO: [2-3 lineas]\nRECOMENDACION: [que hacer concretamente]';
 
   try {
     var r = await fetch('/analizar', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({prompt: prompt})});
