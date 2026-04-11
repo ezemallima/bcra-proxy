@@ -847,40 +847,51 @@ async function verificarTodos() {
         cartera[i].ultimaBcraData = entidades;
       }
 
-      // Analizar menciones en grupo de bodegas con IA
+      // Analizar menciones en grupo de bodegas - primero filtro rapido, luego IA solo si hay sospecha
       var threads = buscarEnWSP(c.cuit);
       if (threads && threads.length > 0) {
+        // PASO 1: filtro rapido con palabras clave - si no hay ninguna, no llama a la IA
+        var palabrasRiesgo = ['rechaz', 'no paga', 'cuidado', 'mora', 'deuda', 'incobrable', 
+          'estafa', 'desapareci', 'fuga', 'impago', 'quiebra', 'concurso', 'sin fondos', 
+          'rebotado', 'mal pagador', 'no responde', 'no contesta', 'bloqueado'];
         var todosMensajes = [];
+        var tieneSospecha = false;
         threads.forEach(function(t) {
           t.mensajes.forEach(function(m) {
             todosMensajes.push(m.autor + ': ' + m.texto);
+            if (palabrasRiesgo.some(function(p) { return m.texto.toLowerCase().includes(p); })) {
+              tieneSospecha = true;
+            }
           });
         });
-        try {
-          var respIA = await fetch('/analizar-bodegas', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({cuit: c.cuit, nombre: c.nombre, mensajes: todosMensajes.slice(0,10)})
-          });
-          var dataIA = await respIA.json();
-          if (dataIA.es_negativo) {
-            var yaExiste = nuevasAlertas.some(function(a) { return a.cuit === c.cuit && a.tipo === 'bodegas'; });
-            if (!yaExiste) {
-              nuevasAlertas.push({
-                nombre: c.nombre, cuit: c.cuit,
-                fecha: new Date().toLocaleDateString('es-AR'),
-                tipo: 'bodegas',
-                mensajes: [dataIA.motivo]
-              });
+        
+        // PASO 2: solo si hay sospecha, llamar a la IA para confirmar el contexto
+        if (tieneSospecha) {
+          try {
+            var respIA = await fetch('/analizar-bodegas', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({cuit: c.cuit, nombre: c.nombre, mensajes: todosMensajes.slice(0,10)})
+            });
+            var dataIA = await respIA.json();
+            if (dataIA.es_negativo) {
+              var yaExiste = nuevasAlertas.some(function(a) { return a.cuit === c.cuit && a.tipo === 'bodegas'; });
+              if (!yaExiste) {
+                nuevasAlertas.push({
+                  nombre: c.nombre, cuit: c.cuit,
+                  fecha: new Date().toLocaleDateString('es-AR'),
+                  tipo: 'bodegas',
+                  mensajes: [dataIA.motivo]
+                });
+              }
             }
-          }
-        } catch(e) {}
+          } catch(e) {}
+        }
       }
     } catch(e) {}
-    // Pausa de 4 segundos entre consultas para no ser bloqueado por el BCRA
+    // Pausa de 2 segundos entre consultas
     if (i < cartera.length - 1) {
-      prog.textContent = `Verificando ${i+1}/${cartera.length}: ${c.nombre}... (esperando ${4}s)`;
-      await new Promise(r=>setTimeout(r,4000));
+      await new Promise(r=>setTimeout(r,2000));
     }
   }
 
@@ -969,12 +980,35 @@ function renderAlertas() {
     return;
   }
 
-  listaEl.innerHTML = cartera.map(function(c) {
+  // Ordenar cartera: primero críticos (sit 3+), luego mora, luego resto
+  var carteraOrdenada = cartera.slice().sort(function(a, b) {
+    var sitA = a.ultimaSit || 0;
+    var sitB = b.ultimaSit || 0;
+    var moraA = buscarEnMoras(a.cuit) ? 1 : 0;
+    var moraB = buscarEnMoras(b.cuit) ? 1 : 0;
+    if (sitA >= 3 && sitB < 3) return -1;
+    if (sitB >= 3 && sitA < 3) return 1;
+    if (moraA && !moraB) return -1;
+    if (moraB && !moraA) return 1;
+    if (sitA === 2 && sitB !== 2) return -1;
+    if (sitB === 2 && sitA !== 2) return 1;
+    return 0;
+  });
+
+  listaEl.innerHTML = carteraOrdenada.map(function(c) {
     var mora = buscarEnMoras(c.cuit);
+    var esCritico = c.ultimaSit && c.ultimaSit >= 3;
+    var esAtencion = c.ultimaSit === 2;
     var verificadoTxt = c.ultimaVerif ? ' · Verificado: ' + c.ultimaVerif : ' · Sin verificar';
-    var html = '<div class="client-row" style="cursor:pointer;" onclick="verCliente(\'' + c.cuit + '\')">';
-    html += '<div><div class="client-name">' + c.nombre + '</div>';
-    html += '<div class="client-meta">CUIT: ' + c.cuit + verificadoTxt + '</div></div>';
+    var borderStyle = esCritico ? 'border-left: 4px solid #ef4444;' : esAtencion ? 'border-left: 4px solid #f97316;' : mora ? 'border-left: 4px solid #991b1b;' : '';
+    var bgStyle = esCritico ? 'background:#fff5f5;' : esAtencion ? 'background:#fff8f0;' : '';
+    var html = '<div class="client-row" style="cursor:pointer;' + borderStyle + bgStyle + '" onclick="verCliente(\'' + c.cuit + '\')">';
+    html += '<div>';
+    if (esCritico) html += '<div style="font-size:10px;color:#991b1b;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;">⚠ Situación crítica BCRA</div>';
+    if (esAtencion && !esCritico) html += '<div style="font-size:10px;color:#9a3412;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;">⚠ Seguimiento especial</div>';
+    html += '<div class="client-name">' + c.nombre + '</div>';
+    html += '<div class="client-meta">CUIT: ' + c.cuit + verificadoTxt + '</div>';
+    html += '</div>';
     html += '<div class="client-right">';
     if (mora) html += '<span class="badge badge-mora">Mora</span>';
     if (buscarEnWSP(c.cuit)) html += '<span class="badge badge-wsp">En bodegas</span>';
