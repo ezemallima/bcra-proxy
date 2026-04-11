@@ -270,26 +270,45 @@ async function init() {
 }
 
 async function cargarCarteraServidor() {
-  // Si ya hay cartera en localStorage, usarla
-  if (cartera.length > 0) {
-    renderCartera();
-    renderAlertas();
-    return;
-  }
-  // Si no hay cartera local, cargar del servidor
+  // Cargar alertas y cartera verificada del servidor (sincroniza entre dispositivos)
   try {
-    const r = await fetch('/cartera_inicial.json');
+    const r = await fetch('/alertas');
     const data = await r.json();
-    if (data && data.length > 0) {
-      cartera = data;
-      localStorage.setItem('piat_cartera', JSON.stringify(cartera));
-      renderCartera();
-      renderAlertas();
-      console.log(`Cartera cargada del servidor: ${cartera.length} clientes`);
+    if (data && !data.error) {
+      if (data.alertas && data.alertas.length > 0) {
+        alertas = data.alertas;
+        localStorage.setItem('piat_alertas', JSON.stringify(alertas));
+      }
+      if (data.ultima_verif) {
+        localStorage.setItem('piat_ultima_verif', data.ultima_verif);
+      }
+      if (data.cartera && data.cartera.length > 0) {
+        // Fusionar situaciones verificadas con cartera local
+        data.cartera.forEach(function(c) {
+          var idx = cartera.findIndex(function(lc) { return lc.cuit === c.cuit; });
+          if (idx >= 0) {
+            cartera[idx].ultimaSit = c.ultimaSit;
+            cartera[idx].ultimaVerif = c.ultimaVerif;
+          }
+        });
+        localStorage.setItem('piat_cartera', JSON.stringify(cartera));
+      }
     }
-  } catch(e) {
-    console.log('No se pudo cargar cartera del servidor:', e);
+  } catch(e) {}
+
+  // Si no hay cartera local, cargar del servidor
+  if (cartera.length === 0) {
+    try {
+      const r = await fetch('/cartera_inicial.json');
+      const data = await r.json();
+      if (data && data.length > 0) {
+        cartera = data;
+        localStorage.setItem('piat_cartera', JSON.stringify(cartera));
+      }
+    } catch(e) {}
   }
+  renderCartera();
+  renderAlertas();
 }
 
 async function checkProxy() {
@@ -828,29 +847,34 @@ async function verificarTodos() {
         cartera[i].ultimaBcraData = entidades;
       }
 
-      // Analizar menciones negativas en grupo de bodegas
+      // Analizar menciones en grupo de bodegas con IA
       var threads = buscarEnWSP(c.cuit);
       if (threads && threads.length > 0) {
-        var palabrasClave = ['rechaz', 'no paga', 'cuidado', 'mora', 'deuda', 'problema', 'incobrable', 'estafa', 'desapareci', 'fuga', 'no respond', 'mal pagador', 'atraso', 'impago', 'quiebra', 'concurso', 'sin fondos', 'rebotado'];
-        var mensajesNegativos = [];
+        var todosMensajes = [];
         threads.forEach(function(t) {
           t.mensajes.forEach(function(m) {
-            if (palabrasClave.some(function(p) { return m.texto.toLowerCase().includes(p); })) {
-              mensajesNegativos.push(m.autor + ': ' + m.texto);
-            }
+            todosMensajes.push(m.autor + ': ' + m.texto);
           });
         });
-        if (mensajesNegativos.length > 0) {
-          var yaExiste = nuevasAlertas.some(function(a) { return a.cuit === c.cuit && a.tipo === 'bodegas'; });
-          if (!yaExiste) {
-            nuevasAlertas.push({
-              nombre: c.nombre, cuit: c.cuit,
-              fecha: new Date().toLocaleDateString('es-AR'),
-              tipo: 'bodegas',
-              mensajes: mensajesNegativos.slice(0, 3)
-            });
+        try {
+          var respIA = await fetch('/analizar-bodegas', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({cuit: c.cuit, nombre: c.nombre, mensajes: todosMensajes.slice(0,10)})
+          });
+          var dataIA = await respIA.json();
+          if (dataIA.es_negativo) {
+            var yaExiste = nuevasAlertas.some(function(a) { return a.cuit === c.cuit && a.tipo === 'bodegas'; });
+            if (!yaExiste) {
+              nuevasAlertas.push({
+                nombre: c.nombre, cuit: c.cuit,
+                fecha: new Date().toLocaleDateString('es-AR'),
+                tipo: 'bodegas',
+                mensajes: [dataIA.motivo]
+              });
+            }
           }
-        }
+        } catch(e) {}
       }
     } catch(e) {}
     // Pausa de 4 segundos entre consultas para no ser bloqueado por el BCRA
@@ -866,6 +890,18 @@ async function verificarTodos() {
   localStorage.setItem('piat_ultima_verif', ahora);
   alertas = [...nuevasAlertas, ...alertas].slice(0,30);
   localStorage.setItem('piat_alertas', JSON.stringify(alertas));
+  // Guardar en servidor para sincronizar entre dispositivos
+  try {
+    await fetch('/alertas', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        alertas: alertas,
+        ultima_verif: ahora,
+        cartera: cartera.map(function(c) { return {cuit: c.cuit, ultimaSit: c.ultimaSit, ultimaVerif: c.ultimaVerif}; })
+      })
+    });
+  } catch(e) {}
   btn.disabled = false;
 
   if (nuevasAlertas.length===0) {
