@@ -83,6 +83,69 @@ def moras():
 def cartera_inicial():
     return send_from_directory(os.getcwd(), 'cartera_inicial.json')
 
+# Archivo de alertas persistente
+ALERTAS_FILE = os.path.join(os.getcwd(), 'alertas_cartera.json')
+
+@app.route("/alertas", methods=["GET"])
+def get_alertas():
+    try:
+        if os.path.exists(ALERTAS_FILE):
+            with open(ALERTAS_FILE, 'r', encoding='utf-8') as f:
+                return jsonify(json.load(f))
+        return jsonify({"alertas": [], "ultima_verif": "", "cartera": []})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/alertas", methods=["POST"])
+def save_alertas():
+    try:
+        data = request.get_json(force=True)
+        with open(ALERTAS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/analizar-bodegas", methods=["POST"])
+def analizar_bodegas():
+    if not GEMINI_KEY:
+        return jsonify({"error": "API key no configurada"}), 500
+    try:
+        body = request.get_json(force=True)
+        cuit = body.get('cuit', '')
+        nombre = body.get('nombre', '')
+        mensajes = body.get('mensajes', [])
+        
+        if not mensajes:
+            return jsonify({"es_negativo": False, "motivo": ""})
+        
+        mensajes_texto = '
+'.join([f"- {m}" for m in mensajes[:10]])
+        prompt = f"""Analizá estos mensajes del grupo de bodegas sobre el cliente {nombre} (CUIT: {cuit}).
+Determiná si los mensajes indican un riesgo crediticio REAL para este cliente específico.
+
+MENSAJES:
+{mensajes_texto}
+
+IMPORTANTE:
+- Solo marcá como negativo si hay referencias DIRECTAS a problemas de pago, deudas impagas, cheques rechazados sin resolver, estafas o desaparición del cliente.
+- Si el mensaje menciona "cheques rechazados pero los reemplaza" o similar, NO es negativo.
+- Si el mensaje habla de OTRO CUIT o razón social diferente, NO es negativo para este cliente.
+- Referencias positivas como "buen cliente", "paga en término", "sin problemas" son POSITIVAS.
+
+Respondé SOLO con JSON sin markdown: {{"es_negativo": true/false, "motivo": "explicación breve en una línea"}}"""
+
+        payload = {{"contents": [{{"parts": [{{"text": prompt}}]}}]}}
+        texto, error = gemini_request(payload, timeout=30)
+        if error:
+            return jsonify({{"es_negativo": False, "motivo": ""}})
+        
+        texto_limpio = texto.strip().replace('```json','').replace('```','').strip()
+        resultado = json.loads(texto_limpio)
+        return jsonify(resultado)
+    except Exception as e:
+        return jsonify({{"es_negativo": False, "motivo": str(e)}})
+
 @app.route("/deudas/<cuit>")
 def get_deudas(cuit):
     data, error = consultar_bcra(cuit)
