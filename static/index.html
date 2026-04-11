@@ -851,9 +851,12 @@ async function verificarTodos() {
       var threads = buscarEnWSP(c.cuit);
       if (threads && threads.length > 0) {
         // PASO 1: filtro rapido con palabras clave - si no hay ninguna, no llama a la IA
-        var palabrasRiesgo = ['rechaz', 'no paga', 'cuidado', 'mora', 'deuda', 'incobrable', 
-          'estafa', 'desapareci', 'fuga', 'impago', 'quiebra', 'concurso', 'sin fondos', 
-          'rebotado', 'mal pagador', 'no responde', 'no contesta', 'bloqueado'];
+        var palabrasRiesgo = ['rechaz', 'no paga', 'cuidado', 'mora', 'deuda', 'incobrable',
+          'estafa', 'desapareci', 'fuga', 'impago', 'quiebra', 'concurso', 'sin fondos',
+          'rebotado', 'mal pagador', 'no responde', 'no contesta', 'bloqueado',
+          'vencid', 'no cancel', 'no liquido', 'no abono', 'figura', 'atencion',
+          'ojo', 'cuidarse', 'problema', 'conflicto', 'judicial', 'abogado',
+          'cobrar', 'factura impaga', 'no cancelo', 'debia', 'nos debe'];
         var todosMensajes = [];
         var tieneSospecha = false;
         threads.forEach(function(t) {
