@@ -18,10 +18,11 @@ GEMINI_MODELS = [
     "gemini-2.5-flash",
     "gemini-2.0-flash",
 ]
+ALERTAS_FILE = os.path.join(os.getcwd(), 'alertas_cartera.json')
 
 def gemini_request(payload, timeout=45):
     for modelo in GEMINI_MODELS:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent?key={GEMINI_KEY}"
+        url = "https://generativelanguage.googleapis.com/v1beta/models/" + modelo + ":generateContent?key=" + GEMINI_KEY
         for intento in range(3):
             try:
                 r = requests.post(url, headers={"Content-Type": "application/json"}, json=payload, timeout=timeout)
@@ -39,11 +40,10 @@ def gemini_request(payload, timeout=45):
                 if intento < 2:
                     time.sleep(2)
                 continue
-    return None, "No se pudo conectar con el motor de análisis. Intentá de nuevo en unos minutos."
+    return None, "No se pudo conectar con el motor de analisis."
 
 def consultar_bcra(cuit, reintentos=3):
-    """Consulta el BCRA con reintentos y manejo de errores mejorado."""
-    url = f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/{cuit}"
+    url = "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit
     for i in range(reintentos):
         try:
             r = requests.get(url, timeout=12, verify=False)
@@ -57,7 +57,7 @@ def consultar_bcra(cuit, reintentos=3):
                     continue
                 return None, "timeout"
             else:
-                return None, f"Error {r.status_code}"
+                return None, "Error " + str(r.status_code)
         except requests.Timeout:
             if i < reintentos - 1:
                 time.sleep(2)
@@ -83,9 +83,6 @@ def moras():
 def cartera_inicial():
     return send_from_directory(os.getcwd(), 'cartera_inicial.json')
 
-# Archivo de alertas persistente
-ALERTAS_FILE = os.path.join(os.getcwd(), 'alertas_cartera.json')
-
 @app.route("/alertas", methods=["GET"])
 def get_alertas():
     try:
@@ -109,48 +106,41 @@ def save_alertas():
 @app.route("/analizar-bodegas", methods=["POST"])
 def analizar_bodegas():
     if not GEMINI_KEY:
-        return jsonify({"error": "API key no configurada"}), 500
+        return jsonify({"es_negativo": False, "motivo": ""})
     try:
         body = request.get_json(force=True)
         cuit = body.get('cuit', '')
         nombre = body.get('nombre', '')
         mensajes = body.get('mensajes', [])
-        
         if not mensajes:
             return jsonify({"es_negativo": False, "motivo": ""})
-        
-        mensajes_texto = '
-'.join([f"- {m}" for m in mensajes[:10]])
-        prompt = f"""Analizá estos mensajes del grupo de bodegas sobre el cliente {nombre} (CUIT: {cuit}).
-Determiná si los mensajes indican un riesgo crediticio REAL para este cliente específico.
-
-MENSAJES:
-{mensajes_texto}
-
-IMPORTANTE:
-- Solo marcá como negativo si hay referencias DIRECTAS a problemas de pago, deudas impagas, cheques rechazados sin resolver, estafas o desaparición del cliente.
-- Si el mensaje menciona "cheques rechazados pero los reemplaza" o similar, NO es negativo.
-- Si el mensaje habla de OTRO CUIT o razón social diferente, NO es negativo para este cliente.
-- Referencias positivas como "buen cliente", "paga en término", "sin problemas" son POSITIVAS.
-
-Respondé SOLO con JSON sin markdown: {{"es_negativo": true/false, "motivo": "explicación breve en una línea"}}"""
-
-        payload = {{"contents": [{{"parts": [{{"text": prompt}}]}}]}}
+        mensajes_texto = "\n".join(["- " + m for m in mensajes[:10]])
+        prompt = (
+            "Analiza estos mensajes del grupo de bodegas sobre " + nombre + " (CUIT: " + cuit + ").\n"
+            "Determina si hay riesgo crediticio REAL para este cliente especifico.\n\n"
+            "MENSAJES:\n" + mensajes_texto + "\n\n"
+            "REGLAS:\n"
+            "- Solo negativo si hay deudas impagas NO resueltas, estafas o desaparicion.\n"
+            "- Cheques rechazados pero reemplazados = NO negativo.\n"
+            "- Mensaje sobre OTRO CUIT diferente = NO negativo para este cliente.\n"
+            "- Buen cliente, paga en termino = POSITIVO.\n\n"
+            'Responde SOLO con este JSON exacto: {"es_negativo": false, "motivo": "texto"}'
+        )
+        payload = {"contents": [{"parts": [{"text": prompt}]}]}
         texto, error = gemini_request(payload, timeout=30)
         if error:
-            return jsonify({{"es_negativo": False, "motivo": ""}})
-        
-        texto_limpio = texto.strip().replace('```json','').replace('```','').strip()
+            return jsonify({"es_negativo": False, "motivo": ""})
+        texto_limpio = texto.strip().replace("```json", "").replace("```", "").strip()
         resultado = json.loads(texto_limpio)
         return jsonify(resultado)
     except Exception as e:
-        return jsonify({{"es_negativo": False, "motivo": str(e)}})
+        return jsonify({"es_negativo": False, "motivo": str(e)})
 
 @app.route("/deudas/<cuit>")
 def get_deudas(cuit):
     data, error = consultar_bcra(cuit)
     if error == "timeout":
-        return jsonify({"error": "timeout", "mensaje": "El BCRA no respondió. El cliente puede no tener deudas registradas o el servicio está temporalmente caído."}), 200
+        return jsonify({"error": "timeout", "mensaje": "El BCRA no respondio."}), 200
     if error:
         return jsonify({"error": error}), 500
     return jsonify(data), 200
@@ -158,7 +148,7 @@ def get_deudas(cuit):
 @app.route("/deudas/<cuit>/historial")
 def get_historial(cuit):
     try:
-        r = requests.get(f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/{cuit}", timeout=12, verify=False)
+        r = requests.get("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit, timeout=12, verify=False)
         return jsonify(r.json()), r.status_code
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -186,15 +176,15 @@ def procesar_veraz():
         body = request.get_json(force=True)
         pdf_base64 = body.get('pdf', '')
         prompt = (
-            'Extraé los datos de este informe Veraz/Equifax. '
-            'Respondé SOLO con un objeto JSON válido, sin markdown, sin texto adicional. '
-            'Estructura exacta: '
+            "Extrae los datos de este informe Veraz/Equifax. "
+            "Responde SOLO con un objeto JSON valido, sin markdown, sin texto adicional. "
+            "Estructura exacta: "
             '{"nombre":"","cuit":"","score":0,"situacion_bcra":"","cheques_rechazados":0,'
             '"monto_cheques":"","saldo_vencido":"","deuda_sistema_financiero":"",'
             '"maximo_atraso":"","entidades_problema":[],"resumen":"",'
             '"socios_directores":[{"nombre":"","cuit_dni":"","cargo":"","score":0,"situacion":""}]} '
-            'El array socios_directores debe incluir todos los socios, directores o representantes '
-            'legales con su informacion crediticia. Si no hay, dejar array vacio [].'
+            "El array socios_directores debe incluir todos los socios, directores o representantes "
+            "legales con su informacion crediticia. Si no hay, dejar array vacio []."
         )
         payload = {"contents": [{"parts": [
             {"inline_data": {"mime_type": "application/pdf", "data": pdf_base64}},
@@ -203,11 +193,11 @@ def procesar_veraz():
         texto, error = gemini_request(payload, timeout=60)
         if error:
             return jsonify({"error": error}), 500
-        texto_limpio = texto.strip().replace('```json','').replace('```','').strip()
+        texto_limpio = texto.strip().replace("```json", "").replace("```", "").strip()
         resultado = json.loads(texto_limpio)
         return jsonify(resultado)
     except json.JSONDecodeError:
-        return jsonify({"error": "Error al procesar el PDF. Intentá de nuevo."}), 500
+        return jsonify({"error": "Error al procesar el PDF. Intenta de nuevo."}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -215,7 +205,7 @@ def procesar_veraz():
 def test_gemini():
     if not GEMINI_KEY:
         return jsonify({"error": "No hay API key"}), 500
-    payload = {"contents": [{"parts": [{"text": "Respondé solo con la palabra OK"}]}]}
+    payload = {"contents": [{"parts": [{"text": "Responde solo con la palabra OK"}]}]}
     texto, error = gemini_request(payload)
     if error:
         return jsonify({"error": error}), 500
