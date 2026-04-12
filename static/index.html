@@ -1270,17 +1270,26 @@ async function verificarTodos() {
 
 async function limpiarAlertas() {
   if (!confirm('¿Limpiar todas las alertas?')) return;
+  // Limpiar todo — localStorage, variable global y servidor
   alertas = [];
-  localStorage.setItem('piat_alertas', JSON.stringify(alertas));
-  // También limpiar en el servidor
+  localStorage.removeItem('piat_alertas');
+  localStorage.removeItem('piat_situaciones');
+  localStorage.removeItem('piat_ultima_verif');
+  // Actualizar cartera local — borrar ultimaSit y ultimaVerif
+  cartera = cartera.map(function(c) {
+    return {cuit: c.cuit, nombre: c.nombre, fechaAlta: c.fechaAlta, ultimaSit: null, ultimaVerif: null};
+  });
+  localStorage.setItem('piat_cartera', JSON.stringify(cartera));
+  // Limpiar en servidor
   try {
     await fetch('/alertas', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({alertas: [], ultima_verif: localStorage.getItem('piat_ultima_verif') || '', cartera: []})
+      body: JSON.stringify({alertas: [], ultima_verif: '', cartera: []})
     });
   } catch(e) {}
   renderAlertas();
+  alert('Alertas limpiadas. Ahora podés correr la verificación.');
 }
 
 function renderAlertas() {
