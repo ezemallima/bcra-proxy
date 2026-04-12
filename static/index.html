@@ -666,18 +666,51 @@ async function consultarCliente() {
 
   document.getElementById('loading-state').style.display = 'none';
   document.getElementById('resultado').style.display = 'block';
-  document.getElementById('cliente-header').innerHTML = `
-    <div style="display:flex;align-items:center;gap:14px;">
-      <div class="avatar" id="cliente-avatar">?</div>
-      <div style="flex:1;">
-        <div style="font-size:16px;font-weight:600;" id="cliente-nombre">CUIT: ${raw}</div>
-        <div style="font-size:12px;color:#888;margin-top:2px;">Consultando datos...</div>
-      </div>
-    </div>`;
+  document.getElementById('cliente-header').innerHTML =
+    '<div style="display:flex;align-items:center;gap:14px;">' +
+    '<div class="avatar" id="cli-avatar">?</div>' +
+    '<div style="flex:1;">' +
+    '<div style="font-size:16px;font-weight:600;" id="cli-nombre">Consultando razón social...</div>' +
+    '<div style="font-size:12px;color:#64748b;margin-top:2px;">CUIT: ' + raw + '</div>' +
+    '</div>' +
+    '<div id="cli-acciones"></div>' +
+    '</div>';
   document.getElementById('verdict-container').innerHTML = '';
   guardarEnHistorial(raw, null);
   mostrarAFIP(raw);
   mostrarWSP(raw);
+
+  // Traer razón social de AFIP y mostrar botón cartera
+  try {
+    var afipR = await fetch('/afip/' + raw, {signal: AbortSignal.timeout(8000)});
+    var afipData = await afipR.json();
+    var nombre = afipData.nombre || 'Sin denominación';
+    var avEl = document.getElementById('cli-avatar');
+    var nomEl = document.getElementById('cli-nombre');
+    var acEl = document.getElementById('cli-acciones');
+    if (avEl) avEl.textContent = nombre.charAt(0).toUpperCase();
+    if (nomEl) nomEl.textContent = nombre;
+    if (acEl) {
+      var yaEsta = cartera.some(function(c) { return c.cuit === raw; });
+      if (!yaEsta) {
+        acEl.innerHTML = '<button onclick="agregarDesdConsulta('' + raw + '', '' + nombre.replace(/'/g,'') + '')" style="font-size:12px;padding:6px 14px;background:var(--azul-suave);color:var(--azul-claro);border-color:var(--azul-borde);">+ Agregar a cartera</button>';
+      } else {
+        acEl.innerHTML = '<span style="font-size:11px;color:var(--verde);padding:4px 10px;background:var(--verde-bg);border-radius:6px;font-weight:600;">En cartera ✓</span>';
+      }
+    }
+  } catch(e) {
+    var nomEl2 = document.getElementById('cli-nombre');
+    if (nomEl2) nomEl2.textContent = 'CUIT: ' + raw;
+  }
+}
+
+function agregarDesdConsulta(cuit, nombre) {
+  if (cartera.some(function(c) { return c.cuit === cuit; })) { return; }
+  cartera.push({cuit: cuit, nombre: nombre, fechaAlta: new Date().toLocaleDateString('es-AR'), ultimaSit: null, ultimaVerif: null});
+  localStorage.setItem('piat_cartera', JSON.stringify(cartera));
+  var acEl = document.getElementById('cli-acciones');
+  if (acEl) acEl.innerHTML = '<span style="font-size:11px;color:var(--verde);padding:4px 10px;background:var(--verde-bg);border-radius:6px;font-weight:600;">Agregado a cartera ✓</span>';
+  renderCartera();
 }
 
 function mostrarResultado(cuit, data, esTimeout) {
