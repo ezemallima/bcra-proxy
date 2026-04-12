@@ -781,96 +781,84 @@ function colorDSO(dias) {
   return {color: '#991b1b', bg: '#fee2e2', label: 'Crítico'};
 }
 
-function normalizarColumna(headers, candidatos) {
-  for (var i = 0; i < candidatos.length; i++) {
-    for (var j = 0; j < headers.length; j++) {
-      if (headers[j].toLowerCase().includes(candidatos[i].toLowerCase())) {
-        return headers[j];
-      }
-    }
-  }
-  return null;
-}
-
 async function procesarDSO(input) {
   var file = input.files[0];
   if (!file) return;
+
   document.getElementById('dso-loading').style.display = 'block';
+  document.getElementById('dso-loading').innerHTML = '<div class="loading-spinner"></div><div style="font-size:13px;color:#64748b;margin-top:8px;">Analizando con IA...</div>';
   document.getElementById('dso-resultado').style.display = 'none';
 
   try {
     var reader = new FileReader();
-    reader.onload = function(e) {
+    reader.onload = async function(e) {
       try {
         var data = new Uint8Array(e.target.result);
         var workbook = XLSX.read(data, {type: 'array'});
         var sheet = workbook.Sheets[workbook.SheetNames[0]];
-        var rows = XLSX.utils.sheet_to_json(sheet, {defval: ''});
+        var rows = XLSX.utils.sheet_to_json(sheet, {defval: '', raw: false});
 
         if (!rows.length) {
-          alert('El archivo está vacío o no tiene el formato correcto.');
+          alert('El archivo está vacío.');
           document.getElementById('dso-loading').style.display = 'none';
           return;
         }
 
-        var headers = Object.keys(rows[0]);
+        // Convertir a texto plano — primeras 200 filas
+        var muestra = rows.slice(0, 200);
+        var headers = Object.keys(muestra[0]).join(' | ');
+        var filas = muestra.map(function(r) {
+          return Object.values(r).join(' | ');
+        }).join('\n');
+        var textoDatos = headers + '\n' + filas;
 
-        // Mapeo flexible de columnas
-        var colContacto = normalizarColumna(headers, ['Contacto', 'Cliente', 'Razón social', 'Razon social', 'Customer']);
-        var colSaldo = normalizarColumna(headers, ['Saldo', 'Balance', 'Importe pendiente', 'Amount due']);
-        var colDias = normalizarColumna(headers, ['Días pendientes', 'Dias pendientes', 'Days', 'Antigüedad', 'Vencimiento']);
+        var umbralBajo = getDSOUmbral();
+        var umbralAlto = getDSOUmbralAlto();
 
-        if (!colContacto || !colSaldo) {
-          alert('No se encontraron las columnas necesarias. Asegurate de tener columnas "Contacto" y "Saldo".');
-          document.getElementById('dso-loading').style.display = 'none';
-          return;
-        }
-
-        // Agrupar por cliente
-        var porCliente = {};
-        rows.forEach(function(row) {
-          var nombre = String(row[colContacto] || '').trim();
-          if (!nombre) return;
-          var saldo = parseFloat(String(row[colSaldo] || '0').replace(/[$.,' ]/g, '').replace(',', '.')) || 0;
-          var dias = colDias ? (parseFloat(String(row[colDias] || '0').replace(/[^0-9.-]/g, '')) || 0) : 0;
-
-          if (!porCliente[nombre]) {
-            porCliente[nombre] = {nombre: nombre, saldo: 0, dias_max: 0, dias_pond: 0, lineas: 0};
-          }
-          porCliente[nombre].saldo += saldo;
-          porCliente[nombre].dias_pond += dias * Math.abs(saldo);
-          porCliente[nombre].dias_max = Math.max(porCliente[nombre].dias_max, dias);
-          porCliente[nombre].lineas++;
+        var prompt = [
+          'Sos un analista financiero experto en el sector vitivinicola argentino.',
+          'Te paso datos de un archivo Excel de una bodega con informacion de saldos.',
+          'Tu tarea:',
+          '1. Identificar columnas relevantes (cliente, saldo pendiente, dias de mora o fechas)',
+          '2. Calcular DSO por cliente (dias promedio de cobro ponderado por saldo)',
+          '3. Calcular DSO global de la cartera',
+          '4. Clasificar cada cliente: Normal (menos de ' + umbralBajo + ' dias), Atencion (' + umbralBajo + '-' + umbralAlto + ' dias), Critico (mas de ' + umbralAlto + ' dias)',
+          '',
+          'IMPORTANTE: Si hay columna de dias pendientes usala directamente. Si hay rangos de antiguedad calcular promedio ponderado.',
+          '',
+          'Responde SOLO con este JSON sin texto adicional ni markdown:',
+          '{"dso_global":0,"saldo_total":0,"total_clientes":0,"clientes":[{"nombre":"","saldo":0,"dso":0,"estado":"Normal"}]}',
+          '',
+          'DATOS DEL ARCHIVO:',
+          textoDatos
+        ].join('\n');
+        var r = await fetch('/analizar', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({prompt: prompt})
         });
+        var respuesta = await r.json();
+        if (respuesta.error) throw new Error(respuesta.error);
 
-        // Calcular DSO por cliente (días ponderados por saldo)
-        dsoDatos = Object.values(porCliente)
-          .filter(function(c) { return c.saldo > 0; })
-          .map(function(c) {
-            var dso = c.saldo > 0 ? Math.round(c.dias_pond / c.saldo) : 0;
-            return {nombre: c.nombre, saldo: c.saldo, dso: dso};
-          })
-          .sort(function(a, b) { return b.dso - a.dso; });
+        var texto = respuesta.texto.trim().replace(/```json/g, '').replace(/```/g, '').trim();
+        var resultado = JSON.parse(texto);
 
-        // DSO global ponderado
-        var saldoTotal = dsoDatos.reduce(function(s, c) { return s + c.saldo; }, 0);
-        var dsoGlobal = saldoTotal > 0
-          ? Math.round(dsoDatos.reduce(function(s, c) { return s + c.dso * c.saldo; }, 0) / saldoTotal)
-          : 0;
+        dsoDatos = (resultado.clientes || []).sort(function(a, b) { return b.dso - a.dso; });
+        var dsoGlobal = resultado.dso_global || 0;
+        var saldoTotal = resultado.saldo_total || 0;
+        var totalClientes = resultado.total_clientes || dsoDatos.length;
 
         document.getElementById('dso-loading').style.display = 'none';
         document.getElementById('dso-resultado').style.display = 'block';
         document.getElementById('dso-upload-area').className = 'upload-area success';
-        document.getElementById('dso-upload-area').innerHTML = '<div style="font-size:13px;color:#166534;font-weight:600;">✓ ' + file.name + ' procesado</div>';
+        document.getElementById('dso-upload-area').innerHTML = '<div style="font-size:13px;color:#166534;font-weight:600;">✓ ' + file.name + ' analizado con IA</div>';
 
-        // KPIs
         var colDSO = colorDSO(dsoGlobal);
         document.getElementById('dso-numero').textContent = dsoGlobal;
         document.getElementById('dso-numero').style.color = colDSO.color;
         document.getElementById('dso-saldo-total').textContent = '$' + Math.round(saldoTotal).toLocaleString('es-AR');
-        document.getElementById('dso-clientes-total').textContent = dsoDatos.length;
+        document.getElementById('dso-clientes-total').textContent = totalClientes;
 
-        // Benchmark
         var benchmarkHtml = '<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">';
         benchmarkHtml += '<div style="font-size:13px;color:#64748b;"><strong style="color:var(--azul-oscuro);">Referencia del sector:</strong> 45–55 días es normal · Más de 65 días es alerta</div>';
         benchmarkHtml += '<div style="display:flex;gap:8px;">';
@@ -884,7 +872,7 @@ async function procesarDSO(input) {
 
       } catch(err) {
         document.getElementById('dso-loading').style.display = 'none';
-        alert('Error al procesar el archivo: ' + err.message);
+        alert('Error al procesar: ' + err.message);
       }
     };
     reader.readAsArrayBuffer(file);
@@ -893,6 +881,7 @@ async function procesarDSO(input) {
     alert('Error: ' + e.message);
   }
 }
+
 
 function renderTablaDSO(datos) {
   if (!datos.length) {
