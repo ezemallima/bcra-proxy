@@ -561,7 +561,7 @@ async function init() {
   await Promise.all([cargarWSP(), cargarMoras(), cargarCarteraServidor()]);
 }
 
-async async function cargarCarteraServidor() {
+async function cargarCarteraServidor() {
   // Cargar alertas y cartera verificada del servidor (sincroniza entre dispositivos)
   try {
     const r = await fetch('/alertas');
@@ -1268,7 +1268,7 @@ async function verificarTodos() {
   renderAlertas();
 }
 
-async async function limpiarAlertas() {
+async function limpiarAlertas() {
   if (!confirm('¿Limpiar todas las alertas?')) return;
   alertas = [];
   localStorage.setItem('piat_alertas', JSON.stringify([]));
