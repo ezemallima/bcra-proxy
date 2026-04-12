@@ -1275,10 +1275,7 @@ async function limpiarAlertas() {
   localStorage.removeItem('piat_alertas');
   localStorage.removeItem('piat_situaciones');
   localStorage.removeItem('piat_ultima_verif');
-  // Actualizar cartera local — borrar ultimaSit y ultimaVerif
-  cartera = cartera.map(function(c) {
-    return {cuit: c.cuit, nombre: c.nombre, fechaAlta: c.fechaAlta, ultimaSit: null, ultimaVerif: null};
-  });
+  // NO borrar ultimaSit ni ultimaVerif — solo limpiar alertas
   localStorage.setItem('piat_cartera', JSON.stringify(cartera));
   // Limpiar en servidor
   try {
