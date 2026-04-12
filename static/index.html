@@ -680,11 +680,14 @@ async function consultarCliente() {
   mostrarAFIP(raw);
   mostrarWSP(raw);
 
-  // Traer razón social de AFIP y mostrar botón cartera
+  // Traer razón social de AFIP via allorigins (proxy gratuito)
   try {
-    var afipR = await fetch('/afip/' + raw, {signal: AbortSignal.timeout(8000)});
-    var afipData = await afipR.json();
-    var nombre = afipData.nombre || 'Sin denominación';
+    var afipUrl = encodeURIComponent('https://soa.afip.gob.ar/sr-padron/v2/persona/' + raw);
+    var afipR = await fetch('https://api.allorigins.win/get?url=' + afipUrl, {signal: AbortSignal.timeout(10000)});
+    var afipWrapper = await afipR.json();
+    var afipData = JSON.parse(afipWrapper.contents);
+    var p = afipData.data || {};
+    var nombre = p.razonSocial || ((p.apellido || '') + ' ' + (p.nombre || '')).trim() || 'Sin denominación';
     var avEl = document.getElementById('cli-avatar');
     var nomEl = document.getElementById('cli-nombre');
     var acEl = document.getElementById('cli-acciones');
