@@ -304,6 +304,7 @@
     .topbar { height: auto; padding: 10px 1rem; }
     .info-grid { grid-template-columns: 1fr; }
     .afip-grid { grid-template-columns: 1fr; }
+    #dashboard-metricas { grid-template-columns: repeat(2,1fr) !important; }
   }
 </style>
 </head>
@@ -356,9 +357,7 @@
         animation: loadBar 2.5s ease forwards;
       "></div>
     </div>
-    <div style="margin-top: 16px; font-size: 12px; color: #93c5fd; font-family: 'DM Sans', sans-serif;">
-      Iniciando sistema...
-    </div>
+    
   </div>
 </div>
 
@@ -387,19 +386,49 @@
     <span class="logo-slogan">vende sin riesgo</span>
   </div>
   <div class="status-bar">
-    <div class="proxy-status"><div class="dot" id="wsp-dot" style="background:#25d366;"></div><span id="wsp-label">Cargando bodegas...</span></div>
-    <div class="proxy-status"><div class="dot" id="mora-dot" style="background:#ccc;"></div><span id="mora-label">Cargando moras...</span></div>
-    <div class="proxy-status"><div class="dot" id="proxy-dot"></div><span id="proxy-label">Conectando BCRA...</span></div>
+    <div class="proxy-status"><div class="dot" id="wsp-dot" style="background:#25d366;"></div><span id="wsp-label"></span></div>
+    <div class="proxy-status"><div class="dot" id="mora-dot" style="background:#ccc;"></div><span id="mora-label"></span></div>
+    <div class="proxy-status"><div class="dot" id="proxy-dot"></div><span id="proxy-label"></span></div>
   </div>
 </div>
 
 <div class="container">
+  <!-- DASHBOARD DE MÉTRICAS -->
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+    <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:var(--azul-oscuro);">Estado de cartera</div>
+    <button class="primary" onclick="generarResumenEjecutivo()" style="font-size:13px;padding:7px 16px;">📄 Resumen ejecutivo</button>
+  </div>
+  <div id="dashboard-metricas" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:1.5rem;">
+    <div style="background:var(--blanco);border:1px solid var(--azul-borde);border-radius:14px;padding:1.25rem;text-align:center;box-shadow:0 1px 4px rgba(37,99,235,0.06);">
+      <div style="font-size:11px;color:var(--azul-claro);font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">Cartera</div>
+      <div id="met-total" style="font-family:'Syne',sans-serif;font-size:36px;font-weight:800;color:var(--azul-oscuro);line-height:1;">—</div>
+      <div style="font-size:11px;color:var(--texto-suave);margin-top:4px;">clientes activos</div>
+    </div>
+    <div style="background:var(--blanco);border:1px solid var(--azul-borde);border-radius:14px;padding:1.25rem;text-align:center;box-shadow:0 1px 4px rgba(37,99,235,0.06);">
+      <div style="font-size:11px;color:#991b1b;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">Alertas BCRA</div>
+      <div id="met-criticos" style="font-family:'Syne',sans-serif;font-size:36px;font-weight:800;color:#991b1b;line-height:1;">—</div>
+      <div style="font-size:11px;color:var(--texto-suave);margin-top:4px;">situación crítica</div>
+    </div>
+    <div style="background:var(--blanco);border:1px solid var(--azul-borde);border-radius:14px;padding:1.25rem;text-align:center;box-shadow:0 1px 4px rgba(37,99,235,0.06);">
+      <div style="font-size:11px;color:#9a3412;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">En Mora</div>
+      <div id="met-mora" style="font-family:'Syne',sans-serif;font-size:36px;font-weight:800;color:#9a3412;line-height:1;">—</div>
+      <div style="font-size:11px;color:var(--texto-suave);margin-top:4px;">mora registrada</div>
+    </div>
+    <div style="background:var(--blanco);border:1px solid var(--azul-borde);border-radius:14px;padding:1.25rem;text-align:center;box-shadow:0 1px 4px rgba(37,99,235,0.06);">
+      <div style="font-size:11px;color:#854d0e;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">En Bodegas</div>
+      <div id="met-bodegas" style="font-family:'Syne',sans-serif;font-size:36px;font-weight:800;color:#854d0e;line-height:1;">—</div>
+      <div style="font-size:11px;color:var(--texto-suave);margin-top:4px;">con menciones</div>
+    </div>
+  </div>
+
   <div class="tabs">
     <button class="tab active" onclick="switchTab('consulta',this)">Consultar</button>
     <button class="tab" onclick="switchTab('cheques',this)">Cheques</button>
     <button class="tab" onclick="switchTab('historial',this)">Historial</button>
     <button class="tab" onclick="switchTab('cartera',this)">Cartera</button>
+    <button class="tab" onclick="switchTab('dso',this)">DSO</button>
     <button class="tab" onclick="switchTab('alertas',this)">Alertas</button>
+    <button class="tab" onclick="switchTab('red',this)">Red</button>
     <button class="tab" onclick="switchTab('configuracion',this)">Config</button>
   </div>
 
@@ -410,7 +439,7 @@
         <input type="text" id="cuit-input" placeholder="Ej: 20-21310600-8" maxlength="13" onkeydown="if(event.key==='Enter') consultarCliente()" />
         <button class="primary" onclick="consultarCliente()">Consultar →</button>
       </div>
-      <div class="hint">BCRA en tiempo real + AFIP + historial bodegas + moras Piattelli.</div>
+      <div class="hint">BCRA en tiempo real + AFIP + historial de bodegas + moras registradas.</div>
     </div>
 
     <div id="loading-state" class="loading-msg" style="display:none;">Consultando...</div>
@@ -502,6 +531,62 @@
     <div id="lista-clientes"><div class="empty-state">No hay clientes en seguimiento.</div></div>
   </div>
 
+  <div id="dso" class="section">
+    <div class="card">
+      <div class="card-title">Módulo DSO — Días de Venta Pendiente de Cobro</div>
+      <p style="font-size:13px;color:#64748b;line-height:1.6;margin-bottom:16px;">
+        Subí tus archivos Excel de saldos para calcular el DSO de tu cartera. 
+        <strong style="color:var(--azul-claro);">Referencia sector vitivinícola: 45–55 días.</strong>
+      </p>
+      <div class="upload-area" id="dso-upload-area" onclick="document.getElementById('dso-file').click()" style="margin-bottom:0;">
+        <div style="font-size:13px;color:#64748b;">Hacé clic para subir tu archivo Excel de saldos</div>
+        <div style="font-size:12px;color:#94a3b8;margin-top:4px;">Columnas necesarias: Contacto, Saldo, Días pendientes · Formato Odoo/Tango/ERP</div>
+      </div>
+      <input type="file" id="dso-file" accept=".xlsx,.xls,.csv" style="display:none;" onchange="procesarDSO(this)" />
+    </div>
+
+    <div id="dso-loading" style="display:none;text-align:center;padding:2rem;">
+      <div class="loading-spinner"></div>
+      <div style="font-size:13px;color:#64748b;margin-top:8px;">Calculando DSO...</div>
+    </div>
+
+    <div id="dso-resultado" style="display:none;">
+      <!-- KPI principal -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:1rem;">
+        <div class="card" style="text-align:center;padding:1.5rem 1rem;">
+          <div style="font-size:11px;color:var(--azul-claro);font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">DSO Global</div>
+          <div id="dso-numero" style="font-family:'Syne',sans-serif;font-size:48px;font-weight:800;line-height:1;"></div>
+          <div style="font-size:12px;color:#64748b;margin-top:4px;">días promedio</div>
+        </div>
+        <div class="card" style="text-align:center;padding:1.5rem 1rem;">
+          <div style="font-size:11px;color:var(--azul-claro);font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">Saldo Total</div>
+          <div id="dso-saldo-total" style="font-family:'Syne',sans-serif;font-size:28px;font-weight:800;color:var(--azul-oscuro);line-height:1;"></div>
+          <div style="font-size:12px;color:#64748b;margin-top:4px;">pendiente de cobro</div>
+        </div>
+        <div class="card" style="text-align:center;padding:1.5rem 1rem;">
+          <div style="font-size:11px;color:var(--azul-claro);font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">Clientes</div>
+          <div id="dso-clientes-total" style="font-family:'Syne',sans-serif;font-size:48px;font-weight:800;color:var(--azul-oscuro);line-height:1;"></div>
+          <div style="font-size:12px;color:#64748b;margin-top:4px;">con saldo pendiente</div>
+        </div>
+      </div>
+
+      <!-- Benchmark -->
+      <div id="dso-benchmark" class="card" style="margin-bottom:1rem;"></div>
+
+      <!-- Tabla de clientes -->
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+          <div class="card-title" style="margin-bottom:0;">Detalle por cliente</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="text" id="dso-search" placeholder="Buscar cliente..." style="font-size:13px;padding:6px 10px;width:180px;" oninput="filtrarDSO(this.value)" />
+            <button class="primary" onclick="exportarDSO()" style="font-size:13px;padding:6px 14px;">Exportar Excel</button>
+          </div>
+        </div>
+        <div id="dso-tabla"></div>
+      </div>
+    </div>
+  </div>
+
   <div id="alertas" class="section">
     <div class="card">
       <div class="card-title">Monitoreo BCRA — Cartera activa</div>
@@ -529,9 +614,108 @@
     </div>
   </div>
 
+  <div id="red" class="section">
+    <!-- Header -->
+    <div class="card" style="text-align:center;padding:2.5rem 1.5rem;background:linear-gradient(135deg,#0f2d52 0%,#1a56a0 100%);border:none;">
+      <div style="font-family:'Syne',sans-serif;font-size:28px;font-weight:800;color:#fff;margin-bottom:6px;">Red de Bodegas</div>
+      <div style="font-size:14px;color:#93c5fd;font-style:italic;font-weight:300;">La inteligencia colectiva del sector</div>
+    </div>
+
+    <!-- Concepto -->
+    <div class="card" style="margin-top:12px;">
+      <p style="font-size:15px;color:#334155;line-height:1.8;text-align:center;max-width:600px;margin:0 auto;">
+        Cada bodega que usa Vende Seguro aporta su historial de clientes de forma anónima. 
+        Si un cliente le rebotó cheques a tres bodegas del sector, vos lo sabés antes de venderle. 
+        <strong>Lo que hoy circula por WhatsApp, mañana es un sistema.</strong>
+      </p>
+    </div>
+
+    <!-- Ilustración SVG de red -->
+    <div class="card" style="text-align:center;padding:2rem;">
+      <svg width="100%" height="200" viewBox="0 0 500 200" xmlns="http://www.w3.org/2000/svg" style="max-width:500px;">
+        <!-- Líneas de conexión -->
+        <line x1="250" y1="100" x2="100" y2="50" stroke="#bfdbfe" stroke-width="2"/>
+        <line x1="250" y1="100" x2="400" y2="50" stroke="#bfdbfe" stroke-width="2"/>
+        <line x1="250" y1="100" x2="80" y2="160" stroke="#bfdbfe" stroke-width="2"/>
+        <line x1="250" y1="100" x2="420" y2="160" stroke="#bfdbfe" stroke-width="2"/>
+        <line x1="250" y1="100" x2="250" y2="30" stroke="#bfdbfe" stroke-width="2"/>
+        <line x1="100" y1="50" x2="80" y2="160" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4"/>
+        <line x1="400" y1="50" x2="420" y2="160" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4"/>
+        <!-- Nodo central (tu bodega) -->
+        <circle cx="250" cy="100" r="28" fill="#2563eb"/>
+        <text x="250" y="95" text-anchor="middle" fill="white" font-size="10" font-family="sans-serif" font-weight="bold">TU</text>
+        <text x="250" y="108" text-anchor="middle" fill="white" font-size="10" font-family="sans-serif" font-weight="bold">BODEGA</text>
+        <!-- Nodos externos -->
+        <circle cx="100" cy="50" r="18" fill="#1a56a0"/>
+        <text x="100" y="54" text-anchor="middle" fill="white" font-size="9" font-family="sans-serif">Bodega</text>
+        <circle cx="400" cy="50" r="18" fill="#1a56a0"/>
+        <text x="400" y="54" text-anchor="middle" fill="white" font-size="9" font-family="sans-serif">Bodega</text>
+        <circle cx="80" cy="160" r="18" fill="#1a56a0" opacity="0.6"/>
+        <text x="80" y="164" text-anchor="middle" fill="white" font-size="9" font-family="sans-serif">+</text>
+        <circle cx="420" cy="160" r="18" fill="#1a56a0" opacity="0.6"/>
+        <text x="420" y="164" text-anchor="middle" fill="white" font-size="9" font-family="sans-serif">+</text>
+        <circle cx="250" cy="30" r="14" fill="#1a56a0" opacity="0.5"/>
+        <text x="250" y="34" text-anchor="middle" fill="white" font-size="8" font-family="sans-serif">+</text>
+        <!-- Punto animado cliente compartido -->
+        <circle cx="175" cy="75" r="6" fill="#ef4444" opacity="0.9">
+          <animate attributeName="opacity" values="0.9;0.3;0.9" dur="2s" repeatCount="indefinite"/>
+        </circle>
+        <text x="175" y="65" text-anchor="middle" fill="#991b1b" font-size="8" font-family="sans-serif">cliente riesgoso</text>
+      </svg>
+      <p style="font-size:12px;color:#94a3b8;margin-top:8px;">Los puntos rojos son clientes con alertas compartidas entre bodegas</p>
+    </div>
+
+    <!-- Contador -->
+    <div class="card" style="text-align:center;padding:1.5rem;">
+      <div style="font-size:12px;color:var(--azul-claro);font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">Bodegas en la red</div>
+      <div id="red-contador" style="font-family:'Syne',sans-serif;font-size:64px;font-weight:800;color:var(--azul-oscuro);line-height:1;">1</div>
+      <div style="font-size:13px;color:#64748b;margin-top:4px;">y creciendo</div>
+    </div>
+
+    <!-- CTA -->
+    <div class="card" style="text-align:center;padding:1.5rem;">
+      <div id="red-cta-form">
+        <p style="font-size:14px;color:#334155;margin-bottom:16px;">¿Querés que tu bodega sea parte de la red y acceder a la inteligencia compartida del sector?</p>
+        <button class="primary" onclick="sumarsePedido()" style="font-size:15px;padding:12px 32px;">Quiero sumarme a la red →</button>
+      </div>
+      <div id="red-confirmacion" style="display:none;">
+        <div style="font-size:32px;margin-bottom:8px;">🎉</div>
+        <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:700;color:var(--azul-oscuro);margin-bottom:6px;">¡Genial, te anotamos!</div>
+        <div style="font-size:14px;color:#64748b;">Nos ponemos en contacto cuando lancemos la red completa.<br>Mientras tanto, seguí usando Vende Seguro para proteger tus ventas.</div>
+      </div>
+    </div>
+  </div>
+
   <div id="configuracion" class="section">
     <div class="card">
-      <div class="card-title">Actualizar historial de bodegas (WhatsApp)</div>
+      <div class="card" style="margin-bottom:1rem;">
+      <div class="card-title">Umbrales DSO</div>
+      <p style="font-size:13px;color:#666;margin-bottom:12px;">Configurá los días de corte para el semáforo de DSO.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div>
+          <div style="font-size:12px;color:#64748b;margin-bottom:4px;">Normal hasta (días)</div>
+          <input type="number" id="input-dso-bajo" placeholder="45" style="width:100%;" value="" />
+        </div>
+        <div>
+          <div style="font-size:12px;color:#64748b;margin-bottom:4px;">Crítico desde (días)</div>
+          <input type="number" id="input-dso-alto" placeholder="65" style="width:100%;" value="" />
+        </div>
+      </div>
+      <button class="primary" onclick="guardarUmbralesDSO()">Guardar umbrales</button>
+      <div id="dso-umbral-status" style="font-size:12px;color:#166534;margin-top:6px;display:none;">✓ Umbrales guardados</div>
+    </div>
+
+    <div class="card" style="margin-bottom:1rem;">
+      <div class="card-title">Nombre de tu bodega</div>
+      <p style="font-size:13px;color:#666;margin-bottom:12px;">Este nombre aparece en los análisis y reportes generados.</p>
+      <div class="input-row">
+        <input type="text" id="input-nombre-bodega" placeholder="Ej: Bodega El Cerro S.A." style="flex:1;" value="" />
+        <button class="primary" onclick="guardarNombreBodega()">Guardar</button>
+      </div>
+      <div id="nombre-bodega-status" style="font-size:12px;color:#166534;margin-top:6px;display:none;">✓ Nombre guardado</div>
+    </div>
+
+    <div class="card-title">Actualizar historial de bodegas (WhatsApp)</div>
       <p style="font-size:13px;color:#666;line-height:1.6;margin-bottom:12px;">
         Exportá el chat desde WhatsApp (sin archivos multimedia) y subí el archivo .txt. Solo se agregan los mensajes nuevos.
       </p>
@@ -543,22 +727,271 @@
       <div id="wsp-update-status" style="font-size:13px;color:#888;margin-top:8px;"></div>
     </div>
   </div>
+  
+
+  
+
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 let wspIndex = null;
 let morasIndex = null;
 let verazData = null;
 let ultimoAnalisis = null;
 let historialConsultas = JSON.parse(localStorage.getItem('piat_historial') || '[]');
+
+function getNombreBodega() {
+  return localStorage.getItem('piat_nombre_bodega') || 'tu bodega';
+}
 let cartera = JSON.parse(localStorage.getItem('piat_cartera') || '[]');
 let situaciones = JSON.parse(localStorage.getItem('piat_situaciones') || '{}');
 let alertas = JSON.parse(localStorage.getItem('piat_alertas') || '[]');
 
+
+// ─── RED BODEGAS ─────────────────────────────────────────────
+function sumarsRed() {
+  document.getElementById('red-cta-area').style.display = 'none';
+  document.getElementById('red-confirmacion').style.display = 'block';
+  // Incrementar contador en localStorage
+  var n = parseInt(localStorage.getItem('piat_red_bodegas') || '1') + 1;
+  localStorage.setItem('piat_red_bodegas', n);
+  document.getElementById('red-contador').textContent = n;
+}
+
+// ─── RESUMEN EJECUTIVO PDF ────────────────────────────────────
+
+// ─── MÓDULO DSO ────────────────────────────────────────────
+var dsoDatos = [];
+
+function getDSOUmbral() {
+  return parseInt(localStorage.getItem('piat_dso_umbral') || '45');
+}
+
+function getDSOUmbralAlto() {
+  return parseInt(localStorage.getItem('piat_dso_umbral_alto') || '65');
+}
+
+function colorDSO(dias) {
+  var bajo = getDSOUmbral();
+  var alto = getDSOUmbralAlto();
+  if (dias < bajo) return {color: '#166534', bg: '#dcfce7', label: 'Normal'};
+  if (dias < alto) return {color: '#854d0e', bg: '#fefce8', label: 'Atención'};
+  return {color: '#991b1b', bg: '#fee2e2', label: 'Crítico'};
+}
+
+function normalizarColumna(headers, candidatos) {
+  for (var i = 0; i < candidatos.length; i++) {
+    for (var j = 0; j < headers.length; j++) {
+      if (headers[j].toLowerCase().includes(candidatos[i].toLowerCase())) {
+        return headers[j];
+      }
+    }
+  }
+  return null;
+}
+
+async function procesarDSO(input) {
+  var file = input.files[0];
+  if (!file) return;
+  document.getElementById('dso-loading').style.display = 'block';
+  document.getElementById('dso-resultado').style.display = 'none';
+
+  try {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        var data = new Uint8Array(e.target.result);
+        var workbook = XLSX.read(data, {type: 'array'});
+        var sheet = workbook.Sheets[workbook.SheetNames[0]];
+        var rows = XLSX.utils.sheet_to_json(sheet, {defval: ''});
+
+        if (!rows.length) {
+          alert('El archivo está vacío o no tiene el formato correcto.');
+          document.getElementById('dso-loading').style.display = 'none';
+          return;
+        }
+
+        var headers = Object.keys(rows[0]);
+
+        // Mapeo flexible de columnas
+        var colContacto = normalizarColumna(headers, ['Contacto', 'Cliente', 'Razón social', 'Razon social', 'Customer']);
+        var colSaldo = normalizarColumna(headers, ['Saldo', 'Balance', 'Importe pendiente', 'Amount due']);
+        var colDias = normalizarColumna(headers, ['Días pendientes', 'Dias pendientes', 'Days', 'Antigüedad', 'Vencimiento']);
+
+        if (!colContacto || !colSaldo) {
+          alert('No se encontraron las columnas necesarias. Asegurate de tener columnas "Contacto" y "Saldo".');
+          document.getElementById('dso-loading').style.display = 'none';
+          return;
+        }
+
+        // Agrupar por cliente
+        var porCliente = {};
+        rows.forEach(function(row) {
+          var nombre = String(row[colContacto] || '').trim();
+          if (!nombre) return;
+          var saldo = parseFloat(String(row[colSaldo] || '0').replace(/[$.,' ]/g, '').replace(',', '.')) || 0;
+          var dias = colDias ? (parseFloat(String(row[colDias] || '0').replace(/[^0-9.-]/g, '')) || 0) : 0;
+
+          if (!porCliente[nombre]) {
+            porCliente[nombre] = {nombre: nombre, saldo: 0, dias_max: 0, dias_pond: 0, lineas: 0};
+          }
+          porCliente[nombre].saldo += saldo;
+          porCliente[nombre].dias_pond += dias * Math.abs(saldo);
+          porCliente[nombre].dias_max = Math.max(porCliente[nombre].dias_max, dias);
+          porCliente[nombre].lineas++;
+        });
+
+        // Calcular DSO por cliente (días ponderados por saldo)
+        dsoDatos = Object.values(porCliente)
+          .filter(function(c) { return c.saldo > 0; })
+          .map(function(c) {
+            var dso = c.saldo > 0 ? Math.round(c.dias_pond / c.saldo) : 0;
+            return {nombre: c.nombre, saldo: c.saldo, dso: dso};
+          })
+          .sort(function(a, b) { return b.dso - a.dso; });
+
+        // DSO global ponderado
+        var saldoTotal = dsoDatos.reduce(function(s, c) { return s + c.saldo; }, 0);
+        var dsoGlobal = saldoTotal > 0
+          ? Math.round(dsoDatos.reduce(function(s, c) { return s + c.dso * c.saldo; }, 0) / saldoTotal)
+          : 0;
+
+        document.getElementById('dso-loading').style.display = 'none';
+        document.getElementById('dso-resultado').style.display = 'block';
+        document.getElementById('dso-upload-area').className = 'upload-area success';
+        document.getElementById('dso-upload-area').innerHTML = '<div style="font-size:13px;color:#166534;font-weight:600;">✓ ' + file.name + ' procesado</div>';
+
+        // KPIs
+        var colDSO = colorDSO(dsoGlobal);
+        document.getElementById('dso-numero').textContent = dsoGlobal;
+        document.getElementById('dso-numero').style.color = colDSO.color;
+        document.getElementById('dso-saldo-total').textContent = '$' + Math.round(saldoTotal).toLocaleString('es-AR');
+        document.getElementById('dso-clientes-total').textContent = dsoDatos.length;
+
+        // Benchmark
+        var benchmarkHtml = '<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">';
+        benchmarkHtml += '<div style="font-size:13px;color:#64748b;"><strong style="color:var(--azul-oscuro);">Referencia del sector:</strong> 45–55 días es normal · Más de 65 días es alerta</div>';
+        benchmarkHtml += '<div style="display:flex;gap:8px;">';
+        benchmarkHtml += '<span style="font-size:11px;padding:3px 10px;background:#dcfce7;color:#166534;border-radius:20px;font-weight:600;">Normal &lt;' + getDSOUmbral() + 'd</span>';
+        benchmarkHtml += '<span style="font-size:11px;padding:3px 10px;background:#fefce8;color:#854d0e;border-radius:20px;font-weight:600;">Atención ' + getDSOUmbral() + '–' + getDSOUmbralAlto() + 'd</span>';
+        benchmarkHtml += '<span style="font-size:11px;padding:3px 10px;background:#fee2e2;color:#991b1b;border-radius:20px;font-weight:600;">Crítico &gt;' + getDSOUmbralAlto() + 'd</span>';
+        benchmarkHtml += '</div></div>';
+        document.getElementById('dso-benchmark').innerHTML = benchmarkHtml;
+
+        renderTablaDSO(dsoDatos);
+
+      } catch(err) {
+        document.getElementById('dso-loading').style.display = 'none';
+        alert('Error al procesar el archivo: ' + err.message);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  } catch(e) {
+    document.getElementById('dso-loading').style.display = 'none';
+    alert('Error: ' + e.message);
+  }
+}
+
+function renderTablaDSO(datos) {
+  if (!datos.length) {
+    document.getElementById('dso-tabla').innerHTML = '<div class="empty-state">Sin datos para mostrar.</div>';
+    return;
+  }
+  var html = '<table class="bcra-table"><thead><tr><th>Cliente</th><th>DSO</th><th>Estado</th><th>Saldo</th></tr></thead><tbody>';
+  datos.forEach(function(c) {
+    var col = colorDSO(c.dso);
+    html += '<tr>';
+    html += '<td style="font-size:13px;">' + c.nombre + '</td>';
+    html += '<td><strong style="font-size:15px;color:' + col.color + ';">' + c.dso + 'd</strong></td>';
+    html += '<td><span style="font-size:11px;padding:3px 10px;background:' + col.bg + ';color:' + col.color + ';border-radius:20px;font-weight:600;">' + col.label + '</span></td>';
+    html += '<td style="font-size:13px;">$' + Math.round(c.saldo).toLocaleString('es-AR') + '</td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  document.getElementById('dso-tabla').innerHTML = html;
+}
+
+function filtrarDSO(query) {
+  if (!dsoDatos.length) return;
+  var filtrados = query
+    ? dsoDatos.filter(function(c) { return c.nombre.toLowerCase().includes(query.toLowerCase()); })
+    : dsoDatos;
+  renderTablaDSO(filtrados);
+}
+
+function exportarDSO() {
+  if (!dsoDatos.length) { alert('No hay datos para exportar.'); return; }
+
+  var wb = XLSX.utils.book_new();
+
+  // Hoja 1: Resumen
+  var saldoTotal = dsoDatos.reduce(function(s, c) { return s + c.saldo; }, 0);
+  var dsoGlobal = Math.round(dsoDatos.reduce(function(s, c) { return s + c.dso * c.saldo; }, 0) / saldoTotal);
+  var criticos = dsoDatos.filter(function(c) { return c.dso >= getDSOUmbralAlto(); }).length;
+  var atencion = dsoDatos.filter(function(c) { return c.dso >= getDSOUmbral() && c.dso < getDSOUmbralAlto(); }).length;
+  var normales = dsoDatos.filter(function(c) { return c.dso < getDSOUmbral(); }).length;
+
+  var resumen = [
+    ['RESUMEN DSO', '', ''],
+    ['Bodega', getNombreBodega(), ''],
+    ['Fecha', new Date().toLocaleDateString('es-AR'), ''],
+    ['', '', ''],
+    ['DSO Global', dsoGlobal + ' días', ''],
+    ['Saldo Total', '$' + Math.round(saldoTotal).toLocaleString('es-AR'), ''],
+    ['Total clientes', dsoDatos.length, ''],
+    ['', '', ''],
+    ['SEMÁFORO', '', ''],
+    ['Normal (< ' + getDSOUmbral() + ' días)', normales, ''],
+    ['Atención (' + getDSOUmbral() + '-' + getDSOUmbralAlto() + ' días)', atencion, ''],
+    ['Crítico (> ' + getDSOUmbralAlto() + ' días)', criticos, ''],
+    ['', '', ''],
+    ['Referencia sector', '45-55 días', '']
+  ];
+  var ws1 = XLSX.utils.aoa_to_sheet(resumen);
+  XLSX.utils.book_append_sheet(wb, ws1, 'Resumen');
+
+  // Hoja 2: Detalle
+  var detalle = [['Cliente', 'DSO (días)', 'Estado', 'Saldo ($)']];
+  dsoDatos.forEach(function(c) {
+    var col = colorDSO(c.dso);
+    detalle.push([c.nombre, c.dso, col.label, Math.round(c.saldo)]);
+  });
+  var ws2 = XLSX.utils.aoa_to_sheet(detalle);
+  XLSX.utils.book_append_sheet(wb, ws2, 'Detalle por Cliente');
+
+  var fecha = new Date().toLocaleDateString('es-AR').replace(/\//g, '-');
+  XLSX.writeFile(wb, 'DSO_' + getNombreBodega().replace(/ /g, '_') + '_' + fecha + '.xlsx');
+}
+// ─── FIN MÓDULO DSO ──────────────────────────────────────────
+
 async function init() {
   checkProxy();
   await Promise.all([cargarWSP(), cargarMoras(), cargarCarteraServidor()]);
+  actualizarMetricas();
+  // Cargar nombre de bodega en campo config
+  var nbEl = document.getElementById('input-nombre-bodega');
+  if (nbEl) nbEl.value = localStorage.getItem('piat_nombre_bodega') || '';
+  var dBajo = document.getElementById('input-dso-bajo');
+  var dAlto = document.getElementById('input-dso-alto');
+  if (dBajo) dBajo.value = localStorage.getItem('piat_dso_umbral') || '45';
+  if (dAlto) dAlto.value = localStorage.getItem('piat_dso_umbral_alto') || '65';
+  // Contador red
+  var contEl = document.getElementById('red-contador');
+  if (contEl) contEl.textContent = localStorage.getItem('piat_red_contador') || '1';
+}
+
+function actualizarMetricas() {
+  var total = cartera.length;
+  var criticos = cartera.filter(function(c) { return c.ultimaSit && c.ultimaSit >= 3; }).length;
+  var enMora = cartera.filter(function(c) { return buscarEnMoras(c.cuit); }).length;
+  var enBodegas = cartera.filter(function(c) { return buscarEnWSP(c.cuit); }).length;
+
+  document.getElementById('met-total').textContent = total || '—';
+  document.getElementById('met-criticos').textContent = criticos || '0';
+  document.getElementById('met-mora').textContent = enMora || '0';
+  document.getElementById('met-bodegas').textContent = enBodegas || '0';
 }
 
 async function cargarCarteraServidor() {
@@ -608,11 +1041,23 @@ async function cargarCarteraServidor() {
 }
 
 async function checkProxy() {
+  const dot = document.getElementById('proxy-dot');
+  const label = document.getElementById('proxy-label');
+  dot.className = 'dot';
+  label.textContent = '';
   try {
-    const r = await fetch('/health', {signal: AbortSignal.timeout(8000)});
-    if (r.ok) { document.getElementById('proxy-dot').classList.add('online'); document.getElementById('proxy-label').textContent = 'BCRA conectado'; }
-    else throw new Error();
-  } catch { document.getElementById('proxy-dot').classList.add('offline'); document.getElementById('proxy-label').textContent = 'BCRA sin conexión'; }
+    const r = await fetch('https://api.allorigins.win/get?url=' + encodeURIComponent('https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/20213106008'), {signal: AbortSignal.timeout(8000)});
+    if (r.ok) {
+      dot.className = 'dot online';
+      label.textContent = 'BCRA conectado';
+    } else {
+      dot.className = 'dot offline';
+      label.textContent = 'Sin conexión';
+    }
+  } catch(e) {
+    dot.className = 'dot offline';
+    label.textContent = 'Sin conexión';
+  }
 }
 
 async function cargarWSP() {
@@ -620,14 +1065,14 @@ async function cargarWSP() {
     const r = await fetch('/whatsapp_index.json');
     wspIndex = await r.json();
     const total = Object.keys(wspIndex).length;
-    document.getElementById('wsp-dot').style.background = '#25d366';
-    document.getElementById('wsp-label').textContent = `Bodegas: ${total} clientes`;
+    document.getElementById('wsp-dot').style.background = '#22c55e';
+    document.getElementById('wsp-label').textContent = 'Red activa · ' + total + ' bodegas';
   } catch { document.getElementById('wsp-dot').style.background = '#ef4444'; document.getElementById('wsp-label').textContent = 'Bodegas no disponible'; }
 }
 
 async function cargarMoras() {
   try {
-    const r = await fetch('/moras_piattelli.json');
+    const r = await fetch('/moras.json');
     morasIndex = await r.json();
     const total = Object.keys(morasIndex).length;
     document.getElementById('mora-dot').style.background = '#ef4444';
@@ -664,7 +1109,7 @@ async function consultarCliente() {
   const mora = buscarEnMoras(raw);
   document.getElementById('mora-alert-container').innerHTML = mora ? `
     <div class="mora-alert">
-      <div class="mora-alert-title">⚠ Cliente en mora con Piattelli</div>
+      <div class="mora-alert-title">⚠ Cliente en mora mora registrada</div>
       <div class="mora-alert-detail"><strong>${mora.nombre}</strong> tiene facturas impagas desde <strong>${mora.fecha_mora}</strong>.<br>Saldo adeudado: <strong>$${mora.saldo.toLocaleString('es-AR')}</strong> — Estado: ${mora.estado}</div>
     </div>` : '';
 
@@ -886,11 +1331,7 @@ async function analizarCliente() {
   const resEl = document.getElementById('analisis-resultado');
   btn.disabled = true; btn.textContent = 'Analizando...'; resEl.style.display = 'none';
 
-  let prompt = `Sos un analista de riesgo crediticio senior especializado en el sector vitivinícola argentino. Tu trabajo es evaluar clientes para Bodega Piattelli y emitir un informe completo de riesgo crediticio.
-
-CUIT consultado: ${cuit}
-
-`;
+  let prompt = 'Sos un analista de riesgo crediticio senior especializado en el sector vitivinícola argentino. Tu trabajo es evaluar clientes para ' + getNombreBodega() + ' y emitir un informe completo de riesgo crediticio.\n\nCUIT consultado: ' + cuit + '\n\n';
   if (mora) prompt += '⚠️ ALERTA CRÍTICA - MORA CON PIATTELLI:\n' + mora.nombre + ' tiene deuda impaga desde ' + mora.fecha_mora + '.\nSaldo adeudado: $' + mora.saldo.toLocaleString('es-AR') + ' — Estado: ' + mora.estado + '\nEste antecedente es determinante para el análisis.\n\n';
   if (verazData) {
     prompt += `INFORME VERAZ/EQUIFAX — EMPRESA:
@@ -926,7 +1367,7 @@ ${piat}
 - Situación BCRA ideal: 1 (Normal). Situación 2 requiere garantías. Situación 3+ es rechazo automático.
 - Score Veraz ideal: 7 o más. Entre 5-6 requiere condiciones. Menos de 5 es rechazo.
 - Cheques rechazados: cualquier antecedente reciente es señal de alerta grave.
-- Mora con Piattelli: es condición de rechazo automático hasta regularización.
+- Mora mora registrada: es condición de rechazo automático hasta regularización.
 - Historial en grupo de bodegas: referencias negativas de colegas del sector pesan mucho.
 
 MODALIDADES DE VENTA DISPONIBLES:
@@ -971,7 +1412,7 @@ Usá el domicilio fiscal del cliente (provincia, ciudad) para evaluar:
    - AMBA y grandes ciudades — mercado normal, evaluar por perfil crediticio
 
 4. CLIENTE NUEVO SIN HISTORIAL:
-   - Si es la primera operación con Piattelli y está en zona de riesgo → pago anticipado obligatorio
+   - Si es la primera operación mora registrada y está en zona de riesgo → pago anticipado obligatorio
    - Si es la primera operación y el domicilio no coincide con el rubro declarado → investigar
 
 Incluí siempre en tu análisis una sección de RIESGO GEOGRÁFICO aunque sea para decir que la zona es de bajo riesgo.
@@ -1034,6 +1475,172 @@ function exportarReporte() {
   doc.save(`VenderSeguros_${cuit}_${ultimoAnalisis.fecha.replace(/\//g,'-')}.pdf`);
 }
 
+
+function sumarsARed() {
+  var nombre = getNombreBodega();
+  var contador = parseInt(localStorage.getItem('piat_red_contador') || '1');
+  if (nombre && nombre !== 'tu bodega') {
+    contador = Math.max(contador, 2);
+    localStorage.setItem('piat_red_contador', contador);
+    document.getElementById('red-contador').textContent = contador;
+  }
+  document.getElementById('red-confirmacion').style.display = 'block';
+}
+
+function generarResumenEjecutivo() {
+  var jsPDF = window.jspdf ? window.jspdf.jsPDF : null;
+  if (!jsPDF) { alert('PDF no disponible, intentá de nuevo.'); return; }
+  var doc = new jsPDF();
+  var bodega = getNombreBodega();
+  var fecha = new Date().toLocaleDateString('es-AR');
+  var y = 20;
+
+  // Header
+  doc.setFillColor(15, 45, 82);
+  doc.rect(0, 0, 210, 35, 'F');
+  doc.setFontSize(22);
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Vende Seguro', 20, 18);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'italic');
+  doc.setTextColor(147, 197, 253);
+  doc.text('vende sin riesgo', 20, 27);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(255, 255, 255);
+  doc.text('Resumen ejecutivo — ' + fecha, 120, 18);
+  doc.text(bodega, 120, 27);
+
+  y = 50;
+
+  // Métricas
+  doc.setFontSize(13);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(15, 45, 82);
+  doc.text('Resumen de cartera', 20, y);
+  y += 8;
+  doc.setDrawColor(200, 220, 255);
+  doc.line(20, y, 190, y);
+  y += 10;
+
+  var metTotal = document.getElementById('met-total').textContent || '—';
+  var metCriticos = document.getElementById('met-criticos').textContent || '0';
+  var metMora = document.getElementById('met-mora').textContent || '0';
+  var metBodegas = document.getElementById('met-bodegas').textContent || '0';
+
+  var metricas = [
+    ['Clientes en cartera', metTotal],
+    ['Alertas BCRA activas', metCriticos],
+    ['Con mora registrada', metMora],
+    ['Con menciones en red', metBodegas]
+  ];
+
+  doc.setFontSize(11);
+  metricas.forEach(function(m) {
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139);
+    doc.text(m[0], 25, y);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(15, 45, 82);
+    doc.text(m[1], 130, y);
+    y += 8;
+  });
+
+  // DSO si hay datos
+  if (dsoDatos && dsoDatos.length > 0) {
+    var saldoTotal = dsoDatos.reduce(function(s, c) { return s + c.saldo; }, 0);
+    var dsoGlobal = Math.round(dsoDatos.reduce(function(s, c) { return s + c.dso * c.saldo; }, 0) / saldoTotal);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139);
+    doc.text('DSO global', 25, y);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(15, 45, 82);
+    doc.text(dsoGlobal + ' días', 130, y);
+    y += 8;
+  }
+
+  y += 6;
+  doc.setDrawColor(200, 220, 255);
+  doc.line(20, y, 190, y);
+  y += 10;
+
+  // Top 5 alertas
+  doc.setFontSize(13);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(15, 45, 82);
+  doc.text('Top 5 clientes con mayor riesgo', 20, y);
+  y += 8;
+
+  var top5 = alertas.slice(0, 5);
+  if (top5.length === 0) {
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(150, 150, 150);
+    doc.text('Sin alertas activas.', 25, y);
+    y += 8;
+  } else {
+    doc.setFontSize(10);
+    top5.forEach(function(a, idx) {
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(153, 27, 27);
+      doc.text((idx + 1) + '. ' + a.nombre, 25, y);
+      y += 6;
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(100, 116, 139);
+      var motivo = a.tipo === 'bcra'
+        ? 'BCRA: Situacion ' + a.sitActual + ' — ' + (a.sitActual >= 3 ? 'Alto riesgo' : 'Seguimiento')
+        : 'Grupo bodegas: ' + (a.mensajes && a.mensajes[0] ? a.mensajes[0].substring(0, 60) + '...' : 'comentarios negativos');
+      doc.text('CUIT: ' + a.cuit + ' · ' + motivo, 28, y);
+      y += 8;
+    });
+  }
+
+  // Footer
+  doc.setFillColor(15, 45, 82);
+  doc.rect(0, 280, 210, 17, 'F');
+  doc.setFontSize(8);
+  doc.setTextColor(147, 197, 253);
+  doc.setFont('helvetica', 'italic');
+  doc.text('Generado por Vende Seguro — analisis crediticio para el sector vitivinicola argentino.', 20, 290);
+
+  doc.save('ResumenEjecutivo_' + bodega.replace(/ /g, '_') + '_' + fecha.replace(/\//g, '-') + '.pdf');
+}
+
+function sumarsePedido() {
+  localStorage.setItem('piat_red_sumado', '1');
+  document.getElementById('red-cta-form').style.display = 'none';
+  document.getElementById('red-confirmacion').style.display = 'block';
+  actualizarContadorRed();
+}
+
+function actualizarContadorRed() {
+  var base = 1;
+  // Cada bodega que tiene nombre configurado cuenta como 1
+  if (localStorage.getItem('piat_nombre_bodega')) base = 1;
+  if (localStorage.getItem('piat_red_sumado')) base = Math.max(base, 1);
+  document.getElementById('red-contador').textContent = base;
+}
+
+function guardarUmbralesDSO() {
+  var bajo = parseInt(document.getElementById('input-dso-bajo').value) || 45;
+  var alto = parseInt(document.getElementById('input-dso-alto').value) || 65;
+  localStorage.setItem('piat_dso_umbral', bajo);
+  localStorage.setItem('piat_dso_umbral_alto', alto);
+  var st = document.getElementById('dso-umbral-status');
+  st.style.display = 'block';
+  setTimeout(function() { st.style.display = 'none'; }, 2000);
+}
+
+function guardarNombreBodega() {
+  var nombre = document.getElementById('input-nombre-bodega').value.trim();
+  if (!nombre) { alert('Ingresá el nombre de tu bodega'); return; }
+  localStorage.setItem('piat_nombre_bodega', nombre);
+  var status = document.getElementById('nombre-bodega-status');
+  status.style.display = 'block';
+  setTimeout(function() { status.style.display = 'none'; }, 2000);
+}
+
 async function actualizarWSP(input) {
   const file = input.files[0];
   if (!file) return;
@@ -1062,8 +1669,8 @@ async function actualizarWSP(input) {
   const total = Object.keys(wspIndex).length;
   document.getElementById('wsp-area').className = 'upload-area success';
   document.getElementById('wsp-area').innerHTML = `<div style="font-size:13px;color:#166534;font-weight:600;">✓ Chat actualizado</div>`;
-  document.getElementById('wsp-dot').style.background = '#25d366';
-  document.getElementById('wsp-label').textContent = `Bodegas: ${total} clientes`;
+  document.getElementById('wsp-dot').style.background = '#22c55e';
+  document.getElementById('wsp-label').textContent = 'Red activa · ' + total + ' bodegas';
   statusEl.textContent = `Listo. ${nuevos} CUITs nuevos. Total: ${total} clientes indexados.`;
 }
 
@@ -1214,6 +1821,7 @@ async function verificarTodos() {
           }
         }
         renderAlertas();
+        actualizarMetricas();
       }
     } catch(e) {}
   }, 5000);
@@ -1476,7 +2084,7 @@ async function analizarCheque() {
     });
   }
 
-  var prompt = 'Sos analista de riesgo de Bodega Piattelli. Evaluá si conviene ACEPTAR un cheque de tercero.\n\n';
+  var prompt = 'Sos analista de riesgo crediticio especializado en el sector vitivinícola argentino. Evaluá si conviene ACEPTAR un cheque de tercero.\n\n';
   prompt += 'CUIT: ' + datos.cuit + '\n';
   prompt += 'Nombre: ' + (datos.nombre || 'Sin denominacion') + '\n\n';
   prompt += 'CHEQUES RECHAZADOS BCRA:\n';
