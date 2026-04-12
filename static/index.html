@@ -568,8 +568,12 @@ async function cargarCarteraServidor() {
     const data = await r.json();
     if (data && !data.error) {
       if (data.alertas && data.alertas.length > 0) {
-        alertas = data.alertas;
-        localStorage.setItem('piat_alertas', JSON.stringify(alertas));
+        // Solo cargar del servidor si no hay alertas locales más recientes
+        var alertasLocales = JSON.parse(localStorage.getItem('piat_alertas') || '[]');
+        if (alertasLocales.length === 0) {
+          alertas = data.alertas;
+          localStorage.setItem('piat_alertas', JSON.stringify(alertas));
+        }
       }
       if (data.ultima_verif) {
         localStorage.setItem('piat_ultima_verif', data.ultima_verif);
@@ -670,13 +674,15 @@ async function consultarCliente() {
     '<div style="display:flex;align-items:center;gap:14px;">' +
     '<div class="avatar" id="cli-avatar">?</div>' +
     '<div style="flex:1;">' +
-    '<div style="font-size:16px;font-weight:600;" id="cli-nombre">Consultando razón social...</div>' +
+    '<div style="font-size:16px;font-weight:600;" id="cli-nombre">Consultando...</div>' +
     '<div style="font-size:12px;color:#64748b;margin-top:2px;">CUIT: ' + raw + '</div>' +
     '</div>' +
-    '<div id="cli-acciones"></div>' +
+    '<div id="cli-acciones">' +
+    (cartera.some(function(c){return c.cuit===raw;}) ? '<span style="font-size:11px;color:var(--verde);padding:4px 10px;background:var(--verde-bg);border-radius:6px;font-weight:600;">En cartera ✓</span>' : '') +
+    '</div>' +
     '</div>';
   document.getElementById('verdict-container').innerHTML = '';
-  guardarEnHistorial(raw, null);
+    guardarEnHistorial(raw, null);
   mostrarAFIP(raw);
   mostrarWSP(raw);
 
@@ -732,12 +738,19 @@ function mostrarResultado(cuit, data, esTimeout) {
       }
     });
   }
-  document.getElementById('cliente-header').innerHTML = `
-    <div style="display:flex;align-items:center;gap:14px;">
-      <div class="avatar">${(nombreFinal && nombreFinal !== 'Sin denominación') ? nombreFinal.charAt(0) : '?'}</div>
-      <div style="flex:1;"><div style="font-size:16px;font-weight:600;" class="nombre-cliente">${(nombreFinal && nombreFinal !== 'Sin denominación') ? nombreFinal : 'Cargando razón social...'}</div><div style="font-size:12px;color:#888;margin-top:2px;">CUIT: ${cuit}</div></div>
-      ${getBadge(maxSit)}
-    </div>`;
+  var nombreMostrar = (nombreFinal && nombreFinal !== 'Sin denominación') ? nombreFinal : 'Sin denominación';
+  var yaEstaCartera = cartera.some(function(c) { return c.cuit === cuit; });
+  var botonCartera = yaEstaCartera
+    ? '<span style="font-size:11px;color:var(--verde);padding:4px 10px;background:var(--verde-bg);border-radius:6px;font-weight:600;">En cartera ✓</span>'
+    : '<button onclick="agregarDesdConsulta(\''+cuit+'\', \''+nombreMostrar.replace(/'/g,'')+'\')" style="font-size:12px;padding:6px 14px;background:var(--azul-suave);color:var(--azul-claro);border-color:var(--azul-borde);">+ Agregar a cartera</button>';
+  var headerHtml = '<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">';
+  headerHtml += '<div class="avatar">' + (nombreMostrar !== 'Sin denominación' ? nombreMostrar.charAt(0) : '?') + '</div>';
+  headerHtml += '<div style="flex:1;"><div style="font-size:16px;font-weight:600;" class="nombre-cliente">' + nombreMostrar + '</div>';
+  headerHtml += '<div style="font-size:12px;color:#64748b;margin-top:2px;">CUIT: ' + cuit + '</div></div>';
+  headerHtml += getBadge(maxSit);
+  headerHtml += '<div>' + botonCartera + '</div>';
+  headerHtml += '</div>';
+  document.getElementById('cliente-header').innerHTML = headerHtml;
   let v = '';
   if (esTimeout) v = '';
   else if (maxSit === 1) v = `<div class="verdict-box aprobar"><div class="verdict-title aprobar">✓ Situación normal en BCRA</div><div class="verdict-detail">El cliente está en situación 1. Sin alertas financieras.</div></div>`;
@@ -1161,7 +1174,8 @@ async function verificarTodos() {
         const entidades = bcraData?.results?.periodos?.[0]?.entidades || [];
         const maxSit = entidades.length ? entidades.reduce((m,e)=>Math.max(m,e.situacion||1),1) : 1;
         const sitAnterior = situaciones[c.cuit] || c.ultimaSit || 1;
-        if (maxSit > sitAnterior) {
+        // Generar alerta si empeoró O si ya está en situación crítica (3+)
+        if (maxSit > sitAnterior || maxSit >= 3) {
           nuevasAlertas.push({
             nombre: c.nombre, cuit: c.cuit, sitAnterior, sitActual: maxSit,
             fecha: new Date().toLocaleDateString('es-AR'),
@@ -1229,7 +1243,8 @@ async function verificarTodos() {
   localStorage.setItem('piat_situaciones', JSON.stringify(situaciones));
   localStorage.setItem('piat_cartera', JSON.stringify(cartera));
   localStorage.setItem('piat_ultima_verif', ahora);
-  alertas = [...nuevasAlertas, ...alertas].slice(0,30);
+  // Reemplazar alertas completamente con las nuevas — no mezclar con viejas
+  alertas = nuevasAlertas.slice(0, 50);
   localStorage.setItem('piat_alertas', JSON.stringify(alertas));
   // Guardar en servidor para sincronizar entre dispositivos
   try {
@@ -1246,9 +1261,9 @@ async function verificarTodos() {
   btn.disabled = false;
 
   if (nuevasAlertas.length===0) {
-    prog.textContent = `✓ Verificación completada el ${ahora}. Sin cambios en la cartera.`;
+    prog.textContent = '✓ Verificación completada el ' + ahora + '. Sin alertas detectadas.';
   } else {
-    prog.textContent = `⚠ Verificación completada. ${nuevasAlertas.length} cliente(s) con cambios de situación.`;
+    prog.textContent = '⚠ Verificación completada. ' + nuevasAlertas.length + ' alerta(s) detectada(s).';
   }
   renderAlertas();
 }
