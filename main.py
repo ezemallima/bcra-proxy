@@ -138,37 +138,15 @@ def analizar_bodegas():
 
 @app.route("/afip/<cuit>")
 def get_afip(cuit):
-    # Intentar múltiples fuentes para obtener razón social
-    fuentes = [
-        "https://soa.afip.gob.ar/sr-padron/v2/persona/" + cuit,
-        "https://afip.tangofactura.com/Rest/GetContribuyenteFull?cuit=" + cuit,
-    ]
-    for url in fuentes:
-        try:
-            headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
-            r = requests.get(url, timeout=8, verify=False, headers=headers)
-            if r.status_code == 200:
-                data = r.json()
-                # Formato AFIP oficial
-                p = data.get('data', {})
-                if p:
-                    nombre = p.get('razonSocial') or (str(p.get('apellido','')) + ' ' + str(p.get('nombre',''))).strip()
-                    if nombre:
-                        return jsonify({
-                            "nombre": nombre.strip(),
-                            "provincia": p.get('domicilioFiscal', {}).get('descripcionProvincia', ''),
-                            "localidad": p.get('domicilioFiscal', {}).get('localidad', ''),
-                            "actividad": p.get('descripcionActividadPrincipal', ''),
-                            "estado": p.get('estadoClave', '')
-                        })
-                # Formato TangoFactura
-                if data.get('Contribuyente'):
-                    c = data['Contribuyente']
-                    nombre = c.get('razonSocial', '')
-                    if nombre:
-                        return jsonify({"nombre": nombre.strip()})
-        except Exception:
-            continue
+    # Usar el BCRA como fuente de nombre — ya funciona en Render
+    try:
+        data, error = consultar_bcra(cuit)
+        if data and not error:
+            nombre = data.get('results', {}).get('denominacion', '')
+            if nombre:
+                return jsonify({"nombre": nombre})
+    except Exception:
+        pass
     return jsonify({"nombre": "", "error": "No encontrado"})
 
 @app.route("/deudas/<cuit>")
