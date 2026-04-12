@@ -561,7 +561,7 @@ async function init() {
   await Promise.all([cargarWSP(), cargarMoras(), cargarCarteraServidor()]);
 }
 
-async function cargarCarteraServidor() {
+async async function cargarCarteraServidor() {
   // Cargar alertas y cartera verificada del servidor (sincroniza entre dispositivos)
   try {
     const r = await fetch('/alertas');
@@ -1268,25 +1268,22 @@ async function verificarTodos() {
   renderAlertas();
 }
 
-async function limpiarAlertas() {
+async async function limpiarAlertas() {
   if (!confirm('¿Limpiar todas las alertas?')) return;
-  // Limpiar todo — localStorage, variable global y servidor
   alertas = [];
-  localStorage.removeItem('piat_alertas');
-  localStorage.removeItem('piat_situaciones');
-  localStorage.removeItem('piat_ultima_verif');
-  // NO borrar ultimaSit ni ultimaVerif — solo limpiar alertas
-  localStorage.setItem('piat_cartera', JSON.stringify(cartera));
-  // Limpiar en servidor
+  localStorage.setItem('piat_alertas', JSON.stringify([]));
+  var ultimaVerif = localStorage.getItem('piat_ultima_verif') || '';
+  var carteraResumen = cartera.map(function(c) {
+    return {cuit: c.cuit, ultimaSit: c.ultimaSit, ultimaVerif: c.ultimaVerif};
+  });
   try {
     await fetch('/alertas', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({alertas: [], ultima_verif: '', cartera: []})
+      body: JSON.stringify({alertas: [], ultima_verif: ultimaVerif, cartera: carteraResumen})
     });
   } catch(e) {}
   renderAlertas();
-  alert('Alertas limpiadas. Ahora podés correr la verificación.');
 }
 
 function renderAlertas() {
