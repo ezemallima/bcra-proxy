@@ -5,6 +5,7 @@ import urllib3
 import os
 import json
 import time
+import threading
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -13,12 +14,18 @@ CORS(app)
 app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024
 
 GEMINI_KEY = os.environ.get('GEMINI_API_KEY', '')
-GEMINI_MODELS = [
-    "gemini-flash-latest",
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
-]
+GEMINI_MODELS = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.0-flash"]
 ALERTAS_FILE = os.path.join(os.getcwd(), 'alertas_cartera.json')
+WSP_FILE = os.path.join(os.getcwd(), 'whatsapp_index.json')
+
+# Estado de verificación en memoria
+verificacion_estado = {
+    "corriendo": False,
+    "progreso": 0,
+    "total": 0,
+    "cliente_actual": "",
+    "mensaje": ""
+}
 
 def gemini_request(payload, timeout=45):
     for modelo in GEMINI_MODELS:
@@ -36,11 +43,11 @@ def gemini_request(payload, timeout=45):
                     break
                 texto = data['candidates'][0]['content']['parts'][0]['text']
                 return texto, None
-            except Exception as e:
+            except Exception:
                 if intento < 2:
                     time.sleep(2)
                 continue
-    return None, "No se pudo conectar con el motor de analisis."
+    return None, "No se pudo conectar."
 
 def consultar_bcra(cuit, reintentos=3):
     url = "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit
@@ -67,12 +74,155 @@ def consultar_bcra(cuit, reintentos=3):
             return None, str(e)
     return None, "timeout"
 
+def analizar_bodegas_server(cuit, nombre, mensajes):
+    if not GEMINI_KEY or not mensajes:
+        return False, ""
+    try:
+        mensajes_texto = "\n".join(["- " + m for m in mensajes[:10]])
+        prompt = (
+            "Analiza estos mensajes del grupo de bodegas sobre " + nombre + " (CUIT: " + cuit + ").\n"
+            "Determina si hay riesgo crediticio REAL para este cliente especifico.\n\n"
+            "MENSAJES:\n" + mensajes_texto + "\n\n"
+            "REGLAS:\n"
+            "- Solo negativo si hay deudas impagas NO resueltas, estafas o desaparicion.\n"
+            "- Cheques rechazados pero reemplazados = NO negativo.\n"
+            "- Mensaje sobre OTRO CUIT diferente = NO negativo para este cliente.\n"
+            "- Buen cliente, paga en termino = POSITIVO.\n\n"
+            'Responde SOLO con este JSON: {"es_negativo": false, "motivo": "texto"}'
+        )
+        payload = {"contents": [{"parts": [{"text": prompt}]}]}
+        texto, error = gemini_request(payload, timeout=30)
+        if error or not texto:
+            return False, ""
+        texto_limpio = texto.strip().replace("```json", "").replace("```", "").strip()
+        resultado = json.loads(texto_limpio)
+        return resultado.get("es_negativo", False), resultado.get("motivo", "")
+    except Exception:
+        return False, ""
+
+def ejecutar_verificacion(cartera_data):
+    global verificacion_estado
+    verificacion_estado["corriendo"] = True
+    verificacion_estado["progreso"] = 0
+    verificacion_estado["total"] = len(cartera_data)
+    verificacion_estado["mensaje"] = "Iniciando verificacion..."
+
+    palabras_riesgo = [
+        'rechaz', 'no paga', 'cuidado', 'mora', 'deuda', 'incobrable',
+        'estafa', 'desapareci', 'fuga', 'impago', 'quiebra', 'concurso',
+        'sin fondos', 'rebotado', 'mal pagador', 'no responde', 'no contesta',
+        'bloqueado', 'vencid', 'no cancel', 'no liquido', 'no abono',
+        'atencion', 'ojo', 'problema', 'judicial', 'cobrar', 'nos debe', 'debia'
+    ]
+
+    # Cargar índice de WhatsApp
+    wsp_index = {}
+    try:
+        with open(WSP_FILE, 'r', encoding='utf-8') as f:
+            wsp_index = json.load(f)
+    except Exception:
+        pass
+
+    nuevas_alertas = []
+    cartera_actualizada = []
+
+    for i, cliente in enumerate(cartera_data):
+        cuit = cliente.get('cuit', '')
+        nombre = cliente.get('nombre', '')
+        sit_anterior = cliente.get('ultimaSit', 1) or 1
+
+        verificacion_estado["progreso"] = i + 1
+        verificacion_estado["cliente_actual"] = nombre
+        verificacion_estado["mensaje"] = "Verificando " + str(i+1) + "/" + str(len(cartera_data)) + ": " + nombre
+
+        cliente_actualizado = dict(cliente)
+
+        try:
+            # Consultar BCRA
+            bcra_data, error = consultar_bcra(cuit)
+            if bcra_data and not error:
+                entidades = []
+                try:
+                    entidades = bcra_data['results']['periodos'][0]['entidades']
+                except Exception:
+                    pass
+                max_sit = 1
+                if entidades:
+                    max_sit = max((e.get('situacion', 1) or 1) for e in entidades)
+
+                cliente_actualizado['ultimaSit'] = max_sit
+                cliente_actualizado['ultimaVerif'] = time.strftime('%d/%m/%Y')
+
+                if max_sit > sit_anterior or max_sit >= 3:
+                    nuevas_alertas.append({
+                        "nombre": nombre,
+                        "cuit": cuit,
+                        "sitAnterior": sit_anterior,
+                        "sitActual": max_sit,
+                        "fecha": time.strftime('%d/%m/%Y'),
+                        "tipo": "bcra"
+                    })
+        except Exception:
+            pass
+
+        # Analizar grupo bodegas
+        try:
+            threads = wsp_index.get(cuit, [])
+            if threads:
+                todos_mensajes = []
+                tiene_sospecha = False
+                for t in threads:
+                    for m in t.get('mensajes', []):
+                        texto_msg = m.get('texto', '')
+                        todos_mensajes.append(m.get('autor', '') + ': ' + texto_msg)
+                        if any(p in texto_msg.lower() for p in palabras_riesgo):
+                            tiene_sospecha = True
+
+                if tiene_sospecha:
+                    ya_existe = any(a['cuit'] == cuit and a['tipo'] == 'bodegas' for a in nuevas_alertas)
+                    if not ya_existe:
+                        es_negativo, motivo = analizar_bodegas_server(cuit, nombre, todos_mensajes[:10])
+                        if es_negativo:
+                            nuevas_alertas.append({
+                                "nombre": nombre,
+                                "cuit": cuit,
+                                "fecha": time.strftime('%d/%m/%Y'),
+                                "tipo": "bodegas",
+                                "mensajes": [motivo]
+                            })
+        except Exception:
+            pass
+
+        cartera_actualizada.append(cliente_actualizado)
+
+        if i < len(cartera_data) - 1:
+            time.sleep(2)
+
+    # Guardar resultados
+    ahora = time.strftime('%d/%m/%Y %H:%M')
+    try:
+        datos_guardar = {
+            "alertas": nuevas_alertas,
+            "ultima_verif": ahora,
+            "cartera": [{"cuit": c.get('cuit'), "ultimaSit": c.get('ultimaSit'), "ultimaVerif": c.get('ultimaVerif')} for c in cartera_actualizada]
+        }
+        with open(ALERTAS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(datos_guardar, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+    verificacion_estado["corriendo"] = False
+    verificacion_estado["mensaje"] = "Verificacion completada. " + str(len(nuevas_alertas)) + " alerta(s) detectada(s)."
+    verificacion_estado["progreso"] = len(cartera_data)
+
+# ─── ENDPOINTS ───────────────────────────────────────────
+
 @app.route("/")
 def index():
     return send_from_directory('static', 'index.html')
 
 @app.route("/whatsapp_index.json")
-def wsp_index():
+def wsp_index_route():
     return send_from_directory(os.getcwd(), 'whatsapp_index.json')
 
 @app.route("/moras_piattelli.json")
@@ -103,6 +253,25 @@ def save_alertas():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/verificar-cartera", methods=["POST"])
+def verificar_cartera():
+    if verificacion_estado["corriendo"]:
+        return jsonify({"error": "Ya hay una verificacion en curso"}), 400
+    try:
+        body = request.get_json(force=True)
+        cartera_data = body.get('cartera', [])
+        if not cartera_data:
+            return jsonify({"error": "Cartera vacia"}), 400
+        t = threading.Thread(target=ejecutar_verificacion, args=(cartera_data,), daemon=True)
+        t.start()
+        return jsonify({"ok": True, "mensaje": "Verificacion iniciada en el servidor"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/verificar-progreso", methods=["GET"])
+def verificar_progreso():
+    return jsonify(verificacion_estado)
+
 @app.route("/analizar-bodegas", methods=["POST"])
 def analizar_bodegas():
     if not GEMINI_KEY:
@@ -112,33 +281,13 @@ def analizar_bodegas():
         cuit = body.get('cuit', '')
         nombre = body.get('nombre', '')
         mensajes = body.get('mensajes', [])
-        if not mensajes:
-            return jsonify({"es_negativo": False, "motivo": ""})
-        mensajes_texto = "\n".join(["- " + m for m in mensajes[:10]])
-        prompt = (
-            "Analiza estos mensajes del grupo de bodegas sobre " + nombre + " (CUIT: " + cuit + ").\n"
-            "Determina si hay riesgo crediticio REAL para este cliente especifico.\n\n"
-            "MENSAJES:\n" + mensajes_texto + "\n\n"
-            "REGLAS:\n"
-            "- Solo negativo si hay deudas impagas NO resueltas, estafas o desaparicion.\n"
-            "- Cheques rechazados pero reemplazados = NO negativo.\n"
-            "- Mensaje sobre OTRO CUIT diferente = NO negativo para este cliente.\n"
-            "- Buen cliente, paga en termino = POSITIVO.\n\n"
-            'Responde SOLO con este JSON exacto: {"es_negativo": false, "motivo": "texto"}'
-        )
-        payload = {"contents": [{"parts": [{"text": prompt}]}]}
-        texto, error = gemini_request(payload, timeout=30)
-        if error:
-            return jsonify({"es_negativo": False, "motivo": ""})
-        texto_limpio = texto.strip().replace("```json", "").replace("```", "").strip()
-        resultado = json.loads(texto_limpio)
-        return jsonify(resultado)
+        es_neg, motivo = analizar_bodegas_server(cuit, nombre, mensajes)
+        return jsonify({"es_negativo": es_neg, "motivo": motivo})
     except Exception as e:
         return jsonify({"es_negativo": False, "motivo": str(e)})
 
 @app.route("/afip/<cuit>")
 def get_afip(cuit):
-    # Usar el BCRA como fuente de nombre — ya funciona en Render
     try:
         data, error = consultar_bcra(cuit)
         if data and not error:
