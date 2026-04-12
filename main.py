@@ -136,6 +136,28 @@ def analizar_bodegas():
     except Exception as e:
         return jsonify({"es_negativo": False, "motivo": str(e)})
 
+@app.route("/afip/<cuit>")
+def get_afip(cuit):
+    try:
+        url = "https://soa.afip.gob.ar/sr-padron/v2/persona/" + cuit
+        r = requests.get(url, timeout=8, verify=False)
+        if r.status_code == 200:
+            data = r.json()
+            p = data.get('data', {})
+            if p:
+                nombre = p.get('razonSocial') or (str(p.get('apellido','')) + ' ' + str(p.get('nombre',''))).strip()
+                return jsonify({
+                    "nombre": nombre,
+                    "provincia": p.get('domicilioFiscal', {}).get('descripcionProvincia', ''),
+                    "localidad": p.get('domicilioFiscal', {}).get('localidad', ''),
+                    "actividad": p.get('descripcionActividadPrincipal', ''),
+                    "estado": p.get('estadoClave', ''),
+                    "tipo": p.get('tipoClave', '')
+                })
+        return jsonify({"nombre": "", "error": "No encontrado"})
+    except Exception as e:
+        return jsonify({"nombre": "", "error": str(e)})
+
 @app.route("/deudas/<cuit>")
 def get_deudas(cuit):
     data, error = consultar_bcra(cuit)
