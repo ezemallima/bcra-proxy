@@ -196,7 +196,7 @@ def ejecutar_verificacion(cartera_data):
         cartera_actualizada.append(cliente_actualizado)
 
         if i < len(cartera_data) - 1:
-            time.sleep(2)
+            time.sleep(5)
 
     # Guardar resultados
     ahora = time.strftime('%d/%m/%Y %H:%M')
@@ -225,7 +225,7 @@ def index():
 def wsp_index_route():
     return send_from_directory(os.getcwd(), 'whatsapp_index.json')
 
-@app.route("/moras_piattelli.json")
+@app.route("/moras.json")
 def moras():
     return send_from_directory(os.getcwd(), 'moras_piattelli.json')
 
