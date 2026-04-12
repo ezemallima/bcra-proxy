@@ -1268,10 +1268,18 @@ async function verificarTodos() {
   renderAlertas();
 }
 
-function limpiarAlertas() {
+async function limpiarAlertas() {
   if (!confirm('¿Limpiar todas las alertas?')) return;
   alertas = [];
   localStorage.setItem('piat_alertas', JSON.stringify(alertas));
+  // También limpiar en el servidor
+  try {
+    await fetch('/alertas', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({alertas: [], ultima_verif: localStorage.getItem('piat_ultima_verif') || '', cartera: []})
+    });
+  } catch(e) {}
   renderAlertas();
 }
 
