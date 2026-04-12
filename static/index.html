@@ -1158,115 +1158,67 @@ function verCliente(cuit) {
 }
 
 async function verificarTodos() {
-  if (!cartera.length) { alert('No hay clientes en la cartera. Agregá clientes en la pestaña Cartera.'); return; }
+  if (!cartera.length) { alert('No hay clientes en la cartera.'); return; }
   const btn = document.getElementById('btn-verificar');
   const prog = document.getElementById('verificar-progress');
-  btn.disabled = true;
-  const nuevasAlertas = [];
 
-  for (let i=0; i<cartera.length; i++) {
-    const c = cartera[i];
-    prog.textContent = `Verificando ${i+1}/${cartera.length}: ${c.nombre}...`;
-    try {
-      // Consultar BCRA con pausa generosa para no ser bloqueado
-      const bcraData = await consultarBCRA(c.cuit);
-      if (bcraData && !bcraData.error) {
-        const entidades = bcraData?.results?.periodos?.[0]?.entidades || [];
-        const maxSit = entidades.length ? entidades.reduce((m,e)=>Math.max(m,e.situacion||1),1) : 1;
-        const sitAnterior = situaciones[c.cuit] || c.ultimaSit || 1;
-        // Generar alerta si empeoró O si ya está en situación crítica (3+)
-        if (maxSit > sitAnterior || maxSit >= 3) {
-          nuevasAlertas.push({
-            nombre: c.nombre, cuit: c.cuit, sitAnterior, sitActual: maxSit,
-            fecha: new Date().toLocaleDateString('es-AR'),
-            tipo: 'bcra'
-          });
-        }
-        situaciones[c.cuit] = maxSit;
-        cartera[i].ultimaSit = maxSit;
-        cartera[i].ultimaVerif = new Date().toLocaleDateString('es-AR');
-        cartera[i].ultimaBcraData = entidades;
-      }
-
-      // Analizar menciones en grupo de bodegas - primero filtro rapido, luego IA solo si hay sospecha
-      var threads = buscarEnWSP(c.cuit);
-      if (threads && threads.length > 0) {
-        // PASO 1: filtro rapido con palabras clave - si no hay ninguna, no llama a la IA
-        var palabrasRiesgo = ['rechaz', 'no paga', 'cuidado', 'mora', 'deuda', 'incobrable',
-          'estafa', 'desapareci', 'fuga', 'impago', 'quiebra', 'concurso', 'sin fondos',
-          'rebotado', 'mal pagador', 'no responde', 'no contesta', 'bloqueado',
-          'vencid', 'no cancel', 'no liquido', 'no abono', 'figura', 'atencion',
-          'ojo', 'cuidarse', 'problema', 'conflicto', 'judicial', 'abogado',
-          'cobrar', 'factura impaga', 'no cancelo', 'debia', 'nos debe'];
-        var todosMensajes = [];
-        var tieneSospecha = false;
-        threads.forEach(function(t) {
-          t.mensajes.forEach(function(m) {
-            todosMensajes.push(m.autor + ': ' + m.texto);
-            if (palabrasRiesgo.some(function(p) { return m.texto.toLowerCase().includes(p); })) {
-              tieneSospecha = true;
-            }
-          });
-        });
-        
-        // PASO 2: solo si hay sospecha, llamar a la IA para confirmar el contexto
-        if (tieneSospecha) {
-          try {
-            var respIA = await fetch('/analizar-bodegas', {
-              method: 'POST',
-              headers: {'Content-Type': 'application/json'},
-              body: JSON.stringify({cuit: c.cuit, nombre: c.nombre, mensajes: todosMensajes.slice(0,10)})
-            });
-            var dataIA = await respIA.json();
-            if (dataIA.es_negativo) {
-              var yaExiste = nuevasAlertas.some(function(a) { return a.cuit === c.cuit && a.tipo === 'bodegas'; });
-              if (!yaExiste) {
-                nuevasAlertas.push({
-                  nombre: c.nombre, cuit: c.cuit,
-                  fecha: new Date().toLocaleDateString('es-AR'),
-                  tipo: 'bodegas',
-                  mensajes: [dataIA.motivo]
-                });
-              }
-            }
-          } catch(e) {}
-        }
-      }
-    } catch(e) {}
-    // Pausa de 2 segundos entre consultas
-    if (i < cartera.length - 1) {
-      await new Promise(r=>setTimeout(r,2000));
-    }
-  }
-
-  const ahora = new Date().toLocaleDateString('es-AR') + ' ' + new Date().toLocaleTimeString('es-AR', {hour:'2-digit',minute:'2-digit'});
-  localStorage.setItem('piat_situaciones', JSON.stringify(situaciones));
-  localStorage.setItem('piat_cartera', JSON.stringify(cartera));
-  localStorage.setItem('piat_ultima_verif', ahora);
-  // Reemplazar alertas completamente con las nuevas — no mezclar con viejas
-  alertas = nuevasAlertas.slice(0, 50);
-  localStorage.setItem('piat_alertas', JSON.stringify(alertas));
-  // Guardar en servidor para sincronizar entre dispositivos
+  // Iniciar verificacion en el servidor
   try {
-    await fetch('/alertas', {
+    const r = await fetch('/verificar-cartera', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        alertas: alertas,
-        ultima_verif: ahora,
-        cartera: cartera.map(function(c) { return {cuit: c.cuit, ultimaSit: c.ultimaSit, ultimaVerif: c.ultimaVerif}; })
-      })
+      body: JSON.stringify({cartera: cartera})
     });
-  } catch(e) {}
-  btn.disabled = false;
-
-  if (nuevasAlertas.length===0) {
-    prog.textContent = '✓ Verificación completada el ' + ahora + '. Sin alertas detectadas.';
-  } else {
-    prog.textContent = '⚠ Verificación completada. ' + nuevasAlertas.length + ' alerta(s) detectada(s).';
+    const data = await r.json();
+    if (data.error) {
+      prog.textContent = data.error;
+      return;
+    }
+  } catch(e) {
+    prog.textContent = 'No se pudo iniciar la verificacion.';
+    return;
   }
-  renderAlertas();
+
+  btn.disabled = true;
+  prog.textContent = 'Verificacion iniciada en el servidor. Podes cerrar esta ventana.';
+
+  // Polling cada 5 segundos para actualizar progreso
+  var interval = setInterval(async function() {
+    try {
+      var r2 = await fetch('/verificar-progreso');
+      var estado = await r2.json();
+      
+      if (estado.corriendo) {
+        prog.textContent = estado.mensaje || 'Verificando...';
+      } else {
+        clearInterval(interval);
+        btn.disabled = false;
+        prog.textContent = estado.mensaje || 'Verificacion completada.';
+        
+        // Cargar resultados del servidor
+        var r3 = await fetch('/alertas');
+        var datos = await r3.json();
+        if (datos && !datos.error) {
+          alertas = datos.alertas || [];
+          localStorage.setItem('piat_alertas', JSON.stringify(alertas));
+          if (datos.ultima_verif) localStorage.setItem('piat_ultima_verif', datos.ultima_verif);
+          if (datos.cartera && datos.cartera.length > 0) {
+            datos.cartera.forEach(function(c) {
+              var idx = cartera.findIndex(function(lc) { return lc.cuit === c.cuit; });
+              if (idx >= 0) {
+                cartera[idx].ultimaSit = c.ultimaSit;
+                cartera[idx].ultimaVerif = c.ultimaVerif;
+              }
+            });
+            localStorage.setItem('piat_cartera', JSON.stringify(cartera));
+          }
+        }
+        renderAlertas();
+      }
+    } catch(e) {}
+  }, 5000);
 }
+
 
 async function limpiarAlertas() {
   if (!confirm('¿Limpiar todas las alertas?')) return;
