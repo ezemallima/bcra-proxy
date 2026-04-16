@@ -544,11 +544,34 @@
         Subí tus archivos Excel de saldos para calcular el DSO de tu cartera. 
         <strong style="color:var(--azul-claro);">Referencia sector vitivinícola: 45–55 días.</strong>
       </p>
-      <div class="upload-area" id="dso-upload-area" onclick="document.getElementById('dso-file').click()" style="margin-bottom:0;">
-        <div style="font-size:13px;color:#64748b;">Hacé clic para subir tu archivo Excel de saldos</div>
-        <div style="font-size:12px;color:#94a3b8;margin-top:4px;">Columnas necesarias: Contacto, Saldo, Días pendientes · Formato Odoo/Tango/ERP</div>
+        <p style="font-size:12px;color:#64748b;margin-bottom:12px;">Cuantos más reportes subas, más preciso es el cálculo. Podés subir solo saldos y ya funciona.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--azul-claro);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Saldos</div>
+          <div class="upload-area" id="dso-upload-saldos" onclick="document.getElementById('dso-file-saldos').click()" style="padding:12px;margin-bottom:0;cursor:pointer;">
+            <div style="font-size:12px;color:#64748b;">Reporte de saldos</div>
+            <div style="font-size:11px;color:#94a3b8;margin-top:2px;">Saldo por cliente</div>
+          </div>
+          <input type="file" id="dso-file-saldos" accept=".xlsx,.xls,.csv" style="display:none;" onchange="cargarArchivoDSO(this,'saldos')" />
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--azul-claro);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Ventas</div>
+          <div class="upload-area" id="dso-upload-ventas" onclick="document.getElementById('dso-file-ventas').click()" style="padding:12px;margin-bottom:0;cursor:pointer;">
+            <div style="font-size:12px;color:#64748b;">Reporte de ventas</div>
+            <div style="font-size:11px;color:#94a3b8;margin-top:2px;">Facturación del período</div>
+          </div>
+          <input type="file" id="dso-file-ventas" accept=".xlsx,.xls,.csv" style="display:none;" onchange="cargarArchivoDSO(this,'ventas')" />
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--azul-claro);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Cheques en cartera</div>
+          <div class="upload-area" id="dso-upload-cheques" onclick="document.getElementById('dso-file-cheques').click()" style="padding:12px;margin-bottom:0;cursor:pointer;">
+            <div style="font-size:12px;color:#64748b;">Valores en cartera</div>
+            <div style="font-size:11px;color:#94a3b8;margin-top:2px;">Cheques recibidos</div>
+          </div>
+          <input type="file" id="dso-file-cheques" accept=".xlsx,.xls,.csv" style="display:none;" onchange="cargarArchivoDSO(this,'cheques')" />
+        </div>
       </div>
-      <input type="file" id="dso-file" accept=".xlsx,.xls,.csv" style="display:none;" onchange="procesarDSO(this)" />
+      <button class="primary" id="dso-btn-calcular" onclick="procesarDSO()" style="width:100%;display:none;">Calcular DSO con IA →</button>
     </div>
 
     <div id="dso-loading" style="display:none;text-align:center;padding:2rem;">
@@ -787,104 +810,146 @@ function colorDSO(dias) {
   return {color: '#991b1b', bg: '#fee2e2', label: 'Crítico'};
 }
 
-async function procesarDSO(input) {
+// Almacén de archivos DSO cargados
+var dsoArchivos = {saldos: null, ventas: null, cheques: null};
+
+function leerExcelComoTexto(file) {
+  return new Promise(function(resolve, reject) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        var data = new Uint8Array(e.target.result);
+        var wb = XLSX.read(data, {type: 'array', raw: false});
+        var sheet = wb.Sheets[wb.SheetNames[0]];
+        var rows = XLSX.utils.sheet_to_json(sheet, {defval: '', raw: false});
+        var muestra = rows.slice(0, 200);
+        var headers = Object.keys(muestra[0] || {}).join(' | ');
+        var filas = muestra.map(function(r) { return Object.values(r).join(' | '); }).join('\n');
+        resolve(headers + '\n' + filas);
+      } catch(e) { reject(e); }
+    };
+    reader.onerror = reject;
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function cargarArchivoDSO(input, tipo) {
   var file = input.files[0];
   if (!file) return;
+  dsoArchivos[tipo] = file;
+  var areaId = 'dso-upload-' + tipo;
+  var area = document.getElementById(areaId);
+  if (area) {
+    area.className = 'upload-area success';
+    area.innerHTML = '<div style="font-size:12px;color:#166534;font-weight:600;">✓ ' + file.name + '</div>';
+  }
+  // Mostrar botón calcular si hay al menos un archivo
+  var hayArchivo = dsoArchivos.saldos || dsoArchivos.ventas || dsoArchivos.cheques;
+  document.getElementById('dso-btn-calcular').style.display = hayArchivo ? 'block' : 'none';
+}
+
+async function procesarDSO() {
+  var hayArchivo = dsoArchivos.saldos || dsoArchivos.ventas || dsoArchivos.cheques;
+  if (!hayArchivo) { alert('Subí al menos un archivo para calcular el DSO.'); return; }
 
   document.getElementById('dso-loading').style.display = 'block';
   document.getElementById('dso-loading').innerHTML = '<div class="loading-spinner"></div><div style="font-size:13px;color:#64748b;margin-top:8px;">Analizando con IA...</div>';
   document.getElementById('dso-resultado').style.display = 'none';
+  document.getElementById('dso-btn-calcular').disabled = true;
 
   try {
-    var reader = new FileReader();
-    reader.onload = async function(e) {
-      try {
-        var data = new Uint8Array(e.target.result);
-        var workbook = XLSX.read(data, {type: 'array'});
-        var sheet = workbook.Sheets[workbook.SheetNames[0]];
-        var rows = XLSX.utils.sheet_to_json(sheet, {defval: '', raw: false});
+    var partes = [];
+    var archivosUsados = [];
 
-        if (!rows.length) {
-          alert('El archivo está vacío.');
-          document.getElementById('dso-loading').style.display = 'none';
-          return;
-        }
+    if (dsoArchivos.saldos) {
+      var txt = await leerExcelComoTexto(dsoArchivos.saldos);
+      partes.push('=== REPORTE DE SALDOS ===\n' + txt);
+      archivosUsados.push('saldos');
+    }
+    if (dsoArchivos.ventas) {
+      var txt2 = await leerExcelComoTexto(dsoArchivos.ventas);
+      partes.push('=== REPORTE DE VENTAS ===\n' + txt2);
+      archivosUsados.push('ventas');
+    }
+    if (dsoArchivos.cheques) {
+      var txt3 = await leerExcelComoTexto(dsoArchivos.cheques);
+      partes.push('=== CHEQUES EN CARTERA ===\n' + txt3);
+      archivosUsados.push('cheques');
+    }
 
-        // Convertir a texto plano — primeras 200 filas
-        var muestra = rows.slice(0, 200);
-        var headers = Object.keys(muestra[0]).join(' | ');
-        var filas = muestra.map(function(r) {
-          return Object.values(r).join(' | ');
-        }).join('\n');
-        var textoDatos = headers + '\n' + filas;
+    var estaCompleto = archivosUsados.length === 3;
+    var umbralBajo = getDSOUmbral();
+    var umbralAlto = getDSOUmbralAlto();
 
-        var umbralBajo = getDSOUmbral();
-        var umbralAlto = getDSOUmbralAlto();
+    var prompt = [
+      'Sos un analista financiero experto en el sector vitivinicola argentino.',
+      'Te paso ' + archivosUsados.length + ' reporte(s): ' + archivosUsados.join(', ') + '.',
+      '',
+      'Calcula el DSO de la siguiente forma:',
+      '- Si tenes saldos + ventas + cheques: DSO = (saldo pendiente - cheques en cartera) / (ventas del periodo / dias del periodo)',
+      '- Si solo tenes saldos: usa los dias de mora o vencimiento directamente',
+      '- Si falta algun reporte, calculá con lo disponible y aclaralo en el campo "advertencia"',
+      '',
+      'Clasificá cada cliente: Normal (menos de ' + umbralBajo + ' dias), Atencion (' + umbralBajo + '-' + umbralAlto + ' dias), Critico (mas de ' + umbralAlto + ' dias)',
+      '',
+      'Responde SOLO con este JSON sin texto adicional ni markdown:',
+      '{"dso_global":0,"saldo_total":0,"total_clientes":0,"calculo_completo":' + estaCompleto + ',"advertencia":"","clientes":[{"nombre":"","saldo":0,"dso":0,"estado":"Normal"}]}',
+      '',
+      'DATOS:',
+      partes.join('\n\n')
+    ].join('\n');
 
-        var prompt = [
-          'Sos un analista financiero experto en el sector vitivinicola argentino.',
-          'Te paso datos de un archivo Excel de una bodega con informacion de saldos.',
-          'Tu tarea:',
-          '1. Identificar columnas relevantes (cliente, saldo pendiente, dias de mora o fechas)',
-          '2. Calcular DSO por cliente (dias promedio de cobro ponderado por saldo)',
-          '3. Calcular DSO global de la cartera',
-          '4. Clasificar cada cliente: Normal (menos de ' + umbralBajo + ' dias), Atencion (' + umbralBajo + '-' + umbralAlto + ' dias), Critico (mas de ' + umbralAlto + ' dias)',
-          '',
-          'IMPORTANTE: Si hay columna de dias pendientes usala directamente. Si hay rangos de antiguedad calcular promedio ponderado.',
-          '',
-          'Responde SOLO con este JSON sin texto adicional ni markdown:',
-          '{"dso_global":0,"saldo_total":0,"total_clientes":0,"clientes":[{"nombre":"","saldo":0,"dso":0,"estado":"Normal"}]}',
-          '',
-          'DATOS DEL ARCHIVO:',
-          textoDatos
-        ].join('\n');
-        var r = await fetch('/analizar', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({prompt: prompt})
-        });
-        var respuesta = await r.json();
-        if (respuesta.error) throw new Error(respuesta.error);
+    var r = await fetch('/analizar', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({prompt: prompt})
+    });
+    var respuesta = await r.json();
+    if (respuesta.error) throw new Error(respuesta.error);
 
-        var texto = respuesta.texto.trim().replace(/```json/g, '').replace(/```/g, '').trim();
-        var resultado = JSON.parse(texto);
+    var texto = respuesta.texto.trim().replace(/```json/g, '').replace(/```/g, '').trim();
+    var resultado = JSON.parse(texto);
 
-        dsoDatos = (resultado.clientes || []).sort(function(a, b) { return b.dso - a.dso; });
-        var dsoGlobal = resultado.dso_global || 0;
-        var saldoTotal = resultado.saldo_total || 0;
-        var totalClientes = resultado.total_clientes || dsoDatos.length;
+    dsoDatos = (resultado.clientes || []).sort(function(a, b) { return b.dso - a.dso; });
+    var dsoGlobal = resultado.dso_global || 0;
+    var saldoTotal = resultado.saldo_total || 0;
+    var totalClientes = resultado.total_clientes || dsoDatos.length;
 
-        document.getElementById('dso-loading').style.display = 'none';
-        document.getElementById('dso-resultado').style.display = 'block';
-        document.getElementById('dso-upload-area').className = 'upload-area success';
-        document.getElementById('dso-upload-area').innerHTML = '<div style="font-size:13px;color:#166534;font-weight:600;">✓ ' + file.name + ' analizado con IA</div>';
-
-        var colDSO = colorDSO(dsoGlobal);
-        document.getElementById('dso-numero').textContent = dsoGlobal;
-        document.getElementById('dso-numero').style.color = colDSO.color;
-        document.getElementById('dso-saldo-total').textContent = '$' + Math.round(saldoTotal).toLocaleString('es-AR');
-        document.getElementById('dso-clientes-total').textContent = totalClientes;
-
-        var benchmarkHtml = '<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">';
-        benchmarkHtml += '<div style="font-size:13px;color:#64748b;"><strong style="color:var(--azul-oscuro);">Referencia del sector:</strong> 45–55 días es normal · Más de 65 días es alerta</div>';
-        benchmarkHtml += '<div style="display:flex;gap:8px;">';
-        benchmarkHtml += '<span style="font-size:11px;padding:3px 10px;background:#dcfce7;color:#166534;border-radius:20px;font-weight:600;">Normal &lt;' + getDSOUmbral() + 'd</span>';
-        benchmarkHtml += '<span style="font-size:11px;padding:3px 10px;background:#fefce8;color:#854d0e;border-radius:20px;font-weight:600;">Atención ' + getDSOUmbral() + '–' + getDSOUmbralAlto() + 'd</span>';
-        benchmarkHtml += '<span style="font-size:11px;padding:3px 10px;background:#fee2e2;color:#991b1b;border-radius:20px;font-weight:600;">Crítico &gt;' + getDSOUmbralAlto() + 'd</span>';
-        benchmarkHtml += '</div></div>';
-        document.getElementById('dso-benchmark').innerHTML = benchmarkHtml;
-
-        renderTablaDSO(dsoDatos);
-
-      } catch(err) {
-        document.getElementById('dso-loading').style.display = 'none';
-        alert('Error al procesar: ' + err.message);
-      }
-    };
-    reader.readAsArrayBuffer(file);
-  } catch(e) {
     document.getElementById('dso-loading').style.display = 'none';
-    alert('Error: ' + e.message);
+    document.getElementById('dso-resultado').style.display = 'block';
+    document.getElementById('dso-btn-calcular').disabled = false;
+
+    // Badge cálculo completo o aproximado
+    var badgeCalculo = resultado.calculo_completo
+      ? '<span style="font-size:11px;padding:3px 10px;background:#dcfce7;color:#166534;border-radius:20px;font-weight:600;">✓ Cálculo completo</span>'
+      : '<span style="font-size:11px;padding:3px 10px;background:#fefce8;color:#854d0e;border-radius:20px;font-weight:600;">⚠ Cálculo aproximado</span>';
+
+    var colDSO = colorDSO(dsoGlobal);
+    document.getElementById('dso-numero').textContent = dsoGlobal;
+    document.getElementById('dso-numero').style.color = colDSO.color;
+    document.getElementById('dso-saldo-total').textContent = '$' + Math.round(saldoTotal).toLocaleString('es-AR');
+    document.getElementById('dso-clientes-total').textContent = totalClientes;
+
+    var benchmarkHtml = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">' + badgeCalculo;
+    if (resultado.advertencia) {
+      benchmarkHtml += '<span style="font-size:12px;color:#854d0e;">' + resultado.advertencia + '</span>';
+    }
+    benchmarkHtml += '</div>';
+    benchmarkHtml += '<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">';
+    benchmarkHtml += '<div style="font-size:13px;color:#64748b;"><strong style="color:var(--azul-oscuro);">Referencia del sector:</strong> 45–55 días es normal · Más de 65 días es alerta</div>';
+    benchmarkHtml += '<div style="display:flex;gap:8px;">';
+    benchmarkHtml += '<span style="font-size:11px;padding:3px 10px;background:#dcfce7;color:#166534;border-radius:20px;font-weight:600;">Normal &lt;' + getDSOUmbral() + 'd</span>';
+    benchmarkHtml += '<span style="font-size:11px;padding:3px 10px;background:#fefce8;color:#854d0e;border-radius:20px;font-weight:600;">Atención ' + getDSOUmbral() + '–' + getDSOUmbralAlto() + 'd</span>';
+    benchmarkHtml += '<span style="font-size:11px;padding:3px 10px;background:#fee2e2;color:#991b1b;border-radius:20px;font-weight:600;">Crítico &gt;' + getDSOUmbralAlto() + 'd</span>';
+    benchmarkHtml += '</div></div>';
+    document.getElementById('dso-benchmark').innerHTML = benchmarkHtml;
+
+    renderTablaDSO(dsoDatos);
+
+  } catch(err) {
+    document.getElementById('dso-loading').style.display = 'none';
+    document.getElementById('dso-btn-calcular').disabled = false;
+    alert('Error al procesar: ' + err.message);
   }
 }
 
