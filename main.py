@@ -444,17 +444,29 @@ def calcular_dso():
         col_contacto = cols_contacto[0]
         col_vto = cols_fecha_vto[0] if cols_fecha_vto else None
 
-        # Fecha de corte = fecha mas reciente del reporte de saldos
+        # Fecha de corte = fecha maxima de factura (no vencimientos futuros)
         fecha_corte = None
-        for col in df_saldos.columns:
+        cols_factura = [c for c in df_saldos.columns if 'factura' in c.lower() or 'emision' in c.lower() or 'emisi' in c.lower()]
+        if cols_factura:
             try:
-                fechas = pd.to_datetime(df_saldos[col], errors='coerce').dropna()
+                fechas = pd.to_datetime(df_saldos[cols_factura[0]], errors='coerce').dropna()
                 if len(fechas) > 0:
-                    fc = fechas.max()
-                    if fecha_corte is None or fc > fecha_corte:
-                        fecha_corte = fc
+                    fecha_corte = fechas.max()
             except Exception:
                 pass
+        # Fallback: buscar en todas las columnas pero tomar la mas comun/logica
+        if fecha_corte is None:
+            for col in df_saldos.columns:
+                try:
+                    fechas = pd.to_datetime(df_saldos[col], errors='coerce').dropna()
+                    # Ignorar columnas con fechas futuras (vencimientos)
+                    fechas_pasadas = fechas[fechas <= pd.Timestamp.now()]
+                    if len(fechas_pasadas) > 0:
+                        fc = fechas_pasadas.max()
+                        if fecha_corte is None or fc > fecha_corte:
+                            fecha_corte = fc
+                except Exception:
+                    pass
         if fecha_corte is None:
             fecha_corte = pd.Timestamp.now()
 
