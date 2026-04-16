@@ -16,6 +16,7 @@ app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024
 GEMINI_KEY = os.environ.get('GEMINI_API_KEY', '')
 GEMINI_MODELS = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.0-flash"]
 ALERTAS_FILE = os.path.join(os.getcwd(), 'alertas_cartera.json')
+DATOS_FILE = os.path.join(os.getcwd(), 'datos_bodega.json')
 WSP_FILE = os.path.join(os.getcwd(), 'whatsapp_index.json')
 
 # Estado de verificación en memoria
@@ -232,6 +233,26 @@ def moras():
 @app.route("/cartera_inicial.json")
 def cartera_inicial():
     return send_from_directory(os.getcwd(), 'cartera_inicial.json')
+
+@app.route("/datos-bodega", methods=["GET"])
+def get_datos_bodega():
+    try:
+        if os.path.exists(DATOS_FILE):
+            with open(DATOS_FILE, 'r', encoding='utf-8') as f:
+                return jsonify(json.load(f))
+        return jsonify({})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/datos-bodega", methods=["POST"])
+def save_datos_bodega():
+    try:
+        data = request.get_json(force=True)
+        with open(DATOS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/alertas", methods=["GET"])
 def get_alertas():
