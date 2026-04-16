@@ -1060,13 +1060,41 @@ async function init() {
   await cargarDesdServidor();
   await Promise.all([cargarWSP(), cargarMoras(), cargarCarteraServidor()]);
   actualizarMetricas();
-  // Restaurar DSO en dashboard si hay datos guardados
+  // Restaurar DSO completo en dashboard y pestaña
   var dsoGuardado = localStorage.getItem('piat_dso_global');
   if (dsoGuardado) {
+    var dsoNum = parseFloat(dsoGuardado);
+    // Dashboard
     var metDso = document.getElementById('met-dso');
-    if (metDso) {
-      metDso.textContent = dsoGuardado;
-      metDso.style.color = colorDSO(parseInt(dsoGuardado)).color;
+    if (metDso) { metDso.textContent = dsoNum; metDso.style.color = colorDSO(dsoNum).color; }
+    // Restaurar tabla completa si hay datos de clientes
+    var datosGuardados = JSON.parse(localStorage.getItem('piat_dso_datos') || '[]');
+    if (datosGuardados.length > 0) {
+      dsoDatos = datosGuardados;
+      var saldoTotalRest = parseFloat(localStorage.getItem('piat_dso_saldo_total') || '0');
+      var totalClientesRest = parseInt(localStorage.getItem('piat_dso_clientes_total') || '0');
+      document.getElementById('dso-resultado').style.display = 'block';
+      var colDSOR = colorDSO(dsoNum);
+      document.getElementById('dso-numero').textContent = dsoNum;
+      document.getElementById('dso-numero').style.color = colDSOR.color;
+      document.getElementById('dso-saldo-total').textContent = '$' + Math.round(saldoTotalRest).toLocaleString('es-AR');
+      document.getElementById('dso-clientes-total').textContent = totalClientesRest;
+      var bHtml = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">';
+      bHtml += '<span style="font-size:11px;padding:3px 10px;background:#dcfce7;color:#166534;border-radius:20px;font-weight:600;">✓ Datos restaurados</span>';
+      bHtml += '</div>';
+      bHtml += '<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">';
+      bHtml += '<div style="font-size:13px;color:#64748b;"><strong style="color:var(--azul-oscuro);">Referencia del sector:</strong> 45–55 días es normal · Más de 65 días es alerta</div>';
+      bHtml += '<div style="display:flex;gap:8px;">';
+      bHtml += '<span style="font-size:11px;padding:3px 10px;background:#dcfce7;color:#166534;border-radius:20px;font-weight:600;">Normal &lt;' + getDSOUmbral() + 'd</span>';
+      bHtml += '<span style="font-size:11px;padding:3px 10px;background:#fefce8;color:#854d0e;border-radius:20px;font-weight:600;">Atención ' + getDSOUmbral() + '–' + getDSOUmbralAlto() + 'd</span>';
+      bHtml += '<span style="font-size:11px;padding:3px 10px;background:#fee2e2;color:#991b1b;border-radius:20px;font-weight:600;">Crítico &gt;' + getDSOUmbralAlto() + 'd</span>';
+      bHtml += '</div>';
+      bHtml += '<div style="margin-top:8px;font-size:12px;color:#94a3b8;">DSO promedio del sector: disponible cuando la Red de Bodegas esté activa</div>';
+      bHtml += '</div>';
+      document.getElementById('dso-benchmark').innerHTML = bHtml;
+      renderTablaDSO(dsoDatos);
+      document.getElementById('dso-upload-saldos').className = 'upload-area success';
+      document.getElementById('dso-upload-saldos').innerHTML = '<div style="font-size:13px;color:#166534;font-weight:600;">✓ Datos restaurados — subí nuevos archivos para actualizar</div>';
     }
   }
   // Cargar nombre de bodega en campo config
