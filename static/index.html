@@ -460,9 +460,9 @@
       </div>
 
       <div class="card">
-        <div class="card-title">Informe Veraz (PDF opcional)</div>
+        <div class="card-title">Informe crediticio (Veraz / Nosis)</div>
         <div class="upload-area" id="veraz-area" onclick="document.getElementById('veraz-pdf').click()">
-          <div style="font-size:13px;color:#888;">Hacé clic para subir el PDF de Veraz</div>
+          <div style="font-size:13px;color:#888;">Hacé clic para subir el PDF de Veraz o Nosis</div>
           <div style="font-size:12px;color:#aaa;margin-top:4px;">Extrae automáticamente score, cheques, deudas y más</div>
         </div>
         <input type="file" id="veraz-pdf" accept=".pdf" style="display:none;" onchange="procesarVeraz(this)" />
@@ -492,6 +492,10 @@
     <div id="cheque-resultado" style="display:none;">
       <div id="cheque-veredicto" style="margin-bottom:8px;"></div>
       <div id="cheque-header" class="card" style="margin-bottom:8px;"></div>
+      <div class="card" style="margin-bottom:8px;">
+        <div class="card-title">Situación BCRA del librador</div>
+        <div id="cheque-bcra-situacion"></div>
+      </div>
       <div class="card" style="margin-bottom:8px;">
         <div class="card-title">Cheques rechazados — BCRA</div>
         <div id="cheque-bcra-data"></div>
@@ -523,9 +527,11 @@
     <div class="card">
       <div class="card-title">Agregar cliente a seguimiento</div>
       <div class="input-row">
-        <input type="text" id="nuevo-cuit" placeholder="CUIT (sin guiones)" style="max-width:180px;" />
+        <input type="text" id="nuevo-cuit" placeholder="CUIT (sin guiones)" style="max-width:160px;" />
         <input type="text" id="nuevo-nombre" placeholder="Razón social" style="flex:2;" />
-        <button onclick="agregarCliente()">Agregar</button>
+        <input type="number" id="nuevo-limite" placeholder="Límite $" style="max-width:120px;" />
+        <input type="number" id="nuevo-plazo" placeholder="Plazo días" style="max-width:100px;" />
+        <button class="primary" onclick="agregarCliente()">Agregar</button>
       </div>
     </div>
     <div id="lista-clientes"><div class="empty-state">No hay clientes en seguimiento.</div></div>
@@ -1091,14 +1097,14 @@ async function consultarCliente() {
   document.getElementById('analisis-resultado').style.display = 'none';
   document.getElementById('btn-export').style.display = 'none';
   document.getElementById('veraz-area').className = 'upload-area';
-  document.getElementById('veraz-area').innerHTML = '<div style="font-size:13px;color:#888;">Hacé clic para subir el PDF de Veraz</div><div style="font-size:12px;color:#aaa;margin-top:4px;">Extrae automáticamente score, cheques, deudas y más</div>';
+  document.getElementById('veraz-area').innerHTML = '<div style="font-size:13px;color:#888;">Hacé clic para subir el PDF de Veraz o Nosis</div><div style="font-size:12px;color:#aaa;margin-top:4px;">Extrae automáticamente score, cheques, deudas y más</div>';
   document.getElementById('veraz-datos').style.display = 'none';
   verazData = null;
 
   const mora = buscarEnMoras(raw);
   document.getElementById('mora-alert-container').innerHTML = mora ? `
     <div class="mora-alert">
-      <div class="mora-alert-title">⚠ Cliente en mora mora registrada</div>
+      <div class="mora-alert-title">⚠ Cliente con mora registrada</div>
       <div class="mora-alert-detail"><strong>${mora.nombre}</strong> tiene facturas impagas desde <strong>${mora.fecha_mora}</strong>.<br>Saldo adeudado: <strong>$${mora.saldo.toLocaleString('es-AR')}</strong> — Estado: ${mora.estado}</div>
     </div>` : '';
 
@@ -1278,7 +1284,7 @@ async function procesarVeraz(input) {
   reader.onload = async (e) => {
     const base64 = e.target.result.split(',')[1];
     try {
-      const r = await fetch('/procesar-veraz', {
+      const r = await fetch('/procesar-informe', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ pdf: base64 })
       });
@@ -1348,15 +1354,20 @@ async function analizarCliente() {
     wspThreads.forEach(t => t.mensajes.slice(0,5).forEach(m => { prompt += `${m.autor}: ${m.texto}\n`; }));
     prompt += `\n`;
   }
-  if (piat) prompt += `HISTORIAL CON PIATTELLI:
-${piat}
-
-`;
+  if (piat) prompt += 'HISTORIAL CON ' + getNombreBodega().toUpperCase() + ':\n' + piat + '\n\n';
+  // Agregar límite y plazo si el cliente está en cartera
+  var clienteCartera = cartera.find(function(c) { return c.cuit === cuit; });
+  if (clienteCartera && (clienteCartera.limiteCreditoARS || clienteCartera.plazoDias)) {
+    prompt += 'CONDICIONES ACTUALES CON ESTA BODEGA:\n';
+    if (clienteCartera.limiteCreditoARS) prompt += '- Límite de crédito: $' + clienteCartera.limiteCreditoARS.toLocaleString('es-AR') + '\n';
+    if (clienteCartera.plazoDias) prompt += '- Plazo de pago: ' + clienteCartera.plazoDias + ' días\n';
+    prompt += '\n';
+  }
   prompt += `CRITERIOS DE EVALUACIÓN:
 - Situación BCRA ideal: 1 (Normal). Situación 2 requiere garantías. Situación 3+ es rechazo automático.
 - Score Veraz ideal: 7 o más. Entre 5-6 requiere condiciones. Menos de 5 es rechazo.
 - Cheques rechazados: cualquier antecedente reciente es señal de alerta grave.
-- Mora mora registrada: es condición de rechazo automático hasta regularización.
+- Mora registrada: es condición de rechazo automático hasta regularización.
 - Historial en grupo de bodegas: referencias negativas de colegas del sector pesan mucho.
 
 MODALIDADES DE VENTA DISPONIBLES:
@@ -1717,10 +1728,20 @@ function agregarCliente() {
   const nombre = document.getElementById('nuevo-nombre').value.trim();
   if (!cuit || !nombre) { alert('Completá CUIT y razón social'); return; }
   if (cartera.find(c=>c.cuit===cuit)) { alert('Este cliente ya está en la cartera'); return; }
-  cartera.push({cuit, nombre, fechaAlta: new Date().toLocaleDateString('es-AR'), ultimaSit: null, ultimaVerif: null});
+  var limite = document.getElementById('nuevo-limite').value.trim();
+  var plazo = document.getElementById('nuevo-plazo').value.trim();
+  cartera.push({
+    cuit, nombre,
+    fechaAlta: new Date().toLocaleDateString('es-AR'),
+    ultimaSit: null, ultimaVerif: null,
+    limiteCreditoARS: limite ? parseFloat(limite) : null,
+    plazoDias: plazo ? parseInt(plazo) : null
+  });
   localStorage.setItem('piat_cartera', JSON.stringify(cartera));
   document.getElementById('nuevo-cuit').value = '';
   document.getElementById('nuevo-nombre').value = '';
+  document.getElementById('nuevo-limite').value = '';
+  document.getElementById('nuevo-plazo').value = '';
   renderCartera();
 }
 
@@ -1736,7 +1757,11 @@ function renderCartera() {
   if (!cartera.length) { el.innerHTML = `<div class="empty-state">No hay clientes en seguimiento.</div>`; return; }
   el.innerHTML = cartera.map((c,i) => `
     <div class="client-row">
-      <div><div class="client-name">${c.nombre}</div><div class="client-meta">CUIT: ${c.cuit} · Alta: ${c.fechaAlta}${c.ultimaVerif?` · Verificado: ${c.ultimaVerif}`:''}</div></div>
+      <div>
+          <div class="client-name">${c.nombre}</div>
+          <div class="client-meta">CUIT: ${c.cuit} · Alta: ${c.fechaAlta}${c.ultimaVerif?' · Verificado: '+c.ultimaVerif:''}</div>
+          ${(c.limiteCreditoARS || c.plazoDias) ? '<div style="font-size:11px;color:var(--azul-claro);margin-top:2px;">' + (c.limiteCreditoARS ? 'Límite: $'+c.limiteCreditoARS.toLocaleString('es-AR') : '') + (c.limiteCreditoARS && c.plazoDias ? ' · ' : '') + (c.plazoDias ? 'Plazo: '+c.plazoDias+' días' : '') + '</div>' : ''}
+        </div>
       <div class="client-right">
         ${c.ultimaSit ? getBadge(c.ultimaSit) : '<span style="font-size:11px;color:#aaa;">Sin verificar</span>'}
         ${buscarEnMoras(c.cuit) ? '<span class="badge badge-mora">Mora</span>' : ''}
@@ -1924,11 +1949,18 @@ function renderAlertas() {
 }
 
 
-function mostrarVeredicto(sinLevantar, totalCheques, tieneNegativo) {
+function mostrarVeredicto(sinLevantar, totalCheques, tieneNegativo, maxSit) {
   var veredicto, color, bg;
-  if (sinLevantar > 0) {
+  maxSit = maxSit || 1;
+  if (maxSit >= 3) {
+    veredicto = '✗ RECHAZAR — Situación BCRA crítica (Sit. ' + maxSit + ')';
+    color = '#991b1b'; bg = '#fee2e2';
+  } else if (sinLevantar > 0) {
     veredicto = '✗ RECHAZAR — Tiene cheques sin levantar';
     color = '#991b1b'; bg = '#fee2e2';
+  } else if (maxSit === 2) {
+    veredicto = '⚠ REVISAR — Seguimiento especial en BCRA';
+    color = '#854d0e'; bg = '#fefce8';
   } else if (totalCheques > 0 || tieneNegativo) {
     veredicto = '⚠ REVISAR — Tiene antecedentes, evaluar con cuidado';
     color = '#854d0e'; bg = '#fefce8';
@@ -1961,6 +1993,7 @@ async function consultarCheque() {
     }
   } catch(e) {}
 
+  var maxSitBCRA = 1;
   try {
     var url2 = encodeURIComponent('https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/' + raw);
     var r2 = await fetch('https://api.allorigins.win/get?url=' + url2, {signal: AbortSignal.timeout(10000)});
@@ -1968,6 +2001,12 @@ async function consultarCheque() {
       var w2 = await r2.json();
       var d2 = JSON.parse(w2.contents);
       nombre = d2 && d2.results ? (d2.results.denominacion || '') : '';
+      if (d2 && d2.results && d2.results.periodos && d2.results.periodos[0]) {
+        var entidadesBCRA = d2.results.periodos[0].entidades || [];
+        if (entidadesBCRA.length) {
+          maxSitBCRA = entidadesBCRA.reduce(function(m, e) { return Math.max(m, e.situacion || 1); }, 1);
+        }
+      }
     }
   } catch(e) {}
 
@@ -2043,7 +2082,19 @@ async function consultarCheque() {
   }
   document.getElementById('cheque-bodegas-data').innerHTML = bodegasHtml;
 
-  mostrarVeredicto(sinLevantar.length, cheques.length, tieneNegativo);
+  // Mostrar situación BCRA del librador
+  var bcraLibradorEl = document.getElementById('cheque-bcra-situacion');
+  if (bcraLibradorEl) {
+    if (maxSitBCRA > 1) {
+      bcraLibradorEl.innerHTML = '<div style="margin-bottom:8px;">' + getBadge(maxSitBCRA) + ' <span style="font-size:12px;color:#64748b;margin-left:6px;">Situación crediticia del librador en el BCRA</span></div>';
+      bcraLibradorEl.style.display = 'block';
+    } else {
+      bcraLibradorEl.innerHTML = '<div style="font-size:13px;color:#166534;">✓ Situación 1 — Normal en el BCRA</div>';
+      bcraLibradorEl.style.display = 'block';
+    }
+  }
+
+  mostrarVeredicto(sinLevantar.length, cheques.length, tieneNegativo, maxSitBCRA);
 
   window.chequeActual = {cuit: raw, nombre: nombre, cheques: cheques, threads: threads};
   document.getElementById('btn-analizar-cheque').style.display = 'block';
