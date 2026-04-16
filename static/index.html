@@ -918,6 +918,12 @@ async function procesarDSO() {
     document.getElementById('dso-loading').style.display = 'none';
     document.getElementById('dso-resultado').style.display = 'block';
     document.getElementById('dso-btn-calcular').disabled = false;
+    // Guardar DSO en localStorage y sincronizar
+    localStorage.setItem('piat_dso_global', dsoGlobal);
+    localStorage.setItem('piat_dso_saldo_total', saldoTotal);
+    localStorage.setItem('piat_dso_clientes_total', totalClientes);
+    localStorage.setItem('piat_dso_datos', JSON.stringify(dsoDatos));
+    sincronizarServidor();
     // Actualizar métrica DSO en el dashboard
     var metDso = document.getElementById('met-dso');
     if (metDso) {
@@ -1035,10 +1041,66 @@ function exportarDSO() {
 }
 // ─── FIN MÓDULO DSO ──────────────────────────────────────────
 
+// ─── SINCRONIZACIÓN SERVIDOR ──────────────────────────────
+async function sincronizarServidor() {
+  var datos = {
+    nombre_bodega: localStorage.getItem('piat_nombre_bodega') || '',
+    dso_umbral: localStorage.getItem('piat_dso_umbral') || '45',
+    dso_umbral_alto: localStorage.getItem('piat_dso_umbral_alto') || '65',
+    dso_global: localStorage.getItem('piat_dso_global') || '',
+    dso_saldo_total: localStorage.getItem('piat_dso_saldo_total') || '',
+    dso_clientes_total: localStorage.getItem('piat_dso_clientes_total') || '',
+    dso_datos: JSON.parse(localStorage.getItem('piat_dso_datos') || '[]'),
+    cartera: JSON.parse(localStorage.getItem('piat_cartera') || '[]')
+  };
+  try {
+    await fetch('/datos-bodega', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(datos)
+    });
+  } catch(e) {}
+}
+
+async function cargarDesdServidor() {
+  try {
+    var r = await fetch('/datos-bodega');
+    var data = await r.json();
+    if (!data || data.error || Object.keys(data).length === 0) return false;
+    // Aplicar datos del servidor
+    if (data.nombre_bodega) localStorage.setItem('piat_nombre_bodega', data.nombre_bodega);
+    if (data.dso_umbral) localStorage.setItem('piat_dso_umbral', data.dso_umbral);
+    if (data.dso_umbral_alto) localStorage.setItem('piat_dso_umbral_alto', data.dso_umbral_alto);
+    if (data.dso_global) localStorage.setItem('piat_dso_global', data.dso_global);
+    if (data.dso_saldo_total) localStorage.setItem('piat_dso_saldo_total', data.dso_saldo_total);
+    if (data.dso_clientes_total) localStorage.setItem('piat_dso_clientes_total', data.dso_clientes_total);
+    if (data.dso_datos && data.dso_datos.length) {
+      dsoDatos = data.dso_datos;
+      localStorage.setItem('piat_dso_datos', JSON.stringify(dsoDatos));
+    }
+    if (data.cartera && data.cartera.length) {
+      cartera = data.cartera;
+      localStorage.setItem('piat_cartera', JSON.stringify(cartera));
+    }
+    return true;
+  } catch(e) { return false; }
+}
+
 async function init() {
   checkProxy();
+  // Cargar datos persistentes del servidor (sincroniza entre dispositivos)
+  await cargarDesdServidor();
   await Promise.all([cargarWSP(), cargarMoras(), cargarCarteraServidor()]);
   actualizarMetricas();
+  // Restaurar DSO en dashboard si hay datos guardados
+  var dsoGuardado = localStorage.getItem('piat_dso_global');
+  if (dsoGuardado) {
+    var metDso = document.getElementById('met-dso');
+    if (metDso) {
+      metDso.textContent = dsoGuardado;
+      metDso.style.color = colorDSO(parseInt(dsoGuardado)).color;
+    }
+  }
   // Cargar nombre de bodega en campo config
   var nbEl = document.getElementById('input-nombre-bodega');
   if (nbEl) nbEl.value = localStorage.getItem('piat_nombre_bodega') || '';
@@ -1699,6 +1761,7 @@ function guardarUmbralesDSO() {
   var alto = parseInt(document.getElementById('input-dso-alto').value) || 65;
   localStorage.setItem('piat_dso_umbral', bajo);
   localStorage.setItem('piat_dso_umbral_alto', alto);
+  sincronizarServidor();
   var st = document.getElementById('dso-umbral-status');
   st.style.display = 'block';
   setTimeout(function() { st.style.display = 'none'; }, 2000);
@@ -1708,6 +1771,7 @@ function guardarNombreBodega() {
   var nombre = document.getElementById('input-nombre-bodega').value.trim();
   if (!nombre) { alert('Ingresá el nombre de tu bodega'); return; }
   localStorage.setItem('piat_nombre_bodega', nombre);
+  sincronizarServidor();
   var status = document.getElementById('nombre-bodega-status');
   status.style.display = 'block';
   setTimeout(function() { status.style.display = 'none'; }, 2000);
@@ -1810,6 +1874,7 @@ function agregarCliente() {
     plazoDias: plazo ? parseInt(plazo) : null
   });
   localStorage.setItem('piat_cartera', JSON.stringify(cartera));
+  sincronizarServidor();
   document.getElementById('nuevo-cuit').value = '';
   document.getElementById('nuevo-nombre').value = '';
   document.getElementById('nuevo-limite').value = '';
