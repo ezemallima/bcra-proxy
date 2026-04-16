@@ -331,6 +331,7 @@ def analizar():
         return jsonify({"error": str(e)}), 500
 
 @app.route("/procesar-veraz", methods=["POST"])
+@app.route("/procesar-informe", methods=["POST"])
 def procesar_veraz():
     if not GEMINI_KEY:
         return jsonify({"error": "API key no configurada"}), 500
@@ -338,7 +339,7 @@ def procesar_veraz():
         body = request.get_json(force=True)
         pdf_base64 = body.get('pdf', '')
         prompt = (
-            "Extrae los datos de este informe Veraz/Equifax. "
+            "Este puede ser un informe de Veraz/Equifax o de Nosis. Detecta el formato automaticamente y extrae los mismos campos. "
             "Responde SOLO con un objeto JSON valido, sin markdown, sin texto adicional. "
             "Estructura exacta: "
             '{"nombre":"","cuit":"","score":0,"situacion_bcra":"","cheques_rechazados":0,'
