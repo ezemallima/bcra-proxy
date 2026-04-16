@@ -885,9 +885,16 @@ async function procesarDSO() {
       'Sos un analista financiero experto en el sector vitivinicola argentino.',
       'Te paso ' + archivosUsados.length + ' reporte(s): ' + archivosUsados.join(', ') + '.',
       '',
+      'IMPORTANTE — FECHA DE CORTE:',
+      'Los dias de mora y el DSO deben calcularse a la fecha del reporte, NO a la fecha de hoy.',
+      'Para determinar la fecha de corte: busca la fecha mas reciente en el reporte de ventas o saldos.',
+      'Esa es la fecha de cierre del reporte. Todos los calculos de dias deben ser relativos a esa fecha.',
+      'Ejemplo: si el reporte es del 28/02/2026, los dias vencidos se cuentan hasta el 28/02/2026, no hasta hoy.',
+      '',
       'Calcula el DSO de la siguiente forma:',
       '- Si tenes saldos + ventas + cheques: DSO = (saldo pendiente - cheques en cartera) / (ventas del periodo / dias del periodo)',
-      '- Si solo tenes saldos: usa los dias de mora o vencimiento directamente',
+      '- Si solo tenes saldos: usa los dias pendientes o de vencimiento del reporte directamente sin recalcular desde hoy',
+      '- El periodo de ventas debe ser el rango de fechas que cubren los reportes provistos',
       '- Si falta algun reporte, calculá con lo disponible y aclaralo en el campo "advertencia"',
       '',
       'Clasificá cada cliente: Normal (menos de ' + umbralBajo + ' dias), Atencion (' + umbralBajo + '-' + umbralAlto + ' dias), Critico (mas de ' + umbralAlto + ' dias)',
@@ -944,6 +951,9 @@ async function procesarDSO() {
     document.getElementById('dso-clientes-total').textContent = totalClientes;
 
     var benchmarkHtml = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">' + badgeCalculo;
+    if (resultado.fecha_corte) {
+      benchmarkHtml += '<span style="font-size:11px;padding:3px 10px;background:#e0f2fe;color:#0369a1;border-radius:20px;font-weight:600;">📅 Fecha de corte: ' + resultado.fecha_corte + '</span>';
+    }
     if (resultado.advertencia) {
       benchmarkHtml += '<span style="font-size:12px;color:#854d0e;">' + resultado.advertencia + '</span>';
     }
@@ -1092,13 +1102,46 @@ async function init() {
   await cargarDesdServidor();
   await Promise.all([cargarWSP(), cargarMoras(), cargarCarteraServidor()]);
   actualizarMetricas();
-  // Restaurar DSO en dashboard si hay datos guardados
+  // Restaurar DSO en dashboard y pestaña completa si hay datos guardados
   var dsoGuardado = localStorage.getItem('piat_dso_global');
   if (dsoGuardado) {
     var metDso = document.getElementById('met-dso');
     if (metDso) {
       metDso.textContent = dsoGuardado;
       metDso.style.color = colorDSO(parseInt(dsoGuardado)).color;
+    }
+    // Restaurar pestaña DSO completa si hay datos de clientes
+    if (dsoDatos && dsoDatos.length > 0) {
+      var dsoGlobalRest = parseInt(dsoGuardado);
+      var saldoTotalRest = parseFloat(localStorage.getItem('piat_dso_saldo_total') || '0');
+      var totalClientesRest = parseInt(localStorage.getItem('piat_dso_clientes_total') || '0');
+      // Mostrar sección de resultados
+      document.getElementById('dso-resultado').style.display = 'block';
+      // Restaurar KPIs
+      var colDSORest = colorDSO(dsoGlobalRest);
+      document.getElementById('dso-numero').textContent = dsoGlobalRest;
+      document.getElementById('dso-numero').style.color = colDSORest.color;
+      document.getElementById('dso-saldo-total').textContent = '$' + Math.round(saldoTotalRest).toLocaleString('es-AR');
+      document.getElementById('dso-clientes-total').textContent = totalClientesRest;
+      // Restaurar benchmark
+      var bHtml = '<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">';
+      bHtml += '<div style="font-size:13px;color:#64748b;"><strong style="color:var(--azul-oscuro);">Referencia del sector:</strong> 45–55 días es normal · Más de 65 días es alerta</div>';
+      bHtml += '<div style="display:flex;gap:8px;flex-wrap:wrap;">';
+      bHtml += '<span style="font-size:11px;padding:3px 10px;background:#dcfce7;color:#166534;border-radius:20px;font-weight:600;">Normal &lt;' + getDSOUmbral() + 'd</span>';
+      bHtml += '<span style="font-size:11px;padding:3px 10px;background:#fefce8;color:#854d0e;border-radius:20px;font-weight:600;">Atención ' + getDSOUmbral() + '–' + getDSOUmbralAlto() + 'd</span>';
+      bHtml += '<span style="font-size:11px;padding:3px 10px;background:#fee2e2;color:#991b1b;border-radius:20px;font-weight:600;">Crítico &gt;' + getDSOUmbralAlto() + 'd</span>';
+      bHtml += '</div>';
+      bHtml += '<div style="margin-top:8px;font-size:12px;color:#94a3b8;">🔒 DSO promedio del sector: disponible cuando la Red de Bodegas esté activa</div>';
+      bHtml += '</div>';
+      document.getElementById('dso-benchmark').innerHTML = bHtml;
+      // Restaurar tabla
+      renderTablaDSO(dsoDatos);
+      // Mostrar área de upload como completada
+      ['dso-upload-saldos','dso-upload-ventas','dso-upload-cheques'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) { el.className = 'upload-area success'; }
+      });
+      document.getElementById('dso-upload-saldos').innerHTML = '<div style="font-size:13px;color:#166534;font-weight:600;">✓ Datos restaurados — subí nuevos archivos para actualizar</div>';
     }
   }
   // Cargar nombre de bodega en campo config
