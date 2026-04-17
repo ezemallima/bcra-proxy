@@ -1272,7 +1272,7 @@ async function consultarCliente() {
     '<div class="avatar" id="cli-avatar">?</div>' +
     '<div style="flex:1;">' +
     '<div style="font-size:16px;font-weight:600;" id="cli-nombre">Consultando...</div>' +
-    '<div style="font-size:12px;color:#64748b;margin-top:2px;" id="cli-cuit-sub"></div>' +
+    '<div style="font-size:12px;color:#64748b;margin-top:2px;" id="cli-cuit-sub">CUIT: ' + raw.slice(0,2)+'-'+raw.slice(2,10)+'-'+raw.slice(10) + '</div>' +
     '</div>' +
     '<div id="cli-acciones">' +
     (cartera.some(function(c){return c.cuit===raw;}) ? '<span style="font-size:11px;color:var(--verde);padding:4px 10px;background:var(--verde-bg);border-radius:6px;font-weight:600;">En cartera ✓</span>' : '') +
@@ -2342,6 +2342,8 @@ async function consultarBCRA(cuit) {
     const r = await fetch(`/deudas/${cuit}`, {signal: AbortSignal.timeout(20000)});
     const data = await r.json();
     if (data && !data.error) { bcraSetCache(cuit, data); return data; }
+    // Si es timeout del BCRA, devolver objeto vacío para mostrar "sin deudas"
+    if (data && data.error === 'timeout') return {results: {denominacion:'', periodos:[]}, sin_deudas: true, timeout: true};
   } catch(e) {}
   // Intento 2: via allorigins (proxy CORS gratuito)
   try {
@@ -2373,7 +2375,12 @@ async function consultarBCRACompleto(cuit) {
   try {
     var data = await consultarBCRA(cuit);
     if (!data) {
-      bcraEl.innerHTML = '<div style="font-size:13px;color:#854d0e;padding:8px;background:#fefce8;border-radius:8px;">El BCRA no respondió. Intentá de nuevo en unos segundos.</div>';
+      bcraEl.innerHTML = '<div style="font-size:13px;color:#854d0e;padding:8px;background:#fefce8;border-radius:8px;border:1px solid #fde047;">El BCRA no respondió en este momento. Podés intentar de nuevo o consultarlo directamente en <a href="https://www.bcra.gob.ar/BCRAyVos/Situacion_Crediticia.asp" target="_blank" style="color:#854d0e;">bcra.gob.ar</a></div>';
+      document.getElementById('verdict-container').innerHTML = '';
+      return;
+    }
+    if (data.timeout) {
+      bcraEl.innerHTML = '<div style="font-size:13px;color:#854d0e;padding:8px;background:#fefce8;border-radius:8px;border:1px solid #fde047;">El BCRA no respondió ahora. Puede significar que el cliente no tiene deudas registradas. Intentá de nuevo en unos segundos.</div>';
       return;
     }
     var res = data.results || {};
@@ -2382,15 +2389,16 @@ async function consultarBCRACompleto(cuit) {
     var maxSit = entidades.length ? entidades.reduce(function(m,e){return Math.max(m,e.situacion||1);},1) : 1;
 
     // Actualizar nombre si lo trajo el BCRA
-    if (nombre) {
-      var nomEl = document.getElementById('cli-nombre');
-      var avEl = document.getElementById('cli-avatar');
-      var subEl = document.getElementById('cli-cuit-sub');
-      if (nomEl && nomEl.textContent === 'Consultando...') {
+    var cuitFmt = cuit.slice(0,2)+'-'+cuit.slice(2,10)+'-'+cuit.slice(10);
+    var nomEl = document.getElementById('cli-nombre');
+    var avEl = document.getElementById('cli-avatar');
+    var subEl = document.getElementById('cli-cuit-sub');
+    if (subEl) subEl.textContent = 'CUIT: ' + cuitFmt;
+    if (nombre && nombre.trim()) {
+      if (nomEl && (nomEl.textContent === 'Consultando...' || nomEl.textContent === 'Sin denominación')) {
         nomEl.textContent = nombre;
         if (avEl) avEl.textContent = nombre.charAt(0).toUpperCase();
       }
-      if (subEl) subEl.textContent = 'CUIT: ' + cuit.slice(0,2)+'-'+cuit.slice(2,10)+'-'+cuit.slice(10);
     }
 
     // Mostrar veredicto
