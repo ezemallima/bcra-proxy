@@ -8,6 +8,7 @@ import time
 import threading
 import base64
 import io
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 try:
     import pandas as pd
@@ -26,6 +27,20 @@ GEMINI_MODELS = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.0-flash"]
 ALERTAS_FILE = os.path.join(os.getcwd(), 'alertas_cartera.json')
 DATOS_FILE = os.path.join(os.getcwd(), 'datos_bodega.json')
 WSP_FILE = os.path.join(os.getcwd(), 'whatsapp_index.json')
+
+# Caché BCRA en memoria — evita consultas repetidas
+import time as time_module
+bcra_cache = {}
+BCRA_CACHE_TTL = 86400  # 24 horas
+
+def bcra_get_cache(cuit):
+    cached = bcra_cache.get(cuit)
+    if cached and (time_module.time() - cached['ts']) < BCRA_CACHE_TTL:
+        return cached['data']
+    return None
+
+def bcra_set_cache(cuit, data):
+    bcra_cache[cuit] = {'data': data, 'ts': time_module.time()}
 
 # Estado de verificación en memoria
 verificacion_estado = {
@@ -59,12 +74,18 @@ def gemini_request(payload, timeout=45):
     return None, "No se pudo conectar."
 
 def consultar_bcra(cuit, reintentos=3):
+    # Verificar caché primero
+    cached = bcra_get_cache(cuit)
+    if cached:
+        return cached, None
     url = "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit
     for i in range(reintentos):
         try:
             r = requests.get(url, timeout=12, verify=False)
             if r.status_code == 200:
-                return r.json(), None
+                data = r.json()
+                bcra_set_cache(cuit, data)
+                return data, None
             elif r.status_code == 404:
                 return {"results": {"denominacion": "", "periodos": []}, "sin_deudas": True}, None
             elif r.status_code in [500, 503]:
@@ -135,19 +156,14 @@ def ejecutar_verificacion(cartera_data):
     nuevas_alertas = []
     cartera_actualizada = []
 
-    for i, cliente in enumerate(cartera_data):
+    # Verificar BCRA en paralelo — 8 consultas simultáneas
+    def verificar_cliente_bcra(cliente):
         cuit = cliente.get('cuit', '')
         nombre = cliente.get('nombre', '')
         sit_anterior = cliente.get('ultimaSit', 1) or 1
-
-        verificacion_estado["progreso"] = i + 1
-        verificacion_estado["cliente_actual"] = nombre
-        verificacion_estado["mensaje"] = "Verificando " + str(i+1) + "/" + str(len(cartera_data)) + ": " + nombre
-
         cliente_actualizado = dict(cliente)
-
+        alerta = None
         try:
-            # Consultar BCRA
             bcra_data, error = consultar_bcra(cuit)
             if bcra_data and not error:
                 entidades = []
@@ -158,23 +174,39 @@ def ejecutar_verificacion(cartera_data):
                 max_sit = 1
                 if entidades:
                     max_sit = max((e.get('situacion', 1) or 1) for e in entidades)
-
                 cliente_actualizado['ultimaSit'] = max_sit
                 cliente_actualizado['ultimaVerif'] = time.strftime('%d/%m/%Y')
-
                 if max_sit > sit_anterior or max_sit >= 3:
-                    nuevas_alertas.append({
-                        "nombre": nombre,
-                        "cuit": cuit,
-                        "sitAnterior": sit_anterior,
-                        "sitActual": max_sit,
-                        "fecha": time.strftime('%d/%m/%Y'),
-                        "tipo": "bcra"
-                    })
+                    alerta = {
+                        "nombre": nombre, "cuit": cuit,
+                        "sitAnterior": sit_anterior, "sitActual": max_sit,
+                        "fecha": time.strftime('%d/%m/%Y'), "tipo": "bcra"
+                    }
         except Exception:
             pass
+        return cliente_actualizado, alerta
 
-        # Analizar grupo bodegas
+    verificacion_estado["mensaje"] = "Consultando BCRA en paralelo..."
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = {executor.submit(verificar_cliente_bcra, c): i for i, c in enumerate(cartera_data)}
+        completados = 0
+        for future in as_completed(futures):
+            completados += 1
+            verificacion_estado["progreso"] = completados
+            verificacion_estado["mensaje"] = f"BCRA: {completados}/{len(cartera_data)} consultados"
+            try:
+                cliente_act, alerta = future.result()
+                cartera_actualizada.append(cliente_act)
+                if alerta:
+                    nuevas_alertas.append(alerta)
+            except Exception:
+                pass
+
+    # Analizar grupo bodegas (secuencial, usa IA)
+    verificacion_estado["mensaje"] = "Analizando grupo de bodegas..."
+    for i, cliente in enumerate(cartera_actualizada):
+        cuit = cliente.get('cuit', '')
+        nombre = cliente.get('nombre', '')
         try:
             threads = wsp_index.get(cuit, [])
             if threads:
@@ -186,26 +218,18 @@ def ejecutar_verificacion(cartera_data):
                         todos_mensajes.append(m.get('autor', '') + ': ' + texto_msg)
                         if any(p in texto_msg.lower() for p in palabras_riesgo):
                             tiene_sospecha = True
-
                 if tiene_sospecha:
                     ya_existe = any(a['cuit'] == cuit and a['tipo'] == 'bodegas' for a in nuevas_alertas)
                     if not ya_existe:
                         es_negativo, motivo = analizar_bodegas_server(cuit, nombre, todos_mensajes[:10])
                         if es_negativo:
                             nuevas_alertas.append({
-                                "nombre": nombre,
-                                "cuit": cuit,
+                                "nombre": nombre, "cuit": cuit,
                                 "fecha": time.strftime('%d/%m/%Y'),
-                                "tipo": "bodegas",
-                                "mensajes": [motivo]
+                                "tipo": "bodegas", "mensajes": [motivo]
                             })
         except Exception:
             pass
-
-        cartera_actualizada.append(cliente_actualizado)
-
-        if i < len(cartera_data) - 1:
-            time.sleep(5)
 
     # Guardar resultados
     ahora = time.strftime('%d/%m/%Y %H:%M')
@@ -571,6 +595,10 @@ def calcular_dso():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route("/ping")
+def ping():
+    return jsonify({"pong": True})
 
 @app.route("/health")
 def health():
