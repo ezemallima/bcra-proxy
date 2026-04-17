@@ -455,6 +455,11 @@
       </div>
 
       <div class="card">
+        <div class="card-title">Situación BCRA</div>
+        <div id="bcra-data"><div class="wsp-no-data">Consultando BCRA...</div></div>
+      </div>
+
+      <div class="card">
         <div class="card-title">Historial grupo de bodegas</div>
         <div id="wsp-data"><div class="wsp-no-data">Buscando en historial...</div></div>
       </div>
@@ -774,6 +779,24 @@ let historialConsultas = JSON.parse(localStorage.getItem('piat_historial') || '[
 function getNombreBodega() {
   return localStorage.getItem('piat_nombre_bodega') || 'tu bodega';
 }
+
+// Caché BCRA — respuesta instantánea en segunda consulta
+var bcraCache = {};
+var BCRA_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 horas
+
+function bcraGetCache(cuit) {
+  var cached = bcraCache[cuit];
+  if (cached && (Date.now() - cached.ts) < BCRA_CACHE_TTL) return cached.data;
+  return null;
+}
+function bcraSetCache(cuit, data) {
+  bcraCache[cuit] = {data: data, ts: Date.now()};
+}
+
+// Ping automático para mantener el servidor despierto
+setInterval(function() {
+  fetch('/health').catch(function(){});
+}, 10 * 60 * 1000);
 let cartera = JSON.parse(localStorage.getItem('piat_cartera') || '[]');
 let situaciones = JSON.parse(localStorage.getItem('piat_situaciones') || '{}');
 let alertas = JSON.parse(localStorage.getItem('piat_alertas') || '[]');
@@ -850,40 +873,65 @@ function cargarArchivoDSO(input, tipo) {
 
 async function procesarDSO() {
   var hayArchivo = dsoArchivos.saldos || dsoArchivos.ventas || dsoArchivos.cheques;
-  if (!hayArchivo) { alert('Subí al menos el reporte de saldos.'); return; }
-  if (!dsoArchivos.saldos) { alert('El reporte de saldos es obligatorio.'); return; }
+  if (!hayArchivo) { alert('Subí al menos un archivo para calcular el DSO.'); return; }
 
   document.getElementById('dso-loading').style.display = 'block';
-  document.getElementById('dso-loading').innerHTML = '<div class="loading-spinner"></div><div style="font-size:13px;color:#64748b;margin-top:8px;">Calculando DSO...</div>';
+  document.getElementById('dso-loading').innerHTML = '<div class="loading-spinner"></div><div style="font-size:13px;color:#64748b;margin-top:8px;">Analizando con IA...</div>';
   document.getElementById('dso-resultado').style.display = 'none';
   document.getElementById('dso-btn-calcular').disabled = true;
 
   try {
-    function fileToBase64(file) {
-      return new Promise(function(resolve, reject) {
-        var reader = new FileReader();
-        reader.onload = function(e) { resolve(e.target.result.split(',')[1]); };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+    var partes = [];
+    var archivosUsados = [];
+
+    if (dsoArchivos.saldos) {
+      var txt = await leerExcelComoTexto(dsoArchivos.saldos);
+      partes.push('=== REPORTE DE SALDOS ===\n' + txt);
+      archivosUsados.push('saldos');
+    }
+    if (dsoArchivos.ventas) {
+      var txt2 = await leerExcelComoTexto(dsoArchivos.ventas);
+      partes.push('=== REPORTE DE VENTAS ===\n' + txt2);
+      archivosUsados.push('ventas');
+    }
+    if (dsoArchivos.cheques) {
+      var txt3 = await leerExcelComoTexto(dsoArchivos.cheques);
+      partes.push('=== CHEQUES EN CARTERA ===\n' + txt3);
+      archivosUsados.push('cheques');
     }
 
-    var archivos = {};
-    if (dsoArchivos.saldos) archivos.saldos = await fileToBase64(dsoArchivos.saldos);
-    if (dsoArchivos.ventas) archivos.ventas = await fileToBase64(dsoArchivos.ventas);
-    if (dsoArchivos.cheques) archivos.cheques = await fileToBase64(dsoArchivos.cheques);
+    var estaCompleto = archivosUsados.length === 3;
+    var umbralBajo = getDSOUmbral();
+    var umbralAlto = getDSOUmbralAlto();
 
-    var r = await fetch('/calcular-dso', {
+    var prompt = [
+      'Sos un analista financiero experto en el sector vitivinicola argentino.',
+      'Te paso ' + archivosUsados.length + ' reporte(s): ' + archivosUsados.join(', ') + '.',
+      '',
+      'Calcula el DSO de la siguiente forma:',
+      '- Si tenes saldos + ventas + cheques: DSO = (saldo pendiente - cheques en cartera) / (ventas del periodo / dias del periodo)',
+      '- Si solo tenes saldos: usa los dias de mora o vencimiento directamente',
+      '- Si falta algun reporte, calculá con lo disponible y aclaralo en el campo "advertencia"',
+      '',
+      'Clasificá cada cliente: Normal (menos de ' + umbralBajo + ' dias), Atencion (' + umbralBajo + '-' + umbralAlto + ' dias), Critico (mas de ' + umbralAlto + ' dias)',
+      '',
+      'Responde SOLO con este JSON sin texto adicional ni markdown:',
+      '{"dso_global":0,"saldo_total":0,"total_clientes":0,"calculo_completo":' + estaCompleto + ',"advertencia":"","clientes":[{"nombre":"","saldo":0,"dso":0,"estado":"Normal"}]}',
+      '',
+      'DATOS:',
+      partes.join('\n\n')
+    ].join('\n');
+
+    var r = await fetch('/analizar', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        archivos: archivos,
-        umbral_bajo: getDSOUmbral(),
-        umbral_alto: getDSOUmbralAlto()
-      })
+      body: JSON.stringify({prompt: prompt})
     });
-    var resultado = await r.json();
-    if (resultado.error) throw new Error(resultado.error);
+    var respuesta = await r.json();
+    if (respuesta.error) throw new Error(respuesta.error);
+
+    var texto = respuesta.texto.trim().replace(/```json/g, '').replace(/```/g, '').trim();
+    var resultado = JSON.parse(texto);
 
     dsoDatos = (resultado.clientes || []).sort(function(a, b) { return b.dso - a.dso; });
     var dsoGlobal = resultado.dso_global || 0;
@@ -893,16 +941,21 @@ async function procesarDSO() {
     document.getElementById('dso-loading').style.display = 'none';
     document.getElementById('dso-resultado').style.display = 'block';
     document.getElementById('dso-btn-calcular').disabled = false;
-
+    // Guardar DSO en localStorage y sincronizar
     localStorage.setItem('piat_dso_global', dsoGlobal);
     localStorage.setItem('piat_dso_saldo_total', saldoTotal);
     localStorage.setItem('piat_dso_clientes_total', totalClientes);
     localStorage.setItem('piat_dso_datos', JSON.stringify(dsoDatos));
     sincronizarServidor();
-
+    // Actualizar métrica DSO en el dashboard
     var metDso = document.getElementById('met-dso');
-    if (metDso) { metDso.textContent = dsoGlobal; metDso.style.color = colorDSO(dsoGlobal).color; }
+    if (metDso) {
+      var colMet = colorDSO(dsoGlobal);
+      metDso.textContent = dsoGlobal;
+      metDso.style.color = colMet.color;
+    }
 
+    // Badge cálculo completo o aproximado
     var badgeCalculo = resultado.calculo_completo
       ? '<span style="font-size:11px;padding:3px 10px;background:#dcfce7;color:#166534;border-radius:20px;font-weight:600;">✓ Cálculo completo</span>'
       : '<span style="font-size:11px;padding:3px 10px;background:#fefce8;color:#854d0e;border-radius:20px;font-weight:600;">⚠ Cálculo aproximado</span>';
@@ -913,26 +966,28 @@ async function procesarDSO() {
     document.getElementById('dso-saldo-total').textContent = '$' + Math.round(saldoTotal).toLocaleString('es-AR');
     document.getElementById('dso-clientes-total').textContent = totalClientes;
 
-    var bHtml = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">' + badgeCalculo;
-    if (resultado.fecha_corte) bHtml += '<span style="font-size:11px;padding:3px 10px;background:#e0f2fe;color:#0369a1;border-radius:20px;font-weight:600;">Fecha de corte: ' + resultado.fecha_corte + '</span>';
-    if (resultado.advertencia) bHtml += '<span style="font-size:12px;color:#854d0e;">' + resultado.advertencia + '</span>';
-    bHtml += '</div>';
-    bHtml += '<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">';
-    bHtml += '<div style="font-size:13px;color:#64748b;"><strong style="color:var(--azul-oscuro);">Referencia del sector:</strong> 45–55 días es normal · Más de 65 días es alerta</div>';
-    bHtml += '<div style="display:flex;gap:8px;">';
-    bHtml += '<span style="font-size:11px;padding:3px 10px;background:#dcfce7;color:#166534;border-radius:20px;font-weight:600;">Normal &lt;' + getDSOUmbral() + 'd</span>';
-    bHtml += '<span style="font-size:11px;padding:3px 10px;background:#fefce8;color:#854d0e;border-radius:20px;font-weight:600;">Atención ' + getDSOUmbral() + '–' + getDSOUmbralAlto() + 'd</span>';
-    bHtml += '<span style="font-size:11px;padding:3px 10px;background:#fee2e2;color:#991b1b;border-radius:20px;font-weight:600;">Crítico &gt;' + getDSOUmbralAlto() + 'd</span>';
-    bHtml += '</div>';
-    bHtml += '<div style="margin-top:8px;font-size:12px;color:#94a3b8;">DSO promedio del sector: disponible cuando la Red de Bodegas esté activa</div>';
-    bHtml += '</div>';
-    document.getElementById('dso-benchmark').innerHTML = bHtml;
+    var benchmarkHtml = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">' + badgeCalculo;
+    if (resultado.advertencia) {
+      benchmarkHtml += '<span style="font-size:12px;color:#854d0e;">' + resultado.advertencia + '</span>';
+    }
+    benchmarkHtml += '</div>';
+    benchmarkHtml += '<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">';
+    benchmarkHtml += '<div style="font-size:13px;color:#64748b;"><strong style="color:var(--azul-oscuro);">Referencia del sector:</strong> 45–55 días es normal · Más de 65 días es alerta</div>';
+    benchmarkHtml += '<div style="display:flex;gap:8px;">';
+    benchmarkHtml += '<span style="font-size:11px;padding:3px 10px;background:#dcfce7;color:#166534;border-radius:20px;font-weight:600;">Normal &lt;' + getDSOUmbral() + 'd</span>';
+    benchmarkHtml += '<span style="font-size:11px;padding:3px 10px;background:#fefce8;color:#854d0e;border-radius:20px;font-weight:600;">Atención ' + getDSOUmbral() + '–' + getDSOUmbralAlto() + 'd</span>';
+    benchmarkHtml += '<span style="font-size:11px;padding:3px 10px;background:#fee2e2;color:#991b1b;border-radius:20px;font-weight:600;">Crítico &gt;' + getDSOUmbralAlto() + 'd</span>';
+    benchmarkHtml += '</div>';
+    benchmarkHtml += '<div style="margin-top:8px;font-size:12px;color:#94a3b8;">🔒 DSO promedio del sector: disponible cuando la Red de Bodegas esté activa</div>';
+    benchmarkHtml += '</div>';
+    document.getElementById('dso-benchmark').innerHTML = benchmarkHtml;
+
     renderTablaDSO(dsoDatos);
 
   } catch(err) {
     document.getElementById('dso-loading').style.display = 'none';
     document.getElementById('dso-btn-calcular').disabled = false;
-    alert('Error al calcular DSO: ' + err.message);
+    alert('Error al procesar: ' + err.message);
   }
 }
 
@@ -1060,41 +1115,13 @@ async function init() {
   await cargarDesdServidor();
   await Promise.all([cargarWSP(), cargarMoras(), cargarCarteraServidor()]);
   actualizarMetricas();
-  // Restaurar DSO completo en dashboard y pestaña
+  // Restaurar DSO en dashboard si hay datos guardados
   var dsoGuardado = localStorage.getItem('piat_dso_global');
   if (dsoGuardado) {
-    var dsoNum = parseFloat(dsoGuardado);
-    // Dashboard
     var metDso = document.getElementById('met-dso');
-    if (metDso) { metDso.textContent = dsoNum; metDso.style.color = colorDSO(dsoNum).color; }
-    // Restaurar tabla completa si hay datos de clientes
-    var datosGuardados = JSON.parse(localStorage.getItem('piat_dso_datos') || '[]');
-    if (datosGuardados.length > 0) {
-      dsoDatos = datosGuardados;
-      var saldoTotalRest = parseFloat(localStorage.getItem('piat_dso_saldo_total') || '0');
-      var totalClientesRest = parseInt(localStorage.getItem('piat_dso_clientes_total') || '0');
-      document.getElementById('dso-resultado').style.display = 'block';
-      var colDSOR = colorDSO(dsoNum);
-      document.getElementById('dso-numero').textContent = dsoNum;
-      document.getElementById('dso-numero').style.color = colDSOR.color;
-      document.getElementById('dso-saldo-total').textContent = '$' + Math.round(saldoTotalRest).toLocaleString('es-AR');
-      document.getElementById('dso-clientes-total').textContent = totalClientesRest;
-      var bHtml = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">';
-      bHtml += '<span style="font-size:11px;padding:3px 10px;background:#dcfce7;color:#166534;border-radius:20px;font-weight:600;">✓ Datos restaurados</span>';
-      bHtml += '</div>';
-      bHtml += '<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">';
-      bHtml += '<div style="font-size:13px;color:#64748b;"><strong style="color:var(--azul-oscuro);">Referencia del sector:</strong> 45–55 días es normal · Más de 65 días es alerta</div>';
-      bHtml += '<div style="display:flex;gap:8px;">';
-      bHtml += '<span style="font-size:11px;padding:3px 10px;background:#dcfce7;color:#166534;border-radius:20px;font-weight:600;">Normal &lt;' + getDSOUmbral() + 'd</span>';
-      bHtml += '<span style="font-size:11px;padding:3px 10px;background:#fefce8;color:#854d0e;border-radius:20px;font-weight:600;">Atención ' + getDSOUmbral() + '–' + getDSOUmbralAlto() + 'd</span>';
-      bHtml += '<span style="font-size:11px;padding:3px 10px;background:#fee2e2;color:#991b1b;border-radius:20px;font-weight:600;">Crítico &gt;' + getDSOUmbralAlto() + 'd</span>';
-      bHtml += '</div>';
-      bHtml += '<div style="margin-top:8px;font-size:12px;color:#94a3b8;">DSO promedio del sector: disponible cuando la Red de Bodegas esté activa</div>';
-      bHtml += '</div>';
-      document.getElementById('dso-benchmark').innerHTML = bHtml;
-      renderTablaDSO(dsoDatos);
-      document.getElementById('dso-upload-saldos').className = 'upload-area success';
-      document.getElementById('dso-upload-saldos').innerHTML = '<div style="font-size:13px;color:#166534;font-weight:600;">✓ Datos restaurados — subí nuevos archivos para actualizar</div>';
+    if (metDso) {
+      metDso.textContent = dsoGuardado;
+      metDso.style.color = colorDSO(parseInt(dsoGuardado)).color;
     }
   }
   // Cargar nombre de bodega en campo config
@@ -1245,16 +1272,18 @@ async function consultarCliente() {
     '<div class="avatar" id="cli-avatar">?</div>' +
     '<div style="flex:1;">' +
     '<div style="font-size:16px;font-weight:600;" id="cli-nombre">Consultando...</div>' +
-    '<div style="font-size:12px;color:#64748b;margin-top:2px;">CUIT: ' + raw + '</div>' +
+    '<div style="font-size:12px;color:#64748b;margin-top:2px;" id="cli-cuit-sub"></div>' +
     '</div>' +
     '<div id="cli-acciones">' +
     (cartera.some(function(c){return c.cuit===raw;}) ? '<span style="font-size:11px;color:var(--verde);padding:4px 10px;background:var(--verde-bg);border-radius:6px;font-weight:600;">En cartera ✓</span>' : '') +
     '</div>' +
     '</div>';
   document.getElementById('verdict-container').innerHTML = '';
-    guardarEnHistorial(raw, null);
+  document.getElementById('bcra-data').innerHTML = '<div class="wsp-no-data">Consultando BCRA...</div>';
+  guardarEnHistorial(raw, null);
   mostrarAFIP(raw);
   mostrarWSP(raw);
+  consultarBCRACompleto(raw);
 
   // Traer razón social via endpoint propio del servidor
   try {
@@ -1268,6 +1297,8 @@ async function consultarCliente() {
     var acEl = document.getElementById('cli-acciones');
     if (avEl) avEl.textContent = nombre.charAt(0).toUpperCase();
     if (nomEl) nomEl.textContent = nombre;
+    var subEl = document.getElementById('cli-cuit-sub');
+    if (subEl) subEl.textContent = 'CUIT: ' + raw.slice(0,2)+'-'+raw.slice(2,10)+'-'+raw.slice(10);
     if (acEl) {
       var yaEsta = cartera.some(function(c) { return c.cuit === raw; });
       if (!yaEsta) {
@@ -1386,14 +1417,14 @@ function renderSocios(socios) {
   let html = '<div class="full" style="padding-top:8px;border-top:1px solid #e0e0d8;">';
   html += '<div style="font-size:11px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Socios / Directores</div>';
   socios.forEach(s => {
-    const scoreColor = s.score <= 3 ? '#991b1b' : s.score <= 5 ? '#854d0e' : '#166534';
+    const scoreColor = s.score <= 400 ? '#991b1b' : s.score <= 650 ? '#854d0e' : '#166534';
     html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f0e8;flex-wrap:wrap;gap:4px;">';
     html += '<div>';
     html += '<div style="font-size:13px;font-weight:600;">' + (s.nombre||'') + '</div>';
     html += '<div style="font-size:11px;color:#888;">' + (s.cargo||'') + (s.cuit_dni ? ' · ' + s.cuit_dni : '') + '</div>';
     html += '</div>';
     html += '<div style="display:flex;gap:6px;align-items:center;">';
-    if (s.score) html += '<span style="font-size:12px;font-weight:600;color:' + scoreColor + '">Score: ' + s.score + '/9</span>';
+    if (s.score) html += '<span style="font-size:12px;font-weight:600;color:' + scoreColor + '">Score: ' + s.score + '/999</span>';
     if (s.situacion) html += '<span style="font-size:11px;padding:2px 8px;background:#f9f9f7;border:1px solid #e0e0d8;border-radius:20px;">' + s.situacion + '</span>';
     html += '</div></div>';
   });
@@ -1425,11 +1456,11 @@ async function procesarVeraz(input) {
       document.getElementById('veraz-area').innerHTML = `<div style="font-size:13px;color:#166534;font-weight:600;">✓ PDF procesado — ${file.name}</div>`;
       statusEl.style.display = 'none';
       datosEl.style.display = 'block';
-      const scoreColor = verazData.score<=3 ? '#991b1b' : verazData.score<=5 ? '#854d0e' : '#166534';
+      const scoreColor = verazData.score<=400 ? '#991b1b' : verazData.score<=650 ? '#854d0e' : '#166534';
       const chequeColor = verazData.cheques_rechazados>0 ? '#991b1b' : '#166534';
       let verazHtml = '<div style="font-size:12px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Datos extraídos del Veraz</div>';
       verazHtml += '<div class="info-grid">';
-      verazHtml += '<div><span class="lbl">Score:</span> <strong style="color:' + scoreColor + '">' + verazData.score + '/9</strong></div>';
+      verazHtml += '<div><span class="lbl">Score Equifax:</span> <strong style="color:' + scoreColor + '">' + verazData.score + ' / 999</strong></div>';
       verazHtml += '<div><span class="lbl">Cheques rechazados:</span> <strong style="color:' + chequeColor + '">' + verazData.cheques_rechazados + '</strong></div>';
       verazHtml += '<div><span class="lbl">Situación BCRA:</span> <strong>' + (verazData.situacion_bcra||'-') + '</strong></div>';
       verazHtml += '<div><span class="lbl">Saldo vencido:</span> <strong>' + (verazData.saldo_vencido||'-') + '</strong></div>';
@@ -1457,16 +1488,19 @@ async function analizarCliente() {
   btn.disabled = true; btn.textContent = 'Analizando...'; resEl.style.display = 'none';
 
   let prompt = 'Sos un analista de riesgo crediticio senior especializado en el sector vitivinícola argentino. Tu trabajo es evaluar clientes para ' + getNombreBodega() + ' y emitir un informe completo de riesgo crediticio.\n\nCUIT consultado: ' + cuit + '\n\n';
-  if (mora) prompt += '⚠️ ALERTA CRÍTICA - MORA CON PIATTELLI:\n' + mora.nombre + ' tiene deuda impaga desde ' + mora.fecha_mora + '.\nSaldo adeudado: $' + mora.saldo.toLocaleString('es-AR') + ' — Estado: ' + mora.estado + '\nEste antecedente es determinante para el análisis.\n\n';
+  if (mora) prompt += '⚠️ ALERTA CRÍTICA - MORA CON ' + getNombreBodega().toUpperCase() + ':\n' + mora.nombre + ' tiene deuda impaga desde ' + mora.fecha_mora + '.\nSaldo adeudado: $' + mora.saldo.toLocaleString('es-AR') + ' — Estado: ' + mora.estado + '\nEste antecedente es determinante para el análisis.\n\n';
   if (verazData) {
     prompt += `INFORME VERAZ/EQUIFAX — EMPRESA:
-- Score crediticio: ${verazData.score}/9 ${verazData.score <= 3 ? '(MUY BAJO - alto riesgo)' : verazData.score <= 5 ? '(MEDIO - revisar)' : '(BUENO)'}
+- Score crediticio: ${verazData.score} de 999 ${verazData.score <= 400 ? '(MUY BAJO - alto riesgo)' : verazData.score <= 600 ? '(MEDIO - revisar)' : verazData.score <= 750 ? '(BUENO)' : '(EXCELENTE)'}
+- IMPORTANTE: El score de Equifax/Veraz va de 1 a 999. Un score de 853 es excelente. Un score de 400 es malo. NO interpretar como escala de 1 a 9.
 - Cheques rechazados: ${verazData.cheques_rechazados} ${verazData.cheques_rechazados > 0 ? '⚠️ ATENCIÓN' : '✓'}
 - Situación BCRA: ${verazData.situacion_bcra}
 - Saldo vencido: ${verazData.saldo_vencido}
 - Deuda total en sistema financiero: ${verazData.deuda_sistema_financiero}
 - Máximo atraso últimos 24 meses: ${verazData.maximo_atraso}
 - Entidades con problemas: ${verazData.entidades_problema?.join(', ') || 'Ninguna'}
+- Entidades que informaron: ${verazData.resumen ? 'Ver resumen' : 'No especificadas'}
+IMPORTANTE: Si en el informe Veraz aparece el nombre de alguna bodega o empresa del rubro vitivinícola como entidad que informa datos del cliente, mencionarlo explícitamente en el análisis ya que es una referencia sectorial relevante.
 
 `;
     if (verazData.socios_directores?.length) {
@@ -1530,6 +1564,12 @@ Usá el domicilio fiscal del cliente (provincia, ciudad) para evaluar:
    - Salta, Jujuy, Formosa, Misiones — zonas limítrofes con Bolivia, Paraguay y Brasil
    - En estas zonas, para clientes nuevos, SIEMPRE recomendá pago anticipado o cheque contra entrega
    - Ya hubo casos documentados de clientes que retiraron mercadería y cruzaron la frontera
+   
+   IMPORTANTE SOBRE EL DOMICILIO: Antes de clasificar la zona, verificá que sea una ciudad o provincia argentina real.
+   - "Martínez 1640" significa ciudad de Martínez (Gran Buenos Aires), código postal 1640. NO es Misiones.
+   - "Martinez" sin número es la localidad de Martínez, partido de San Isidro, provincia de Buenos Aires.
+   - El número que sigue al nombre de ciudad suele ser el código postal argentino, no el nombre de otra ciudad.
+   - Si el domicilio tiene formato "Calle NNNN Ciudad CPPP", interpretar como: calle + número + ciudad + código postal.
 
 2. COHERENCIA VOLUMEN vs GEOGRAFÍA:
    - Localidad de menos de 5.000 habitantes pidiendo más de 200 cajas → alerta
@@ -1572,12 +1612,12 @@ function exportarReporte() {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
   const cuit = document.getElementById('cuit-input').value.trim();
-  const headerEl = document.getElementById('cliente-header');
-  const nombre = headerEl.querySelector('div > div > div')?.textContent || cuit;
+  const headerEl = document.getElementById('cli-nombre');
+  const nombre = (headerEl ? headerEl.textContent : '') || cuit;
   const mora = buscarEnMoras(cuit.replace(/-/g,''));
   let y = 20;
   doc.setFontSize(18); doc.setTextColor(155, 32, 32);
-  doc.text('Vender Seguros', 20, y); y += 8;
+  doc.text('Vende Seguro', 20, y); y += 8;
   doc.setFontSize(11); doc.setTextColor(100);
   doc.text(`Reporte de riesgo crediticio — ${ultimoAnalisis.fecha}`, 20, y); y += 6;
   doc.setDrawColor(220); doc.line(20, y, 190, y); y += 10;
@@ -1593,7 +1633,7 @@ function exportarReporte() {
     doc.setTextColor(30); doc.setFontSize(12);
     doc.text('Datos Veraz:', 20, y); y += 7;
     doc.setFontSize(10); doc.setTextColor(80);
-    doc.text(`Score: ${verazData.score}/9 | Cheques rechazados: ${verazData.cheques_rechazados}`, 20, y); y += 6;
+    doc.text(`Score Equifax: ${verazData.score}/999 | Cheques rechazados: ${verazData.cheques_rechazados}`, 20, y); y += 6;
     doc.text(`Situación: ${verazData.situacion_bcra} | Saldo vencido: ${verazData.saldo_vencido}`, 20, y); y += 6;
     doc.text(`Deuda total: ${verazData.deuda_sistema_financiero}`, 20, y); y += 10;
   }
@@ -1601,8 +1641,13 @@ function exportarReporte() {
   doc.text('Análisis de riesgo:', 20, y); y += 8;
   doc.setFontSize(10); doc.setTextColor(60);
   const lines = doc.splitTextToSize(ultimoAnalisis.texto, 170);
-  doc.text(lines, 20, y);
-  doc.save(`VenderSeguros_${cuit}_${ultimoAnalisis.fecha.replace(/\//g,'-')}.pdf`);
+  var pageH = doc.internal.pageSize.height;
+  lines.forEach(function(line) {
+    if (y > pageH - 20) { doc.addPage(); y = 20; }
+    doc.text(line, 20, y);
+    y += 5;
+  });
+  doc.save(`VendeSeguro_${cuit}_${ultimoAnalisis.fecha.replace(/\//g,'-')}.pdf`);
 }
 
 
@@ -1791,6 +1836,10 @@ async function actualizarWSP(input) {
     for (const match of msg.texto.matchAll(new RegExp(cuitPattern.source, 'g'))) {
       const cuit = match[1].replace(/[-\s]/g,'');
       if (cuit.length === 11) {
+        // Validar que el CUIT empiece con prefijo válido (20,23,24,27,30,33,34)
+        var prefix = parseInt(cuit.slice(0,2));
+        var prefijosValidos = [20,23,24,27,30,33,34];
+        if (!prefijosValidos.includes(prefix)) continue;
         if (!newIndex[cuit]) { newIndex[cuit] = []; nuevos++; }
         const contexto = messages.slice(i, Math.min(i+11, messages.length));
         newIndex[cuit].push({ fecha: msg.fecha, cuit_mencionado: match[1], mensajes: contexto.map(c => ({fecha:c.fecha,autor:c.autor,texto:c.texto})) });
@@ -2285,7 +2334,16 @@ async function analizarCheque() {
 }
 
 async function consultarBCRA(cuit) {
-  // Intento 1: via allorigins (proxy CORS gratuito)
+  // Verificar caché primero
+  var cached = bcraGetCache(cuit);
+  if (cached) return cached;
+  // Intento 1: via proxy del servidor (más confiable)
+  try {
+    const r = await fetch(`/deudas/${cuit}`, {signal: AbortSignal.timeout(20000)});
+    const data = await r.json();
+    if (data && !data.error) { bcraSetCache(cuit, data); return data; }
+  } catch(e) {}
+  // Intento 2: via allorigins (proxy CORS gratuito)
   try {
     const url = encodeURIComponent(`https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/${cuit}`);
     const r = await fetch(`https://api.allorigins.win/get?url=${url}`, {
@@ -2294,13 +2352,8 @@ async function consultarBCRA(cuit) {
     if (r.ok) {
       const wrapper = await r.json();
       const data = JSON.parse(wrapper.contents);
-      if (data.status === 200) return data;
+      if (data && !data.error) { bcraSetCache(cuit, data); return data; }
     }
-  } catch(e) {}
-  // Intento 2: via proxy del servidor
-  try {
-    const r = await fetch(`/deudas/${cuit}`, {signal: AbortSignal.timeout(20000)});
-    return await r.json();
   } catch(e) {}
   return null;
 }
@@ -2312,6 +2365,58 @@ async function obtenerNombre(cuit) {
     if (data.nombre && !data.error) return data.nombre;
   } catch(e) {}
   return '';
+}
+
+async function consultarBCRACompleto(cuit) {
+  var bcraEl = document.getElementById('bcra-data');
+  if (!bcraEl) return;
+  try {
+    var data = await consultarBCRA(cuit);
+    if (!data) {
+      bcraEl.innerHTML = '<div style="font-size:13px;color:#854d0e;padding:8px;background:#fefce8;border-radius:8px;">El BCRA no respondió. Intentá de nuevo en unos segundos.</div>';
+      return;
+    }
+    var res = data.results || {};
+    var nombre = res.denominacion || '';
+    var entidades = (res.periodos && res.periodos[0]) ? (res.periodos[0].entidades || []) : [];
+    var maxSit = entidades.length ? entidades.reduce(function(m,e){return Math.max(m,e.situacion||1);},1) : 1;
+
+    // Actualizar nombre si lo trajo el BCRA
+    if (nombre) {
+      var nomEl = document.getElementById('cli-nombre');
+      var avEl = document.getElementById('cli-avatar');
+      var subEl = document.getElementById('cli-cuit-sub');
+      if (nomEl && nomEl.textContent === 'Consultando...') {
+        nomEl.textContent = nombre;
+        if (avEl) avEl.textContent = nombre.charAt(0).toUpperCase();
+      }
+      if (subEl) subEl.textContent = 'CUIT: ' + cuit.slice(0,2)+'-'+cuit.slice(2,10)+'-'+cuit.slice(10);
+    }
+
+    // Mostrar veredicto
+    var v = '';
+    if (maxSit === 1) v = '<div class="verdict-box aprobar"><div class="verdict-title aprobar">✓ Situación normal en BCRA</div><div class="verdict-detail">Situación 1 — Sin alertas financieras en el sistema.</div></div>';
+    else if (maxSit === 2) v = '<div class="verdict-box revisar"><div class="verdict-title revisar">⚠ Revisar — Seguimiento especial</div><div class="verdict-detail">Situación 2 en al menos una entidad. Solicitá Veraz completo.</div></div>';
+    else v = '<div class="verdict-box rechazar"><div class="verdict-title rechazar">✗ Alerta — Situación crítica (Sit. '+maxSit+')</div><div class="verdict-detail">'+sitNombre(maxSit)+' en el sistema financiero. Alto riesgo.</div></div>';
+    document.getElementById('verdict-container').innerHTML = v;
+
+    // Mostrar tabla BCRA
+    if (!entidades.length) {
+      bcraEl.innerHTML = '<div class="empty-state" style="color:#166534;">✓ Sin deudas registradas en el BCRA para este CUIT.</div>';
+    } else {
+      var t = '<table class="bcra-table"><thead><tr><th>Entidad</th><th>Monto</th><th>Situación</th><th>Días atraso</th></tr></thead><tbody>';
+      entidades.forEach(function(e) {
+        t += '<tr><td>'+( e.entidad||'-')+'</td><td>$'+((e.monto||0).toLocaleString('es-AR'))+'</td>';
+        t += '<td class="sit-'+e.situacion+'">'+e.situacion+' — '+sitNombre(e.situacion)+'</td>';
+        t += '<td>'+(e.diasAtrasoPago||0)+'</td></tr>';
+      });
+      t += '</tbody></table>';
+      bcraEl.innerHTML = t;
+    }
+    guardarEnHistorial(cuit, data);
+  } catch(e) {
+    if (bcraEl) bcraEl.innerHTML = '<div style="font-size:13px;color:#888;">No se pudo consultar el BCRA.</div>';
+  }
 }
 
 init().then(function() {
