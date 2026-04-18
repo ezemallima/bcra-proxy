@@ -987,9 +987,9 @@ async function procesarDSO() {
       rowsVentas.forEach(function(r) {
         var contacto = String(r[cV] || '').trim();
         var total = parseMonto(r[mV]);
-        if (!contacto || total <= 0) return; // excluir NC y vacíos
+        if (!contacto || total === 0) return; // solo excluir vacíos — NC (negativos) restan
         ventasPorCliente[contacto] = (ventasPorCliente[contacto] || 0) + total;
-        if (fV) { var d = parseFecha(r[fV]); if (d) fechas.push(d); }
+        if (fV && total > 0) { var d = parseFecha(r[fV]); if (d) fechas.push(d); }
       });
     }
 
