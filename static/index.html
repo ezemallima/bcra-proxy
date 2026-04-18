@@ -883,6 +883,12 @@ function leerExcelRows(file) {
         var wb = XLSX.read(data, {type: 'array', raw: false, cellDates: true});
         var sheet = wb.Sheets[wb.SheetNames[0]];
         var rows = XLSX.utils.sheet_to_json(sheet, {defval: '', raw: false});
+        // Limpiar espacios fantasma en headers
+        rows = rows.map(function(row) {
+          var clean = {};
+          Object.keys(row).forEach(function(k) { clean[k.trim()] = row[k]; });
+          return clean;
+        });
         resolve(rows);
       } catch(ex) { reject(ex); }
     };
@@ -948,7 +954,19 @@ async function procesarDSO() {
     var rowsCheques = dsoArchivos.cheques ? await leerExcelRows(dsoArchivos.cheques) : [];
 
     function parseMonto(v) {
-      return parseFloat(String(v || '0').replace(/[$, ]/g, '').replace(',', '.')) || 0;
+      var s = String(v || '0').trim();
+      // Eliminar símbolo $ y espacios
+      s = s.replace(/[$\s]/g, '');
+      // Formato argentino: 1.234.567,89 → detectar si hay coma como decimal
+      if (s.indexOf(',') > s.indexOf('.') && s.indexOf(',') >= 0) {
+        // Formato AR/EU: puntos = miles, coma = decimal
+        s = s.replace(/\./g, '').replace(',', '.');
+      } else {
+        // Formato US o sin separador: solo quitar comas de miles
+        s = s.replace(/,/g, '');
+      }
+      var n = parseFloat(s);
+      return isNaN(n) ? 0 : n;
     }
     function parseFecha(v) {
       if (!v) return null;
