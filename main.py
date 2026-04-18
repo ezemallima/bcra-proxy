@@ -6,15 +6,6 @@ import os
 import json
 import time
 import threading
-import base64
-import io
-from concurrent.futures import ThreadPoolExecutor, as_completed
-
-try:
-    import pandas as pd
-    PANDAS_OK = True
-except ImportError:
-    PANDAS_OK = False
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -27,20 +18,6 @@ GEMINI_MODELS = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.0-flash"]
 ALERTAS_FILE = os.path.join(os.getcwd(), 'alertas_cartera.json')
 DATOS_FILE = os.path.join(os.getcwd(), 'datos_bodega.json')
 WSP_FILE = os.path.join(os.getcwd(), 'whatsapp_index.json')
-
-# Caché BCRA en memoria — evita consultas repetidas
-import time as time_module
-bcra_cache = {}
-BCRA_CACHE_TTL = 86400  # 24 horas
-
-def bcra_get_cache(cuit):
-    cached = bcra_cache.get(cuit)
-    if cached and (time_module.time() - cached['ts']) < BCRA_CACHE_TTL:
-        return cached['data']
-    return None
-
-def bcra_set_cache(cuit, data):
-    bcra_cache[cuit] = {'data': data, 'ts': time_module.time()}
 
 # Estado de verificación en memoria
 verificacion_estado = {
@@ -74,18 +51,12 @@ def gemini_request(payload, timeout=45):
     return None, "No se pudo conectar."
 
 def consultar_bcra(cuit, reintentos=3):
-    # Verificar caché primero
-    cached = bcra_get_cache(cuit)
-    if cached:
-        return cached, None
     url = "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit
     for i in range(reintentos):
         try:
             r = requests.get(url, timeout=12, verify=False)
             if r.status_code == 200:
-                data = r.json()
-                bcra_set_cache(cuit, data)
-                return data, None
+                return r.json(), None
             elif r.status_code == 404:
                 return {"results": {"denominacion": "", "periodos": []}, "sin_deudas": True}, None
             elif r.status_code in [500, 503]:
@@ -156,14 +127,19 @@ def ejecutar_verificacion(cartera_data):
     nuevas_alertas = []
     cartera_actualizada = []
 
-    # Verificar BCRA en paralelo — 8 consultas simultáneas
-    def verificar_cliente_bcra(cliente):
+    for i, cliente in enumerate(cartera_data):
         cuit = cliente.get('cuit', '')
         nombre = cliente.get('nombre', '')
         sit_anterior = cliente.get('ultimaSit', 1) or 1
+
+        verificacion_estado["progreso"] = i + 1
+        verificacion_estado["cliente_actual"] = nombre
+        verificacion_estado["mensaje"] = "Verificando " + str(i+1) + "/" + str(len(cartera_data)) + ": " + nombre
+
         cliente_actualizado = dict(cliente)
-        alerta = None
+
         try:
+            # Consultar BCRA
             bcra_data, error = consultar_bcra(cuit)
             if bcra_data and not error:
                 entidades = []
@@ -174,39 +150,23 @@ def ejecutar_verificacion(cartera_data):
                 max_sit = 1
                 if entidades:
                     max_sit = max((e.get('situacion', 1) or 1) for e in entidades)
+
                 cliente_actualizado['ultimaSit'] = max_sit
                 cliente_actualizado['ultimaVerif'] = time.strftime('%d/%m/%Y')
+
                 if max_sit > sit_anterior or max_sit >= 3:
-                    alerta = {
-                        "nombre": nombre, "cuit": cuit,
-                        "sitAnterior": sit_anterior, "sitActual": max_sit,
-                        "fecha": time.strftime('%d/%m/%Y'), "tipo": "bcra"
-                    }
+                    nuevas_alertas.append({
+                        "nombre": nombre,
+                        "cuit": cuit,
+                        "sitAnterior": sit_anterior,
+                        "sitActual": max_sit,
+                        "fecha": time.strftime('%d/%m/%Y'),
+                        "tipo": "bcra"
+                    })
         except Exception:
             pass
-        return cliente_actualizado, alerta
 
-    verificacion_estado["mensaje"] = "Consultando BCRA en paralelo..."
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        futures = {executor.submit(verificar_cliente_bcra, c): i for i, c in enumerate(cartera_data)}
-        completados = 0
-        for future in as_completed(futures):
-            completados += 1
-            verificacion_estado["progreso"] = completados
-            verificacion_estado["mensaje"] = f"BCRA: {completados}/{len(cartera_data)} consultados"
-            try:
-                cliente_act, alerta = future.result()
-                cartera_actualizada.append(cliente_act)
-                if alerta:
-                    nuevas_alertas.append(alerta)
-            except Exception:
-                pass
-
-    # Analizar grupo bodegas (secuencial, usa IA)
-    verificacion_estado["mensaje"] = "Analizando grupo de bodegas..."
-    for i, cliente in enumerate(cartera_actualizada):
-        cuit = cliente.get('cuit', '')
-        nombre = cliente.get('nombre', '')
+        # Analizar grupo bodegas
         try:
             threads = wsp_index.get(cuit, [])
             if threads:
@@ -218,18 +178,26 @@ def ejecutar_verificacion(cartera_data):
                         todos_mensajes.append(m.get('autor', '') + ': ' + texto_msg)
                         if any(p in texto_msg.lower() for p in palabras_riesgo):
                             tiene_sospecha = True
+
                 if tiene_sospecha:
                     ya_existe = any(a['cuit'] == cuit and a['tipo'] == 'bodegas' for a in nuevas_alertas)
                     if not ya_existe:
                         es_negativo, motivo = analizar_bodegas_server(cuit, nombre, todos_mensajes[:10])
                         if es_negativo:
                             nuevas_alertas.append({
-                                "nombre": nombre, "cuit": cuit,
+                                "nombre": nombre,
+                                "cuit": cuit,
                                 "fecha": time.strftime('%d/%m/%Y'),
-                                "tipo": "bodegas", "mensajes": [motivo]
+                                "tipo": "bodegas",
+                                "mensajes": [motivo]
                             })
         except Exception:
             pass
+
+        cartera_actualizada.append(cliente_actualizado)
+
+        if i < len(cartera_data) - 1:
+            time.sleep(5)
 
     # Guardar resultados
     ahora = time.strftime('%d/%m/%Y %H:%M')
@@ -360,6 +328,14 @@ def get_deudas(cuit):
         return jsonify({"error": error}), 500
     return jsonify(data), 200
 
+@app.route("/deudas/<cuit>/cheques")
+def get_cheques(cuit):
+    try:
+        r = requests.get("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/" + cuit, timeout=12, verify=False)
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/deudas/<cuit>/historial")
 def get_historial(cuit):
     try:
@@ -426,179 +402,6 @@ def test_gemini():
     if error:
         return jsonify({"error": error}), 500
     return jsonify({"ok": True, "respuesta": texto})
-
-@app.route("/calcular-dso", methods=["POST"])
-def calcular_dso():
-    if not PANDAS_OK:
-        return jsonify({"error": "pandas no disponible"}), 500
-    try:
-        body = request.get_json(force=True)
-        archivos = body.get('archivos', {})
-        umbral_bajo = int(body.get('umbral_bajo', 45))
-        umbral_alto = int(body.get('umbral_alto', 65))
-
-        def leer_excel(b64):
-            data = base64.b64decode(b64)
-            return pd.read_excel(io.BytesIO(data))
-
-        df_saldos = None
-        df_ventas = None
-        df_cheques = None
-
-        if archivos.get('saldos'):
-            df_saldos = leer_excel(archivos['saldos'])
-        if archivos.get('ventas'):
-            df_ventas = leer_excel(archivos['ventas'])
-        if archivos.get('cheques'):
-            df_cheques = leer_excel(archivos['cheques'])
-
-        if df_saldos is None:
-            return jsonify({"error": "Se requiere al menos el reporte de saldos"}), 400
-
-        # Detectar columnas clave en saldos
-        cols_saldo = [c for c in df_saldos.columns if 'saldo' in c.lower() or 'pendiente' in c.lower()]
-        cols_contacto = [c for c in df_saldos.columns if 'contacto' in c.lower() or 'cliente' in c.lower() or 'razon' in c.lower()]
-        cols_fecha_vto = [c for c in df_saldos.columns if 'vencimiento' in c.lower() or 'vto' in c.lower() or 'siguiente' in c.lower() or 'pago' in c.lower()]
-        cols_fecha_fac = [c for c in df_saldos.columns if 'factura' in c.lower() or 'fecha' in c.lower()]
-
-        if not cols_saldo or not cols_contacto:
-            return jsonify({"error": "No se encontraron columnas de saldo o contacto en el archivo"}), 400
-
-        col_saldo = cols_saldo[0]
-        col_contacto = cols_contacto[0]
-        col_vto = cols_fecha_vto[0] if cols_fecha_vto else None
-
-        # Fecha de corte = fecha maxima de factura (no vencimientos futuros)
-        fecha_corte = None
-        cols_factura = [c for c in df_saldos.columns if 'factura' in c.lower() or 'emision' in c.lower() or 'emisi' in c.lower()]
-        if cols_factura:
-            try:
-                fechas = pd.to_datetime(df_saldos[cols_factura[0]], errors='coerce').dropna()
-                if len(fechas) > 0:
-                    fecha_corte = fechas.max()
-            except Exception:
-                pass
-        # Fallback: buscar en todas las columnas pero tomar la mas comun/logica
-        if fecha_corte is None:
-            for col in df_saldos.columns:
-                try:
-                    fechas = pd.to_datetime(df_saldos[col], errors='coerce').dropna()
-                    # Ignorar columnas con fechas futuras (vencimientos)
-                    fechas_pasadas = fechas[fechas <= pd.Timestamp.now()]
-                    if len(fechas_pasadas) > 0:
-                        fc = fechas_pasadas.max()
-                        if fecha_corte is None or fc > fecha_corte:
-                            fecha_corte = fc
-                except Exception:
-                    pass
-        if fecha_corte is None:
-            fecha_corte = pd.Timestamp.now()
-
-        # Calcular saldo total pendiente
-        df_saldos[col_saldo] = pd.to_numeric(df_saldos[col_saldo], errors='coerce').fillna(0)
-        saldo_total = df_saldos[df_saldos[col_saldo] > 0][col_saldo].sum()
-
-        # Cheques en cartera pendientes de cobro
-        cheques_pendientes = 0.0
-        if df_cheques is not None:
-            cols_imp = [c for c in df_cheques.columns if 'importe' in c.lower() or 'monto' in c.lower() or 'total' in c.lower()]
-            cols_fpago = [c for c in df_cheques.columns if 'pago' in c.lower() or 'vto' in c.lower() or 'vencimiento' in c.lower()]
-            if cols_imp:
-                col_imp = cols_imp[0]
-                df_cheques[col_imp] = pd.to_numeric(df_cheques[col_imp], errors='coerce').fillna(0)
-                if cols_fpago:
-                    col_fpago = cols_fpago[0]
-                    df_cheques[col_fpago] = pd.to_datetime(df_cheques[col_fpago], errors='coerce')
-                    cheques_pendientes = df_cheques[df_cheques[col_fpago] >= fecha_corte][col_imp].sum()
-                else:
-                    cheques_pendientes = df_cheques[df_cheques[col_imp] > 0][col_imp].sum()
-
-        # Ventas del período
-        ventas_diarias = None
-        dias_periodo = None
-        ventas_netas = None
-        advertencia = ""
-        if df_ventas is not None:
-            cols_total = [c for c in df_ventas.columns if 'total' in c.lower() or 'importe' in c.lower() or 'monto' in c.lower()]
-            cols_fecha_v = [c for c in df_ventas.columns if 'fecha' in c.lower()]
-            if cols_total and cols_fecha_v:
-                col_total = cols_total[0]
-                col_fecha_v = cols_fecha_v[0]
-                df_ventas[col_total] = pd.to_numeric(df_ventas[col_total], errors='coerce').fillna(0)
-                df_ventas[col_fecha_v] = pd.to_datetime(df_ventas[col_fecha_v], errors='coerce')
-                df_ventas_ok = df_ventas.dropna(subset=[col_fecha_v])
-                if len(df_ventas_ok) > 0:
-                    fecha_inicio = df_ventas_ok[col_fecha_v].min()
-                    fecha_fin = df_ventas_ok[col_fecha_v].max()
-                    dias_periodo = max((fecha_fin - fecha_inicio).days, 1)
-                    ventas_netas = df_ventas_ok[df_ventas_ok[col_total] > 0][col_total].sum()
-                    ventas_diarias = ventas_netas / dias_periodo
-
-        # DSO global
-        saldo_neto = saldo_total - cheques_pendientes
-        if ventas_diarias and ventas_diarias > 0:
-            dso_global = round(saldo_neto / ventas_diarias, 1)
-            calculo_completo = df_cheques is not None and df_ventas is not None
-        else:
-            # Fallback: promedio ponderado de dias vencidos por saldo
-            advertencia = "Sin reporte de ventas — DSO calculado por antigüedad de saldos"
-            calculo_completo = False
-            if col_vto:
-                df_saldos[col_vto] = pd.to_datetime(df_saldos[col_vto], errors='coerce')
-                df_pos = df_saldos[df_saldos[col_saldo] > 0].copy()
-                df_pos['dias'] = (fecha_corte - df_pos[col_vto]).dt.days.clip(lower=0)
-                pond = (df_pos['dias'] * df_pos[col_saldo]).sum()
-                dso_global = round(pond / df_pos[col_saldo].sum(), 1) if df_pos[col_saldo].sum() > 0 else 0
-            else:
-                dso_global = 0
-
-        # DSO por cliente
-        df_pos = df_saldos[df_saldos[col_saldo] > 0].copy()
-        if col_vto and col_vto in df_saldos.columns:
-            df_saldos[col_vto] = pd.to_datetime(df_saldos[col_vto], errors='coerce')
-            df_pos['dias_vencido'] = (fecha_corte - df_saldos.loc[df_pos.index, col_vto]).dt.days.clip(lower=0)
-        else:
-            df_pos['dias_vencido'] = 0
-
-        por_cliente = df_pos.groupby(col_contacto).agg(
-            saldo=(col_saldo, 'sum'),
-            dias_max=('dias_vencido', 'max')
-        ).reset_index()
-        por_cliente = por_cliente[por_cliente['saldo'] > 0].sort_values('dias_max', ascending=False)
-
-        clientes = []
-        for _, row in por_cliente.iterrows():
-            dso_cli = int(row['dias_max'])
-            if dso_cli < umbral_bajo:
-                estado = 'Normal'
-            elif dso_cli < umbral_alto:
-                estado = 'Atención'
-            else:
-                estado = 'Crítico'
-            clientes.append({
-                'nombre': str(row[col_contacto]),
-                'saldo': round(float(row['saldo']), 2),
-                'dso': dso_cli,
-                'estado': estado
-            })
-
-        return jsonify({
-            'dso_global': dso_global,
-            'saldo_total': round(float(saldo_total), 2),
-            'cheques_pendientes': round(float(cheques_pendientes), 2),
-            'total_clientes': len(clientes),
-            'calculo_completo': calculo_completo,
-            'fecha_corte': fecha_corte.strftime('%d/%m/%Y'),
-            'advertencia': advertencia,
-            'clientes': clientes
-        })
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/ping")
-def ping():
-    return jsonify({"pong": True})
 
 @app.route("/health")
 def health():
