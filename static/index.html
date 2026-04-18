@@ -1268,6 +1268,10 @@ async function consultarCliente() {
     nombreFinal = afipData.nombre || '';
   } catch(e) {}
 
+  // Asegurar que el div resultado esté visible antes de llamar mostrarResultado
+  document.getElementById('loading-state').style.display = 'none';
+  document.getElementById('resultado').style.display = 'block';
+
   try {
     var bcraR = await fetch('/deudas/' + raw, {signal: AbortSignal.timeout(12000)});
     var bcraData = await bcraR.json();
