@@ -19,6 +19,23 @@ ALERTAS_FILE = os.path.join(os.getcwd(), 'alertas_cartera.json')
 DATOS_FILE = os.path.join(os.getcwd(), 'datos_bodega.json')
 WSP_FILE = os.path.join(os.getcwd(), 'whatsapp_index.json')
 
+# Caché de consultas BCRA — evita re-consultar el mismo CUIT en 24hs
+bcra_cache = {}  # {cuit: {data: ..., timestamp: ...}}
+CACHE_TTL = 60 * 60 * 24  # 24 horas en segundos
+
+def consultar_bcra_cached(cuit):
+    import time
+    ahora = time.time()
+    if cuit in bcra_cache:
+        entrada = bcra_cache[cuit]
+        if ahora - entrada['timestamp'] < CACHE_TTL:
+            return entrada['data'], None  # hit de caché
+    # Miss — consultar BCRA real
+    data, error = consultar_bcra(cuit)
+    if data and not error:
+        bcra_cache[cuit] = {'data': data, 'timestamp': ahora}
+    return data, error
+
 # Estado de verificación en memoria
 verificacion_estado = {
     "corriendo": False,
@@ -140,7 +157,7 @@ def ejecutar_verificacion(cartera_data):
 
         try:
             # Consultar BCRA
-            bcra_data, error = consultar_bcra(cuit)
+            bcra_data, error = consultar_bcra_cached(cuit)
             if bcra_data and not error:
                 entidades = []
                 try:
@@ -321,7 +338,7 @@ def get_afip(cuit):
 
 @app.route("/deudas/<cuit>")
 def get_deudas(cuit):
-    data, error = consultar_bcra(cuit)
+    data, error = consultar_bcra_cached(cuit)
     if error == "timeout":
         return jsonify({"error": "timeout", "mensaje": "El BCRA no respondio."}), 200
     if error:
@@ -402,6 +419,13 @@ def test_gemini():
     if error:
         return jsonify({"error": error}), 500
     return jsonify({"ok": True, "respuesta": texto})
+
+@app.route("/cache-stats")
+def cache_stats():
+    import time
+    ahora = time.time()
+    activos = sum(1 for v in bcra_cache.values() if ahora - v['timestamp'] < CACHE_TTL)
+    return jsonify({"total": len(bcra_cache), "activos": activos, "ttl_horas": CACHE_TTL/3600})
 
 @app.route("/health")
 def health():
