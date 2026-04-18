@@ -1021,7 +1021,9 @@ async function procesarDSO() {
         .concat(Object.keys(chequesPorCliente))
     );
 
-    var ventasNetasTotal = 0, activoTotal = 0;
+    var ventasNetasTotal = 0;
+    var saldoTotalKPI = 0;    // solo saldos → lo que muestra el KPI
+    var activoTotalDSO = 0;   // saldos + cheques → para calcular DSO
     dsoDatos = [];
 
     todosClientes.forEach(function(contacto) {
@@ -1029,20 +1031,21 @@ async function procesarDSO() {
       var ventas  = ventasPorCliente[contacto]  || 0;
       var saldo   = saldosPorCliente[contacto]  || 0;
       var cheques = chequesPorCliente[contacto] || 0;
-      var activo  = saldo + cheques; // cheques suman al riesgo
+      var activoDSO = saldo + cheques; // cheques suman al riesgo para el DSO
       ventasNetasTotal += ventas;
-      activoTotal += activo;
-      var dsoCliente = (ventas > 0 && activo > 0)
-        ? Math.round((activo / ventas) * diasPeriodo)
+      saldoTotalKPI   += saldo;        // KPI muestra solo saldos
+      activoTotalDSO  += activoDSO;    // DSO usa saldos + cheques
+      var dsoCliente = (ventas > 0 && activoDSO > 0)
+        ? Math.round((activoDSO / ventas) * diasPeriodo)
         : 0;
-      if (activo > 0 || ventas > 0) {
-        dsoDatos.push({nombre: contacto, saldo: activo, dso: dsoCliente});
+      if (activoDSO > 0 || ventas > 0) {
+        dsoDatos.push({nombre: contacto, saldo: saldo, dso: dsoCliente});
       }
     });
 
-    // ── DSO GLOBAL ──
-    var dsoGlobal = (ventasNetasTotal > 0 && activoTotal > 0)
-      ? Math.round((activoTotal / ventasNetasTotal) * diasPeriodo)
+    // ── DSO GLOBAL — usa activo completo (saldos + cheques) ──
+    var dsoGlobal = (ventasNetasTotal > 0 && activoTotalDSO > 0)
+      ? Math.round((activoTotalDSO / ventasNetasTotal) * diasPeriodo)
       : 0;
 
     var estaCompleto = !!(dsoArchivos.ventas && dsoArchivos.saldos);
@@ -1054,7 +1057,7 @@ async function procesarDSO() {
 
     // Guardar y sincronizar
     localStorage.setItem('piat_dso_global', dsoGlobal);
-    localStorage.setItem('piat_dso_saldo_total', activoTotal);
+    localStorage.setItem('piat_dso_saldo_total', saldoTotalKPI);
     localStorage.setItem('piat_dso_clientes_total', dsoDatos.length);
     localStorage.setItem('piat_dso_datos', JSON.stringify(dsoDatos));
     sincronizarServidor();
@@ -1063,7 +1066,7 @@ async function procesarDSO() {
     var colDSO = colorDSO(dsoGlobal);
     document.getElementById('dso-numero').textContent = dsoGlobal;
     document.getElementById('dso-numero').style.color = colDSO.color;
-    document.getElementById('dso-saldo-total').textContent = '$' + Math.round(activoTotal).toLocaleString('es-AR');
+    document.getElementById('dso-saldo-total').textContent = '$' + Math.round(saldoTotalKPI).toLocaleString('es-AR');
     document.getElementById('dso-clientes-total').textContent = dsoDatos.length;
     var metDso = document.getElementById('met-dso');
     if (metDso) { metDso.textContent = dsoGlobal; metDso.style.color = colDSO.color; }
