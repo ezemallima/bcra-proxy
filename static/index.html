@@ -1010,7 +1010,7 @@ async function procesarDSO() {
       if (!mS) throw new Error('Archivo de saldos: no se encontró columna de monto. Columnas: ' + hS.join(', '));
       rowsSaldos.forEach(function(r) {
         var contacto = String(r[cS] || '').trim();
-        var saldo = Math.abs(parseMonto(r[mS]));
+        var saldo = parseMonto(r[mS]); // respetar signo — negativos son NC y restan
         if (!contacto || saldo === 0) return;
         saldosPorCliente[contacto] = (saldosPorCliente[contacto] || 0) + saldo;
       });
@@ -1039,9 +1039,11 @@ async function procesarDSO() {
         .concat(Object.keys(chequesPorCliente))
     );
 
+    // ── KPI saldo: suma directa del diccionario de saldos (sin pasar por todosClientes)
+    var saldoTotalKPI = Object.values(saldosPorCliente).reduce(function(s, v) { return s + v; }, 0);
+
     var ventasNetasTotal = 0;
-    var saldoTotalKPI = 0;    // solo saldos → lo que muestra el KPI
-    var activoTotalDSO = 0;   // saldos + cheques → para calcular DSO
+    var activoTotalDSO = 0;
     dsoDatos = [];
 
     todosClientes.forEach(function(contacto) {
@@ -1049,10 +1051,9 @@ async function procesarDSO() {
       var ventas  = ventasPorCliente[contacto]  || 0;
       var saldo   = saldosPorCliente[contacto]  || 0;
       var cheques = chequesPorCliente[contacto] || 0;
-      var activoDSO = saldo + cheques; // cheques suman al riesgo para el DSO
+      var activoDSO = saldo + cheques;
       ventasNetasTotal += ventas;
-      saldoTotalKPI   += saldo;        // KPI muestra solo saldos
-      activoTotalDSO  += activoDSO;    // DSO usa saldos + cheques
+      activoTotalDSO  += activoDSO;
       var dsoCliente = (ventas > 0 && activoDSO > 0)
         ? Math.round((activoDSO / ventas) * diasPeriodo)
         : 0;
@@ -1061,7 +1062,7 @@ async function procesarDSO() {
       }
     });
 
-    // ── DSO GLOBAL — usa activo completo (saldos + cheques) ──
+    // ── DSO GLOBAL ──
     var dsoGlobal = (ventasNetasTotal > 0 && activoTotalDSO > 0)
       ? Math.round((activoTotalDSO / ventasNetasTotal) * diasPeriodo)
       : 0;
