@@ -2120,17 +2120,33 @@ function verCliente(cuit) {
   consultarCliente();
 }
 
-async function verificarTodos() {
+async function verificarTodos(forzar) {
   if (!cartera.length) { alert('No hay clientes en la cartera.'); return; }
   const btn = document.getElementById('btn-verificar');
   const prog = document.getElementById('verificar-progress');
+
+  // Filtrar: solo pendientes (sin verificar) y eliminar duplicados Odoo
+  var cartFiltrada = cartera.filter(function(c) {
+    // Excluir contactos duplicados de Odoo (tienen ", contacto" en el nombre)
+    if (/,\s*(contacto|entrega|almacen|comercial|boada|alvear|contacto\s*\d)/i.test(c.nombre)) return false;
+    // Solo los que no tienen verificación del día de hoy
+    var hoy = new Date().toLocaleDateString('es-AR');
+    if (forzar) return true; // forzar verifica todos
+    return !c.ultimaVerif || c.ultimaVerif !== hoy || !c.ultimaSit;
+  });
+
+  if (!cartFiltrada.length) {
+    prog.textContent = 'Todos los clientes ya fueron verificados hoy.';
+    return;
+  }
+  prog.textContent = 'Verificando ' + cartFiltrada.length + ' clientes pendientes (de ' + cartera.length + ' en cartera)...';
 
   // Iniciar verificacion en el servidor
   try {
     const r = await fetch('/verificar-cartera', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({cartera: cartera})
+      body: JSON.stringify({cartera: cartFiltrada})
     });
     const data = await r.json();
     if (data.error) {
