@@ -822,37 +822,56 @@ function colorDSO(dias) {
   return {color: '#991b1b', bg: '#fee2e2', label: 'Crítico'};
 }
 
-// ─── MÓDULO DSO — CÁLCULO DETERMINÍSTICO ────────────────────
+// ─── MÓDULO DSO — MAPEO FLEXIBLE + CÁLCULO DETERMINÍSTICO ────
 var dsoArchivos = {saldos: null, ventas: null, cheques: null};
 
-// Columnas requeridas por plantilla
-var DSO_COLUMNAS = {
-  ventas:  ['Contacto', 'Fecha de factura', 'Total'],
-  saldos:  ['Contacto', 'SALDO PENDIENTE DE PAGO'],
-  cheques: ['Cliente/Proveedor', 'Fecha de Pago', 'Importe']
+// Aliases por tipo de archivo — busca estos nombres sin importar mayúsculas
+var DSO_ALIASES = {
+  saldos: {
+    contacto: ['cliente', 'contacto', 'razon social', 'razón social', 'nombre'],
+    monto:    ['saldo pendiente de pago', 'saldo', 'saldo pendiente', 'importe pendiente', 'balance'],
+    fecha:    ['fecha de factura', 'fecha factura', 'fecha', 'fecha de vencimiento']
+  },
+  ventas: {
+    contacto: ['cliente', 'contacto', 'razon social', 'razón social', 'nombre'],
+    monto:    ['total', 'total con impuestos', 'importe', 'monto', 'total facturado'],
+    fecha:    ['fecha de factura', 'fecha factura', 'fecha', 'fecha emision']
+  },
+  cheques: {
+    contacto: ['cliente', 'cliente/proveedor', 'contacto', 'nombre', 'librador'],
+    monto:    ['total', 'importe', 'monto', 'valor', 'importe cheque'],
+    fecha:    ['fecha de pago', 'fecha pago', 'fecha vencimiento', 'fecha']
+  }
+};
+
+// Plantillas para descargar
+var DSO_PLANTILLAS = {
+  ventas:  { nombre: 'Plantilla_Ventas.csv',  cols: ['cliente', 'Fecha de factura', 'Total'] },
+  saldos:  { nombre: 'Plantilla_Saldos.csv',  cols: ['cliente', 'Fecha de factura', 'SALDO PENDIENTE DE PAGO'] },
+  cheques: { nombre: 'Plantilla_Cheques.csv', cols: ['cliente', 'Fecha de Pago', 'total'] }
 };
 
 function descargarPlantillas() {
-  var plantillas = [
-    { nombre: 'Plantilla_Ventas.csv',   cols: DSO_COLUMNAS.ventas  },
-    { nombre: 'Plantilla_Saldos.csv',   cols: DSO_COLUMNAS.saldos  },
-    { nombre: 'Plantilla_Cheques.csv',  cols: DSO_COLUMNAS.cheques }
-  ];
-  plantillas.forEach(function(p) {
-    var csv = p.cols.join(',') + '\n';
+  Object.values(DSO_PLANTILLAS).forEach(function(p) {
+    var csv = p.cols.join(',') + '\n' + p.cols.map(function(){ return ''; }).join(',') + '\n';
     var blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
     var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url; a.download = p.nombre; a.click();
+    var a = document.createElement('a'); a.href = url; a.download = p.nombre; a.click();
     URL.revokeObjectURL(url);
   });
 }
 
-function validarColumnas(headers, tipo) {
-  var requeridas = DSO_COLUMNAS[tipo];
-  var headersNorm = headers.map(function(h) { return h.trim(); });
-  var faltantes = requeridas.filter(function(r) { return !headersNorm.includes(r); });
-  return faltantes;
+// Normaliza un header: minúsculas + trim
+function norm(s) { return String(s || '').toLowerCase().trim(); }
+
+// Busca la columna real en un array de headers usando aliases
+function mapearColumna(headers, aliases) {
+  var headersNorm = headers.map(norm);
+  for (var i = 0; i < aliases.length; i++) {
+    var idx = headersNorm.indexOf(norm(aliases[i]));
+    if (idx >= 0) return headers[idx]; // devuelve el nombre original
+  }
+  return null;
 }
 
 function leerExcelRows(file) {
@@ -865,7 +884,7 @@ function leerExcelRows(file) {
         var sheet = wb.Sheets[wb.SheetNames[0]];
         var rows = XLSX.utils.sheet_to_json(sheet, {defval: '', raw: false});
         resolve(rows);
-      } catch(e) { reject(e); }
+      } catch(ex) { reject(ex); }
     };
     reader.onerror = reject;
     reader.readAsArrayBuffer(file);
@@ -875,10 +894,8 @@ function leerExcelRows(file) {
 function cargarArchivoDSO(input, tipo) {
   var file = input.files[0];
   if (!file) return;
-  var areaId = 'dso-upload-' + tipo;
-  var area = document.getElementById(areaId);
+  var area = document.getElementById('dso-upload-' + tipo);
 
-  // Validar columnas antes de aceptar
   var reader = new FileReader();
   reader.onload = function(e) {
     try {
@@ -887,17 +904,28 @@ function cargarArchivoDSO(input, tipo) {
       var sheet = wb.Sheets[wb.SheetNames[0]];
       var rows = XLSX.utils.sheet_to_json(sheet, {defval: '', raw: false});
       if (!rows.length) { alert('El archivo está vacío.'); return; }
+
       var headers = Object.keys(rows[0]);
-      var faltantes = validarColumnas(headers, tipo);
-      if (faltantes.length) {
-        if (area) { area.className = 'upload-area'; area.innerHTML = '<div style="font-size:12px;color:#991b1b;">✗ Formato inválido</div><div style="font-size:11px;color:#94a3b8;margin-top:2px;">Descargá la plantilla oficial</div>'; }
-        alert('Error: El archivo no cumple con el formato requerido.\n\nColumnas faltantes: ' + faltantes.join(', ') + '\n\nDescargá la plantilla oficial con el botón Descargar plantillas.');
-        input.value = '';
-        return;
+      var aliases = DSO_ALIASES[tipo];
+
+      // Validar columnas mínimas requeridas
+      var colContacto = mapearColumna(headers, aliases.contacto);
+      var colMonto    = mapearColumna(headers, aliases.monto);
+
+      if (!colContacto) {
+        if (area) { area.className = 'upload-area'; area.innerHTML = '<div style="font-size:12px;color:#991b1b;">✗ Falta columna de cliente</div>'; }
+        alert('Error: El archivo de ' + tipo + ' no contiene una columna de cliente.\n\nColumnas detectadas: ' + headers.join(', ') + '\n\nDescargá la plantilla con el botón "Descargar plantillas".');
+        input.value = ''; return;
       }
-      // Archivo válido
+      if (!colMonto) {
+        if (area) { area.className = 'upload-area'; area.innerHTML = '<div style="font-size:12px;color:#991b1b;">✗ Falta columna de monto</div>'; }
+        alert('Error: El archivo de ' + tipo + ' no contiene una columna de monto.\n\nColumnas detectadas: ' + headers.join(', ') + '\n\nDescargá la plantilla con el botón "Descargar plantillas".');
+        input.value = ''; return;
+      }
+
+      // Válido
       dsoArchivos[tipo] = file;
-      if (area) { area.className = 'upload-area success'; area.innerHTML = '<div style="font-size:12px;color:#166534;font-weight:600;">✓ ' + file.name + '</div>'; }
+      if (area) { area.className = 'upload-area success'; area.innerHTML = '<div style="font-size:12px;color:#166534;font-weight:600;">✓ ' + file.name + '</div><div style="font-size:11px;color:#166534;margin-top:2px;">Cliente: "' + colContacto + '" · Monto: "' + colMonto + '"</div>'; }
       var hayArchivo = dsoArchivos.saldos || dsoArchivos.ventas || dsoArchivos.cheques;
       document.getElementById('dso-btn-calcular').style.display = hayArchivo ? 'block' : 'none';
     } catch(err) { alert('Error al leer el archivo: ' + err.message); }
@@ -907,7 +935,7 @@ function cargarArchivoDSO(input, tipo) {
 
 async function procesarDSO() {
   var hayArchivo = dsoArchivos.saldos || dsoArchivos.ventas || dsoArchivos.cheques;
-  if (!hayArchivo) { alert('Subí al menos un archivo para calcular el DSO.'); return; }
+  if (!hayArchivo) { alert('Subí al menos un archivo.'); return; }
 
   document.getElementById('dso-loading').style.display = 'block';
   document.getElementById('dso-loading').innerHTML = '<div class="loading-spinner"></div><div style="font-size:13px;color:#64748b;margin-top:8px;">Calculando DSO...</div>';
@@ -919,54 +947,81 @@ async function procesarDSO() {
     var rowsSaldos  = dsoArchivos.saldos  ? await leerExcelRows(dsoArchivos.saldos)  : [];
     var rowsCheques = dsoArchivos.cheques ? await leerExcelRows(dsoArchivos.cheques) : [];
 
-    // ── Ventas: agrupar por Contacto, sumar Total (excluir negativos = NC) ──
-    var ventasPorCliente = {};
-    var fechas = [];
-    rowsVentas.forEach(function(r) {
-      var contacto = String(r['Contacto'] || '').trim();
-      var total = parseFloat(String(r['Total'] || '0').replace(/[^0-9.-]/g, '')) || 0;
-      var fecha = r['Fecha de factura'];
-      if (total <= 0) return; // excluir notas de crédito
-      if (!ventasPorCliente[contacto]) ventasPorCliente[contacto] = 0;
-      ventasPorCliente[contacto] += total;
-      if (fecha) {
-        var d = new Date(fecha);
-        if (!isNaN(d)) fechas.push(d);
-      }
-    });
-
-    // Período en días
-    var diasPeriodo = 90; // default
-    if (fechas.length >= 2) {
-      fechas.sort(function(a,b){return a-b;});
-      diasPeriodo = Math.max(1, Math.round((fechas[fechas.length-1] - fechas[0]) / (1000*60*60*24)));
+    function parseMonto(v) {
+      return parseFloat(String(v || '0').replace(/[$, ]/g, '').replace(',', '.')) || 0;
+    }
+    function parseFecha(v) {
+      if (!v) return null;
+      var d = new Date(v);
+      return isNaN(d) ? null : d;
     }
 
-    // ── Saldos: agrupar por Contacto ──
+    // ── VENTAS ──
+    var ventasPorCliente = {};
+    var fechas = [];
+    if (rowsVentas.length) {
+      var hV = Object.keys(rowsVentas[0]);
+      var cV = mapearColumna(hV, DSO_ALIASES.ventas.contacto);
+      var mV = mapearColumna(hV, DSO_ALIASES.ventas.monto);
+      var fV = mapearColumna(hV, DSO_ALIASES.ventas.fecha);
+      if (!cV) throw new Error('Archivo de ventas: no se encontró columna de cliente. Columnas: ' + hV.join(', '));
+      if (!mV) throw new Error('Archivo de ventas: no se encontró columna de monto. Columnas: ' + hV.join(', '));
+      rowsVentas.forEach(function(r) {
+        var contacto = String(r[cV] || '').trim();
+        var total = parseMonto(r[mV]);
+        if (!contacto || total <= 0) return; // excluir NC y vacíos
+        ventasPorCliente[contacto] = (ventasPorCliente[contacto] || 0) + total;
+        if (fV) { var d = parseFecha(r[fV]); if (d) fechas.push(d); }
+      });
+    }
+
+    // Período
+    var diasPeriodo = 90;
+    if (fechas.length >= 2) {
+      fechas.sort(function(a,b){return a-b;});
+      diasPeriodo = Math.max(1, Math.round((fechas[fechas.length-1]-fechas[0])/(1000*60*60*24)));
+    }
+
+    // ── SALDOS ──
     var saldosPorCliente = {};
-    rowsSaldos.forEach(function(r) {
-      var contacto = String(r['Contacto'] || '').trim();
-      var saldo = parseFloat(String(r['SALDO PENDIENTE DE PAGO'] || '0').replace(/[^0-9.-]/g, '')) || 0;
-      if (!saldosPorCliente[contacto]) saldosPorCliente[contacto] = 0;
-      saldosPorCliente[contacto] += Math.abs(saldo);
-    });
+    if (rowsSaldos.length) {
+      var hS = Object.keys(rowsSaldos[0]);
+      var cS = mapearColumna(hS, DSO_ALIASES.saldos.contacto);
+      var mS = mapearColumna(hS, DSO_ALIASES.saldos.monto);
+      if (!cS) throw new Error('Archivo de saldos: no se encontró columna de cliente. Columnas: ' + hS.join(', '));
+      if (!mS) throw new Error('Archivo de saldos: no se encontró columna de monto. Columnas: ' + hS.join(', '));
+      rowsSaldos.forEach(function(r) {
+        var contacto = String(r[cS] || '').trim();
+        var saldo = Math.abs(parseMonto(r[mS]));
+        if (!contacto || saldo === 0) return;
+        saldosPorCliente[contacto] = (saldosPorCliente[contacto] || 0) + saldo;
+      });
+    }
 
-    // ── Cheques: agrupar por Cliente/Proveedor ──
+    // ── CHEQUES ──
     var chequesPorCliente = {};
-    rowsCheques.forEach(function(r) {
-      var contacto = String(r['Cliente/Proveedor'] || '').trim();
-      var importe = parseFloat(String(r['Importe'] || '0').replace(/[^0-9.-]/g, '')) || 0;
-      if (!chequesPorCliente[contacto]) chequesPorCliente[contacto] = 0;
-      chequesPorCliente[contacto] += Math.abs(importe);
-    });
+    if (rowsCheques.length) {
+      var hC = Object.keys(rowsCheques[0]);
+      var cC = mapearColumna(hC, DSO_ALIASES.cheques.contacto);
+      var mC = mapearColumna(hC, DSO_ALIASES.cheques.monto);
+      if (!cC) throw new Error('Archivo de cheques: no se encontró columna de cliente. Columnas: ' + hC.join(', '));
+      if (!mC) throw new Error('Archivo de cheques: no se encontró columna de monto. Columnas: ' + hC.join(', '));
+      rowsCheques.forEach(function(r) {
+        var contacto = String(r[cC] || '').trim();
+        var importe = Math.abs(parseMonto(r[mC]));
+        if (!contacto || importe === 0) return;
+        chequesPorCliente[contacto] = (chequesPorCliente[contacto] || 0) + importe;
+      });
+    }
 
-    // ── Unir clientes y calcular DSO por cliente ──
+    // ── CONSOLIDAR POR CLIENTE ──
     var todosClientes = new Set(
-      Object.keys(ventasPorCliente).concat(Object.keys(saldosPorCliente)).concat(Object.keys(chequesPorCliente))
+      Object.keys(ventasPorCliente)
+        .concat(Object.keys(saldosPorCliente))
+        .concat(Object.keys(chequesPorCliente))
     );
 
-    var ventasNetasTotal = 0;
-    var activoTotal = 0;
+    var ventasNetasTotal = 0, activoTotal = 0;
     dsoDatos = [];
 
     todosClientes.forEach(function(contacto) {
@@ -974,30 +1029,24 @@ async function procesarDSO() {
       var ventas  = ventasPorCliente[contacto]  || 0;
       var saldo   = saldosPorCliente[contacto]  || 0;
       var cheques = chequesPorCliente[contacto] || 0;
-      var activo  = saldo + cheques; // sumar cheques al riesgo, no restar
+      var activo  = saldo + cheques; // cheques suman al riesgo
       ventasNetasTotal += ventas;
       activoTotal += activo;
-      // DSO individual: (activo / ventas) * días — solo si tiene ventas
-      var dsoCliente = 0;
-      if (ventas > 0 && activo > 0) {
-        dsoCliente = Math.round((activo / ventas) * diasPeriodo);
-      } else if (activo > 0) {
-        dsoCliente = 999; // sin ventas pero con saldo = dato incompleto
-      }
+      var dsoCliente = (ventas > 0 && activo > 0)
+        ? Math.round((activo / ventas) * diasPeriodo)
+        : 0;
       if (activo > 0 || ventas > 0) {
         dsoDatos.push({nombre: contacto, saldo: activo, dso: dsoCliente});
       }
     });
 
-    // DSO global
-    var dsoGlobal = 0;
-    if (ventasNetasTotal > 0 && activoTotal > 0) {
-      dsoGlobal = Math.round((activoTotal / ventasNetasTotal) * diasPeriodo);
-    }
+    // ── DSO GLOBAL ──
+    var dsoGlobal = (ventasNetasTotal > 0 && activoTotal > 0)
+      ? Math.round((activoTotal / ventasNetasTotal) * diasPeriodo)
+      : 0;
 
     var estaCompleto = !!(dsoArchivos.ventas && dsoArchivos.saldos);
-    dsoDatos = dsoDatos.filter(function(c){return c.dso < 999;}).sort(function(a,b){return b.dso-a.dso;});
-    var totalClientes = dsoDatos.length;
+    dsoDatos = dsoDatos.filter(function(c){return c.dso > 0;}).sort(function(a,b){return b.dso-a.dso;});
 
     document.getElementById('dso-loading').style.display = 'none';
     document.getElementById('dso-resultado').style.display = 'block';
@@ -1006,7 +1055,7 @@ async function procesarDSO() {
     // Guardar y sincronizar
     localStorage.setItem('piat_dso_global', dsoGlobal);
     localStorage.setItem('piat_dso_saldo_total', activoTotal);
-    localStorage.setItem('piat_dso_clientes_total', totalClientes);
+    localStorage.setItem('piat_dso_clientes_total', dsoDatos.length);
     localStorage.setItem('piat_dso_datos', JSON.stringify(dsoDatos));
     sincronizarServidor();
 
@@ -1015,34 +1064,32 @@ async function procesarDSO() {
     document.getElementById('dso-numero').textContent = dsoGlobal;
     document.getElementById('dso-numero').style.color = colDSO.color;
     document.getElementById('dso-saldo-total').textContent = '$' + Math.round(activoTotal).toLocaleString('es-AR');
-    document.getElementById('dso-clientes-total').textContent = totalClientes;
-
+    document.getElementById('dso-clientes-total').textContent = dsoDatos.length;
     var metDso = document.getElementById('met-dso');
     if (metDso) { metDso.textContent = dsoGlobal; metDso.style.color = colDSO.color; }
 
-    var badgeCalculo = estaCompleto
+    // Benchmark
+    var badge = estaCompleto
       ? '<span style="font-size:11px;padding:3px 10px;background:#dcfce7;color:#166534;border-radius:20px;font-weight:600;">✓ Cálculo completo</span>'
-      : '<span style="font-size:11px;padding:3px 10px;background:#fefce8;color:#854d0e;border-radius:20px;font-weight:600;">⚠ Cálculo aproximado — falta archivo de ventas o saldos</span>';
-
-    var benchmarkHtml = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">' + badgeCalculo;
-    benchmarkHtml += '<span style="font-size:11px;color:#64748b;">Período: ' + diasPeriodo + ' días</span>';
-    benchmarkHtml += '</div>';
-    benchmarkHtml += '<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">';
-    benchmarkHtml += '<div style="font-size:13px;color:#64748b;"><strong style="color:var(--azul-oscuro);">Referencia del sector:</strong> 45–55 días es normal · Más de 65 días es alerta</div>';
-    benchmarkHtml += '<div style="display:flex;gap:8px;">';
-    benchmarkHtml += '<span style="font-size:11px;padding:3px 10px;background:#dcfce7;color:#166534;border-radius:20px;font-weight:600;">Normal &lt;' + getDSOUmbral() + 'd</span>';
-    benchmarkHtml += '<span style="font-size:11px;padding:3px 10px;background:#fefce8;color:#854d0e;border-radius:20px;font-weight:600;">Atención ' + getDSOUmbral() + '–' + getDSOUmbralAlto() + 'd</span>';
-    benchmarkHtml += '<span style="font-size:11px;padding:3px 10px;background:#fee2e2;color:#991b1b;border-radius:20px;font-weight:600;">Crítico &gt;' + getDSOUmbralAlto() + 'd</span>';
-    benchmarkHtml += '</div></div>';
-    benchmarkHtml += '<div style="margin-top:8px;font-size:12px;color:#94a3b8;">🔒 DSO promedio del sector: disponible cuando la Red de Bodegas esté activa</div>';
-    document.getElementById('dso-benchmark').innerHTML = benchmarkHtml;
+      : '<span style="font-size:11px;padding:3px 10px;background:#fefce8;color:#854d0e;border-radius:20px;font-weight:600;">⚠ Cálculo aproximado</span>';
+    var bHtml = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">' + badge;
+    bHtml += '<span style="font-size:11px;color:#64748b;">Período analizado: ' + diasPeriodo + ' días</span></div>';
+    bHtml += '<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">';
+    bHtml += '<div style="font-size:13px;color:#64748b;"><strong style="color:var(--azul-oscuro);">Referencia del sector:</strong> 45–55 días es normal · Más de 65 días es alerta</div>';
+    bHtml += '<div style="display:flex;gap:8px;">';
+    bHtml += '<span style="font-size:11px;padding:3px 10px;background:#dcfce7;color:#166534;border-radius:20px;font-weight:600;">Normal &lt;' + getDSOUmbral() + 'd</span>';
+    bHtml += '<span style="font-size:11px;padding:3px 10px;background:#fefce8;color:#854d0e;border-radius:20px;font-weight:600;">Atención ' + getDSOUmbral() + '–' + getDSOUmbralAlto() + 'd</span>';
+    bHtml += '<span style="font-size:11px;padding:3px 10px;background:#fee2e2;color:#991b1b;border-radius:20px;font-weight:600;">Crítico &gt;' + getDSOUmbralAlto() + 'd</span>';
+    bHtml += '</div></div>';
+    bHtml += '<div style="margin-top:8px;font-size:12px;color:#94a3b8;">🔒 DSO promedio del sector: disponible cuando la Red de Bodegas esté activa</div>';
+    document.getElementById('dso-benchmark').innerHTML = bHtml;
 
     renderTablaDSO(dsoDatos);
 
   } catch(err) {
     document.getElementById('dso-loading').style.display = 'none';
     document.getElementById('dso-btn-calcular').disabled = false;
-    alert('Error al calcular: ' + err.message);
+    alert('Error en el cálculo: ' + err.message);
   }
 }
 
