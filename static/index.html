@@ -1297,23 +1297,8 @@ async function consultarCliente() {
     mostrarResultado(raw, null, true);
   }
 
-  if (!nombreFinal) nombreFinal = 'No disponible';
-
-  var avEl = document.getElementById('cli-avatar');
-  var nomEl = document.getElementById('cli-nombre');
-  var metaEl = document.getElementById('cli-meta');
-  var acEl = document.getElementById('cli-acciones');
-  if (avEl) avEl.textContent = nombreFinal !== 'No disponible' ? nombreFinal.charAt(0).toUpperCase() : '?';
-  if (nomEl) nomEl.textContent = nombreFinal;
-  if (metaEl) metaEl.textContent = 'CUIT: ' + raw.slice(0,2) + '-' + raw.slice(2,10) + '-' + raw.slice(10);
-  if (acEl) {
-    var yaEsta = cartera.some(function(c) { return c.cuit === raw; });
-    if (!yaEsta) {
-      acEl.innerHTML = '<button onclick="agregarDesdConsulta(&quot;' + raw + '&quot;, &quot;' + nombreFinal.replace(/"/g,'') + '&quot;)" style="font-size:12px;padding:6px 14px;background:var(--azul-suave);color:var(--azul-claro);border-color:var(--azul-borde);">+ Agregar a cartera</button>';
-    } else {
-      acEl.innerHTML = '<span style="font-size:11px;color:var(--verde);padding:4px 10px;background:var(--verde-bg);border-radius:6px;font-weight:600;">En cartera ✓</span>';
-    }
-  }
+  // mostrarResultado ya maneja el header completo con nombre, badge y botón cartera
+  // No reescribir el header acá
 
   // Mostrar cheques rechazados si el BCRA los trajo
   try {
