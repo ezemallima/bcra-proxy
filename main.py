@@ -1,435 +1,2527 @@
-from flask import Flask, jsonify, send_from_directory, request
-from flask_cors import CORS
-import requests
-import urllib3
-import os
-import json
-import time
-import threading
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vende Seguro</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap');
 
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+  :root {
+    --azul-oscuro: #0f2d52;
+    --azul-medio: #1a56a0;
+    --azul-claro: #2563eb;
+    --azul-suave: #eff6ff;
+    --azul-borde: #bfdbfe;
+    --blanco: #ffffff;
+    --fondo: #f0f5ff;
+    --texto: #0f172a;
+    --texto-suave: #64748b;
+    --rojo: #991b1b;
+    --rojo-bg: #fee2e2;
+    --verde: #166534;
+    --verde-bg: #dcfce7;
+    --naranja: #9a3412;
+    --naranja-bg: #ffedd5;
+  }
 
-app = Flask(__name__, static_folder='static')
-CORS(app)
-app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024
+  * { box-sizing: border-box; margin: 0; padding: 0; }
 
-GEMINI_KEY = os.environ.get('GEMINI_API_KEY', '')
-GEMINI_MODELS = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.0-flash"]
-ALERTAS_FILE = os.path.join(os.getcwd(), 'alertas_cartera.json')
-DATOS_FILE = os.path.join(os.getcwd(), 'datos_bodega.json')
-WSP_FILE = os.path.join(os.getcwd(), 'whatsapp_index.json')
+  body {
+    font-family: 'DM Sans', -apple-system, sans-serif;
+    background: var(--fondo);
+    color: var(--texto);
+    font-size: 15px;
+  }
 
-# Caché de consultas BCRA — evita re-consultar el mismo CUIT en 24hs
-bcra_cache = {}  # {cuit: {data: ..., timestamp: ...}}
-CACHE_TTL = 60 * 60 * 24  # 24 horas en segundos
+  /* TOPBAR */
+  .topbar {
+    background: var(--azul-oscuro);
+    padding: 0 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 58px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    flex-wrap: wrap;
+    gap: 8px;
+    box-shadow: 0 2px 12px rgba(15,45,82,0.25);
+  }
 
-def consultar_bcra_cached(cuit):
-    import time
-    ahora = time.time()
-    if cuit in bcra_cache:
-        entrada = bcra_cache[cuit]
-        if ahora - entrada['timestamp'] < CACHE_TTL:
-            return entrada['data'], None  # hit de caché
-    # Miss — consultar BCRA real
-    data, error = consultar_bcra(cuit)
-    if data and not error:
-        bcra_cache[cuit] = {'data': data, 'timestamp': ahora}
-    return data, error
+  .logo {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.1;
+  }
 
-# Estado de verificación en memoria
-verificacion_estado = {
-    "corriendo": False,
-    "progreso": 0,
-    "total": 0,
-    "cliente_actual": "",
-    "mensaje": ""
+  .logo-nombre {
+    font-family: 'Syne', sans-serif;
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--blanco);
+    letter-spacing: -0.5px;
+  }
+
+  .logo-slogan {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 10px;
+    font-weight: 300;
+    font-style: italic;
+    color: #93c5fd;
+    letter-spacing: 0.5px;
+  }
+
+  .status-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .proxy-status { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #93c5fd; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #475569; flex-shrink: 0; }
+  .dot.online { background: #22c55e; }
+  .dot.offline { background: #ef4444; }
+
+  /* CONTAINER */
+  .container { max-width: 860px; margin: 0 auto; padding: 1.5rem 1rem; }
+
+  /* TABS */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 1.5rem;
+    background: var(--blanco);
+    border: 1px solid var(--azul-borde);
+    border-radius: 12px;
+    padding: 4px;
+    flex-wrap: wrap;
+    box-shadow: 0 1px 4px rgba(37,99,235,0.08);
+  }
+
+  .tab {
+    flex: 1;
+    padding: 8px;
+    font-size: 13px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    background: transparent;
+    color: var(--texto-suave);
+    font-weight: 500;
+    transition: all 0.15s;
+    min-width: 80px;
+    font-family: 'DM Sans', sans-serif;
+  }
+
+  .tab:hover { background: var(--azul-suave); color: var(--azul-claro); }
+  .tab.active { background: var(--azul-claro); color: var(--blanco); box-shadow: 0 2px 8px rgba(37,99,235,0.3); }
+
+  /* SECTIONS */
+  .section { display: none; }
+  .section.active { display: block; }
+
+  /* CARDS */
+  .card {
+    background: var(--blanco);
+    border: 1px solid var(--azul-borde);
+    border-radius: 14px;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 1px 4px rgba(37,99,235,0.06);
+  }
+
+  .card-title {
+    font-size: 11px;
+    color: var(--azul-claro);
+    margin-bottom: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+
+  /* INPUTS */
+  .input-row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+
+  input, select, textarea {
+    font-family: 'DM Sans', inherit;
+    font-size: 14px;
+    padding: 9px 12px;
+    border: 1px solid var(--azul-borde);
+    border-radius: 8px;
+    background: var(--blanco);
+    color: var(--texto);
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--azul-claro);
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
+  }
+
+  input { flex: 1; min-width: 120px; }
+  textarea { width: 100%; resize: vertical; }
+
+  /* BUTTONS */
+  button {
+    font-family: 'DM Sans', inherit;
+    font-size: 14px;
+    padding: 9px 18px;
+    border: 1px solid var(--azul-borde);
+    border-radius: 8px;
+    background: var(--blanco);
+    color: var(--texto);
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+
+  button:hover { background: var(--azul-suave); border-color: var(--azul-claro); color: var(--azul-claro); }
+  button.primary { background: var(--azul-claro); color: var(--blanco); border-color: var(--azul-claro); }
+  button.primary:hover { background: var(--azul-medio); border-color: var(--azul-medio); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* BADGES */
+  .badge { display: inline-block; font-size: 11px; padding: 3px 10px; border-radius: 6px; font-weight: 600; }
+  .badge-success { background: var(--verde-bg); color: var(--verde); }
+  .badge-warning { background: var(--naranja-bg); color: var(--naranja); }
+  .badge-danger { background: var(--rojo-bg); color: var(--rojo); }
+  .badge-wsp { background: #dcfce7; color: #166534; }
+  .badge-mora { background: var(--rojo-bg); color: var(--rojo); }
+
+  /* VERDICT */
+  .verdict-box { border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1rem; border: 1px solid; }
+  .verdict-box.aprobar { background: #f0fdf4; border-color: #86efac; }
+  .verdict-box.revisar { background: #fefce8; border-color: #fde047; }
+  .verdict-box.rechazar { background: #fff1f2; border-color: #fca5a5; }
+  .verdict-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; font-family: 'Syne', sans-serif; }
+  .verdict-title.aprobar { color: var(--verde); }
+  .verdict-title.revisar { color: var(--naranja); }
+  .verdict-title.rechazar { color: var(--rojo); }
+  .verdict-detail { font-size: 13px; color: #555; line-height: 1.6; }
+
+  /* MORA ALERT */
+  .mora-alert { background: #fff1f2; border: 1px solid #fca5a5; border-left: 4px solid var(--rojo); border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+  .mora-alert-title { font-size: 14px; font-weight: 600; color: var(--rojo); margin-bottom: 6px; font-family: 'Syne', sans-serif; }
+  .mora-alert-detail { font-size: 13px; color: #555; line-height: 1.6; }
+
+  /* BCRA TABLE */
+  .bcra-table { width: 100%; font-size: 13px; border-collapse: collapse; }
+  .bcra-table th { text-align: left; padding: 7px 10px; border-bottom: 2px solid var(--azul-borde); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--azul-claro); font-weight: 600; }
+  .bcra-table td { padding: 8px 10px; border-bottom: 1px solid var(--azul-suave); }
+  .bcra-table tr:last-child td { border-bottom: none; }
+  .bcra-table tr:hover td { background: var(--azul-suave); }
+  .sit-1 { color: var(--verde); font-weight: 600; }
+  .sit-2 { color: #854d0e; font-weight: 600; }
+  .sit-3, .sit-4, .sit-5, .sit-6 { color: var(--rojo); font-weight: 600; }
+
+  /* WSP */
+  .wsp-thread { background: var(--azul-suave); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; border-left: 3px solid var(--azul-claro); }
+  .wsp-thread-fecha { font-size: 11px; color: var(--azul-claro); font-weight: 600; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .wsp-msg { font-size: 13px; color: #334155; padding: 3px 0; line-height: 1.5; }
+  .wsp-autor { font-weight: 600; color: var(--azul-medio); }
+  .wsp-no-data { font-size: 13px; color: var(--texto-suave); text-align: center; padding: 1rem; }
+
+  /* UPLOAD AREA */
+  .upload-area {
+    border: 2px dashed var(--azul-borde);
+    border-radius: 10px;
+    padding: 1.5rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.15s;
+    background: var(--azul-suave);
+    margin-bottom: 12px;
+  }
+  .upload-area:hover { border-color: var(--azul-claro); background: #dbeafe; }
+  .upload-area.success { border-color: #86efac; border-style: solid; background: #f0fdf4; }
+
+  /* LOADING */
+  #loading-state { text-align: center; padding: 2rem; }
+  .loading-spinner { display: inline-block; width: 32px; height: 32px; border: 3px solid var(--azul-borde); border-top-color: var(--azul-claro); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 12px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* AVATAR */
+  .avatar {
+    width: 44px; height: 44px; border-radius: 12px;
+    background: linear-gradient(135deg, var(--azul-claro), var(--azul-oscuro));
+    color: white; font-size: 18px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Syne', sans-serif;
+    flex-shrink: 0;
+  }
+
+  /* CLIENT ROWS */
+  .client-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 1rem; background: var(--blanco);
+    border: 1px solid var(--azul-borde); border-radius: 10px;
+    margin-bottom: 6px; gap: 8px; flex-wrap: wrap;
+    transition: box-shadow 0.15s;
+  }
+  .client-row:hover { box-shadow: 0 2px 8px rgba(37,99,235,0.12); }
+  .client-name { font-size: 14px; font-weight: 600; color: var(--texto); }
+  .client-meta { font-size: 12px; color: var(--texto-suave); margin-top: 2px; }
+  .client-right { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+  /* ALERT CARDS */
+  .alert-card {
+    padding: 12px 1rem; background: var(--blanco);
+    border: 1px solid #fca5a5; border-left: 4px solid var(--rojo);
+    border-radius: 10px; margin-bottom: 6px;
+  }
+
+  /* HIST ROWS */
+  .hist-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 1rem; background: var(--blanco);
+    border: 1px solid var(--azul-borde); border-radius: 10px;
+    margin-bottom: 6px; gap: 8px; flex-wrap: wrap; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .hist-row:hover { background: var(--azul-suave); }
+  .hist-nombre { font-size: 14px; font-weight: 600; color: var(--texto); }
+  .hist-meta { font-size: 12px; color: var(--texto-suave); margin-top: 2px; }
+
+  /* PROGRESS */
+  .progress-msg { font-size: 13px; color: var(--azul-claro); margin-top: 8px; padding: 8px; background: var(--azul-suave); border-radius: 8px; display: none; }
+  .progress-msg:not(:empty) { display: block; }
+
+  /* INFO GRID */
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px; }
+  .info-grid .full { grid-column: 1 / -1; }
+  .info-grid .lbl { color: var(--texto-suave); margin-right: 4px; }
+
+  /* AFIP */
+  .afip-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 13px; margin-top: 8px; }
+
+  /* EMPTY STATE */
+  .empty-state { text-align: center; color: var(--texto-suave); padding: 2rem; font-size: 14px; }
+
+  /* HIST STYLES */
+  .hist-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 1rem; background: var(--blanco); border: 1px solid var(--azul-borde); border-radius: 10px; margin-bottom: 6px; gap: 8px; flex-wrap: wrap; cursor: pointer; transition: background 0.15s; }
+  .hist-row:hover { background: var(--azul-suave); }
+
+  @media (max-width: 600px) {
+    .topbar { height: auto; padding: 10px 1rem; }
+    .info-grid { grid-template-columns: 1fr; }
+    .afip-grid { grid-template-columns: 1fr; }
+    #dashboard-metricas { grid-template-columns: repeat(2,1fr) !important; }
+  }
+</style>
+</head>
+<body>
+
+<!-- PANTALLA DE CARGA -->
+<div id="splash-screen" style="
+  position: fixed; inset: 0; z-index: 9999;
+  background: linear-gradient(135deg, #0f2d52 0%, #1a56a0 60%, #2563eb 100%);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  transition: opacity 0.6s ease, visibility 0.6s ease;
+">
+  <div style="text-align:center; animation: splashIn 0.8s ease forwards;">
+    <!-- Logo animado -->
+    <div style="margin-bottom: 8px;">
+      <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0 4px 16px rgba(37,99,235,0.4));">
+        <rect width="64" height="64" rx="16" fill="white" fill-opacity="0.15"/>
+        <path d="M20 22 L32 14 L44 22 L44 36 C44 42 38 48 32 50 C26 48 20 42 20 36 Z" fill="white" fill-opacity="0.9"/>
+        <path d="M27 32 L31 36 L38 28" stroke="#1a56a0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <!-- Nombre -->
+    <div style="
+      font-family: 'Syne', sans-serif;
+      font-size: 36px;
+      font-weight: 800;
+      color: white;
+      letter-spacing: -1px;
+      line-height: 1;
+      margin-bottom: 6px;
+    ">Vende Seguro</div>
+    <!-- Slogan -->
+    <div style="
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      font-weight: 300;
+      font-style: italic;
+      color: #93c5fd;
+      letter-spacing: 1px;
+      margin-bottom: 48px;
+    ">vende sin riesgo</div>
+    <!-- Barra de progreso -->
+    <div style="width: 200px; height: 3px; background: rgba(255,255,255,0.2); border-radius: 10px; overflow: hidden; margin: 0 auto;">
+      <div id="splash-bar" style="
+        height: 100%;
+        background: white;
+        border-radius: 10px;
+        width: 0%;
+        animation: loadBar 2.5s ease forwards;
+      "></div>
+    </div>
+    
+  </div>
+</div>
+
+<style>
+@keyframes splashIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes loadBar {
+  0% { width: 0%; }
+  30% { width: 40%; }
+  60% { width: 70%; }
+  85% { width: 90%; }
+  100% { width: 100%; }
+}
+#splash-screen.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+</style>
+
+<div class="topbar">
+  <div class="logo">
+    <span class="logo-nombre">Vende Seguro</span>
+    <span class="logo-slogan">vende sin riesgo</span>
+  </div>
+  <div class="status-bar">
+    <div class="proxy-status"><div class="dot" id="wsp-dot" style="background:#25d366;"></div><span id="wsp-label"></span></div>
+    <div class="proxy-status"><div class="dot" id="mora-dot" style="background:#ccc;"></div><span id="mora-label"></span></div>
+    <div class="proxy-status"><div class="dot" id="proxy-dot"></div><span id="proxy-label"></span></div>
+  </div>
+</div>
+
+<div class="container">
+  <!-- DASHBOARD DE MÉTRICAS -->
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+    <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:var(--azul-oscuro);">Estado de cartera</div>
+    <button class="primary" onclick="generarResumenEjecutivo()" style="font-size:13px;padding:7px 16px;">📄 Resumen ejecutivo</button>
+  </div>
+  <div id="dashboard-metricas" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:1.5rem;">
+    <div style="background:var(--blanco);border:1px solid var(--azul-borde);border-radius:14px;padding:1.25rem;text-align:center;box-shadow:0 1px 4px rgba(37,99,235,0.06);">
+      <div style="font-size:11px;color:var(--azul-claro);font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">Cartera</div>
+      <div id="met-total" style="font-family:'Syne',sans-serif;font-size:36px;font-weight:800;color:var(--azul-oscuro);line-height:1;">—</div>
+      <div style="font-size:11px;color:var(--texto-suave);margin-top:4px;">clientes activos</div>
+    </div>
+    <div style="background:var(--blanco);border:1px solid var(--azul-borde);border-radius:14px;padding:1.25rem;text-align:center;box-shadow:0 1px 4px rgba(37,99,235,0.06);">
+      <div style="font-size:11px;color:#991b1b;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">Alertas BCRA</div>
+      <div id="met-criticos" style="font-family:'Syne',sans-serif;font-size:36px;font-weight:800;color:#991b1b;line-height:1;">—</div>
+      <div style="font-size:11px;color:var(--texto-suave);margin-top:4px;">situación crítica</div>
+    </div>
+    <div style="background:var(--blanco);border:1px solid var(--azul-borde);border-radius:14px;padding:1.25rem;text-align:center;box-shadow:0 1px 4px rgba(37,99,235,0.06);">
+      <div style="font-size:11px;color:#9a3412;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">En Mora</div>
+      <div id="met-mora" style="font-family:'Syne',sans-serif;font-size:36px;font-weight:800;color:#9a3412;line-height:1;">—</div>
+      <div style="font-size:11px;color:var(--texto-suave);margin-top:4px;">mora registrada</div>
+    </div>
+    <div style="background:var(--blanco);border:1px solid var(--azul-borde);border-radius:14px;padding:1.25rem;text-align:center;box-shadow:0 1px 4px rgba(37,99,235,0.06);">
+      <div style="font-size:11px;color:var(--azul-claro);font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">DSO</div>
+      <div id="met-dso" style="font-family:'Syne',sans-serif;font-size:36px;font-weight:800;color:var(--azul-oscuro);line-height:1;">—</div>
+      <div style="font-size:11px;color:var(--texto-suave);margin-top:4px;">días promedio de cobro</div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('consulta',this)">Consultar</button>
+    <button class="tab" onclick="switchTab('cheques',this)">Cheques</button>
+    <button class="tab" onclick="switchTab('historial',this)">Historial</button>
+    <button class="tab" onclick="switchTab('cartera',this)">Cartera</button>
+    <button class="tab" onclick="switchTab('dso',this)">DSO</button>
+    <button class="tab" onclick="switchTab('alertas',this)">Alertas</button>
+    <button class="tab" onclick="switchTab('red',this)">Red</button>
+    <button class="tab" onclick="switchTab('configuracion',this)">Config</button>
+  </div>
+
+  <div id="consulta" class="section active">
+    <div class="card">
+      <div class="card-title">Consulta por CUIT</div>
+      <div class="input-row">
+        <input type="text" id="cuit-input" placeholder="Ej: 20-21310600-8" maxlength="13" onkeydown="if(event.key==='Enter') consultarCliente()" />
+        <button class="primary" onclick="consultarCliente()">Consultar →</button>
+      </div>
+      <div class="hint">BCRA en tiempo real + AFIP + historial de bodegas + moras registradas.</div>
+    </div>
+
+    <div id="loading-state" class="loading-msg" style="display:none;">Consultando...</div>
+
+    <div id="resultado" style="display:none;">
+      <div id="mora-alert-container"></div>
+      <div id="cliente-header" class="card" style="margin-bottom:8px;"></div>
+      <div id="verdict-container"></div>
+
+      <div class="card" style="margin-bottom:8px;">
+        <div class="card-title">Situación BCRA</div>
+        <div id="bcra-data"><div class="empty-state" style="color:#64748b;">Consultando BCRA...</div></div>
+      </div>
+
+      <div id="cheques-rechazados-card" class="card" style="margin-bottom:8px;display:none;">
+        <div class="card-title" style="color:#991b1b;">Cheques rechazados</div>
+        <div id="cheques-rechazados-data"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">AFIP</div>
+        <div id="afip-container"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Historial grupo de bodegas</div>
+        <div id="wsp-data"><div class="wsp-no-data">Buscando en historial...</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Informe crediticio (Veraz / Nosis)</div>
+        <div class="upload-area" id="veraz-area" onclick="document.getElementById('veraz-pdf').click()">
+          <div style="font-size:13px;color:#888;">Hacé clic para subir el PDF de Veraz o Nosis</div>
+          <div style="font-size:12px;color:#aaa;margin-top:4px;">Extrae automáticamente score, cheques, deudas y más</div>
+        </div>
+        <input type="file" id="veraz-pdf" accept=".pdf" style="display:none;" onchange="procesarVeraz(this)" />
+        <div id="veraz-status" style="display:none;font-size:13px;color:#888;margin-bottom:8px;"></div>
+        <div id="veraz-datos" style="display:none;padding:12px;background:#f9f9f7;border-radius:8px;border:1px solid #e0e0d8;margin-bottom:12px;"></div>
+      </div>
+
+      <div id="analisis-resultado" style="display:none;margin-bottom:1rem;padding:1.25rem;background:#fff;border-radius:12px;border:1px solid #e0e0d8;"></div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="primary" onclick="analizarCliente()" id="btn-analizar" style="flex:1;">Analizar riesgo crediticio →</button>
+        <button onclick="exportarReporte()" id="btn-export" style="display:none;">Exportar PDF</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="cheques" class="section">
+    <div class="card">
+      <div class="card-title">Consultar cheque de tercero</div>
+      <p style="font-size:13px;color:#666;line-height:1.6;margin-bottom:12px;">Ingresá el CUIT del librador para saber si conviene aceptar el cheque.</p>
+      <div class="input-row">
+        <input type="text" id="cuit-cheque" placeholder="CUIT del librador (sin guiones)" style="flex:1;" onkeydown="if(event.key==='Enter') consultarCheque()" />
+        <button class="primary" onclick="consultarCheque()">Consultar →</button>
+      </div>
+    </div>
+    <div id="cheque-loading" style="display:none;text-align:center;padding:2rem;color:#888;font-size:13px;">Consultando BCRA y grupo de bodegas...</div>
+    <div id="cheque-resultado" style="display:none;">
+      <div id="cheque-veredicto" style="margin-bottom:8px;"></div>
+      <div id="cheque-header" class="card" style="margin-bottom:8px;"></div>
+      <div class="card" style="margin-bottom:8px;">
+        <div class="card-title">Situación BCRA del librador</div>
+        <div id="cheque-bcra-situacion"></div>
+      </div>
+      <div class="card" style="margin-bottom:8px;">
+        <div class="card-title">Cheques rechazados — BCRA</div>
+        <div id="cheque-bcra-data"></div>
+      </div>
+      <div class="card" style="margin-bottom:8px;">
+        <div class="card-title">Historial grupo de bodegas</div>
+        <div id="cheque-bodegas-data"></div>
+      </div>
+      <div id="cheque-analisis-card" class="card" style="margin-bottom:8px;display:none;">
+        <div class="card-title">Análisis IA</div>
+        <div id="cheque-analisis-data"></div>
+      </div>
+      <button class="primary" onclick="analizarCheque()" id="btn-analizar-cheque" style="width:100%;display:none;">Analizar con IA →</button>
+    </div>
+  </div>
+
+  <div id="historial" class="section">
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <div class="card-title" style="margin-bottom:0;">Clientes consultados</div>
+        <button onclick="limpiarHistorial()" style="font-size:12px;padding:4px 10px;color:#991b1b;">Limpiar</button>
+      </div>
+      <div style="font-size:12px;color:#aaa;">Se guardan automáticamente las últimas 50 consultas.</div>
+    </div>
+    <div id="historial-lista"><div class="empty-state">Todavía no consultaste ningún cliente.</div></div>
+  </div>
+
+  <div id="cartera" class="section">
+    <div class="card">
+      <div class="card-title">Agregar cliente a seguimiento</div>
+      <div class="input-row">
+        <input type="text" id="nuevo-cuit" placeholder="CUIT (sin guiones)" style="max-width:160px;" />
+        <input type="text" id="nuevo-nombre" placeholder="Razón social" style="flex:2;" />
+        <input type="number" id="nuevo-limite" placeholder="Límite $" style="max-width:120px;" />
+        <input type="number" id="nuevo-plazo" placeholder="Plazo días" style="max-width:100px;" />
+        <button class="primary" onclick="agregarCliente()">Agregar</button>
+      </div>
+    </div>
+    <div id="lista-clientes"><div class="empty-state">No hay clientes en seguimiento.</div></div>
+  </div>
+
+  <div id="dso" class="section">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+        <div>
+          <div class="card-title" style="margin-bottom:4px;">Módulo DSO — Días de Venta Pendiente de Cobro</div>
+          <p style="font-size:13px;color:#64748b;margin:0;"><strong style="color:var(--azul-claro);">Referencia sector vitivinícola: 45–55 días.</strong> Usá las plantillas oficiales para garantizar un cálculo correcto.</p>
+        </div>
+        <button onclick="descargarPlantillas()" style="font-size:12px;padding:7px 14px;background:var(--azul-suave);color:var(--azul-claro);border:1px solid var(--azul-borde);border-radius:8px;cursor:pointer;white-space:nowrap;">⬇ Descargar plantillas</button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--azul-claro);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Ventas</div>
+          <div style="font-size:10px;color:#94a3b8;margin-bottom:6px;">Columnas: Contacto · Fecha de factura · Total</div>
+          <div class="upload-area" id="dso-upload-ventas" onclick="document.getElementById('dso-file-ventas').click()" style="padding:12px;margin-bottom:0;cursor:pointer;">
+            <div style="font-size:12px;color:#64748b;">Subir reporte de ventas</div>
+          </div>
+          <input type="file" id="dso-file-ventas" accept=".xlsx,.xls,.csv" style="display:none;" onchange="cargarArchivoDSO(this,'ventas')" />
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--azul-claro);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Saldos</div>
+          <div style="font-size:10px;color:#94a3b8;margin-bottom:6px;">Columnas: Contacto · SALDO PENDIENTE DE PAGO</div>
+          <div class="upload-area" id="dso-upload-saldos" onclick="document.getElementById('dso-file-saldos').click()" style="padding:12px;margin-bottom:0;cursor:pointer;">
+            <div style="font-size:12px;color:#64748b;">Subir reporte de saldos</div>
+          </div>
+          <input type="file" id="dso-file-saldos" accept=".xlsx,.xls,.csv" style="display:none;" onchange="cargarArchivoDSO(this,'saldos')" />
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--azul-claro);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Cheques en cartera</div>
+          <div style="font-size:10px;color:#94a3b8;margin-bottom:6px;">Columnas: Cliente/Proveedor · Fecha de Pago · Importe</div>
+          <div class="upload-area" id="dso-upload-cheques" onclick="document.getElementById('dso-file-cheques').click()" style="padding:12px;margin-bottom:0;cursor:pointer;">
+            <div style="font-size:12px;color:#64748b;">Subir cheques en cartera</div>
+          </div>
+          <input type="file" id="dso-file-cheques" accept=".xlsx,.xls,.csv" style="display:none;" onchange="cargarArchivoDSO(this,'cheques')" />
+        </div>
+      </div>
+      <button class="primary" id="dso-btn-calcular" onclick="procesarDSO()" style="width:100%;display:none;">Calcular DSO →</button>
+    </div>
+
+    <div id="dso-loading" style="display:none;text-align:center;padding:2rem;">
+      <div class="loading-spinner"></div>
+      <div style="font-size:13px;color:#64748b;margin-top:8px;">Calculando DSO...</div>
+    </div>
+
+    <div id="dso-resultado" style="display:none;">
+      <!-- KPI principal -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:1rem;">
+        <div class="card" style="text-align:center;padding:1.5rem 1rem;">
+          <div style="font-size:11px;color:var(--azul-claro);font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">DSO Global</div>
+          <div id="dso-numero" style="font-family:'Syne',sans-serif;font-size:48px;font-weight:800;line-height:1;"></div>
+          <div style="font-size:12px;color:#64748b;margin-top:4px;">días promedio</div>
+        </div>
+        <div class="card" style="text-align:center;padding:1.5rem 1rem;">
+          <div style="font-size:11px;color:var(--azul-claro);font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">Saldo Total</div>
+          <div id="dso-saldo-total" style="font-family:'Syne',sans-serif;font-size:28px;font-weight:800;color:var(--azul-oscuro);line-height:1;"></div>
+          <div style="font-size:12px;color:#64748b;margin-top:4px;">pendiente de cobro</div>
+        </div>
+        <div class="card" style="text-align:center;padding:1.5rem 1rem;">
+          <div style="font-size:11px;color:var(--azul-claro);font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">Clientes</div>
+          <div id="dso-clientes-total" style="font-family:'Syne',sans-serif;font-size:48px;font-weight:800;color:var(--azul-oscuro);line-height:1;"></div>
+          <div style="font-size:12px;color:#64748b;margin-top:4px;">con saldo pendiente</div>
+        </div>
+      </div>
+
+      <!-- Benchmark -->
+      <div id="dso-benchmark" class="card" style="margin-bottom:1rem;"></div>
+
+      <!-- Tabla de clientes -->
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+          <div class="card-title" style="margin-bottom:0;">Detalle por cliente</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="text" id="dso-search" placeholder="Buscar cliente..." style="font-size:13px;padding:6px 10px;width:180px;" oninput="filtrarDSO(this.value)" />
+            <button class="primary" onclick="exportarDSO()" style="font-size:13px;padding:6px 14px;">Exportar Excel</button>
+          </div>
+        </div>
+        <div id="dso-tabla"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="alertas" class="section">
+    <div class="card">
+      <div class="card-title">Monitoreo BCRA — Cartera activa</div>
+      <p style="font-size:13px;color:#666;line-height:1.6;margin-bottom:8px;">
+        Verificá la situación BCRA de todos tus clientes. Se hacen pausas entre consultas para no ser bloqueado por el BCRA. Ejecutá una vez por mes.
+      </p>
+      <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+        <button class="primary" onclick="verificarTodos()" id="btn-verificar" style="flex:1;">Verificar toda la cartera →</button>
+        <button onclick="limpiarAlertas()" style="font-size:13px;color:#991b1b;">Limpiar alertas</button>
+      </div>
+      <div class="progress-msg" id="verificar-progress"></div>
+    </div>
+
+    <div id="alertas-nuevas" style="display:none;margin-bottom:1rem;">
+      <div style="font-size:12px;color:#991b1b;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">⚠ Cambios detectados</div>
+      <div id="alertas-lista"></div>
+    </div>
+
+    <div class="card" style="margin-bottom:8px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <div class="card-title" style="margin-bottom:0;">Estado actual de la cartera</div>
+        <div style="font-size:12px;color:#888;" id="ultima-verificacion"></div>
+      </div>
+      <div id="cartera-bcra-lista"><div class="empty-state">No hay clientes en la cartera.<br>Agregá clientes en la pestaña Cartera.</div></div>
+    </div>
+  </div>
+
+  <div id="red" class="section">
+    <!-- Header -->
+    <div class="card" style="text-align:center;padding:2.5rem 1.5rem;background:linear-gradient(135deg,#0f2d52 0%,#1a56a0 100%);border:none;">
+      <div style="font-family:'Syne',sans-serif;font-size:28px;font-weight:800;color:#fff;margin-bottom:6px;">Red de Bodegas</div>
+      <div style="font-size:14px;color:#93c5fd;font-style:italic;font-weight:300;">La inteligencia colectiva del sector</div>
+    </div>
+
+    <!-- Concepto -->
+    <div class="card" style="margin-top:12px;">
+      <p style="font-size:15px;color:#334155;line-height:1.8;text-align:center;max-width:600px;margin:0 auto;">
+        Cada bodega que usa Vende Seguro aporta su historial de clientes de forma anónima. 
+        Si un cliente le rebotó cheques a tres bodegas del sector, vos lo sabés antes de venderle. 
+        <strong>Lo que hoy circula por WhatsApp, mañana es un sistema.</strong>
+      </p>
+    </div>
+
+    <!-- Ilustración SVG de red -->
+    <div class="card" style="text-align:center;padding:2rem;">
+      <svg width="100%" height="200" viewBox="0 0 500 200" xmlns="http://www.w3.org/2000/svg" style="max-width:500px;">
+        <!-- Líneas de conexión -->
+        <line x1="250" y1="100" x2="100" y2="50" stroke="#bfdbfe" stroke-width="2"/>
+        <line x1="250" y1="100" x2="400" y2="50" stroke="#bfdbfe" stroke-width="2"/>
+        <line x1="250" y1="100" x2="80" y2="160" stroke="#bfdbfe" stroke-width="2"/>
+        <line x1="250" y1="100" x2="420" y2="160" stroke="#bfdbfe" stroke-width="2"/>
+        <line x1="250" y1="100" x2="250" y2="30" stroke="#bfdbfe" stroke-width="2"/>
+        <line x1="100" y1="50" x2="80" y2="160" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4"/>
+        <line x1="400" y1="50" x2="420" y2="160" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4"/>
+        <!-- Nodo central (tu bodega) -->
+        <circle cx="250" cy="100" r="28" fill="#2563eb"/>
+        <text x="250" y="95" text-anchor="middle" fill="white" font-size="10" font-family="sans-serif" font-weight="bold">TU</text>
+        <text x="250" y="108" text-anchor="middle" fill="white" font-size="10" font-family="sans-serif" font-weight="bold">BODEGA</text>
+        <!-- Nodos externos -->
+        <circle cx="100" cy="50" r="18" fill="#1a56a0"/>
+        <text x="100" y="54" text-anchor="middle" fill="white" font-size="9" font-family="sans-serif">Bodega</text>
+        <circle cx="400" cy="50" r="18" fill="#1a56a0"/>
+        <text x="400" y="54" text-anchor="middle" fill="white" font-size="9" font-family="sans-serif">Bodega</text>
+        <circle cx="80" cy="160" r="18" fill="#1a56a0" opacity="0.6"/>
+        <text x="80" y="164" text-anchor="middle" fill="white" font-size="9" font-family="sans-serif">+</text>
+        <circle cx="420" cy="160" r="18" fill="#1a56a0" opacity="0.6"/>
+        <text x="420" y="164" text-anchor="middle" fill="white" font-size="9" font-family="sans-serif">+</text>
+        <circle cx="250" cy="30" r="14" fill="#1a56a0" opacity="0.5"/>
+        <text x="250" y="34" text-anchor="middle" fill="white" font-size="8" font-family="sans-serif">+</text>
+        <!-- Punto animado cliente compartido -->
+        <circle cx="175" cy="75" r="6" fill="#ef4444" opacity="0.9">
+          <animate attributeName="opacity" values="0.9;0.3;0.9" dur="2s" repeatCount="indefinite"/>
+        </circle>
+        <text x="175" y="65" text-anchor="middle" fill="#991b1b" font-size="8" font-family="sans-serif">cliente riesgoso</text>
+      </svg>
+      <p style="font-size:12px;color:#94a3b8;margin-top:8px;">Los puntos rojos son clientes con alertas compartidas entre bodegas</p>
+    </div>
+
+    <!-- Contador -->
+    <div class="card" style="text-align:center;padding:1.5rem;">
+      <div style="font-size:12px;color:var(--azul-claro);font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">Bodegas en la red</div>
+      <div id="red-contador" style="font-family:'Syne',sans-serif;font-size:64px;font-weight:800;color:var(--azul-oscuro);line-height:1;">1</div>
+      <div style="font-size:13px;color:#64748b;margin-top:4px;">y creciendo</div>
+    </div>
+
+    <!-- CTA -->
+    <div class="card" style="text-align:center;padding:1.5rem;">
+      <div id="red-cta-form">
+        <p style="font-size:14px;color:#334155;margin-bottom:16px;">¿Querés que tu bodega sea parte de la red y acceder a la inteligencia compartida del sector?</p>
+        <button class="primary" onclick="sumarsePedido()" style="font-size:15px;padding:12px 32px;">Quiero sumarme a la red →</button>
+      </div>
+      <div id="red-confirmacion" style="display:none;">
+        <div style="font-size:32px;margin-bottom:8px;">🎉</div>
+        <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:700;color:var(--azul-oscuro);margin-bottom:6px;">¡Genial, te anotamos!</div>
+        <div style="font-size:14px;color:#64748b;">Nos ponemos en contacto cuando lancemos la red completa.<br>Mientras tanto, seguí usando Vende Seguro para proteger tus ventas.</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="configuracion" class="section">
+    <div class="card">
+      <div class="card" style="margin-bottom:1rem;">
+      <div class="card-title">Umbrales DSO</div>
+      <p style="font-size:13px;color:#666;margin-bottom:12px;">Configurá los días de corte para el semáforo de DSO.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div>
+          <div style="font-size:12px;color:#64748b;margin-bottom:4px;">Normal hasta (días)</div>
+          <input type="number" id="input-dso-bajo" placeholder="45" style="width:100%;" value="" />
+        </div>
+        <div>
+          <div style="font-size:12px;color:#64748b;margin-bottom:4px;">Crítico desde (días)</div>
+          <input type="number" id="input-dso-alto" placeholder="65" style="width:100%;" value="" />
+        </div>
+      </div>
+      <button class="primary" onclick="guardarUmbralesDSO()">Guardar umbrales</button>
+      <div id="dso-umbral-status" style="font-size:12px;color:#166534;margin-top:6px;display:none;">✓ Umbrales guardados</div>
+    </div>
+
+    <div class="card" style="margin-bottom:1rem;">
+      <div class="card-title">Nombre de tu bodega</div>
+      <p style="font-size:13px;color:#666;margin-bottom:12px;">Este nombre aparece en los análisis y reportes generados.</p>
+      <div class="input-row">
+        <input type="text" id="input-nombre-bodega" placeholder="Ej: Bodega El Cerro S.A." style="flex:1;" value="" />
+        <button class="primary" onclick="guardarNombreBodega()">Guardar</button>
+      </div>
+      <div id="nombre-bodega-status" style="font-size:12px;color:#166534;margin-top:6px;display:none;">✓ Nombre guardado</div>
+    </div>
+
+    <div class="card-title">Actualizar historial de bodegas (WhatsApp)</div>
+      <p style="font-size:13px;color:#666;line-height:1.6;margin-bottom:12px;">
+        Exportá el chat desde WhatsApp (sin archivos multimedia) y subí el archivo .txt. Solo se agregan los mensajes nuevos.
+      </p>
+      <div class="upload-area" id="wsp-area" onclick="document.getElementById('wsp-file').click()">
+        <div style="font-size:13px;color:#888;">Hacé clic para subir el chat exportado (.txt)</div>
+        <div style="font-size:12px;color:#aaa;margin-top:4px;">Se procesan solo los mensajes nuevos</div>
+      </div>
+      <input type="file" id="wsp-file" accept=".txt" style="display:none;" onchange="actualizarWSP(this)" />
+      <div id="wsp-update-status" style="font-size:13px;color:#888;margin-top:8px;"></div>
+    </div>
+  </div>
+  
+
+  
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+let wspIndex = null;
+let morasIndex = null;
+let verazData = null;
+let ultimoAnalisis = null;
+let historialConsultas = JSON.parse(localStorage.getItem('piat_historial') || '[]');
+
+function getNombreBodega() {
+  return localStorage.getItem('piat_nombre_bodega') || 'tu bodega';
+}
+let cartera = JSON.parse(localStorage.getItem('piat_cartera') || '[]');
+let situaciones = JSON.parse(localStorage.getItem('piat_situaciones') || '{}');
+let alertas = JSON.parse(localStorage.getItem('piat_alertas') || '[]');
+
+
+// ─── RED BODEGAS ─────────────────────────────────────────────
+function sumarsRed() {
+  document.getElementById('red-cta-area').style.display = 'none';
+  document.getElementById('red-confirmacion').style.display = 'block';
+  // Incrementar contador en localStorage
+  var n = parseInt(localStorage.getItem('piat_red_bodegas') || '1') + 1;
+  localStorage.setItem('piat_red_bodegas', n);
+  document.getElementById('red-contador').textContent = n;
 }
 
-def gemini_request(payload, timeout=45):
-    for modelo in GEMINI_MODELS:
-        url = "https://generativelanguage.googleapis.com/v1beta/models/" + modelo + ":generateContent?key=" + GEMINI_KEY
-        for intento in range(3):
-            try:
-                r = requests.post(url, headers={"Content-Type": "application/json"}, json=payload, timeout=timeout)
-                data = r.json()
-                if 'error' in data:
-                    code = data['error'].get('code', 0)
-                    msg = data['error'].get('message', '')
-                    if code in [429, 503] or 'demanda' in msg.lower() or 'quota' in msg.lower():
-                        time.sleep(3 * (intento + 1))
-                        continue
-                    break
-                texto = data['candidates'][0]['content']['parts'][0]['text']
-                return texto, None
-            except Exception:
-                if intento < 2:
-                    time.sleep(2)
-                continue
-    return None, "No se pudo conectar."
+// ─── RESUMEN EJECUTIVO PDF ────────────────────────────────────
 
-def consultar_bcra(cuit, reintentos=3):
-    url = "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit
-    for i in range(reintentos):
-        try:
-            r = requests.get(url, timeout=12, verify=False)
-            if r.status_code == 200:
-                return r.json(), None
-            elif r.status_code == 404:
-                return {"results": {"denominacion": "", "periodos": []}, "sin_deudas": True}, None
-            elif r.status_code in [500, 503]:
-                if i < reintentos - 1:
-                    time.sleep(2)
-                    continue
-                return None, "timeout"
-            else:
-                return None, "Error " + str(r.status_code)
-        except requests.Timeout:
-            if i < reintentos - 1:
-                time.sleep(2)
-                continue
-            return None, "timeout"
-        except Exception as e:
-            return None, str(e)
-    return None, "timeout"
+// ─── MÓDULO DSO ────────────────────────────────────────────
+var dsoDatos = [];
 
-def analizar_bodegas_server(cuit, nombre, mensajes):
-    if not GEMINI_KEY or not mensajes:
-        return False, ""
-    try:
-        mensajes_texto = "\n".join(["- " + m for m in mensajes[:10]])
-        prompt = (
-            "Analiza estos mensajes del grupo de bodegas sobre " + nombre + " (CUIT: " + cuit + ").\n"
-            "Determina si hay riesgo crediticio REAL para este cliente especifico.\n\n"
-            "MENSAJES:\n" + mensajes_texto + "\n\n"
-            "REGLAS:\n"
-            "- Solo negativo si hay deudas impagas NO resueltas, estafas o desaparicion.\n"
-            "- Cheques rechazados pero reemplazados = NO negativo.\n"
-            "- Mensaje sobre OTRO CUIT diferente = NO negativo para este cliente.\n"
-            "- Buen cliente, paga en termino = POSITIVO.\n\n"
-            'Responde SOLO con este JSON: {"es_negativo": false, "motivo": "texto"}'
-        )
-        payload = {"contents": [{"parts": [{"text": prompt}]}]}
-        texto, error = gemini_request(payload, timeout=30)
-        if error or not texto:
-            return False, ""
-        texto_limpio = texto.strip().replace("```json", "").replace("```", "").strip()
-        resultado = json.loads(texto_limpio)
-        return resultado.get("es_negativo", False), resultado.get("motivo", "")
-    except Exception:
-        return False, ""
+function getDSOUmbral() {
+  return parseInt(localStorage.getItem('piat_dso_umbral') || '45');
+}
 
-def ejecutar_verificacion(cartera_data):
-    global verificacion_estado
-    verificacion_estado["corriendo"] = True
-    verificacion_estado["progreso"] = 0
-    verificacion_estado["total"] = len(cartera_data)
-    verificacion_estado["mensaje"] = "Iniciando verificacion..."
+function getDSOUmbralAlto() {
+  return parseInt(localStorage.getItem('piat_dso_umbral_alto') || '65');
+}
 
-    palabras_riesgo = [
-        'rechaz', 'no paga', 'cuidado', 'mora', 'deuda', 'incobrable',
-        'estafa', 'desapareci', 'fuga', 'impago', 'quiebra', 'concurso',
-        'sin fondos', 'rebotado', 'mal pagador', 'no responde', 'no contesta',
-        'bloqueado', 'vencid', 'no cancel', 'no liquido', 'no abono',
-        'atencion', 'ojo', 'problema', 'judicial', 'cobrar', 'nos debe', 'debia'
-    ]
+function colorDSO(dias) {
+  var bajo = getDSOUmbral();
+  var alto = getDSOUmbralAlto();
+  if (dias < bajo) return {color: '#166534', bg: '#dcfce7', label: 'Normal'};
+  if (dias < alto) return {color: '#854d0e', bg: '#fefce8', label: 'Atención'};
+  return {color: '#991b1b', bg: '#fee2e2', label: 'Crítico'};
+}
 
-    # Cargar índice de WhatsApp
-    wsp_index = {}
-    try:
-        with open(WSP_FILE, 'r', encoding='utf-8') as f:
-            wsp_index = json.load(f)
-    except Exception:
-        pass
+// ─── MÓDULO DSO — MAPEO FLEXIBLE + CÁLCULO DETERMINÍSTICO ────
+var dsoArchivos = {saldos: null, ventas: null, cheques: null};
 
-    nuevas_alertas = []
-    cartera_actualizada = []
+// Aliases por tipo de archivo — busca estos nombres sin importar mayúsculas
+var DSO_ALIASES = {
+  saldos: {
+    contacto: ['cliente', 'contacto', 'razon social', 'razón social', 'nombre'],
+    monto:    ['saldo pendiente de pago', 'saldo', 'saldo pendiente', 'importe pendiente', 'balance'],
+    fecha:    ['fecha de factura', 'fecha factura', 'fecha', 'fecha de vencimiento']
+  },
+  ventas: {
+    contacto: ['cliente', 'contacto', 'razon social', 'razón social', 'nombre'],
+    monto:    ['total', 'total con impuestos', 'importe', 'monto', 'total facturado'],
+    fecha:    ['fecha de factura', 'fecha factura', 'fecha', 'fecha emision']
+  },
+  cheques: {
+    contacto: ['cliente', 'cliente/proveedor', 'contacto', 'nombre', 'librador'],
+    monto:    ['total', 'importe', 'monto', 'valor', 'importe cheque'],
+    fecha:    ['fecha de pago', 'fecha pago', 'fecha vencimiento', 'fecha']
+  }
+};
 
-    for i, cliente in enumerate(cartera_data):
-        cuit = cliente.get('cuit', '')
-        nombre = cliente.get('nombre', '')
-        sit_anterior = cliente.get('ultimaSit', 1) or 1
+// Plantillas para descargar
+var DSO_PLANTILLAS = {
+  ventas:  { nombre: 'Plantilla_Ventas.csv',  cols: ['cliente', 'Fecha de factura', 'Total'] },
+  saldos:  { nombre: 'Plantilla_Saldos.csv',  cols: ['cliente', 'Fecha de factura', 'SALDO PENDIENTE DE PAGO'] },
+  cheques: { nombre: 'Plantilla_Cheques.csv', cols: ['cliente', 'Fecha de Pago', 'total'] }
+};
 
-        verificacion_estado["progreso"] = i + 1
-        verificacion_estado["cliente_actual"] = nombre
-        verificacion_estado["mensaje"] = "Verificando " + str(i+1) + "/" + str(len(cartera_data)) + ": " + nombre
+function descargarPlantillas() {
+  Object.values(DSO_PLANTILLAS).forEach(function(p) {
+    var csv = p.cols.join(',') + '\n' + p.cols.map(function(){ return ''; }).join(',') + '\n';
+    var blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a'); a.href = url; a.download = p.nombre; a.click();
+    URL.revokeObjectURL(url);
+  });
+}
 
-        cliente_actualizado = dict(cliente)
+// Normaliza un header: minúsculas + trim
+function norm(s) { return String(s || '').toLowerCase().trim(); }
 
-        try:
-            # Consultar BCRA
-            bcra_data, error = consultar_bcra_cached(cuit)
-            if bcra_data and not error:
-                entidades = []
-                try:
-                    entidades = bcra_data['results']['periodos'][0]['entidades']
-                except Exception:
-                    pass
-                max_sit = 1
-                if entidades:
-                    max_sit = max((e.get('situacion', 1) or 1) for e in entidades)
+function parseMonto(v) {
+  var s = String(v || '0').trim();
+  s = s.replace(/[$\s]/g, '');
+  // Formato argentino: punto = miles, coma = decimal
+  if (s.indexOf(',') > s.indexOf('.') && s.indexOf(',') >= 0) {
+    s = s.replace(/\./g, '').replace(',', '.');
+  } else {
+    s = s.replace(/,/g, '');
+  }
+  var n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
 
-                cliente_actualizado['ultimaSit'] = max_sit
-                cliente_actualizado['ultimaVerif'] = time.strftime('%d/%m/%Y')
+function parseFecha(v) {
+  if (!v) return null;
+  var d = new Date(v);
+  return isNaN(d) ? null : d;
+}
 
-                if max_sit > sit_anterior or max_sit >= 3:
-                    nuevas_alertas.append({
-                        "nombre": nombre,
-                        "cuit": cuit,
-                        "sitAnterior": sit_anterior,
-                        "sitActual": max_sit,
-                        "fecha": time.strftime('%d/%m/%Y'),
-                        "tipo": "bcra"
-                    })
-        except Exception:
-            pass
+// Busca la columna real en un array de headers usando aliases
+function mapearColumna(headers, aliases) {
+  var headersNorm = headers.map(norm);
+  for (var i = 0; i < aliases.length; i++) {
+    var idx = headersNorm.indexOf(norm(aliases[i]));
+    if (idx >= 0) return headers[idx]; // devuelve el nombre original
+  }
+  return null;
+}
 
-        # Analizar grupo bodegas
-        try:
-            threads = wsp_index.get(cuit, [])
-            if threads:
-                todos_mensajes = []
-                tiene_sospecha = False
-                for t in threads:
-                    for m in t.get('mensajes', []):
-                        texto_msg = m.get('texto', '')
-                        todos_mensajes.append(m.get('autor', '') + ': ' + texto_msg)
-                        if any(p in texto_msg.lower() for p in palabras_riesgo):
-                            tiene_sospecha = True
+function leerExcelRows(file) {
+  return new Promise(function(resolve, reject) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        var data = new Uint8Array(e.target.result);
+        var wb = XLSX.read(data, {type: 'array', raw: false, cellDates: true});
+        var sheet = wb.Sheets[wb.SheetNames[0]];
+        var rows = XLSX.utils.sheet_to_json(sheet, {defval: '', raw: false});
+        // Limpiar espacios fantasma en headers
+        rows = rows.map(function(row) {
+          var clean = {};
+          Object.keys(row).forEach(function(k) { clean[k.trim()] = row[k]; });
+          return clean;
+        });
+        resolve(rows);
+      } catch(ex) { reject(ex); }
+    };
+    reader.onerror = reject;
+    reader.readAsArrayBuffer(file);
+  });
+}
 
-                if tiene_sospecha:
-                    ya_existe = any(a['cuit'] == cuit and a['tipo'] == 'bodegas' for a in nuevas_alertas)
-                    if not ya_existe:
-                        es_negativo, motivo = analizar_bodegas_server(cuit, nombre, todos_mensajes[:10])
-                        if es_negativo:
-                            nuevas_alertas.append({
-                                "nombre": nombre,
-                                "cuit": cuit,
-                                "fecha": time.strftime('%d/%m/%Y'),
-                                "tipo": "bodegas",
-                                "mensajes": [motivo]
-                            })
-        except Exception:
-            pass
+function cargarArchivoDSO(input, tipo) {
+  var file = input.files[0];
+  if (!file) return;
+  var area = document.getElementById('dso-upload-' + tipo);
 
-        cartera_actualizada.append(cliente_actualizado)
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var data = new Uint8Array(e.target.result);
+      var wb = XLSX.read(data, {type: 'array', raw: false});
+      var sheet = wb.Sheets[wb.SheetNames[0]];
+      var rows = XLSX.utils.sheet_to_json(sheet, {defval: '', raw: false});
+      if (!rows.length) { alert('El archivo está vacío.'); return; }
 
-        if i < len(cartera_data) - 1:
-            time.sleep(5)
+      var headers = Object.keys(rows[0]);
+      var aliases = DSO_ALIASES[tipo];
 
-    # Guardar resultados
-    ahora = time.strftime('%d/%m/%Y %H:%M')
-    try:
-        datos_guardar = {
-            "alertas": nuevas_alertas,
-            "ultima_verif": ahora,
-            "cartera": [{"cuit": c.get('cuit'), "ultimaSit": c.get('ultimaSit'), "ultimaVerif": c.get('ultimaVerif')} for c in cartera_actualizada]
+      // Validar columnas mínimas requeridas
+      var colContacto = mapearColumna(headers, aliases.contacto);
+      var colMonto    = mapearColumna(headers, aliases.monto);
+
+      if (!colContacto) {
+        if (area) { area.className = 'upload-area'; area.innerHTML = '<div style="font-size:12px;color:#991b1b;">✗ Falta columna de cliente</div>'; }
+        alert('Error: El archivo de ' + tipo + ' no contiene una columna de cliente.\n\nColumnas detectadas: ' + headers.join(', ') + '\n\nDescargá la plantilla con el botón "Descargar plantillas".');
+        input.value = ''; return;
+      }
+      if (!colMonto) {
+        if (area) { area.className = 'upload-area'; area.innerHTML = '<div style="font-size:12px;color:#991b1b;">✗ Falta columna de monto</div>'; }
+        alert('Error: El archivo de ' + tipo + ' no contiene una columna de monto.\n\nColumnas detectadas: ' + headers.join(', ') + '\n\nDescargá la plantilla con el botón "Descargar plantillas".');
+        input.value = ''; return;
+      }
+
+      // Válido
+      dsoArchivos[tipo] = file;
+      if (area) { area.className = 'upload-area success'; area.innerHTML = '<div style="font-size:12px;color:#166534;font-weight:600;">✓ ' + file.name + '</div><div style="font-size:11px;color:#166534;margin-top:2px;">Cliente: "' + colContacto + '" · Monto: "' + colMonto + '"</div>'; }
+      var hayArchivo = dsoArchivos.saldos || dsoArchivos.ventas || dsoArchivos.cheques;
+      document.getElementById('dso-btn-calcular').style.display = hayArchivo ? 'block' : 'none';
+    } catch(err) { alert('Error al leer el archivo: ' + err.message); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+async function procesarDSO() {
+  var hayArchivo = dsoArchivos.saldos || dsoArchivos.ventas || dsoArchivos.cheques;
+  if (!hayArchivo) { alert('Subí al menos un archivo.'); return; }
+
+  document.getElementById('dso-loading').style.display = 'block';
+  document.getElementById('dso-loading').innerHTML = '<div class="loading-spinner"></div><div style="font-size:13px;color:#64748b;margin-top:8px;">Calculando DSO...</div>';
+  document.getElementById('dso-resultado').style.display = 'none';
+  document.getElementById('dso-btn-calcular').disabled = true;
+
+  try {
+    var rowsVentas  = dsoArchivos.ventas  ? await leerExcelRows(dsoArchivos.ventas)  : [];
+    var rowsSaldos  = dsoArchivos.saldos  ? await leerExcelRows(dsoArchivos.saldos)  : [];
+    var rowsCheques = dsoArchivos.cheques ? await leerExcelRows(dsoArchivos.cheques) : [];
+
+    // parseMonto y parseFecha son globales
+
+    // ── VENTAS ──
+    var ventasPorCliente = {};
+    var fechas = [];
+    if (rowsVentas.length) {
+      var hV = Object.keys(rowsVentas[0]);
+      var cV = mapearColumna(hV, DSO_ALIASES.ventas.contacto);
+      var mV = mapearColumna(hV, DSO_ALIASES.ventas.monto);
+      var fV = mapearColumna(hV, DSO_ALIASES.ventas.fecha);
+      if (!cV) throw new Error('Archivo de ventas: no se encontró columna de cliente. Columnas: ' + hV.join(', '));
+      if (!mV) throw new Error('Archivo de ventas: no se encontró columna de monto. Columnas: ' + hV.join(', '));
+      rowsVentas.forEach(function(r) {
+        var contacto = String(r[cV] || '').trim();
+        var total = parseMonto(r[mV]);
+        if (!contacto || total === 0) return; // solo excluir vacíos — NC (negativos) restan
+        ventasPorCliente[contacto] = (ventasPorCliente[contacto] || 0) + total;
+        if (fV && total > 0) { var d = parseFecha(r[fV]); if (d) fechas.push(d); }
+      });
+    }
+
+    // Período
+    var diasPeriodo = 90;
+    if (fechas.length >= 2) {
+      fechas.sort(function(a,b){return a-b;});
+      diasPeriodo = Math.max(1, Math.round((fechas[fechas.length-1]-fechas[0])/(1000*60*60*24)));
+    }
+
+    // ── SALDOS ──
+    var saldosPorCliente = {};
+    if (rowsSaldos.length) {
+      var hS = Object.keys(rowsSaldos[0]);
+      var cS = mapearColumna(hS, DSO_ALIASES.saldos.contacto);
+      var mS = mapearColumna(hS, DSO_ALIASES.saldos.monto);
+      if (!cS) throw new Error('Archivo de saldos: no se encontró columna de cliente. Columnas: ' + hS.join(', '));
+      if (!mS) throw new Error('Archivo de saldos: no se encontró columna de monto. Columnas: ' + hS.join(', '));
+      rowsSaldos.forEach(function(r) {
+        var contacto = String(r[cS] || '').trim();
+        var saldo = parseMonto(r[mS]); // respetar signo — negativos son NC y restan
+        if (!contacto || saldo === 0) return;
+        saldosPorCliente[contacto] = (saldosPorCliente[contacto] || 0) + saldo;
+      });
+    }
+
+    // ── CHEQUES ──
+    var chequesPorCliente = {};
+    if (rowsCheques.length) {
+      var hC = Object.keys(rowsCheques[0]);
+      var cC = mapearColumna(hC, DSO_ALIASES.cheques.contacto);
+      var mC = mapearColumna(hC, DSO_ALIASES.cheques.monto);
+      if (!cC) throw new Error('Archivo de cheques: no se encontró columna de cliente. Columnas: ' + hC.join(', '));
+      if (!mC) throw new Error('Archivo de cheques: no se encontró columna de monto. Columnas: ' + hC.join(', '));
+      rowsCheques.forEach(function(r) {
+        var contacto = String(r[cC] || '').trim();
+        var importe = Math.abs(parseMonto(r[mC]));
+        if (!contacto || importe === 0) return;
+        chequesPorCliente[contacto] = (chequesPorCliente[contacto] || 0) + importe;
+      });
+    }
+
+    // ── CONSOLIDAR POR CLIENTE ──
+    var todosClientes = new Set(
+      Object.keys(ventasPorCliente)
+        .concat(Object.keys(saldosPorCliente))
+        .concat(Object.keys(chequesPorCliente))
+    );
+
+    // ── KPI saldo: suma directa del diccionario de saldos (sin pasar por todosClientes)
+    var saldoTotalKPI = Object.values(saldosPorCliente).reduce(function(s, v) { return s + v; }, 0);
+
+    var ventasNetasTotal = 0;
+    var activoTotalDSO = 0;
+    dsoDatos = [];
+
+    todosClientes.forEach(function(contacto) {
+      if (!contacto) return;
+      var ventas  = ventasPorCliente[contacto]  || 0;
+      var saldo   = saldosPorCliente[contacto]  || 0;
+      var cheques = chequesPorCliente[contacto] || 0;
+      var activoDSO = saldo + cheques;
+      ventasNetasTotal += ventas;
+      activoTotalDSO  += activoDSO;
+      var dsoCliente = (ventas > 0 && activoDSO > 0)
+        ? Math.round((activoDSO / ventas) * diasPeriodo)
+        : 0;
+      if (activoDSO > 0 || ventas > 0) {
+        dsoDatos.push({nombre: contacto, saldo: saldo, dso: dsoCliente});
+      }
+    });
+
+    // ── DSO GLOBAL ──
+    var dsoGlobal = (ventasNetasTotal > 0 && activoTotalDSO > 0)
+      ? Math.round((activoTotalDSO / ventasNetasTotal) * diasPeriodo)
+      : 0;
+
+    var estaCompleto = !!(dsoArchivos.ventas && dsoArchivos.saldos);
+    dsoDatos = dsoDatos.filter(function(c){return c.dso > 0;}).sort(function(a,b){return b.dso-a.dso;});
+
+    document.getElementById('dso-loading').style.display = 'none';
+    document.getElementById('dso-resultado').style.display = 'block';
+    document.getElementById('dso-btn-calcular').disabled = false;
+
+    // Guardar y sincronizar
+    localStorage.setItem('piat_dso_global', dsoGlobal);
+    localStorage.setItem('piat_dso_saldo_total', saldoTotalKPI);
+    localStorage.setItem('piat_dso_clientes_total', dsoDatos.length);
+    localStorage.setItem('piat_dso_datos', JSON.stringify(dsoDatos));
+    sincronizarServidor();
+
+    // KPIs
+    var colDSO = colorDSO(dsoGlobal);
+    document.getElementById('dso-numero').textContent = dsoGlobal;
+    document.getElementById('dso-numero').style.color = colDSO.color;
+    document.getElementById('dso-saldo-total').textContent = '$' + Math.round(saldoTotalKPI).toLocaleString('es-AR');
+    document.getElementById('dso-clientes-total').textContent = dsoDatos.length;
+    var metDso = document.getElementById('met-dso');
+    if (metDso) { metDso.textContent = dsoGlobal; metDso.style.color = colDSO.color; }
+
+    // Benchmark
+    var badge = estaCompleto
+      ? '<span style="font-size:11px;padding:3px 10px;background:#dcfce7;color:#166534;border-radius:20px;font-weight:600;">✓ Cálculo completo</span>'
+      : '<span style="font-size:11px;padding:3px 10px;background:#fefce8;color:#854d0e;border-radius:20px;font-weight:600;">⚠ Cálculo aproximado</span>';
+    var bHtml = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">' + badge;
+    bHtml += '<span style="font-size:11px;color:#64748b;">Período analizado: ' + diasPeriodo + ' días</span></div>';
+    bHtml += '<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">';
+    bHtml += '<div style="font-size:13px;color:#64748b;"><strong style="color:var(--azul-oscuro);">Referencia del sector:</strong> 45–55 días es normal · Más de 65 días es alerta</div>';
+    bHtml += '<div style="display:flex;gap:8px;">';
+    bHtml += '<span style="font-size:11px;padding:3px 10px;background:#dcfce7;color:#166534;border-radius:20px;font-weight:600;">Normal &lt;' + getDSOUmbral() + 'd</span>';
+    bHtml += '<span style="font-size:11px;padding:3px 10px;background:#fefce8;color:#854d0e;border-radius:20px;font-weight:600;">Atención ' + getDSOUmbral() + '–' + getDSOUmbralAlto() + 'd</span>';
+    bHtml += '<span style="font-size:11px;padding:3px 10px;background:#fee2e2;color:#991b1b;border-radius:20px;font-weight:600;">Crítico &gt;' + getDSOUmbralAlto() + 'd</span>';
+    bHtml += '</div></div>';
+    bHtml += '<div style="margin-top:8px;font-size:12px;color:#94a3b8;">🔒 DSO promedio del sector: disponible cuando la Red de Bodegas esté activa</div>';
+    document.getElementById('dso-benchmark').innerHTML = bHtml;
+
+    renderTablaDSO(dsoDatos);
+
+  } catch(err) {
+    document.getElementById('dso-loading').style.display = 'none';
+    document.getElementById('dso-btn-calcular').disabled = false;
+    alert('Error en el cálculo: ' + err.message);
+  }
+}
+
+
+function renderTablaDSO(datos) {
+  if (!datos.length) {
+    document.getElementById('dso-tabla').innerHTML = '<div class="empty-state">Sin datos para mostrar.</div>';
+    return;
+  }
+  var html = '<table class="bcra-table"><thead><tr><th>Cliente</th><th>DSO</th><th>Estado</th><th>Saldo</th></tr></thead><tbody>';
+  datos.forEach(function(c) {
+    var col = colorDSO(c.dso);
+    html += '<tr>';
+    html += '<td style="font-size:13px;">' + c.nombre + '</td>';
+    html += '<td><strong style="font-size:15px;color:' + col.color + ';">' + c.dso + 'd</strong></td>';
+    html += '<td><span style="font-size:11px;padding:3px 10px;background:' + col.bg + ';color:' + col.color + ';border-radius:20px;font-weight:600;">' + col.label + '</span></td>';
+    html += '<td style="font-size:13px;">$' + Math.round(c.saldo).toLocaleString('es-AR') + '</td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  document.getElementById('dso-tabla').innerHTML = html;
+}
+
+function filtrarDSO(query) {
+  if (!dsoDatos.length) return;
+  var filtrados = query
+    ? dsoDatos.filter(function(c) { return c.nombre.toLowerCase().includes(query.toLowerCase()); })
+    : dsoDatos;
+  renderTablaDSO(filtrados);
+}
+
+function exportarDSO() {
+  if (!dsoDatos.length) { alert('No hay datos para exportar.'); return; }
+
+  var wb = XLSX.utils.book_new();
+
+  // Hoja 1: Resumen
+  var saldoTotal = dsoDatos.reduce(function(s, c) { return s + c.saldo; }, 0);
+  var dsoGlobal = Math.round(dsoDatos.reduce(function(s, c) { return s + c.dso * c.saldo; }, 0) / saldoTotal);
+  var criticos = dsoDatos.filter(function(c) { return c.dso >= getDSOUmbralAlto(); }).length;
+  var atencion = dsoDatos.filter(function(c) { return c.dso >= getDSOUmbral() && c.dso < getDSOUmbralAlto(); }).length;
+  var normales = dsoDatos.filter(function(c) { return c.dso < getDSOUmbral(); }).length;
+
+  var resumen = [
+    ['RESUMEN DSO', '', ''],
+    ['Bodega', getNombreBodega(), ''],
+    ['Fecha', new Date().toLocaleDateString('es-AR'), ''],
+    ['', '', ''],
+    ['DSO Global', dsoGlobal + ' días', ''],
+    ['Saldo Total', '$' + Math.round(saldoTotal).toLocaleString('es-AR'), ''],
+    ['Total clientes', dsoDatos.length, ''],
+    ['', '', ''],
+    ['SEMÁFORO', '', ''],
+    ['Normal (< ' + getDSOUmbral() + ' días)', normales, ''],
+    ['Atención (' + getDSOUmbral() + '-' + getDSOUmbralAlto() + ' días)', atencion, ''],
+    ['Crítico (> ' + getDSOUmbralAlto() + ' días)', criticos, ''],
+    ['', '', ''],
+    ['Referencia sector', '45-55 días', '']
+  ];
+  var ws1 = XLSX.utils.aoa_to_sheet(resumen);
+  XLSX.utils.book_append_sheet(wb, ws1, 'Resumen');
+
+  // Hoja 2: Detalle
+  var detalle = [['Cliente', 'DSO (días)', 'Estado', 'Saldo ($)']];
+  dsoDatos.forEach(function(c) {
+    var col = colorDSO(c.dso);
+    detalle.push([c.nombre, c.dso, col.label, Math.round(c.saldo)]);
+  });
+  var ws2 = XLSX.utils.aoa_to_sheet(detalle);
+  XLSX.utils.book_append_sheet(wb, ws2, 'Detalle por Cliente');
+
+  var fecha = new Date().toLocaleDateString('es-AR').replace(/\//g, '-');
+  XLSX.writeFile(wb, 'DSO_' + getNombreBodega().replace(/ /g, '_') + '_' + fecha + '.xlsx');
+}
+// ─── FIN MÓDULO DSO ──────────────────────────────────────────
+
+// ─── SINCRONIZACIÓN SERVIDOR ──────────────────────────────
+async function sincronizarServidor() {
+  var datos = {
+    nombre_bodega: localStorage.getItem('piat_nombre_bodega') || '',
+    dso_umbral: localStorage.getItem('piat_dso_umbral') || '45',
+    dso_umbral_alto: localStorage.getItem('piat_dso_umbral_alto') || '65',
+    dso_global: localStorage.getItem('piat_dso_global') || '',
+    dso_saldo_total: localStorage.getItem('piat_dso_saldo_total') || '',
+    dso_clientes_total: localStorage.getItem('piat_dso_clientes_total') || '',
+    dso_datos: JSON.parse(localStorage.getItem('piat_dso_datos') || '[]'),
+    cartera: JSON.parse(localStorage.getItem('piat_cartera') || '[]')
+  };
+  try {
+    await fetch('/datos-bodega', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(datos)
+    });
+  } catch(e) {}
+}
+
+async function cargarDesdServidor() {
+  try {
+    var r = await fetch('/datos-bodega');
+    var data = await r.json();
+    if (!data || data.error || Object.keys(data).length === 0) return false;
+    // Aplicar datos del servidor
+    if (data.nombre_bodega) localStorage.setItem('piat_nombre_bodega', data.nombre_bodega);
+    if (data.dso_umbral) localStorage.setItem('piat_dso_umbral', data.dso_umbral);
+    if (data.dso_umbral_alto) localStorage.setItem('piat_dso_umbral_alto', data.dso_umbral_alto);
+    if (data.dso_global) localStorage.setItem('piat_dso_global', data.dso_global);
+    if (data.dso_saldo_total) localStorage.setItem('piat_dso_saldo_total', data.dso_saldo_total);
+    if (data.dso_clientes_total) localStorage.setItem('piat_dso_clientes_total', data.dso_clientes_total);
+    if (data.dso_datos && data.dso_datos.length) {
+      dsoDatos = data.dso_datos;
+      localStorage.setItem('piat_dso_datos', JSON.stringify(dsoDatos));
+    }
+    if (data.cartera && data.cartera.length) {
+      cartera = data.cartera;
+      localStorage.setItem('piat_cartera', JSON.stringify(cartera));
+    }
+    return true;
+  } catch(e) { return false; }
+}
+
+async function init() {
+  checkProxy();
+  // Cargar datos persistentes del servidor (sincroniza entre dispositivos)
+  await cargarDesdServidor();
+  await Promise.all([cargarWSP(), cargarMoras(), cargarCarteraServidor()]);
+  actualizarMetricas();
+  // Restaurar DSO en dashboard si hay datos guardados
+  var dsoGuardado = localStorage.getItem('piat_dso_global');
+  if (dsoGuardado) {
+    var metDso = document.getElementById('met-dso');
+    if (metDso) {
+      metDso.textContent = dsoGuardado;
+      metDso.style.color = colorDSO(parseInt(dsoGuardado)).color;
+    }
+  }
+  // Cargar nombre de bodega en campo config
+  var nbEl = document.getElementById('input-nombre-bodega');
+  if (nbEl) nbEl.value = localStorage.getItem('piat_nombre_bodega') || '';
+  var dBajo = document.getElementById('input-dso-bajo');
+  var dAlto = document.getElementById('input-dso-alto');
+  if (dBajo) dBajo.value = localStorage.getItem('piat_dso_umbral') || '45';
+  if (dAlto) dAlto.value = localStorage.getItem('piat_dso_umbral_alto') || '65';
+  // Contador red
+  var contEl = document.getElementById('red-contador');
+  if (contEl) contEl.textContent = localStorage.getItem('piat_red_contador') || '1';
+}
+
+function actualizarMetricas() {
+  var total = cartera.length;
+  var criticos = cartera.filter(function(c) { return c.ultimaSit && c.ultimaSit >= 3; }).length;
+  var enMora = cartera.filter(function(c) { return buscarEnMoras(c.cuit); }).length;
+  document.getElementById('met-total').textContent = total || '—';
+  document.getElementById('met-criticos').textContent = criticos || '0';
+  document.getElementById('met-mora').textContent = enMora || '0';
+  // met-dso se actualiza desde procesarDSO()
+}
+
+async function cargarCarteraServidor() {
+  // Cargar alertas y cartera verificada del servidor (sincroniza entre dispositivos)
+  try {
+    const r = await fetch('/alertas');
+    const data = await r.json();
+    if (data && !data.error) {
+      // Siempre priorizar alertas del servidor — son la fuente de verdad
+      if (data.alertas) {
+        alertas = data.alertas;
+        localStorage.setItem('piat_alertas', JSON.stringify(alertas));
+      }
+      if (data.ultima_verif) {
+        localStorage.setItem('piat_ultima_verif', data.ultima_verif);
+      }
+      if (data.cartera && data.cartera.length > 0) {
+        // Fusionar situaciones verificadas con cartera local
+        data.cartera.forEach(function(c) {
+          var idx = cartera.findIndex(function(lc) { return lc.cuit === c.cuit; });
+          if (idx >= 0) {
+            cartera[idx].ultimaSit = c.ultimaSit;
+            cartera[idx].ultimaVerif = c.ultimaVerif;
+          }
+        });
+        localStorage.setItem('piat_cartera', JSON.stringify(cartera));
+      }
+    }
+  } catch(e) {}
+
+  // Si no hay cartera local, cargar del servidor
+  if (cartera.length === 0) {
+    try {
+      const r = await fetch('/cartera_inicial.json');
+      const data = await r.json();
+      if (data && data.length > 0) {
+        cartera = data;
+        localStorage.setItem('piat_cartera', JSON.stringify(cartera));
+      }
+    } catch(e) {}
+  }
+  renderCartera();
+  renderAlertas();
+}
+
+async function checkProxy() {
+  const dot = document.getElementById('proxy-dot');
+  const label = document.getElementById('proxy-label');
+  dot.className = 'dot';
+  label.textContent = '';
+  try {
+    const r = await fetch('https://api.allorigins.win/get?url=' + encodeURIComponent('https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/20213106008'), {signal: AbortSignal.timeout(8000)});
+    if (r.ok) {
+      dot.className = 'dot online';
+      label.textContent = 'BCRA conectado';
+    } else {
+      dot.className = 'dot offline';
+      label.textContent = 'Sin conexión';
+    }
+  } catch(e) {
+    dot.className = 'dot offline';
+    label.textContent = 'Sin conexión';
+  }
+}
+
+async function cargarWSP() {
+  try {
+    const r = await fetch('/whatsapp_index.json');
+    wspIndex = await r.json();
+    const total = Object.keys(wspIndex).length;
+    document.getElementById('wsp-dot').style.background = '#22c55e';
+    document.getElementById('wsp-label').textContent = 'Red activa · ' + total + ' bodegas';
+  } catch { document.getElementById('wsp-dot').style.background = '#ef4444'; document.getElementById('wsp-label').textContent = 'Bodegas no disponible'; }
+}
+
+async function cargarMoras() {
+  try {
+    const r = await fetch('/moras.json');
+    morasIndex = await r.json();
+    const total = Object.keys(morasIndex).length;
+    document.getElementById('mora-dot').style.background = '#ef4444';
+    document.getElementById('mora-label').textContent = `${total} clientes en mora`;
+  } catch { document.getElementById('mora-label').textContent = 'Moras no disponible'; }
+}
+
+function buscarEnWSP(cuit) { return wspIndex ? wspIndex[cuit.replace(/-/g,'')] || null : null; }
+function buscarEnMoras(cuit) { return morasIndex ? morasIndex[cuit.replace(/-/g,'')] || null : null; }
+
+function switchTab(tab, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById(tab).classList.add('active');
+  if (tab === 'cheques') { document.getElementById('cheque-resultado').style.display='none'; }
+  if (tab === 'historial') renderHistorial();
+  if (tab === 'cartera') renderCartera();
+  if (tab === 'alertas') renderAlertas();
+}
+
+async function consultarCliente() {
+  const raw = document.getElementById('cuit-input').value.replace(/-/g,'').trim();
+  if (!raw || raw.length < 10) { alert('Ingresá un CUIT válido'); return; }
+  // ── RESET COMPLETO DE UI antes de nueva consulta ──
+  document.getElementById('resultado').style.display = 'none';
+  document.getElementById('loading-state').style.display = 'block';
+  document.getElementById('analisis-resultado').style.display = 'none';
+  document.getElementById('btn-export').style.display = 'none';
+  // Limpiar todos los contenedores de resultados
+  var resetIds = [
+    'cliente-header','verdict-container','bcra-data',
+    'cheques-rechazados-data','afip-container','wsp-data',
+    'veraz-datos','mora-alert-container'
+  ];
+  resetIds.forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.innerHTML = '';
+  });
+  var chCard = document.getElementById('cheques-rechazados-card');
+  if (chCard) chCard.style.display = 'none';
+  document.getElementById('veraz-status').style.display = 'none';
+  document.getElementById('veraz-datos').style.display = 'none';
+  document.getElementById('veraz-area').className = 'upload-area';
+  document.getElementById('veraz-area').innerHTML = '<div style="font-size:13px;color:#888;">Hacé clic para subir el PDF de Veraz o Nosis</div><div style="font-size:12px;color:#aaa;margin-top:4px;">Extrae automáticamente score, cheques, deudas y más</div>';
+  document.getElementById('veraz-datos').style.display = 'none';
+  verazData = null;
+
+  const mora = buscarEnMoras(raw);
+  document.getElementById('mora-alert-container').innerHTML = mora ? `
+    <div class="mora-alert">
+      <div class="mora-alert-title">⚠ Cliente con mora registrada</div>
+      <div class="mora-alert-detail"><strong>${mora.nombre}</strong> tiene facturas impagas desde <strong>${mora.fecha_mora}</strong>.<br>Saldo adeudado: <strong>$${mora.saldo.toLocaleString('es-AR')}</strong> — Estado: ${mora.estado}</div>
+    </div>` : '';
+
+  document.getElementById('loading-state').style.display = 'none';
+  document.getElementById('resultado').style.display = 'block';
+  document.getElementById('cliente-header').innerHTML =
+    '<div style="display:flex;align-items:center;gap:14px;">' +
+    '<div class="avatar" id="cli-avatar">?</div>' +
+    '<div style="flex:1;">' +
+    '<div style="font-size:16px;font-weight:600;" id="cli-nombre">Consultando razón social...</div>' +
+    '<div style="font-size:12px;color:#64748b;margin-top:2px;" id="cli-meta">CUIT: ' + raw + '</div>' +
+    '</div>' +
+    '<div id="cli-acciones"></div>' +
+    '</div>';
+  document.getElementById('verdict-container').innerHTML = '';
+    guardarEnHistorial(raw, null);
+  mostrarAFIP(raw);
+  mostrarWSP(raw);
+
+  // Traer razón social (AFIP + BCRA como fallback) y situación BCRA
+  var nombreFinal = '';
+  try {
+    var afipR = await fetch('/afip/' + raw, {signal: AbortSignal.timeout(8000)});
+    var afipData = await afipR.json();
+    nombreFinal = afipData.nombre || '';
+  } catch(e) {}
+
+  // Asegurar que el div resultado esté visible antes de llamar mostrarResultado
+  document.getElementById('loading-state').style.display = 'none';
+  document.getElementById('resultado').style.display = 'block';
+
+  try {
+    var bcraR = await fetch('/deudas/' + raw, {signal: AbortSignal.timeout(12000)});
+    var bcraData = await bcraR.json();
+    // Tomar nombre del BCRA si AFIP no lo trajo
+    if (!nombreFinal && bcraData.results && bcraData.results.denominacion) {
+      nombreFinal = bcraData.results.denominacion;
+    }
+    // Mostrar situación BCRA
+    if (bcraData.error === 'timeout') {
+      mostrarResultado(raw, null, true);
+    } else {
+      mostrarResultado(raw, bcraData, false);
+    }
+  } catch(e) {
+    mostrarResultado(raw, null, true);
+  }
+
+  // mostrarResultado ya maneja el header completo con nombre, badge y botón cartera
+  // No reescribir el header acá
+
+  // Mostrar cheques rechazados si el BCRA los trajo
+  try {
+    var chequesUrl = encodeURIComponent('https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/' + raw);
+    var chR = await fetch('https://api.allorigins.win/get?url=' + chequesUrl, {signal: AbortSignal.timeout(10000)});
+    if (chR.ok) {
+      var chW = await chR.json();
+      var chData = JSON.parse(chW.contents);
+      var chequesCard = document.getElementById('cheques-rechazados-card');
+      var chequesEl = document.getElementById('cheques-rechazados-data');
+      var todosChq = [];
+      if (chData.results && chData.results.causales) {
+        chData.results.causales.forEach(function(causal) {
+          (causal.entidades || []).forEach(function(ent) {
+            (ent.detalle || []).forEach(function(ch) {
+              todosChq.push({fecha: ch.fechaRechazo, motivo: causal.causal, monto: ch.monto, levantado: !!ch.fechaPago});
+            });
+          });
+        });
+      }
+      if (todosChq.length && chequesCard && chequesEl) {
+        chequesCard.style.display = 'block';
+        chequesCard.style.borderLeft = '4px solid #f97316';
+        chequesCard.style.background = '#fff8f0';
+        var sinLevantar = todosChq.filter(function(c) { return !c.levantado; }).length;
+        var resumen = '<div style="font-size:13px;margin-bottom:8px;"><strong style="color:#991b1b;">' + todosChq.length + ' cheque(s) rechazado(s)</strong>';
+        if (sinLevantar) resumen += ' · <span style="color:#991b1b;font-weight:600;">' + sinLevantar + ' sin levantar ⚠️</span>';
+        resumen += '</div>';
+        var tabla = '<table class="bcra-table"><thead><tr><th>Fecha</th><th>Motivo</th><th>Monto</th><th>Estado</th></tr></thead><tbody>';
+        todosChq.slice(0,10).forEach(function(ch) {
+          tabla += '<tr><td>' + (ch.fecha||'-') + '</td><td>' + (ch.motivo||'-') + '</td><td>$' + ((ch.monto||0).toLocaleString('es-AR')) + '</td><td>' + (ch.levantado ? '<span style="color:#166534;">✓ Levantado</span>' : '<span style="color:#991b1b;font-weight:600;">Sin levantar</span>') + '</td></tr>';
+        });
+        if (todosChq.length > 10) tabla += '<tr><td colspan="4" style="font-size:12px;color:#64748b;text-align:center;">... y ' + (todosChq.length-10) + ' más</td></tr>';
+        tabla += '</tbody></table>';
+        chequesEl.innerHTML = resumen + tabla;
+      }
+    }
+  } catch(e) {}
+}
+
+function agregarDesdConsulta(cuit, nombre) {
+  if (cartera.some(function(c) { return c.cuit === cuit; })) { return; }
+  cartera.push({cuit: cuit, nombre: nombre, fechaAlta: new Date().toLocaleDateString('es-AR'), ultimaSit: null, ultimaVerif: null});
+  localStorage.setItem('piat_cartera', JSON.stringify(cartera));
+  var acEl = document.getElementById('cli-acciones');
+  if (acEl) acEl.innerHTML = '<span style="font-size:11px;color:var(--verde);padding:4px 10px;background:var(--verde-bg);border-radius:6px;font-weight:600;">Agregado a cartera ✓</span>';
+  renderCartera();
+}
+
+function mostrarResultado(cuit, data, esTimeout) {
+  const res = data?.results;
+  const entidades = res?.periodos?.[0]?.entidades || [];
+  const nombre = res?.denominacion || 'Sin denominación';
+  const maxSit = entidades.length ? entidades.reduce((m,e) => Math.max(m, e.situacion||1), 1) : 1;
+  // Si BCRA no trajo nombre, intentar con AFIP
+  let nombreFinal = nombre;
+  if (!nombreFinal || nombreFinal === 'Sin denominación') {
+    obtenerNombre(cuit).then(n => {
+      if (n) {
+        const el = document.querySelector('#cliente-header .nombre-cliente');
+        if (el) el.textContent = n;
+        const av = document.querySelector('#cliente-header .avatar');
+        if (av) av.textContent = n.charAt(0).toUpperCase();
+      }
+    });
+  }
+  var nombreMostrar = (nombreFinal && nombreFinal !== 'Sin denominación') ? nombreFinal : 'Sin denominación';
+  var yaEstaCartera = cartera.some(function(c) { return c.cuit === cuit; });
+  var botonCartera = yaEstaCartera
+    ? '<span style="font-size:11px;color:var(--verde);padding:4px 10px;background:var(--verde-bg);border-radius:6px;font-weight:600;">En cartera ✓</span>'
+    : '<button onclick="agregarDesdConsulta(\''+cuit+'\', \''+nombreMostrar.replace(/'/g,'')+'\')" style="font-size:12px;padding:6px 14px;background:var(--azul-suave);color:var(--azul-claro);border-color:var(--azul-borde);">+ Agregar a cartera</button>';
+  var headerHtml = '<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">';
+  headerHtml += '<div class="avatar">' + (nombreMostrar !== 'Sin denominación' ? nombreMostrar.charAt(0) : '?') + '</div>';
+  headerHtml += '<div style="flex:1;"><div style="font-size:16px;font-weight:600;" class="nombre-cliente">' + nombreMostrar + '</div>';
+  headerHtml += '<div style="font-size:12px;color:#64748b;margin-top:2px;">CUIT: ' + cuit + '</div></div>';
+  headerHtml += getBadge(maxSit);
+  headerHtml += '<div>' + botonCartera + '</div>';
+  headerHtml += '</div>';
+  document.getElementById('cliente-header').innerHTML = headerHtml;
+  let v = '';
+  if (esTimeout) v = '';
+  else if (maxSit === 1) v = `<div class="verdict-box aprobar"><div class="verdict-title aprobar">✓ Situación normal en BCRA</div><div class="verdict-detail">El cliente está en situación 1. Sin alertas financieras.</div></div>`;
+  else if (maxSit === 2) v = `<div class="verdict-box revisar"><div class="verdict-title revisar">⚠ Revisar — Seguimiento especial</div><div class="verdict-detail">Situación 2 en al menos una entidad. Recomendable solicitar Veraz completo.</div></div>`;
+  else v = `<div class="verdict-box rechazar"><div class="verdict-title rechazar">✗ Alerta — Situación crítica</div><div class="verdict-detail">Situación ${maxSit} (${sitNombre(maxSit)}) en el sistema financiero. Alto riesgo.</div></div>`;
+  document.getElementById('verdict-container').innerHTML = v;
+  if (esTimeout) {
+    document.getElementById('bcra-data').innerHTML = `<div style="font-size:13px;color:#854d0e;padding:8px;background:#fefce8;border-radius:8px;border:1px solid #fde047;">El BCRA no respondió en este momento. Esto puede significar que el cliente no tiene deudas registradas, o que el servicio está temporalmente caído. Intentá de nuevo en unos segundos o consultá directamente en <a href="https://www.bcra.gob.ar/BCRAyVos/Situacion_Crediticia.asp" target="_blank" style="color:#854d0e;">bcra.gob.ar</a>.</div>`;
+  } else if (!entidades.length) {
+    document.getElementById('bcra-data').innerHTML = `<div class="empty-state" style="color:#166534;">✓ Sin deudas registradas en el BCRA para este CUIT.</div>`;
+  } else {
+    let t = `<table class="bcra-table"><thead><tr><th>Entidad</th><th>Monto</th><th>Situación</th><th>Días atraso</th></tr></thead><tbody>`;
+    entidades.forEach(e => { t += `<tr><td>${e.entidad||'-'}</td><td>$${(e.monto||0).toLocaleString('es-AR')}</td><td class="sit-${e.situacion}">${e.situacion} — ${sitNombre(e.situacion)}</td><td>${e.diasAtrasoPago||0}</td></tr>`; });
+    t += `</tbody></table>`;
+    document.getElementById('bcra-data').innerHTML = t;
+  }
+}
+
+function mostrarAFIP(cuit) {
+  const el = document.getElementById('afip-container');
+  const cuitFormateado = cuit.replace(/(\d{2})(\d{8})(\d{1})/, '$1-$2-$3');
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+      <div style="font-size:13px;color:#555;">Consultá la situación fiscal completa en el sitio oficial de AFIP.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a href="https://seti.afip.gob.ar/padron-puc-constancia-internet/ConsultaConstanciaAction.do" target="_blank"
+          style="display:inline-block;font-size:13px;font-weight:500;padding:7px 14px;background:#0ea5e9;color:#fff;border-radius:8px;text-decoration:none;">
+          Constancia inscripción →
+        </a>
+        <a href="https://servicios1.afip.gov.ar/clavefiscal/ingreso/ingresoCV.aspx" target="_blank"
+          style="display:inline-block;font-size:13px;font-weight:500;padding:7px 14px;background:#fff;color:#0ea5e9;border:1px solid #0ea5e9;border-radius:8px;text-decoration:none;">
+          Padrón AFIP →
+        </a>
+      </div>
+    </div>
+    <div style="margin-top:10px;padding:8px 12px;background:#f0f9ff;border-radius:8px;font-size:12px;color:#075985;">
+      CUIT consultado: <strong>${cuitFormateado}</strong> — Hacé clic en "Constancia inscripción" para ver condición IVA, actividad y domicilio fiscal.
+    </div>`;
+}
+
+function mostrarWSP(cuit) {
+  const el = document.getElementById('wsp-data');
+  const threads = buscarEnWSP(cuit);
+  if (!threads || !threads.length) { el.innerHTML = `<div class="wsp-no-data">Este cliente no aparece en el historial del grupo de bodegas.</div>`; return; }
+  let html = `<div style="margin-bottom:8px;"><span class="badge badge-wsp">${threads.length} mención(es) en el grupo</span></div>`;
+  threads.forEach(t => {
+    html += `<div class="wsp-thread"><div class="wsp-thread-fecha">${t.fecha} — CUIT: ${t.cuit_mencionado}</div>`;
+    t.mensajes.slice(0,8).forEach(m => { html += `<div class="wsp-msg"><span class="wsp-autor">${m.autor}:</span> ${m.texto}</div>`; });
+    html += `</div>`;
+  });
+  el.innerHTML = html;
+}
+
+function getBadge(s) {
+  if (s===1) return `<span class="badge badge-success">Sit. 1 — Normal</span>`;
+  if (s===2) return `<span class="badge badge-warning">Sit. 2 — Seguimiento</span>`;
+  return `<span class="badge badge-danger">Sit. ${s} — Crítico</span>`;
+}
+function sitNombre(s) { return {1:'Normal',2:'Seguimiento especial',3:'Con problemas',4:'Alto riesgo',5:'Irrecuperable',6:'Irrecuperable'}[s]||'-'; }
+
+function renderSocios(socios) {
+  if (!socios || !socios.length) return '';
+  let html = '<div class="full" style="padding-top:8px;border-top:1px solid #e0e0d8;">';
+  html += '<div style="font-size:11px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Socios / Directores</div>';
+  socios.forEach(s => {
+    const scoreColor = s.score <= 3 ? '#991b1b' : s.score <= 5 ? '#854d0e' : '#166534';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f0e8;flex-wrap:wrap;gap:4px;">';
+    html += '<div>';
+    html += '<div style="font-size:13px;font-weight:600;">' + (s.nombre||'') + '</div>';
+    html += '<div style="font-size:11px;color:#888;">' + (s.cargo||'') + (s.cuit_dni ? ' · ' + s.cuit_dni : '') + '</div>';
+    html += '</div>';
+    html += '<div style="display:flex;gap:6px;align-items:center;">';
+    if (s.score) html += '<span style="font-size:12px;font-weight:600;color:' + scoreColor + '">Score: ' + s.score + '/9</span>';
+    if (s.situacion) html += '<span style="font-size:11px;padding:2px 8px;background:#f9f9f7;border:1px solid #e0e0d8;border-radius:20px;">' + s.situacion + '</span>';
+    html += '</div></div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+async function procesarVeraz(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById('veraz-status');
+  const datosEl = document.getElementById('veraz-datos');
+  statusEl.style.display = 'block';
+  statusEl.textContent = 'Procesando PDF de Veraz...';
+  datosEl.style.display = 'none';
+  verazData = null;
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    const base64 = e.target.result.split(',')[1];
+    try {
+      const r = await fetch('/procesar-informe', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ pdf: base64 })
+      });
+      const data = await r.json();
+      if (data.error) throw new Error(data.error);
+      verazData = data;
+      document.getElementById('veraz-area').className = 'upload-area success';
+      document.getElementById('veraz-area').innerHTML = `<div style="font-size:13px;color:#166534;font-weight:600;">✓ PDF procesado — ${file.name}</div>`;
+      statusEl.style.display = 'none';
+      datosEl.style.display = 'block';
+      const scoreColor = verazData.score<=3 ? '#991b1b' : verazData.score<=5 ? '#854d0e' : '#166534';
+      const chequeColor = verazData.cheques_rechazados>0 ? '#991b1b' : '#166534';
+      let verazHtml = '<div style="font-size:12px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Datos extraídos del Veraz</div>';
+      verazHtml += '<div class="info-grid">';
+      verazHtml += '<div><span class="lbl">Score:</span> <strong style="color:' + scoreColor + '">' + verazData.score + '/9</strong></div>';
+      verazHtml += '<div><span class="lbl">Cheques rechazados:</span> <strong style="color:' + chequeColor + '">' + verazData.cheques_rechazados + '</strong></div>';
+      verazHtml += '<div><span class="lbl">Situación BCRA:</span> <strong>' + (verazData.situacion_bcra||'-') + '</strong></div>';
+      verazHtml += '<div><span class="lbl">Saldo vencido:</span> <strong>' + (verazData.saldo_vencido||'-') + '</strong></div>';
+      verazHtml += '<div class="full"><span class="lbl">Deuda sistema financiero:</span> <strong>' + (verazData.deuda_sistema_financiero||'-') + '</strong></div>';
+      verazHtml += '<div class="full"><span class="lbl">Máximo atraso 24 meses:</span> <strong>' + (verazData.maximo_atraso||'-') + '</strong></div>';
+      if (verazData.resumen) verazHtml += '<div class="full" style="padding-top:8px;border-top:1px solid #e0e0d8;color:#555;line-height:1.5;">' + verazData.resumen + '</div>';
+      verazHtml += renderSocios(verazData.socios_directores);
+      verazHtml += '</div>';
+      datosEl.innerHTML = verazHtml;
+    } catch(e) { statusEl.textContent = 'No se pudo procesar el PDF. Intentá de nuevo en unos segundos.'; }
+  };
+  reader.readAsDataURL(file);
+}
+
+async function analizarCliente() {
+  const cuit = document.getElementById('cuit-input').value.replace(/-/g,'').trim();
+  const piatEl = document.getElementById('piattelli-info');
+  const piat = piatEl ? piatEl.value : '';
+  const bcraEl = document.getElementById('bcra-data');
+  const bcra = bcraEl ? bcraEl.innerText : '';
+  const wspThreads = buscarEnWSP(cuit);
+  const mora = buscarEnMoras(cuit);
+  const btn = document.getElementById('btn-analizar');
+  const resEl = document.getElementById('analisis-resultado');
+  btn.disabled = true; btn.textContent = 'Analizando...'; resEl.style.display = 'none';
+
+  let prompt = 'Sos un analista de riesgo crediticio senior especializado en el sector vitivinícola argentino. Tu trabajo es evaluar clientes para ' + getNombreBodega() + ' y emitir un informe completo de riesgo crediticio.\n\nCUIT consultado: ' + cuit + '\n\n';
+  if (mora) prompt += '⚠️ ALERTA CRÍTICA - MORA CON PIATTELLI:\n' + mora.nombre + ' tiene deuda impaga desde ' + mora.fecha_mora + '.\nSaldo adeudado: $' + mora.saldo.toLocaleString('es-AR') + ' — Estado: ' + mora.estado + '\nEste antecedente es determinante para el análisis.\n\n';
+  if (verazData) {
+    prompt += `INFORME VERAZ/EQUIFAX — EMPRESA:
+- Score crediticio: ${verazData.score}/9 ${verazData.score <= 3 ? '(MUY BAJO - alto riesgo)' : verazData.score <= 5 ? '(MEDIO - revisar)' : '(BUENO)'}
+- Cheques rechazados: ${verazData.cheques_rechazados} ${verazData.cheques_rechazados > 0 ? '⚠️ ATENCIÓN' : '✓'}
+- Situación BCRA: ${verazData.situacion_bcra}
+- Saldo vencido: ${verazData.saldo_vencido}
+- Deuda total en sistema financiero: ${verazData.deuda_sistema_financiero}
+- Máximo atraso últimos 24 meses: ${verazData.maximo_atraso}
+- Entidades con problemas: ${verazData.entidades_problema?.join(', ') || 'Ninguna'}
+
+`;
+    if (verazData.socios_directores?.length) {
+      const sociosTexto = verazData.socios_directores.map(function(s) {
+        return '- ' + s.nombre + ' (' + (s.cargo||'socio') + '): Score ' + (s.score||'N/D') + '/9 | Situación: ' + (s.situacion||'N/D') + ' | ID: ' + (s.cuit_dni||'N/D');
+      }).join('\n');
+      prompt += 'SOCIOS / DIRECTORES (información de contexto — NO son el cliente principal):\n';
+      prompt += 'IMPORTANTE: El análisis principal debe basarse en el CUIT de la empresa.\n';
+      prompt += sociosTexto + '\n\n';
+    }
+  }
+  if (wspThreads?.length) {
+    prompt += `HISTORIAL EN GRUPO DE BODEGAS (referencia del mercado):
+`;
+    wspThreads.forEach(t => t.mensajes.slice(0,5).forEach(m => { prompt += `${m.autor}: ${m.texto}\n`; }));
+    prompt += `\n`;
+  }
+  if (piat) prompt += 'HISTORIAL CON ' + getNombreBodega().toUpperCase() + ':\n' + piat + '\n\n';
+  // Agregar límite y plazo si el cliente está en cartera
+  var clienteCartera = cartera.find(function(c) { return c.cuit === cuit; });
+  if (clienteCartera && (clienteCartera.limiteCreditoARS || clienteCartera.plazoDias)) {
+    prompt += 'CONDICIONES ACTUALES CON ESTA BODEGA:\n';
+    if (clienteCartera.limiteCreditoARS) prompt += '- Límite de crédito: $' + clienteCartera.limiteCreditoARS.toLocaleString('es-AR') + '\n';
+    if (clienteCartera.plazoDias) prompt += '- Plazo de pago: ' + clienteCartera.plazoDias + ' días\n';
+    prompt += '\n';
+  }
+  prompt += `CRITERIOS DE EVALUACIÓN:
+- Situación BCRA ideal: 1 (Normal). Situación 2 requiere garantías. Situación 3+ es rechazo automático.
+- Score Veraz ideal: 7 o más. Entre 5-6 requiere condiciones. Menos de 5 es rechazo.
+- Cheques rechazados: cualquier antecedente reciente es señal de alerta grave.
+- Mora registrada: es condición de rechazo automático hasta regularización.
+- Historial en grupo de bodegas: referencias negativas de colegas del sector pesan mucho.
+
+MODALIDADES DE VENTA DISPONIBLES:
+1. CUENTA CORRIENTE 30/60/90 días — para clientes AAA sin antecedentes
+2. CHEQUE A 30/60 DÍAS — para clientes buenos con alguna observación menor  
+3. CHEQUE CONTRA ENTREGA — para clientes nuevos o con historial mixto
+4. PAGO ANTICIPADO — para clientes con antecedentes negativos pero con potencial
+5. RECHAZO TOTAL — para clientes con mora activa, situación 3+ o cheques rechazados recientes
+
+FORMATO DE RESPUESTA REQUERIDO:
+**VEREDICTO: [APROBAR / APROBAR CON CONDICIONES / REVISAR / RECHAZAR]**
+
+**MODALIDAD DE VENTA RECOMENDADA:** [elegí una de las 5 opciones y justificá]
+
+**LÍMITE DE CRÉDITO SUGERIDO:** $[monto en pesos] — [justificación breve]
+
+**ANÁLISIS DE RIESGO:**
+[3-4 líneas con los puntos más importantes del perfil crediticio]
+
+**SEÑALES DE ALERTA:**
+[listá las alertas encontradas, o "Sin alertas" si el perfil es limpio]
+
+**CONDICIONES ESPECIALES (si aplica):**
+[cualquier condición adicional que recomendés, como garantías, avales, límite de plazo, etc.]
+
+ANÁLISIS GEOGRÁFICO Y DE CONTEXTO:
+Usá el domicilio fiscal del cliente (provincia, ciudad) para evaluar:
+
+1. ZONAS DE RIESGO DE CONTRABANDO (alerta máxima para clientes nuevos):
+   - Salta, Jujuy, Formosa, Misiones — zonas limítrofes con Bolivia, Paraguay y Brasil
+   - En estas zonas, para clientes nuevos, SIEMPRE recomendá pago anticipado o cheque contra entrega
+   - Ya hubo casos documentados de clientes que retiraron mercadería y cruzaron la frontera
+
+2. COHERENCIA VOLUMEN vs GEOGRAFÍA:
+   - Localidad de menos de 5.000 habitantes pidiendo más de 200 cajas → alerta
+   - Localidad de menos de 20.000 habitantes pidiendo más de 500 cajas → alerta grave
+   - Si el volumen no tiene sentido para el tamaño del mercado local, preguntarse para qué destino es realmente
+
+3. ZONAS ECONÓMICAMENTE COMPLEJAS:
+   - NOA (Noroeste Argentino) y NEA (Nordeste) — mayor riesgo de insolvencia histórico
+   - Patagonia lejana — logística compleja, recupero de deuda difícil
+   - AMBA y grandes ciudades — mercado normal, evaluar por perfil crediticio
+
+4. CLIENTE NUEVO SIN HISTORIAL:
+   - Si es la primera operación mora registrada y está en zona de riesgo → pago anticipado obligatorio
+   - Si es la primera operación y el domicilio no coincide con el rubro declarado → investigar
+
+Incluí siempre en tu análisis una sección de RIESGO GEOGRÁFICO aunque sea para decir que la zona es de bajo riesgo.
+
+Sé directo, profesional y específico. El equipo de ventas va a usar este informe para tomar decisiones comerciales reales. Tu análisis puede evitar pérdidas millonarias.`;
+
+  try {
+    const r = await fetch('/analizar', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ prompt })
+    });
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+    ultimoAnalisis = { cuit, texto: data.texto, fecha: new Date().toLocaleDateString('es-AR') };
+    resEl.style.display = 'block';
+    resEl.innerHTML = `<div style="font-size:12px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Análisis de riesgo</div><div style="font-size:13px;line-height:1.7;white-space:pre-wrap;color:#333;">${data.texto}</div>`;
+    document.getElementById('btn-export').style.display = 'inline-block';
+  } catch(e) {
+    resEl.style.display = 'block';
+    resEl.innerHTML = `<div style="font-size:13px;color:#888;">No se pudo conectar con el motor de análisis. Intentá de nuevo en unos segundos.</div>`;
+  }
+  btn.disabled = false; btn.textContent = 'Analizar riesgo crediticio →';
+}
+
+function exportarReporte() {
+  if (!ultimoAnalisis) return;
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const cuit = document.getElementById('cuit-input').value.trim();
+  const headerEl = document.getElementById('cliente-header');
+  const nombre = headerEl.querySelector('div > div > div')?.textContent || cuit;
+  const mora = buscarEnMoras(cuit.replace(/-/g,''));
+  let y = 20;
+  doc.setFontSize(18); doc.setTextColor(155, 32, 32);
+  doc.text('Vender Seguros', 20, y); y += 8;
+  doc.setFontSize(11); doc.setTextColor(100);
+  doc.text(`Reporte de riesgo crediticio — ${ultimoAnalisis.fecha}`, 20, y); y += 6;
+  doc.setDrawColor(220); doc.line(20, y, 190, y); y += 10;
+  doc.setFontSize(13); doc.setTextColor(30);
+  doc.text(`Cliente: ${nombre}`, 20, y); y += 8;
+  doc.setFontSize(11); doc.setTextColor(100);
+  doc.text(`CUIT: ${cuit}`, 20, y); y += 10;
+  if (mora) {
+    doc.setTextColor(153, 27, 27);
+    doc.text(`MORA: $${mora.saldo.toLocaleString('es-AR')} desde ${mora.fecha_mora} (${mora.estado})`, 20, y); y += 10;
+  }
+  if (verazData) {
+    doc.setTextColor(30); doc.setFontSize(12);
+    doc.text('Datos Veraz:', 20, y); y += 7;
+    doc.setFontSize(10); doc.setTextColor(80);
+    doc.text(`Score: ${verazData.score}/9 | Cheques rechazados: ${verazData.cheques_rechazados}`, 20, y); y += 6;
+    doc.text(`Situación: ${verazData.situacion_bcra} | Saldo vencido: ${verazData.saldo_vencido}`, 20, y); y += 6;
+    doc.text(`Deuda total: ${verazData.deuda_sistema_financiero}`, 20, y); y += 10;
+  }
+  doc.setFontSize(12); doc.setTextColor(30);
+  doc.text('Análisis de riesgo:', 20, y); y += 8;
+  doc.setFontSize(10); doc.setTextColor(60);
+  const lines = doc.splitTextToSize(ultimoAnalisis.texto, 170);
+  doc.text(lines, 20, y);
+  doc.save(`VenderSeguros_${cuit}_${ultimoAnalisis.fecha.replace(/\//g,'-')}.pdf`);
+}
+
+
+function sumarsARed() {
+  var nombre = getNombreBodega();
+  var contador = parseInt(localStorage.getItem('piat_red_contador') || '1');
+  if (nombre && nombre !== 'tu bodega') {
+    contador = Math.max(contador, 2);
+    localStorage.setItem('piat_red_contador', contador);
+    document.getElementById('red-contador').textContent = contador;
+  }
+  document.getElementById('red-confirmacion').style.display = 'block';
+}
+
+function generarResumenEjecutivo() {
+  var jsPDF = window.jspdf ? window.jspdf.jsPDF : null;
+  if (!jsPDF) { alert('PDF no disponible, intentá de nuevo.'); return; }
+  var doc = new jsPDF();
+  var bodega = getNombreBodega();
+  var fecha = new Date().toLocaleDateString('es-AR');
+  var y = 20;
+
+  // Header
+  doc.setFillColor(15, 45, 82);
+  doc.rect(0, 0, 210, 35, 'F');
+  doc.setFontSize(22);
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Vende Seguro', 20, 18);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'italic');
+  doc.setTextColor(147, 197, 253);
+  doc.text('vende sin riesgo', 20, 27);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(255, 255, 255);
+  doc.text('Resumen ejecutivo — ' + fecha, 120, 18);
+  doc.text(bodega, 120, 27);
+
+  y = 50;
+
+  // Métricas
+  doc.setFontSize(13);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(15, 45, 82);
+  doc.text('Resumen de cartera', 20, y);
+  y += 8;
+  doc.setDrawColor(200, 220, 255);
+  doc.line(20, y, 190, y);
+  y += 10;
+
+  var metTotal = document.getElementById('met-total').textContent || '—';
+  var metCriticos = document.getElementById('met-criticos').textContent || '0';
+  var metMora = document.getElementById('met-mora').textContent || '0';
+  var metBodegas = document.getElementById('met-bodegas').textContent || '0';
+
+  var metricas = [
+    ['Clientes en cartera', metTotal],
+    ['Alertas BCRA activas', metCriticos],
+    ['Con mora registrada', metMora],
+    ['Con menciones en red', metBodegas]
+  ];
+
+  doc.setFontSize(11);
+  metricas.forEach(function(m) {
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139);
+    doc.text(m[0], 25, y);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(15, 45, 82);
+    doc.text(m[1], 130, y);
+    y += 8;
+  });
+
+  // DSO si hay datos
+  if (dsoDatos && dsoDatos.length > 0) {
+    var saldoTotal = dsoDatos.reduce(function(s, c) { return s + c.saldo; }, 0);
+    var dsoGlobal = Math.round(dsoDatos.reduce(function(s, c) { return s + c.dso * c.saldo; }, 0) / saldoTotal);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139);
+    doc.text('DSO global', 25, y);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(15, 45, 82);
+    doc.text(dsoGlobal + ' días', 130, y);
+    y += 8;
+  }
+
+  y += 6;
+  doc.setDrawColor(200, 220, 255);
+  doc.line(20, y, 190, y);
+  y += 10;
+
+  // Top 5 alertas
+  doc.setFontSize(13);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(15, 45, 82);
+  doc.text('Top 5 clientes con mayor riesgo', 20, y);
+  y += 8;
+
+  var top5 = alertas.slice(0, 5);
+  if (top5.length === 0) {
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(150, 150, 150);
+    doc.text('Sin alertas activas.', 25, y);
+    y += 8;
+  } else {
+    doc.setFontSize(10);
+    top5.forEach(function(a, idx) {
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(153, 27, 27);
+      doc.text((idx + 1) + '. ' + a.nombre, 25, y);
+      y += 6;
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(100, 116, 139);
+      var motivo = a.tipo === 'bcra'
+        ? 'BCRA: Situacion ' + a.sitActual + ' — ' + (a.sitActual >= 3 ? 'Alto riesgo' : 'Seguimiento')
+        : 'Grupo bodegas: ' + (a.mensajes && a.mensajes[0] ? a.mensajes[0].substring(0, 60) + '...' : 'comentarios negativos');
+      doc.text('CUIT: ' + a.cuit + ' · ' + motivo, 28, y);
+      y += 8;
+    });
+  }
+
+  // Footer
+  doc.setFillColor(15, 45, 82);
+  doc.rect(0, 280, 210, 17, 'F');
+  doc.setFontSize(8);
+  doc.setTextColor(147, 197, 253);
+  doc.setFont('helvetica', 'italic');
+  doc.text('Generado por Vende Seguro — analisis crediticio para el sector vitivinicola argentino.', 20, 290);
+
+  doc.save('ResumenEjecutivo_' + bodega.replace(/ /g, '_') + '_' + fecha.replace(/\//g, '-') + '.pdf');
+}
+
+function sumarsePedido() {
+  localStorage.setItem('piat_red_sumado', '1');
+  document.getElementById('red-cta-form').style.display = 'none';
+  document.getElementById('red-confirmacion').style.display = 'block';
+  actualizarContadorRed();
+}
+
+function actualizarContadorRed() {
+  var base = 1;
+  // Cada bodega que tiene nombre configurado cuenta como 1
+  if (localStorage.getItem('piat_nombre_bodega')) base = 1;
+  if (localStorage.getItem('piat_red_sumado')) base = Math.max(base, 1);
+  document.getElementById('red-contador').textContent = base;
+}
+
+function guardarUmbralesDSO() {
+  var bajo = parseInt(document.getElementById('input-dso-bajo').value) || 45;
+  var alto = parseInt(document.getElementById('input-dso-alto').value) || 65;
+  localStorage.setItem('piat_dso_umbral', bajo);
+  localStorage.setItem('piat_dso_umbral_alto', alto);
+  sincronizarServidor();
+  var st = document.getElementById('dso-umbral-status');
+  st.style.display = 'block';
+  setTimeout(function() { st.style.display = 'none'; }, 2000);
+}
+
+function guardarNombreBodega() {
+  var nombre = document.getElementById('input-nombre-bodega').value.trim();
+  if (!nombre) { alert('Ingresá el nombre de tu bodega'); return; }
+  localStorage.setItem('piat_nombre_bodega', nombre);
+  sincronizarServidor();
+  var status = document.getElementById('nombre-bodega-status');
+  status.style.display = 'block';
+  setTimeout(function() { status.style.display = 'none'; }, 2000);
+}
+
+async function actualizarWSP(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById('wsp-update-status');
+  statusEl.textContent = 'Procesando chat...';
+  const text = await file.text();
+  const msgPattern = /(\d{1,2}\/\d{1,2}\/\d{4}), (\d{1,2}:\d{2}) - ([^:]+): (.+?)(?=\n\d{1,2}\/\d{1,2}\/\d{4}|$)/gs;
+  const cuitPattern = /\b(\d{2}[-\s]?\d{8}[-\s]?\d{1})\b/g;
+  const messages = [];
+  for (const m of text.matchAll(msgPattern)) {
+    messages.push({ fecha: m[1], autor: m[3].trim(), texto: m[4].trim().replace(/\n/g,' ') });
+  }
+  const newIndex = wspIndex ? {...wspIndex} : {};
+  let nuevos = 0;
+  messages.forEach((msg, i) => {
+    for (const match of msg.texto.matchAll(new RegExp(cuitPattern.source, 'g'))) {
+      const cuit = match[1].replace(/[-\s]/g,'');
+      if (cuit.length === 11) {
+        if (!newIndex[cuit]) { newIndex[cuit] = []; nuevos++; }
+        const contexto = messages.slice(i, Math.min(i+11, messages.length));
+        newIndex[cuit].push({ fecha: msg.fecha, cuit_mencionado: match[1], mensajes: contexto.map(c => ({fecha:c.fecha,autor:c.autor,texto:c.texto})) });
+      }
+    }
+  });
+  wspIndex = newIndex;
+  const total = Object.keys(wspIndex).length;
+  document.getElementById('wsp-area').className = 'upload-area success';
+  document.getElementById('wsp-area').innerHTML = `<div style="font-size:13px;color:#166534;font-weight:600;">✓ Chat actualizado</div>`;
+  document.getElementById('wsp-dot').style.background = '#22c55e';
+  document.getElementById('wsp-label').textContent = 'Red activa · ' + total + ' bodegas';
+  statusEl.textContent = `Listo. ${nuevos} CUITs nuevos. Total: ${total} clientes indexados.`;
+}
+
+function guardarEnHistorial(cuit, bcraData) {
+  const entidades = bcraData?.results?.periodos?.[0]?.entidades || [];
+  const nombre = bcraData?.results?.denominacion || 'Sin denominación';
+  const maxSit = entidades.length ? entidades.reduce((m,e) => Math.max(m, e.situacion||1), 1) : 1;
+  const mora = buscarEnMoras(cuit);
+  const entrada = {
+    cuit,
+    nombre,
+    situacion: maxSit,
+    tieneMora: !!mora,
+    fecha: new Date().toLocaleDateString('es-AR'),
+    hora: new Date().toLocaleTimeString('es-AR', {hour:'2-digit', minute:'2-digit'})
+  };
+  historialConsultas = [entrada, ...historialConsultas.filter(h => h.cuit !== cuit)].slice(0, 50);
+  localStorage.setItem('piat_historial', JSON.stringify(historialConsultas));
+}
+
+function renderHistorial() {
+  const el = document.getElementById('historial-lista');
+  if (!historialConsultas.length) {
+    el.innerHTML = `<div class="empty-state">Todavía no consultaste ningún cliente.</div>`;
+    return;
+  }
+  el.innerHTML = historialConsultas.map(h => `
+    <div class="hist-row" onclick="verClienteHistorial('${h.cuit}')">
+      <div>
+        <div class="hist-nombre">${h.nombre}</div>
+        <div class="hist-meta">CUIT: ${h.cuit} · ${h.fecha} ${h.hora}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+        ${h.tieneMora ? '<span class="badge badge-mora">Mora</span>' : ''}
+        ${getBadge(h.situacion)}
+      </div>
+    </div>`).join('');
+}
+
+function verClienteHistorial(cuit) {
+  document.querySelectorAll('.tab')[0].click();
+  document.getElementById('cuit-input').value = cuit;
+  consultarCliente();
+}
+
+function limpiarHistorial() {
+  if (!confirm('¿Limpiar todo el historial de consultas?')) return;
+  historialConsultas = [];
+  localStorage.setItem('piat_historial', JSON.stringify(historialConsultas));
+  renderHistorial();
+}
+
+function agregarCliente() {
+  const cuit = document.getElementById('nuevo-cuit').value.replace(/-/g,'').trim();
+  const nombre = document.getElementById('nuevo-nombre').value.trim();
+  if (!cuit || !nombre) { alert('Completá CUIT y razón social'); return; }
+  if (cartera.find(c=>c.cuit===cuit)) { alert('Este cliente ya está en la cartera'); return; }
+  var limite = document.getElementById('nuevo-limite').value.trim();
+  var plazo = document.getElementById('nuevo-plazo').value.trim();
+  cartera.push({
+    cuit, nombre,
+    fechaAlta: new Date().toLocaleDateString('es-AR'),
+    ultimaSit: null, ultimaVerif: null,
+    limiteCreditoARS: limite ? parseFloat(limite) : null,
+    plazoDias: plazo ? parseInt(plazo) : null
+  });
+  localStorage.setItem('piat_cartera', JSON.stringify(cartera));
+  sincronizarServidor();
+  document.getElementById('nuevo-cuit').value = '';
+  document.getElementById('nuevo-nombre').value = '';
+  document.getElementById('nuevo-limite').value = '';
+  document.getElementById('nuevo-plazo').value = '';
+  renderCartera();
+}
+
+function eliminarCliente(i) {
+  if (!confirm('¿Eliminar este cliente?')) return;
+  cartera.splice(i,1);
+  localStorage.setItem('piat_cartera', JSON.stringify(cartera));
+  renderCartera();
+}
+
+function renderCartera() {
+  const el = document.getElementById('lista-clientes');
+  if (!cartera.length) { el.innerHTML = `<div class="empty-state">No hay clientes en seguimiento.</div>`; return; }
+  el.innerHTML = cartera.map((c,i) => `
+    <div class="client-row">
+      <div>
+          <div class="client-name">${c.nombre}</div>
+          <div class="client-meta">CUIT: ${c.cuit} · Alta: ${c.fechaAlta}${c.ultimaVerif?' · Verificado: '+c.ultimaVerif:''}</div>
+          ${(c.limiteCreditoARS || c.plazoDias) ? '<div style="font-size:11px;color:var(--azul-claro);margin-top:2px;">' + (c.limiteCreditoARS ? 'Límite: $'+c.limiteCreditoARS.toLocaleString('es-AR') : '') + (c.limiteCreditoARS && c.plazoDias ? ' · ' : '') + (c.plazoDias ? 'Plazo: '+c.plazoDias+' días' : '') + '</div>' : ''}
+        </div>
+      <div class="client-right">
+        ${c.ultimaSit ? getBadge(c.ultimaSit) : '<span style="font-size:11px;color:#aaa;">Sin verificar</span>'}
+        ${buscarEnMoras(c.cuit) ? '<span class="badge badge-mora">Mora</span>' : ''}
+        ${buscarEnWSP(c.cuit) ? '<span class="badge badge-wsp">En bodegas</span>' : ''}
+        <button onclick="verCliente('${c.cuit}')" style="font-size:12px;padding:5px 12px;">Ver</button>
+        <button onclick="eliminarCliente(${i})" style="font-size:12px;padding:5px 10px;color:#991b1b;">×</button>
+      </div>
+    </div>`).join('');
+}
+
+function verCliente(cuit) {
+  document.querySelectorAll('.tab')[0].click();
+  document.getElementById('cuit-input').value = cuit;
+  consultarCliente();
+}
+
+async function verificarTodos(forzar) {
+  if (!cartera.length) { alert('No hay clientes en la cartera.'); return; }
+  const btn = document.getElementById('btn-verificar');
+  const prog = document.getElementById('verificar-progress');
+
+  // Filtrar: solo pendientes (sin verificar) y eliminar duplicados Odoo
+  var cartFiltrada = cartera.filter(function(c) {
+    // Excluir contactos duplicados de Odoo (tienen ", contacto" en el nombre)
+    if (/,\s*(contacto|entrega|almacen|comercial|boada|alvear|contacto\s*\d)/i.test(c.nombre)) return false;
+    // Solo los que no tienen verificación del día de hoy
+    var hoy = new Date().toLocaleDateString('es-AR');
+    if (forzar) return true; // forzar verifica todos
+    return !c.ultimaVerif || c.ultimaVerif !== hoy || !c.ultimaSit;
+  });
+
+  if (!cartFiltrada.length) {
+    prog.textContent = 'Todos los clientes ya fueron verificados hoy.';
+    return;
+  }
+  prog.textContent = 'Verificando ' + cartFiltrada.length + ' clientes pendientes (de ' + cartera.length + ' en cartera)...';
+
+  // Iniciar verificacion en el servidor
+  try {
+    const r = await fetch('/verificar-cartera', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({cartera: cartFiltrada})
+    });
+    const data = await r.json();
+    if (data.error) {
+      prog.textContent = data.error;
+      return;
+    }
+  } catch(e) {
+    prog.textContent = 'No se pudo iniciar la verificacion.';
+    return;
+  }
+
+  btn.disabled = true;
+  prog.textContent = 'Verificacion iniciada en el servidor. Podes cerrar esta ventana.';
+
+  // Polling cada 5 segundos para actualizar progreso
+  var interval = setInterval(async function() {
+    try {
+      var r2 = await fetch('/verificar-progreso');
+      var estado = await r2.json();
+      
+      if (estado.corriendo) {
+        prog.textContent = estado.mensaje || 'Verificando...';
+      } else {
+        clearInterval(interval);
+        btn.disabled = false;
+        prog.textContent = estado.mensaje || 'Verificacion completada.';
+        
+        // Cargar resultados del servidor
+        var r3 = await fetch('/alertas');
+        var datos = await r3.json();
+        if (datos && !datos.error) {
+          alertas = datos.alertas || [];
+          localStorage.setItem('piat_alertas', JSON.stringify(alertas));
+          if (datos.ultima_verif) localStorage.setItem('piat_ultima_verif', datos.ultima_verif);
+          if (datos.cartera && datos.cartera.length > 0) {
+            datos.cartera.forEach(function(c) {
+              var idx = cartera.findIndex(function(lc) { return lc.cuit === c.cuit; });
+              if (idx >= 0) {
+                cartera[idx].ultimaSit = c.ultimaSit;
+                cartera[idx].ultimaVerif = c.ultimaVerif;
+              }
+            });
+            localStorage.setItem('piat_cartera', JSON.stringify(cartera));
+          }
         }
-        with open(ALERTAS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(datos_guardar, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
+        renderAlertas();
+        actualizarMetricas();
+      }
+    } catch(e) {}
+  }, 5000);
+}
 
-    verificacion_estado["corriendo"] = False
-    verificacion_estado["mensaje"] = "Verificacion completada. " + str(len(nuevas_alertas)) + " alerta(s) detectada(s)."
-    verificacion_estado["progreso"] = len(cartera_data)
 
-# ─── ENDPOINTS ───────────────────────────────────────────
+async function limpiarAlertas() {
+  if (!confirm('¿Limpiar todas las alertas?')) return;
+  alertas = [];
+  localStorage.setItem('piat_alertas', JSON.stringify([]));
+  var ultimaVerif = localStorage.getItem('piat_ultima_verif') || '';
+  var carteraResumen = cartera.map(function(c) {
+    return {cuit: c.cuit, ultimaSit: c.ultimaSit, ultimaVerif: c.ultimaVerif};
+  });
+  try {
+    await fetch('/alertas', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({alertas: [], ultima_verif: ultimaVerif, cartera: carteraResumen})
+    });
+  } catch(e) {}
+  renderAlertas();
+}
 
-@app.route("/")
-def index():
-    return send_from_directory('static', 'index.html')
+function renderAlertas() {
+  // Mostrar alertas nuevas
+  const alertasEl = document.getElementById('alertas-lista');
+  const alertasNuevasDiv = document.getElementById('alertas-nuevas');
+  
+  if (alertas.length) {
+    alertasNuevasDiv.style.display = 'block';
+    alertasEl.innerHTML = alertas.map(function(a) {
+      var badgeClass = a.tipo === 'bodegas' ? 'badge-warning' : 'badge-danger';
+      var badgeStyle = a.tipo === 'bodegas' ? 'background:#fef9c3;color:#713f12;' : '';
+      var badgeText = a.tipo === 'bodegas' ? '⚠ Bodegas' : 'BCRA';
+      var html = '<div class="alert-card">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">';
+      html += '<div style="flex:1;">';
+      html += '<div style="font-size:14px;font-weight:600;">' + a.nombre + '</div>';
+      html += '<div style="font-size:12px;color:#888;margin-top:2px;">CUIT: ' + a.cuit + ' · ' + a.fecha + '</div>';
+      if (a.tipo === 'bcra') {
+        html += '<div style="font-size:13px;margin-top:8px;color:#991b1b;font-weight:500;">';
+        html += 'BCRA: Situación ' + a.sitAnterior + ' → ' + a.sitActual + ' (' + sitNombre(a.sitActual) + ')';
+        html += '</div>';
+      }
+      if (a.tipo === 'bodegas') {
+        html += '<div style="font-size:13px;margin-top:8px;color:#854d0e;font-weight:500;">Grupo bodegas: comentarios negativos detectados</div>';
+        if (a.mensajes && a.mensajes.length > 0) {
+          a.mensajes.forEach(function(msg) {
+            html += '<div style="font-size:12px;color:#666;margin-top:4px;padding:4px 8px;background:#fefce8;border-radius:6px;font-style:italic;">"' + msg + '"</div>';
+          });
+        }
+      }
+      html += '</div>';
+      html += '<span class="badge ' + badgeClass + '" style="' + badgeStyle + '">' + badgeText + '</span>';
+      html += '</div></div>';
+      return html;
+    }).join('');
+  } else {
+    alertasNuevasDiv.style.display = 'none';
+  }
 
-@app.route("/whatsapp_index.json")
-def wsp_index_route():
-    return send_from_directory(os.getcwd(), 'whatsapp_index.json')
+  // Mostrar estado actual de toda la cartera
+  const listaEl = document.getElementById('cartera-bcra-lista');
+  const ultimaVerif = localStorage.getItem('piat_ultima_verif');
+  if (ultimaVerif) {
+    document.getElementById('ultima-verificacion').textContent = `Última verificación: ${ultimaVerif}`;
+  }
 
-@app.route("/moras.json")
-def moras():
-    return send_from_directory(os.getcwd(), 'moras_piattelli.json')
+  if (!cartera.length) {
+    listaEl.innerHTML = `<div class="empty-state">No hay clientes en la cartera.<br>Agregá clientes en la pestaña Cartera.</div>`;
+    return;
+  }
 
-@app.route("/cartera_inicial.json")
-def cartera_inicial():
-    return send_from_directory(os.getcwd(), 'cartera_inicial.json')
+  // Ordenar cartera: primero críticos (sit 3+), luego mora, luego resto
+  var carteraOrdenada = cartera.slice().sort(function(a, b) {
+    var sitA = a.ultimaSit || 0;
+    var sitB = b.ultimaSit || 0;
+    var moraA = buscarEnMoras(a.cuit) ? 1 : 0;
+    var moraB = buscarEnMoras(b.cuit) ? 1 : 0;
+    if (sitA >= 3 && sitB < 3) return -1;
+    if (sitB >= 3 && sitA < 3) return 1;
+    if (moraA && !moraB) return -1;
+    if (moraB && !moraA) return 1;
+    if (sitA === 2 && sitB !== 2) return -1;
+    if (sitB === 2 && sitA !== 2) return 1;
+    return 0;
+  });
 
-@app.route("/datos-bodega", methods=["GET"])
-def get_datos_bodega():
-    try:
-        if os.path.exists(DATOS_FILE):
-            with open(DATOS_FILE, 'r', encoding='utf-8') as f:
-                return jsonify(json.load(f))
-        return jsonify({})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+  listaEl.innerHTML = carteraOrdenada.map(function(c) {
+    var mora = buscarEnMoras(c.cuit);
+    var esCritico = c.ultimaSit && c.ultimaSit >= 3;
+    var esAtencion = c.ultimaSit === 2;
+    var verificadoTxt = c.ultimaVerif ? ' · Verificado: ' + c.ultimaVerif : ' · Sin verificar';
+    var borderStyle = esCritico ? 'border-left: 4px solid #ef4444;' : esAtencion ? 'border-left: 4px solid #f97316;' : mora ? 'border-left: 4px solid #991b1b;' : '';
+    var bgStyle = esCritico ? 'background:#fff5f5;' : esAtencion ? 'background:#fff8f0;' : '';
+    var html = '<div class="client-row" style="cursor:pointer;' + borderStyle + bgStyle + '" onclick="verCliente(\'' + c.cuit + '\')">';
+    html += '<div>';
+    if (esCritico) html += '<div style="font-size:10px;color:#991b1b;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;">⚠ Situación crítica BCRA</div>';
+    if (esAtencion && !esCritico) html += '<div style="font-size:10px;color:#9a3412;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;">⚠ Seguimiento especial</div>';
+    html += '<div class="client-name">' + c.nombre + '</div>';
+    html += '<div class="client-meta">CUIT: ' + c.cuit + verificadoTxt + '</div>';
+    html += '</div>';
+    html += '<div class="client-right">';
+    if (mora) html += '<span class="badge badge-mora">Mora</span>';
+    if (buscarEnWSP(c.cuit)) html += '<span class="badge badge-wsp">En bodegas</span>';
+    html += c.ultimaSit ? getBadge(c.ultimaSit) : '<span style="font-size:11px;color:#aaa;">Pendiente</span>';
+    html += '</div></div>';
+    return html;
+  }).join('');
+}
 
-@app.route("/datos-bodega", methods=["POST"])
-def save_datos_bodega():
-    try:
-        data = request.get_json(force=True)
-        with open(DATOS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        return jsonify({"ok": True})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
-@app.route("/alertas", methods=["GET"])
-def get_alertas():
-    try:
-        if os.path.exists(ALERTAS_FILE):
-            with open(ALERTAS_FILE, 'r', encoding='utf-8') as f:
-                return jsonify(json.load(f))
-        return jsonify({"alertas": [], "ultima_verif": "", "cartera": []})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+function mostrarVeredicto(sinLevantar, totalCheques, tieneNegativo, maxSit) {
+  var veredicto, color, bg;
+  maxSit = maxSit || 1;
+  if (maxSit >= 3) {
+    veredicto = '✗ RECHAZAR — Situación BCRA crítica (Sit. ' + maxSit + ')';
+    color = '#991b1b'; bg = '#fee2e2';
+  } else if (sinLevantar > 0) {
+    veredicto = '✗ RECHAZAR — Tiene cheques sin levantar';
+    color = '#991b1b'; bg = '#fee2e2';
+  } else if (maxSit === 2) {
+    veredicto = '⚠ REVISAR — Seguimiento especial en BCRA';
+    color = '#854d0e'; bg = '#fefce8';
+  } else if (totalCheques > 0 || tieneNegativo) {
+    veredicto = '⚠ REVISAR — Tiene antecedentes, evaluar con cuidado';
+    color = '#854d0e'; bg = '#fefce8';
+  } else {
+    veredicto = '✓ ACEPTAR — Sin antecedentes negativos';
+    color = '#166534'; bg = '#dcfce7';
+  }
+  var html = '<div style="padding:1rem 1.25rem;background:' + bg + ';border-radius:12px;border:1px solid ' + color + '20;margin-bottom:8px;">';
+  html += '<div style="font-size:16px;font-weight:700;color:' + color + ';">' + veredicto + '</div>';
+  html += '<div style="font-size:12px;color:' + color + ';margin-top:4px;opacity:0.8;">Basado en datos del BCRA y grupo de bodegas</div>';
+  html += '</div>';
+  document.getElementById('cheque-veredicto').innerHTML = html;
+}
 
-@app.route("/alertas", methods=["POST"])
-def save_alertas():
-    try:
-        data = request.get_json(force=True)
-        with open(ALERTAS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        return jsonify({"ok": True})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+async function consultarCheque() {
+  var raw = document.getElementById('cuit-cheque').value.replace(/-/g,'').trim();
+  if (!raw || raw.length < 10) { alert('Ingresá un CUIT válido'); return; }
+  document.getElementById('cheque-resultado').style.display = 'none';
+  document.getElementById('cheque-loading').style.display = 'block';
 
-@app.route("/verificar-cartera", methods=["POST"])
-def verificar_cartera():
-    if verificacion_estado["corriendo"]:
-        return jsonify({"error": "Ya hay una verificacion en curso"}), 400
-    try:
-        body = request.get_json(force=True)
-        cartera_data = body.get('cartera', [])
-        if not cartera_data:
-            return jsonify({"error": "Cartera vacia"}), 400
-        t = threading.Thread(target=ejecutar_verificacion, args=(cartera_data,), daemon=True)
-        t.start()
-        return jsonify({"ok": True, "mensaje": "Verificacion iniciada en el servidor"})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+  var chequesData = null;
+  var nombre = '';
+  var maxSitBCRA = 1;
 
-@app.route("/verificar-progreso", methods=["GET"])
-def verificar_progreso():
-    return jsonify(verificacion_estado)
+  // 1. Situación BCRA del librador — via servidor
+  try {
+    var r1 = await fetch('/deudas/' + raw, {signal: AbortSignal.timeout(12000)});
+    var d1 = await r1.json();
+    if (d1.results) {
+      nombre = d1.results.denominacion || '';
+      var entidades = [];
+      try { entidades = d1.results.periodos[0].entidades || []; } catch(e) {}
+      if (entidades.length) {
+        maxSitBCRA = entidades.reduce(function(m, e) { return Math.max(m, e.situacion || 1); }, 1);
+      }
+    }
+  } catch(e) {}
 
-@app.route("/analizar-bodegas", methods=["POST"])
-def analizar_bodegas():
-    if not GEMINI_KEY:
-        return jsonify({"es_negativo": False, "motivo": ""})
-    try:
-        body = request.get_json(force=True)
-        cuit = body.get('cuit', '')
-        nombre = body.get('nombre', '')
-        mensajes = body.get('mensajes', [])
-        es_neg, motivo = analizar_bodegas_server(cuit, nombre, mensajes)
-        return jsonify({"es_negativo": es_neg, "motivo": motivo})
-    except Exception as e:
-        return jsonify({"es_negativo": False, "motivo": str(e)})
+  // 2. Cheques rechazados — via servidor
+  try {
+    var rCh = await fetch('/deudas/' + raw + '/cheques', {signal: AbortSignal.timeout(12000)});
+    chequesData = await rCh.json();
+  } catch(e) {}
 
-@app.route("/afip/<cuit>")
-def get_afip(cuit):
-    try:
-        data, error = consultar_bcra(cuit)
-        if data and not error:
-            nombre = data.get('results', {}).get('denominacion', '')
-            if nombre:
-                return jsonify({"nombre": nombre})
-    except Exception:
-        pass
-    return jsonify({"nombre": "", "error": "No encontrado"})
+  document.getElementById('cheque-loading').style.display = 'none';
+  document.getElementById('cheque-resultado').style.display = 'block';
 
-@app.route("/deudas/<cuit>")
-def get_deudas(cuit):
-    data, error = consultar_bcra_cached(cuit)
-    if error == "timeout":
-        return jsonify({"error": "timeout", "mensaje": "El BCRA no respondio."}), 200
-    if error:
-        return jsonify({"error": error}), 500
-    return jsonify(data), 200
+  var cuitFmt = raw.slice(0,2) + '-' + raw.slice(2,10) + '-' + raw.slice(10);
+  var nombreMostrar = nombre || 'Sin denominación';
+  document.getElementById('cheque-header').innerHTML =
+    '<div style="display:flex;align-items:center;gap:14px;">' +
+    '<div class="avatar">' + (nombre ? nombre.charAt(0) : '?') + '</div>' +
+    '<div><div style="font-size:16px;font-weight:600;">' + nombreMostrar + '</div>' +
+    '<div style="font-size:12px;color:#888;">CUIT: ' + cuitFmt + '</div></div>' +
+    '</div>';
 
-@app.route("/deudas/<cuit>/cheques")
-def get_cheques(cuit):
-    try:
-        r = requests.get("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/" + cuit, timeout=12, verify=False)
-        return jsonify(r.json()), r.status_code
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+  // Situación BCRA del librador
+  var bcraLibradorEl = document.getElementById('cheque-bcra-situacion');
+  if (bcraLibradorEl) {
+    if (maxSitBCRA > 1) {
+      bcraLibradorEl.innerHTML = getBadge(maxSitBCRA) + ' <span style="font-size:12px;color:#64748b;margin-left:6px;">Situación crediticia del librador</span>';
+    } else {
+      bcraLibradorEl.innerHTML = '<div style="font-size:13px;color:#166534;">✓ Situación 1 — Normal en el BCRA</div>';
+    }
+  }
 
-@app.route("/deudas/<cuit>/historial")
-def get_historial(cuit):
-    try:
-        r = requests.get("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit, timeout=12, verify=False)
-        return jsonify(r.json()), r.status_code
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+  // Cheques rechazados
+  var cheques = [];
+  var sinLevantar = [];
+  if (chequesData && chequesData.results && chequesData.results.causales) {
+    chequesData.results.causales.forEach(function(causal) {
+      (causal.entidades || []).forEach(function(ent) {
+        (ent.detalle || []).forEach(function(ch) {
+          var levantado = !!ch.fechaPago;
+          cheques.push({fecha: ch.fechaRechazo, motivo: causal.causal, monto: ch.monto, levantado: levantado});
+          if (!levantado) sinLevantar.push(ch);
+        });
+      });
+    });
+  }
 
-@app.route("/analizar", methods=["POST"])
-def analizar():
-    if not GEMINI_KEY:
-        return jsonify({"error": "API key no configurada"}), 500
-    try:
-        body = request.get_json()
-        prompt = body.get('prompt', '')
-        payload = {"contents": [{"parts": [{"text": prompt}]}]}
-        texto, error = gemini_request(payload, timeout=90)
-        if error:
-            return jsonify({"error": error}), 500
-        return jsonify({"texto": texto})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+  var chEl = document.getElementById('cheque-bcra-data');
+  if (chEl) {
+    if (!cheques.length) {
+      chEl.innerHTML = '<div class="empty-state" style="color:#166534;">✓ Sin cheques rechazados en el BCRA.</div>';
+    } else {
+      var resumen = '<div style="font-size:13px;margin-bottom:8px;"><strong style="color:#991b1b;">' + cheques.length + ' cheque(s) rechazado(s)</strong>';
+      if (sinLevantar.length) resumen += ' · <span style="color:#991b1b;font-weight:600;">' + sinLevantar.length + ' sin levantar ⚠️</span>';
+      resumen += '</div>';
+      var tabla = '<table class="bcra-table"><thead><tr><th>Fecha</th><th>Motivo</th><th>Monto</th><th>Estado</th></tr></thead><tbody>';
+      cheques.slice(0, 15).forEach(function(ch) {
+        tabla += '<tr><td>' + (ch.fecha||'-') + '</td><td>' + (ch.motivo||'-') + '</td><td>$' + ((ch.monto||0).toLocaleString('es-AR')) + '</td><td>' + (ch.levantado ? '<span style="color:#166534;">✓ Levantado</span>' : '<span style="color:#991b1b;font-weight:600;">Sin levantar</span>') + '</td></tr>';
+      });
+      if (cheques.length > 15) tabla += '<tr><td colspan="4" style="font-size:12px;color:#64748b;text-align:center;">... y ' + (cheques.length-15) + ' más</td></tr>';
+      tabla += '</tbody></table>';
+      chEl.innerHTML = resumen + tabla;
+    }
+  }
 
-@app.route("/procesar-veraz", methods=["POST"])
-@app.route("/procesar-informe", methods=["POST"])
-def procesar_veraz():
-    if not GEMINI_KEY:
-        return jsonify({"error": "API key no configurada"}), 500
-    try:
-        body = request.get_json(force=True)
-        pdf_base64 = body.get('pdf', '')
-        prompt = (
-            "Este puede ser un informe de Veraz/Equifax o de Nosis. Detecta el formato automaticamente y extrae los mismos campos. "
-            "Responde SOLO con un objeto JSON valido, sin markdown, sin texto adicional. "
-            "Estructura exacta: "
-            '{"nombre":"","cuit":"","score":0,"situacion_bcra":"","cheques_rechazados":0,'
-            '"monto_cheques":"","saldo_vencido":"","deuda_sistema_financiero":"",'
-            '"maximo_atraso":"","entidades_problema":[],"resumen":"",'
-            '"socios_directores":[{"nombre":"","cuit_dni":"","cargo":"","score":0,"situacion":""}]} '
-            "El array socios_directores debe incluir todos los socios, directores o representantes "
-            "legales con su informacion crediticia. Si no hay, dejar array vacio []."
-        )
-        payload = {"contents": [{"parts": [
-            {"inline_data": {"mime_type": "application/pdf", "data": pdf_base64}},
-            {"text": prompt}
-        ]}]}
-        texto, error = gemini_request(payload, timeout=60)
-        if error:
-            return jsonify({"error": error}), 500
-        texto_limpio = texto.strip().replace("```json", "").replace("```", "").strip()
-        resultado = json.loads(texto_limpio)
-        return jsonify(resultado)
-    except json.JSONDecodeError:
-        return jsonify({"error": "Error al procesar el PDF. Intenta de nuevo."}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+  // Bodegas
+  var bodegasHtml = '';
+  var threads = wspIndex[raw] || [];
+  var tieneNegativo = false;
+  if (threads.length) {
+    var mensajes = [];
+    threads.forEach(function(t) { (t.mensajes||[]).forEach(function(m) { mensajes.push(m.autor + ': ' + m.texto); }); });
+    bodegasHtml = '<div style="font-size:13px;color:#64748b;margin-bottom:8px;">' + mensajes.slice(0,5).map(function(m){return '<div style="padding:4px 0;border-bottom:1px solid #f1f5f9;">'+m+'</div>';}).join('') + '</div>';
+    tieneNegativo = mensajes.some(function(m) {
+      return ['rechaz','no paga','cuidado','mora','deuda','estafa','sin fondos'].some(function(p){ return m.toLowerCase().includes(p); });
+    });
+  } else {
+    bodegasHtml = '<div class="empty-state">Sin menciones en el grupo de bodegas.</div>';
+  }
+  document.getElementById('cheque-bodegas-data').innerHTML = bodegasHtml;
 
-@app.route("/test-gemini")
-def test_gemini():
-    if not GEMINI_KEY:
-        return jsonify({"error": "No hay API key"}), 500
-    payload = {"contents": [{"parts": [{"text": "Responde solo con la palabra OK"}]}]}
-    texto, error = gemini_request(payload)
-    if error:
-        return jsonify({"error": error}), 500
-    return jsonify({"ok": True, "respuesta": texto})
+  mostrarVeredicto(sinLevantar.length, cheques.length, tieneNegativo, maxSitBCRA);
+}
 
-@app.route("/cache-stats")
-def cache_stats():
-    import time
-    ahora = time.time()
-    activos = sum(1 for v in bcra_cache.values() if ahora - v['timestamp'] < CACHE_TTL)
-    return jsonify({"total": len(bcra_cache), "activos": activos, "ttl_horas": CACHE_TTL/3600})
 
-@app.route("/health")
-def health():
-    return jsonify({"status": "ok", "gemini": bool(GEMINI_KEY)})
+async function analizarCheque() {
+  var datos = window.chequeActual || {};
+  if (!datos.cuit) return;
+  var btn = document.getElementById('btn-analizar-cheque');
+  var card = document.getElementById('cheque-analisis-card');
+  var dataEl = document.getElementById('cheque-analisis-data');
+  btn.disabled = true;
+  btn.textContent = 'Analizando...';
+  card.style.display = 'block';
+  dataEl.innerHTML = '<div style="color:#888;font-size:13px;">Consultando motor de análisis...</div>';
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080, timeout=120)
+  var sinLevantar = datos.cheques.filter(function(c) { return !c.fechaPago; });
+  var palabrasNeg = ['rechaz','no pag','cuidado','debe','moroso','rebotado','sin fondos','incobrable'];
+  var mensNeg = [];
+  if (datos.threads) {
+    datos.threads.forEach(function(t) {
+      t.mensajes.forEach(function(m) {
+        if (palabrasNeg.some(function(p) { return m.texto.toLowerCase().includes(p); })) {
+          mensNeg.push(m.autor + ': ' + m.texto);
+        }
+      });
+    });
+  }
+
+  var prompt = 'Sos analista de riesgo crediticio especializado en el sector vitivinícola argentino. Evaluá si conviene ACEPTAR un cheque de tercero.\n\n';
+  prompt += 'CUIT: ' + datos.cuit + '\n';
+  prompt += 'Nombre: ' + (datos.nombre || 'Sin denominacion') + '\n\n';
+  prompt += 'CHEQUES RECHAZADOS BCRA:\n';
+  prompt += '- Total: ' + datos.cheques.length + '\n';
+  prompt += '- Sin levantar: ' + sinLevantar.length + (sinLevantar.length > 0 ? ' CRITICO' : ' OK') + '\n';
+  prompt += '- Levantados: ' + (datos.cheques.length - sinLevantar.length) + '\n\n';
+  if (mensNeg.length > 0) {
+    prompt += 'COMENTARIOS NEGATIVOS EN GRUPO DE BODEGAS:\n' + mensNeg.join('\n') + '\n\n';
+  } else {
+    prompt += 'GRUPO DE BODEGAS: Sin comentarios negativos\n\n';
+  }
+  prompt += 'CRITERIOS: cheques sin levantar = RECHAZAR siempre. Levantados hace mas de 6 meses = puede aceptar con precaucion. Comentarios negativos = REVISAR.\n\n';
+  prompt += 'Responde con este formato:\nVEREDICTO: [ACEPTAR / REVISAR / RECHAZAR]\nMOTIVO: [2-3 lineas]\nRECOMENDACION: [que hacer concretamente]';
+
+  try {
+    var r = await fetch('/analizar', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({prompt: prompt})});
+    var data = await r.json();
+    if (data.error) throw new Error(data.error);
+    dataEl.innerHTML = '<div style="font-size:13px;line-height:1.7;white-space:pre-wrap;color:#333;">' + data.texto + '</div>';
+  } catch(e) {
+    dataEl.innerHTML = '<div style="font-size:13px;color:#888;">No se pudo conectar. Intentá de nuevo.</div>';
+  }
+  btn.disabled = false;
+  btn.textContent = 'Analizar con IA →';
+}
+
+async function consultarBCRA(cuit) {
+  // Intento 1: via allorigins (proxy CORS gratuito)
+  try {
+    const url = encodeURIComponent(`https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/${cuit}`);
+    const r = await fetch(`https://api.allorigins.win/get?url=${url}`, {
+      signal: AbortSignal.timeout(15000)
+    });
+    if (r.ok) {
+      const wrapper = await r.json();
+      const data = JSON.parse(wrapper.contents);
+      if (data.status === 200) return data;
+    }
+  } catch(e) {}
+  // Intento 2: via proxy del servidor
+  try {
+    const r = await fetch(`/deudas/${cuit}`, {signal: AbortSignal.timeout(20000)});
+    return await r.json();
+  } catch(e) {}
+  return null;
+}
+
+async function obtenerNombre(cuit) {
+  try {
+    const r = await fetch(`/afip/${cuit}`, {signal: AbortSignal.timeout(8000)});
+    const data = await r.json();
+    if (data.nombre && !data.error) return data.nombre;
+  } catch(e) {}
+  return '';
+}
+
+init().then(function() {
+  setTimeout(function() {
+    var splash = document.getElementById('splash-screen');
+    if (splash) splash.classList.add('hidden');
+  }, 2800);
+});
+</script>
+</body>
+</html>
