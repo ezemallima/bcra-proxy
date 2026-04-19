@@ -2131,10 +2131,17 @@ async function verificarTodos(forzar) {
     if (!c.ultimaSit) return true;
     // Verificados hace más de 7 días
     if (!c.ultimaVerif) return true;
+    // Parsear DD/MM/YYYY
     var partes = c.ultimaVerif.split('/');
     if (partes.length !== 3) return true;
-    var fechaVerif = new Date(partes[2], partes[1]-1, partes[0]);
-    var diasDesde = Math.floor((new Date() - fechaVerif) / (1000*60*60*24));
+    var dia = parseInt(partes[0], 10);
+    var mes = parseInt(partes[1], 10) - 1;
+    var anio = parseInt(partes[2], 10);
+    var fechaVerif = new Date(anio, mes, dia);
+    var ahora = new Date();
+    ahora.setHours(0,0,0,0);
+    fechaVerif.setHours(0,0,0,0);
+    var diasDesde = Math.floor((ahora - fechaVerif) / (1000*60*60*24));
     return diasDesde >= 7;
   });
 
