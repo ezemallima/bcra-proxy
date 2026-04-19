@@ -1276,13 +1276,10 @@ async function cargarCarteraServidor() {
     const r = await fetch('/alertas');
     const data = await r.json();
     if (data && !data.error) {
-      if (data.alertas && data.alertas.length > 0) {
-        // Solo cargar del servidor si no hay alertas locales más recientes
-        var alertasLocales = JSON.parse(localStorage.getItem('piat_alertas') || '[]');
-        if (alertasLocales.length === 0) {
-          alertas = data.alertas;
-          localStorage.setItem('piat_alertas', JSON.stringify(alertas));
-        }
+      // Siempre priorizar alertas del servidor — son la fuente de verdad
+      if (data.alertas) {
+        alertas = data.alertas;
+        localStorage.setItem('piat_alertas', JSON.stringify(alertas));
       }
       if (data.ultima_verif) {
         localStorage.setItem('piat_ultima_verif', data.ultima_verif);
@@ -2125,14 +2122,20 @@ async function verificarTodos(forzar) {
   const btn = document.getElementById('btn-verificar');
   const prog = document.getElementById('verificar-progress');
 
-  // Filtrar: solo pendientes (sin verificar) y eliminar duplicados Odoo
+  // Filtrar: solo pendientes y eliminar duplicados Odoo
   var cartFiltrada = cartera.filter(function(c) {
-    // Excluir contactos duplicados de Odoo (tienen ", contacto" en el nombre)
+    // Excluir contactos duplicados de Odoo
     if (/,\s*(contacto|entrega|almacen|comercial|boada|alvear|contacto\s*\d)/i.test(c.nombre)) return false;
-    // Solo los que no tienen verificación del día de hoy
-    var hoy = new Date().toLocaleDateString('es-AR');
-    if (forzar) return true; // forzar verifica todos
-    return !c.ultimaVerif || c.ultimaVerif !== hoy || !c.ultimaSit;
+    if (forzar) return true;
+    // Sin situación nunca verificada
+    if (!c.ultimaSit) return true;
+    // Verificados hace más de 7 días
+    if (!c.ultimaVerif) return true;
+    var partes = c.ultimaVerif.split('/');
+    if (partes.length !== 3) return true;
+    var fechaVerif = new Date(partes[2], partes[1]-1, partes[0]);
+    var diasDesde = Math.floor((new Date() - fechaVerif) / (1000*60*60*24));
+    return diasDesde >= 7;
   });
 
   if (!cartFiltrada.length) {
