@@ -2142,7 +2142,7 @@ async function verificarTodos(forzar) {
     ahora.setHours(0,0,0,0);
     fechaVerif.setHours(0,0,0,0);
     var diasDesde = Math.floor((ahora - fechaVerif) / (1000*60*60*24));
-    return diasDesde >= 7;
+    return diasDesde > 7;
   });
 
   if (!cartFiltrada.length) {
