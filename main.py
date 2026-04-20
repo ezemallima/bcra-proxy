@@ -15,8 +15,11 @@ app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024
 
 GEMINI_KEY = os.environ.get('GEMINI_API_KEY', '')
 GEMINI_MODELS = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.0-flash"]
-ALERTAS_FILE = os.path.join(os.getcwd(), 'alertas_cartera.json')
-DATOS_FILE = os.path.join(os.getcwd(), 'datos_bodega.json')
+# Usar disco persistente de Render si existe, sino carpeta local
+DATA_DIR = '/data' if os.path.exists('/data') else os.getcwd()
+ALERTAS_FILE = os.path.join(DATA_DIR, 'alertas_cartera.json')
+DATOS_FILE = os.path.join(DATA_DIR, 'datos_bodega.json')
+print(f"[init] Almacenamiento en: {DATA_DIR}", flush=True)
 WSP_FILE = os.path.join(os.getcwd(), 'whatsapp_index.json')
 
 # Caché de consultas BCRA — evita re-consultar el mismo CUIT en 24hs
