@@ -410,13 +410,29 @@ def procesar_veraz():
             "El array socios_directores debe incluir todos los socios, directores o representantes "
             "legales con su informacion crediticia. Si no hay, dejar array vacio []."
         )
+        if not pdf_base64:
+            return jsonify({"error": "No se recibio el PDF"}), 400
         payload = {"contents": [{"parts": [
             {"inline_data": {"mime_type": "application/pdf", "data": pdf_base64}},
             {"text": prompt}
         ]}]}
-        if not pdf_base64:
-            return jsonify({"error": "No se recibió el PDF"}), 400
-        texto, error = gemini_request(payload, timeout=90)
+        # Usar modelo con soporte de vision para PDFs
+        texto, error = None, None
+        for modelo in ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-flash"]:
+            url = "https://generativelanguage.googleapis.com/v1beta/models/" + modelo + ":generateContent?key=" + GEMINI_KEY
+            try:
+                r = requests.post(url, headers={"Content-Type": "application/json"}, json=payload, timeout=90)
+                data = r.json()
+                if "candidates" in data:
+                    texto = data["candidates"][0]["content"]["parts"][0]["text"]
+                    error = None
+                    break
+                elif "error" in data:
+                    error = data["error"].get("message", "Error desconocido")
+            except Exception as ex:
+                error = str(ex)
+        if error or not texto:
+            return jsonify({"error": "No se pudo procesar el PDF: " + str(error)}), 500
         if error:
             return jsonify({"error": "No se pudo procesar el PDF: " + str(error)}), 500
         texto_limpio = texto.strip().replace("```json", "").replace("```", "").strip()
