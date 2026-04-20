@@ -325,15 +325,31 @@ def analizar_bodegas():
 
 @app.route("/afip/<cuit>")
 def get_afip(cuit):
+    # Intento 1: via caché/proxy interno
     try:
-        data, error = consultar_bcra(cuit)
+        data, error = consultar_bcra_cached(cuit)
         if data and not error:
             nombre = data.get('results', {}).get('denominacion', '')
             if nombre:
                 return jsonify({"nombre": nombre})
     except Exception:
         pass
-    return jsonify({"nombre": "", "error": "No encontrado"})
+    # Intento 2: directo al BCRA con timeout extendido
+    try:
+        r = requests.get(
+            "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit,
+            timeout=15, verify=False
+        )
+        if r.status_code == 200:
+            data2 = r.json()
+            nombre2 = data2.get('results', {}).get('denominacion', '')
+            if nombre2:
+                return jsonify({"nombre": nombre2})
+    except Exception:
+        pass
+    # Fallback: devolver CUIT formateado
+    cuit_fmt = cuit[:2] + '-' + cuit[2:10] + '-' + cuit[10:] if len(cuit) == 11 else cuit
+    return jsonify({"nombre": cuit_fmt})
 
 @app.route("/deudas/<cuit>")
 def get_deudas(cuit):
