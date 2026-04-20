@@ -398,7 +398,17 @@ def procesar_veraz():
         return jsonify({"error": "API key no configurada"}), 500
     try:
         body = request.get_json(force=True)
+        if not body:
+            return jsonify({"error": "Request body vacio o no es JSON"}), 400
         pdf_base64 = body.get('pdf', '')
+        print(f"[procesar-informe] PDF recibido: {len(pdf_base64)} chars base64", flush=True)
+        if not pdf_base64:
+            return jsonify({"error": "No se recibio el PDF en el campo 'pdf'"}), 400
+        # Verificar tamaño — Gemini soporta hasta ~20MB
+        pdf_bytes = len(pdf_base64) * 3 // 4  # aprox bytes del PDF
+        print(f"[procesar-informe] Tamaño estimado: {pdf_bytes // 1024} KB", flush=True)
+        if pdf_bytes > 20 * 1024 * 1024:
+            return jsonify({"error": "PDF demasiado grande (max 20MB)"}), 400
         prompt = (
             "Este puede ser un informe de Veraz/Equifax o de Nosis. Detecta el formato automaticamente y extrae los mismos campos. "
             "Responde SOLO con un objeto JSON valido, sin markdown, sin texto adicional. "
@@ -444,9 +454,12 @@ def procesar_veraz():
         resultado = json.loads(texto_limpio)
         return jsonify(resultado)
     except json.JSONDecodeError as e:
-        return jsonify({"error": "Error al parsear respuesta: " + str(e)}), 500
+        print(f"[procesar-informe] JSON decode error: {e}", flush=True)
+        return jsonify({"error": "Error al parsear respuesta de Gemini: " + str(e)}), 500
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        import traceback
+        print(f"[procesar-informe] Exception: {traceback.format_exc()}", flush=True)
+        return jsonify({"error": str(e), "detalle": traceback.format_exc()}), 500
 
 @app.route("/test-gemini")
 def test_gemini():
