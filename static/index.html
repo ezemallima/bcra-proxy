@@ -482,6 +482,10 @@
 
       <div id="analisis-resultado" style="display:none;margin-bottom:1rem;padding:1.25rem;background:#fff;border-radius:12px;border:1px solid #e0e0d8;"></div>
 
+      <div style="margin-bottom:10px;">
+        <input type="text" id="input-direccion-cliente" placeholder="Dirección del cliente (opcional) — ciudad, provincia" style="width:100%;font-size:13px;padding:8px 12px;border:1px solid var(--azul-borde);border-radius:8px;color:#334155;" />
+        <div style="font-size:11px;color:#94a3b8;margin-top:4px;">Si la ingresás, el análisis geográfico será preciso. Sin este dato, la IA indicará "Ubicación no disponible".</div>
+      </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="primary" onclick="analizarCliente()" id="btn-analizar" style="flex:1;">Analizar riesgo crediticio →</button>
         <button onclick="exportarReporte()" id="btn-export" style="display:none;">Exportar PDF</button>
@@ -1389,6 +1393,8 @@ async function consultarCliente() {
   if (chCard) chCard.style.display = 'none';
   document.getElementById('veraz-status').style.display = 'none';
   document.getElementById('veraz-datos').style.display = 'none';
+  var dirEl = document.getElementById('input-direccion-cliente');
+  if (dirEl) dirEl.value = '';
   document.getElementById('veraz-area').className = 'upload-area';
   document.getElementById('veraz-area').innerHTML = '<div style="font-size:13px;color:#888;">Hacé clic para subir el PDF de Veraz o Nosis</div><div style="font-size:12px;color:#aaa;margin-top:4px;">Extrae automáticamente score, cheques, deudas y más</div>';
   document.getElementById('veraz-datos').style.display = 'none';
@@ -1500,21 +1506,21 @@ function agregarDesdConsulta(cuit, nombre) {
 function mostrarResultado(cuit, data, esTimeout) {
   const res = data?.results;
   const entidades = res?.periodos?.[0]?.entidades || [];
-  const nombre = res?.denominacion || 'Sin denominación';
+  const nombre = res?.denominacion || data?.denominacion || '';
   const maxSit = entidades.length ? entidades.reduce((m,e) => Math.max(m, e.situacion||1), 1) : 1;
-  // Si BCRA no trajo nombre, intentar con AFIP
-  let nombreFinal = nombre;
-  if (!nombreFinal || nombreFinal === 'Sin denominación') {
-    obtenerNombre(cuit).then(n => {
-      if (n) {
-        const el = document.querySelector('#cliente-header .nombre-cliente');
+  // Jerarquía: BCRA > AFIP async > CUIT formateado
+  var cuitFmt2 = cuit.length === 11 ? cuit.slice(0,2)+'-'+cuit.slice(2,10)+'-'+cuit.slice(10) : cuit;
+  var nombreMostrar = nombre || cuitFmt2;
+  if (!nombre) {
+    obtenerNombre(cuit).then(function(n) {
+      if (n && n !== cuitFmt2) {
+        var el = document.querySelector('#cliente-header .nombre-cliente');
         if (el) el.textContent = n;
-        const av = document.querySelector('#cliente-header .avatar');
-        if (av) av.textContent = n.charAt(0).toUpperCase();
+        var av = document.querySelector('#cliente-header .avatar');
+        if (av) { av.textContent = n.charAt(0).toUpperCase(); }
       }
     });
   }
-  var nombreMostrar = (nombreFinal && nombreFinal !== 'Sin denominación') ? nombreFinal : 'Sin denominación';
   var yaEstaCartera = cartera.some(function(c) { return c.cuit === cuit; });
   var botonCartera = yaEstaCartera
     ? '<span style="font-size:11px;color:var(--verde);padding:4px 10px;background:var(--verde-bg);border-radius:6px;font-weight:600;">En cartera ✓</span>'
@@ -1650,6 +1656,29 @@ async function procesarVeraz(input) {
   reader.readAsDataURL(file);
 }
 
+function obtenerPromptUbicacion() {
+  // Prioridad 1: dirección ingresada manualmente
+  var dirManual = (document.getElementById('input-direccion-cliente') || {}).value || '';
+  dirManual = dirManual.trim();
+  if (dirManual) {
+    return 'ANÁLISIS GEOGRÁFICO:\nDirección confirmada: ' + dirManual + '\n' +
+      'Con esta ubicación evaluá:\n' +
+      '- Zonas de riesgo de contrabando (Salta, Jujuy, Formosa, Misiones)\n' +
+      '- Coherencia volumen/mercado local\n' +
+      '- Zonas económicamente complejas (NOA, NEA, Patagonia lejana)';
+  }
+  // Prioridad 2: dirección extraída del PDF Veraz
+  if (verazData && verazData.domicilio) {
+    return 'ANÁLISIS GEOGRÁFICO:\nDirección extraída del informe crediticio: ' + verazData.domicilio + '\n' +
+      'Con esta ubicación evaluá las zonas de riesgo geográfico.';
+  }
+  // Prioridad 3: sin datos — prohibido inventar
+  return 'ANÁLISIS GEOGRÁFICO:\nUbicación: [NO DISPONIBLE]\n' +
+    'RESTRICCIÓN ESTRICTA: No tenés datos de ubicación confirmados. ' +
+    'NO inferir, adivinar ni asumir ninguna zona geográfica basándote en el nombre del cliente, su CUIT u otros datos. ' +
+    'Indicá explícitamente "Ubicación no disponible" y omitir el análisis de riesgo geográfico.';
+}
+
 async function analizarCliente() {
   const cuit = document.getElementById('cuit-input').value.replace(/-/g,'').trim();
   const piatEl = document.getElementById('piattelli-info');
@@ -1729,29 +1758,7 @@ FORMATO DE RESPUESTA REQUERIDO:
 **CONDICIONES ESPECIALES (si aplica):**
 [cualquier condición adicional que recomendés, como garantías, avales, límite de plazo, etc.]
 
-ANÁLISIS GEOGRÁFICO Y DE CONTEXTO:
-Usá el domicilio fiscal del cliente (provincia, ciudad) para evaluar:
-
-1. ZONAS DE RIESGO DE CONTRABANDO (alerta máxima para clientes nuevos):
-   - Salta, Jujuy, Formosa, Misiones — zonas limítrofes con Bolivia, Paraguay y Brasil
-   - En estas zonas, para clientes nuevos, SIEMPRE recomendá pago anticipado o cheque contra entrega
-   - Ya hubo casos documentados de clientes que retiraron mercadería y cruzaron la frontera
-
-2. COHERENCIA VOLUMEN vs GEOGRAFÍA:
-   - Localidad de menos de 5.000 habitantes pidiendo más de 200 cajas → alerta
-   - Localidad de menos de 20.000 habitantes pidiendo más de 500 cajas → alerta grave
-   - Si el volumen no tiene sentido para el tamaño del mercado local, preguntarse para qué destino es realmente
-
-3. ZONAS ECONÓMICAMENTE COMPLEJAS:
-   - NOA (Noroeste Argentino) y NEA (Nordeste) — mayor riesgo de insolvencia histórico
-   - Patagonia lejana — logística compleja, recupero de deuda difícil
-   - AMBA y grandes ciudades — mercado normal, evaluar por perfil crediticio
-
-4. CLIENTE NUEVO SIN HISTORIAL:
-   - Si es la primera operación mora registrada y está en zona de riesgo → pago anticipado obligatorio
-   - Si es la primera operación y el domicilio no coincide con el rubro declarado → investigar
-
-Incluí siempre en tu análisis una sección de RIESGO GEOGRÁFICO aunque sea para decir que la zona es de bajo riesgo.
+' + obtenerPromptUbicacion() + '
 
 Sé directo, profesional y específico. El equipo de ventas va a usar este informe para tomar decisiones comerciales reales. Tu análisis puede evitar pérdidas millonarias.`;
 
