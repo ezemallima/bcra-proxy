@@ -1737,17 +1737,32 @@ async function analizarCliente() {
 
 MODALIDADES DE VENTA DISPONIBLES:
 1. CUENTA CORRIENTE 30/60/90 días — para clientes AAA sin antecedentes
-2. CHEQUE A 30/60 DÍAS — para clientes buenos con alguna observación menor  
+2. CHEQUE A 30/60 DÍAS — para clientes buenos con alguna observación menor
 3. CHEQUE CONTRA ENTREGA — para clientes nuevos o con historial mixto
 4. PAGO ANTICIPADO — para clientes con antecedentes negativos pero con potencial
 5. RECHAZO TOTAL — para clientes con mora activa, situación 3+ o cheques rechazados recientes
+
+PARÁMETROS DE NEGOCIO PARA EL LÍMITE DE CRÉDITO (OBLIGATORIO USAR):
+- Precio promedio por botella: $10.000
+- Volumen estándar: 120 botellas = 1 operación estándar
+- Valor de compra estándar: $1.200.000
+- Regla de cálculo por score Veraz:
+  * Score > 800 (bueno): límite MÍNIMO $1.200.000 (1 operación estándar)
+  * Score 600-800 (medio): límite $600.000 (50% de operación estándar)
+  * Score < 600 (malo): límite $0 — prepago obligatorio
+- Si no hay score disponible, basar el límite en la situación BCRA:
+  * Situación 1 sin antecedentes: $1.200.000
+  * Situación 1 con algún antecedente menor: $600.000
+  * Situación 2: $300.000 máximo con garantías
+  * Situación 3+: $0 — rechazo
+- El límite propuesto DEBE justificarse citando estos parámetros. No seas conservador sin justificación. Un cliente limpio merece un límite operativo real.
 
 FORMATO DE RESPUESTA REQUERIDO:
 **VEREDICTO: [APROBAR / APROBAR CON CONDICIONES / REVISAR / RECHAZAR]**
 
 **MODALIDAD DE VENTA RECOMENDADA:** [elegí una de las 5 opciones y justificá]
 
-**LÍMITE DE CRÉDITO SUGERIDO:** $[monto en pesos] — [justificación breve]
+**LÍMITE DE CRÉDITO SUGERIDO:** $[monto] — [justificá usando los parámetros de negocio: score/situación BCRA y valor operación estándar $1.200.000]
 
 **ANÁLISIS DE RIESGO:**
 [3-4 líneas con los puntos más importantes del perfil crediticio]
@@ -1785,19 +1800,39 @@ function exportarReporte() {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
   const cuit = document.getElementById('cuit-input').value.trim();
-  const headerEl = document.getElementById('cliente-header');
-  const nombre = headerEl.querySelector('div > div > div')?.textContent || cuit;
-  const mora = buscarEnMoras(cuit.replace(/-/g,''));
+  const raw = cuit.replace(/-/g,'');
+  const mora = buscarEnMoras(raw);
+  // Nombre: prioridad Veraz > BCRA header > cartera > CUIT
+  var nombre = '';
+  if (verazData && verazData.nombre) nombre = verazData.nombre;
+  if (!nombre) {
+    var nomEl = document.querySelector('#cliente-header .nombre-cliente');
+    if (nomEl) nombre = nomEl.textContent.trim();
+  }
+  if (!nombre || nombre === cuit) {
+    var enCartera = cartera.find(function(c) { return c.cuit === raw; });
+    if (enCartera) nombre = enCartera.nombre;
+  }
+  if (!nombre) nombre = cuit;
+  // CUIT formateado limpio
+  var cuitFmt = raw.length === 11 ? raw.slice(0,2)+'-'+raw.slice(2,10)+'-'+raw.slice(10) : cuit;
   let y = 20;
-  doc.setFontSize(18); doc.setTextColor(155, 32, 32);
-  doc.text('Vender Seguros', 20, y); y += 8;
-  doc.setFontSize(11); doc.setTextColor(100);
-  doc.text(`Reporte de riesgo crediticio — ${ultimoAnalisis.fecha}`, 20, y); y += 6;
-  doc.setDrawColor(220); doc.line(20, y, 190, y); y += 10;
-  doc.setFontSize(13); doc.setTextColor(30);
-  doc.text(`Cliente: ${nombre}`, 20, y); y += 8;
-  doc.setFontSize(11); doc.setTextColor(100);
-  doc.text(`CUIT: ${cuit}`, 20, y); y += 10;
+  // Header
+  doc.setFillColor(15, 45, 82);
+  doc.rect(0, 0, 210, 30, 'F');
+  doc.setFontSize(16); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold');
+  doc.text('Vende Seguro', 20, 14);
+  doc.setFontSize(9); doc.setFont('helvetica','italic'); doc.setTextColor(147,197,253);
+  doc.text('vende sin riesgo', 20, 22);
+  doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(200,220,255);
+  doc.text('Reporte de riesgo crediticio — ' + ultimoAnalisis.fecha, 110, 14);
+  doc.text(getNombreBodega(), 110, 22);
+  y = 42;
+  doc.setFontSize(13); doc.setTextColor(15,45,82); doc.setFont('helvetica','bold');
+  doc.text(nombre, 20, y); y += 7;
+  doc.setFontSize(10); doc.setTextColor(100,116,139); doc.setFont('helvetica','normal');
+  doc.text('CUIT: ' + cuitFmt, 20, y); y += 10;
+  doc.setDrawColor(200,215,255); doc.line(20, y, 190, y); y += 8;
   if (mora) {
     doc.setTextColor(153, 27, 27);
     doc.text(`MORA: $${mora.saldo.toLocaleString('es-AR')} desde ${mora.fecha_mora} (${mora.estado})`, 20, y); y += 10;
