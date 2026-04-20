@@ -426,23 +426,37 @@ def procesar_veraz():
             {"inline_data": {"mime_type": "application/pdf", "data": pdf_base64}},
             {"text": prompt}
         ]}]}
-        # Usar modelo con soporte de vision para PDFs
+        # Usar modelo con soporte de vision para PDFs — con reintentos por alta demanda
         texto, error = None, None
-        for modelo in ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-flash"]:
-            url = "https://generativelanguage.googleapis.com/v1beta/models/" + modelo + ":generateContent?key=" + GEMINI_KEY
-            try:
-                r = requests.post(url, headers={"Content-Type": "application/json"}, json=payload, timeout=90)
-                data = r.json()
-                if "candidates" in data:
-                    texto = data["candidates"][0]["content"]["parts"][0]["text"]
-                    error = None
-                    break
-                elif "error" in data:
-                    error = data["error"].get("message", "Error desconocido")
-            except Exception as ex:
-                error = str(ex)
+        modelos = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-flash"]
+        for intento in range(3):
+            for modelo in modelos:
+                url = "https://generativelanguage.googleapis.com/v1beta/models/" + modelo + ":generateContent?key=" + GEMINI_KEY
+                try:
+                    r = requests.post(url, headers={"Content-Type": "application/json"}, json=payload, timeout=90)
+                    data = r.json()
+                    if "candidates" in data:
+                        texto = data["candidates"][0]["content"]["parts"][0]["text"]
+                        error = None
+                        print(f"[procesar-informe] OK con modelo {modelo} en intento {intento+1}", flush=True)
+                        break
+                    elif "error" in data:
+                        msg = data["error"].get("message", "")
+                        print(f"[procesar-informe] Error modelo {modelo}: {msg}", flush=True)
+                        if "high demand" in msg.lower() or "quota" in msg.lower() or "429" in str(data["error"].get("code","")):
+                            error = msg
+                            time.sleep(5 * (intento + 1))
+                        else:
+                            error = msg
+                except Exception as ex:
+                    error = str(ex)
+            if texto:
+                break
+            if intento < 2:
+                print(f"[procesar-informe] Reintento {intento+2}/3 en 10 segundos...", flush=True)
+                time.sleep(10)
         if error or not texto:
-            return jsonify({"error": "No se pudo procesar el PDF: " + str(error)}), 500
+            return jsonify({"error": "Gemini no disponible en este momento. Intentá de nuevo en unos minutos. Detalle: " + str(error)}), 503
         if error:
             return jsonify({"error": "No se pudo procesar el PDF: " + str(error)}), 500
         texto_limpio = texto.strip().replace("```json", "").replace("```", "").strip()
