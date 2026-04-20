@@ -414,14 +414,21 @@ def procesar_veraz():
             {"inline_data": {"mime_type": "application/pdf", "data": pdf_base64}},
             {"text": prompt}
         ]}]}
-        texto, error = gemini_request(payload, timeout=60)
+        if not pdf_base64:
+            return jsonify({"error": "No se recibió el PDF"}), 400
+        texto, error = gemini_request(payload, timeout=90)
         if error:
-            return jsonify({"error": error}), 500
+            return jsonify({"error": "No se pudo procesar el PDF: " + str(error)}), 500
         texto_limpio = texto.strip().replace("```json", "").replace("```", "").strip()
+        # Extraer JSON aunque haya texto adicional
+        import re as re_mod
+        match = re_mod.search(r'\{[\s\S]+\}', texto_limpio)
+        if match:
+            texto_limpio = match.group(0)
         resultado = json.loads(texto_limpio)
         return jsonify(resultado)
-    except json.JSONDecodeError:
-        return jsonify({"error": "Error al procesar el PDF. Intenta de nuevo."}), 500
+    except json.JSONDecodeError as e:
+        return jsonify({"error": "Error al parsear respuesta: " + str(e)}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
