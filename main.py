@@ -14,7 +14,8 @@ CORS(app)
 app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024
 
 GEMINI_KEY = os.environ.get('GEMINI_API_KEY', '')
-GEMINI_MODEL = "gemini-1.5-flash"
+OPENAI_KEY = os.environ.get('OPENAI_API_KEY', '')
+GEMINI_MODEL = "gemini-2.5-flash"
 # Usar disco persistente de Render si existe, sino carpeta local
 DATA_DIR = '/data' if os.path.exists('/data') else os.getcwd()
 ALERTAS_FILE = os.path.join(DATA_DIR, 'alertas_cartera.json')
@@ -47,40 +48,74 @@ verificacion_estado = {
     "mensaje": ""
 }
 
-def gemini_request(payload, timeout=90):
-    # Intentar v1 primero (produccion), luego v1beta como fallback
-    urls = [
-        "https://generativelanguage.googleapis.com/v1/models/" + GEMINI_MODEL + ":generateContent?key=" + GEMINI_KEY,
-        "https://generativelanguage.googleapis.com/v1beta/models/" + GEMINI_MODEL + ":generateContent?key=" + GEMINI_KEY,
-    ]
-    last_error = "Sin respuesta"
-    for url in urls:
+def gemini_request(payload, timeout=120):
+    """Intenta Gemini primero, si falla usa OpenAI como fallback."""
+    # --- INTENTO 1: Gemini ---
+    if GEMINI_KEY:
+        url = "https://generativelanguage.googleapis.com/v1beta/models/" + GEMINI_MODEL + ":generateContent?key=" + GEMINI_KEY
         for intento in range(2):
             try:
                 r = requests.post(url, headers={"Content-Type": "application/json"}, json=payload, timeout=timeout)
-                print(f"[gemini_request] Status {r.status_code}", flush=True)
-                if r.status_code != 200:
-                    last_error = f"Error HTTP {r.status_code}: {r.text[:200]}"
-                    print(f"[gemini_request] {last_error}", flush=True)
+                print(f"[gemini] Intento {intento+1} status {r.status_code}", flush=True)
+                if r.status_code == 200:
+                    data = r.json()
+                    if 'candidates' in data:
+                        print("[gemini] OK", flush=True)
+                        return data['candidates'][0]['content']['parts'][0]['text'], None
+                    if 'error' in data:
+                        msg = data['error'].get('message', 'Error')
+                        print(f"[gemini] Error: {msg[:80]}", flush=True)
+                        if 'demand' in msg.lower() or 'demanda' in msg.lower():
+                            if intento < 1:
+                                time.sleep(20)
+                                continue
+                        break
+                else:
+                    print(f"[gemini] HTTP {r.status_code}", flush=True)
                     break
-                data = r.json()
-                if 'error' in data:
-                    msg = data['error'].get('message', 'Error desconocido')
-                    print(f"[gemini_request] Error API: {msg}", flush=True)
-                    last_error = msg
-                    if 'demand' in msg.lower() or 'demanda' in msg.lower():
-                        if intento < 1:
-                            time.sleep(20)
-                            continue
-                    break
-                texto = data['candidates'][0]['content']['parts'][0]['text']
-                return texto, None
             except Exception as e:
-                last_error = str(e)
-                print(f"[gemini_request] Excepcion: {e}", flush=True)
+                print(f"[gemini] Excepcion: {e}", flush=True)
                 if intento < 1:
                     time.sleep(10)
-    return None, last_error
+        print("[gemini] Fallando a OpenAI...", flush=True)
+
+    # --- INTENTO 2: OpenAI como fallback ---
+    if OPENAI_KEY:
+        try:
+            # Extraer el texto del prompt desde el payload de Gemini
+            partes = payload.get('contents', [{}])[0].get('parts', [])
+            prompt_text = ''
+            for parte in partes:
+                if 'text' in parte:
+                    prompt_text += parte['text']
+            
+            headers_oai = {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + OPENAI_KEY
+            }
+            body_oai = {
+                "model": "gpt-4o-mini",
+                "messages": [{"role": "user", "content": prompt_text}],
+                "max_tokens": 2000,
+                "temperature": 0.3
+            }
+            r2 = requests.post("https://api.openai.com/v1/chat/completions",
+                headers=headers_oai, json=body_oai, timeout=60)
+            print(f"[openai] Status {r2.status_code}", flush=True)
+            if r2.status_code == 200:
+                data2 = r2.json()
+                texto = data2['choices'][0]['message']['content']
+                print("[openai] OK", flush=True)
+                return texto, None
+            else:
+                msg = f"OpenAI HTTP {r2.status_code}: {r2.text[:100]}"
+                print(f"[openai] {msg}", flush=True)
+                return None, msg
+        except Exception as e:
+            print(f"[openai] Excepcion: {e}", flush=True)
+            return None, str(e)
+
+    return None, "No hay APIs de IA disponibles. Configurá GEMINI_API_KEY o OPENAI_API_KEY."
 
 def consultar_bcra(cuit, reintentos=3):
     url = "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit
