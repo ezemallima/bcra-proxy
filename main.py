@@ -14,7 +14,7 @@ CORS(app)
 app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024
 
 GEMINI_KEY = os.environ.get('GEMINI_API_KEY', '')
-GEMINI_MODEL = "gemini-1.5-flash"
+GEMINI_MODEL = "gemini-2.5-flash-preview-04-17"
 # Usar disco persistente de Render si existe, sino carpeta local
 DATA_DIR = '/data' if os.path.exists('/data') else os.getcwd()
 ALERTAS_FILE = os.path.join(DATA_DIR, 'alertas_cartera.json')
@@ -468,11 +468,11 @@ def test_modelos():
         return jsonify({"error": "Sin API key"}), 500
     resultados = {}
     combos = [
-        ("gemini-1.5-flash", "v1beta"),
-        ("gemini-1.5-flash", "v1"),
-        ("gemini-2.0-flash", "v1beta"),
-        ("gemini-2.0-flash-lite", "v1beta"),
-        ("gemini-1.5-flash-latest", "v1beta"),
+        ("gemini-2.5-flash-preview-04-17", "v1beta"),
+        ("gemini-2.5-flash", "v1beta"),
+        ("gemini-2.5-pro-preview-03-25", "v1beta"),
+        ("gemini-2.0-flash-exp", "v1beta"),
+        ("gemini-exp-1206", "v1beta"),
     ]
     for modelo, version in combos:
         key = f"{modelo}/{version}"
