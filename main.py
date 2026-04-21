@@ -397,13 +397,8 @@ def procesar_veraz():
         if not body:
             return jsonify({"error": "Request body vacio o no es JSON"}), 400
         pdf_base64 = body.get('pdf', '')
-        print(f"[procesar-informe] PDF recibido: {len(pdf_base64)} chars base64", flush=True)
-        if not pdf_base64:
-            return jsonify({"error": "No se recibio el PDF en el campo 'pdf'"}), 400
-        # Verificar tamaño — Gemini soporta hasta ~20MB
-        pdf_bytes = len(pdf_base64) * 3 // 4  # aprox bytes del PDF
-        print(f"[procesar-informe] Tamaño estimado: {pdf_bytes // 1024} KB", flush=True)
-        if pdf_bytes > 20 * 1024 * 1024:
+        print(f"[procesar-informe] PDF recibido: {len(pdf_base64)} chars, ~{len(pdf_base64)*3//4//1024} KB", flush=True)
+        if len(pdf_base64) * 3 // 4 > 20 * 1024 * 1024:
             return jsonify({"error": "PDF demasiado grande (max 20MB)"}), 400
         prompt = (
             "Este puede ser un informe de Veraz/Equifax o de Nosis. Detecta el formato automaticamente y extrae los mismos campos. "
@@ -416,32 +411,22 @@ def procesar_veraz():
             "El array socios_directores debe incluir todos los socios, directores o representantes "
             "legales con su informacion crediticia. Si no hay, dejar array vacio []."
         )
-        if not pdf_base64:
-            return jsonify({"error": "No se recibio el PDF"}), 400
         payload = {"contents": [{"parts": [
             {"inline_data": {"mime_type": "application/pdf", "data": pdf_base64}},
             {"text": prompt}
         ]}]}
         # Modelo fijo: gemini-1.5-flash via v1
         url = "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=" + GEMINI_KEY
-        try:
-            r = requests.post(url, headers={"Content-Type": "application/json"}, json=payload, timeout=90)
-            data = r.json()
-            if "candidates" in data:
-                texto = data["candidates"][0]["content"]["parts"][0]["text"]
-            elif "error" in data:
-                msg = data["error"].get("message", "Error desconocido")
-                print(f"[procesar-informe] Error Gemini: {msg}", flush=True)
-                return jsonify({"error": "Error de Gemini: " + msg}), 503
-            else:
-                return jsonify({"error": "Respuesta inesperada de Gemini"}), 503
-        except Exception as ex:
-            print(f"[procesar-informe] Excepcion: {ex}", flush=True)
-            return jsonify({"error": "No se pudo conectar con Gemini: " + str(ex)}), 503
-        if error:
-            return jsonify({"error": "No se pudo procesar el PDF: " + str(error)}), 500
+        r = requests.post(url, headers={"Content-Type": "application/json"}, json=payload, timeout=90)
+        data = r.json()
+        if "error" in data:
+            msg = data["error"].get("message", "Error desconocido")
+            print(f"[procesar-informe] Error Gemini: {msg}", flush=True)
+            return jsonify({"error": "Error de Gemini: " + msg}), 503
+        if "candidates" not in data:
+            return jsonify({"error": "Respuesta inesperada de Gemini: " + str(data)}), 503
+        texto = data["candidates"][0]["content"]["parts"][0]["text"]
         texto_limpio = texto.strip().replace("```json", "").replace("```", "").strip()
-        # Extraer JSON aunque haya texto adicional
         import re as re_mod
         match = re_mod.search(r'\{[\s\S]+\}', texto_limpio)
         if match:
