@@ -462,6 +462,35 @@ def cache_stats():
 def health():
     return jsonify({"status": "ok", "gemini": bool(GEMINI_KEY)})
 
+@app.route("/test-modelos")
+def test_modelos():
+    if not GEMINI_KEY:
+        return jsonify({"error": "Sin API key"}), 500
+    resultados = {}
+    combos = [
+        ("gemini-1.5-flash", "v1beta"),
+        ("gemini-1.5-flash", "v1"),
+        ("gemini-2.0-flash", "v1beta"),
+        ("gemini-2.0-flash-lite", "v1beta"),
+        ("gemini-1.5-flash-latest", "v1beta"),
+    ]
+    for modelo, version in combos:
+        key = f"{modelo}/{version}"
+        url = f"https://generativelanguage.googleapis.com/{version}/models/{modelo}:generateContent?key={GEMINI_KEY}"
+        try:
+            r = requests.post(url, headers={"Content-Type": "application/json"},
+                json={"contents": [{"parts": [{"text": "di OK"}]}]}, timeout=10)
+            data = r.json()
+            if "candidates" in data:
+                resultados[key] = "OK"
+            elif "error" in data:
+                resultados[key] = data["error"].get("message", "error")[:100]
+            else:
+                resultados[key] = "respuesta inesperada"
+        except Exception as e:
+            resultados[key] = str(e)[:100]
+    return jsonify(resultados)
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
