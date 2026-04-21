@@ -14,7 +14,7 @@ CORS(app)
 app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024
 
 GEMINI_KEY = os.environ.get('GEMINI_API_KEY', '')
-GEMINI_MODEL = "gemini-2.5-flash-preview-04-17"
+GEMINI_MODEL = "gemini-2.5-flash"
 # Usar disco persistente de Render si existe, sino carpeta local
 DATA_DIR = '/data' if os.path.exists('/data') else os.getcwd()
 ALERTAS_FILE = os.path.join(DATA_DIR, 'alertas_cartera.json')
