@@ -49,18 +49,25 @@ verificacion_estado = {
 
 def gemini_request(payload, timeout=45):
     url = "https://generativelanguage.googleapis.com/v1beta/models/" + GEMINI_MODEL + ":generateContent?key=" + GEMINI_KEY
-    try:
-        r = requests.post(url, headers={"Content-Type": "application/json"}, json=payload, timeout=timeout)
-        data = r.json()
-        if 'error' in data:
-            msg = data['error'].get('message', 'Error desconocido')
-            print(f"[gemini_request] Error: {msg}", flush=True)
-            return None, msg
-        texto = data['candidates'][0]['content']['parts'][0]['text']
-        return texto, None
-    except Exception as e:
-        print(f"[gemini_request] Excepcion: {e}", flush=True)
-        return None, str(e)
+    for intento in range(3):
+        try:
+            r = requests.post(url, headers={"Content-Type": "application/json"}, json=payload, timeout=timeout)
+            data = r.json()
+            if 'error' in data:
+                msg = data['error'].get('message', 'Error desconocido')
+                print(f"[gemini_request] Intento {intento+1} error: {msg}", flush=True)
+                if 'alta demanda' in msg.lower() or 'high demand' in msg.lower() or 'quota' in msg.lower() or '429' in str(data['error'].get('code','')):
+                    if intento < 2:
+                        time.sleep(15 * (intento + 1))
+                        continue
+                return None, msg
+            texto = data['candidates'][0]['content']['parts'][0]['text']
+            return texto, None
+        except Exception as e:
+            print(f"[gemini_request] Intento {intento+1} excepcion: {e}", flush=True)
+            if intento < 2:
+                time.sleep(10)
+    return None, "Gemini no disponible. Intentá de nuevo en unos minutos."
 
 def consultar_bcra(cuit, reintentos=3):
     url = "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit
