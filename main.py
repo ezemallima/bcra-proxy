@@ -14,7 +14,7 @@ CORS(app)
 app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024
 
 GEMINI_KEY = os.environ.get('GEMINI_API_KEY', '')
-GEMINI_MODELS = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.0-flash"]
+GEMINI_MODEL = "gemini-1.5-flash"
 # Usar disco persistente de Render si existe, sino carpeta local
 DATA_DIR = '/data' if os.path.exists('/data') else os.getcwd()
 ALERTAS_FILE = os.path.join(DATA_DIR, 'alertas_cartera.json')
@@ -48,26 +48,19 @@ verificacion_estado = {
 }
 
 def gemini_request(payload, timeout=45):
-    for modelo in GEMINI_MODELS:
-        url = "https://generativelanguage.googleapis.com/v1beta/models/" + modelo + ":generateContent?key=" + GEMINI_KEY
-        for intento in range(3):
-            try:
-                r = requests.post(url, headers={"Content-Type": "application/json"}, json=payload, timeout=timeout)
-                data = r.json()
-                if 'error' in data:
-                    code = data['error'].get('code', 0)
-                    msg = data['error'].get('message', '')
-                    if code in [429, 503] or 'demanda' in msg.lower() or 'quota' in msg.lower():
-                        time.sleep(3 * (intento + 1))
-                        continue
-                    break
-                texto = data['candidates'][0]['content']['parts'][0]['text']
-                return texto, None
-            except Exception:
-                if intento < 2:
-                    time.sleep(2)
-                continue
-    return None, "No se pudo conectar."
+    url = "https://generativelanguage.googleapis.com/v1/models/" + GEMINI_MODEL + ":generateContent?key=" + GEMINI_KEY
+    try:
+        r = requests.post(url, headers={"Content-Type": "application/json"}, json=payload, timeout=timeout)
+        data = r.json()
+        if 'error' in data:
+            msg = data['error'].get('message', 'Error desconocido')
+            print(f"[gemini_request] Error: {msg}", flush=True)
+            return None, msg
+        texto = data['candidates'][0]['content']['parts'][0]['text']
+        return texto, None
+    except Exception as e:
+        print(f"[gemini_request] Excepcion: {e}", flush=True)
+        return None, str(e)
 
 def consultar_bcra(cuit, reintentos=3):
     url = "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit
