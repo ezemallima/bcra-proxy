@@ -14,7 +14,7 @@ CORS(app)
 app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024
 
 GEMINI_KEY = os.environ.get('GEMINI_API_KEY', '')
-GEMINI_MODEL = "gemini-1.5-flash-001"
+GEMINI_MODEL = "gemini-1.5-flash"
 # Usar disco persistente de Render si existe, sino carpeta local
 DATA_DIR = '/data' if os.path.exists('/data') else os.getcwd()
 ALERTAS_FILE = os.path.join(DATA_DIR, 'alertas_cartera.json')
@@ -47,27 +47,40 @@ verificacion_estado = {
     "mensaje": ""
 }
 
-def gemini_request(payload, timeout=45):
-    url = "https://generativelanguage.googleapis.com/v1beta/models/" + GEMINI_MODEL + ":generateContent?key=" + GEMINI_KEY
-    for intento in range(3):
-        try:
-            r = requests.post(url, headers={"Content-Type": "application/json"}, json=payload, timeout=timeout)
-            data = r.json()
-            if 'error' in data:
-                msg = data['error'].get('message', 'Error desconocido')
-                print(f"[gemini_request] Intento {intento+1} error: {msg}", flush=True)
-                if 'alta demanda' in msg.lower() or 'high demand' in msg.lower() or 'quota' in msg.lower() or '429' in str(data['error'].get('code','')):
-                    if intento < 2:
-                        time.sleep(15 * (intento + 1))
-                        continue
-                return None, msg
-            texto = data['candidates'][0]['content']['parts'][0]['text']
-            return texto, None
-        except Exception as e:
-            print(f"[gemini_request] Intento {intento+1} excepcion: {e}", flush=True)
-            if intento < 2:
-                time.sleep(10)
-    return None, "Gemini no disponible. Intentá de nuevo en unos minutos."
+def gemini_request(payload, timeout=90):
+    # Intentar v1 primero (produccion), luego v1beta como fallback
+    urls = [
+        "https://generativelanguage.googleapis.com/v1/models/" + GEMINI_MODEL + ":generateContent?key=" + GEMINI_KEY,
+        "https://generativelanguage.googleapis.com/v1beta/models/" + GEMINI_MODEL + ":generateContent?key=" + GEMINI_KEY,
+    ]
+    last_error = "Sin respuesta"
+    for url in urls:
+        for intento in range(2):
+            try:
+                r = requests.post(url, headers={"Content-Type": "application/json"}, json=payload, timeout=timeout)
+                print(f"[gemini_request] Status {r.status_code}", flush=True)
+                if r.status_code != 200:
+                    last_error = f"Error HTTP {r.status_code}: {r.text[:200]}"
+                    print(f"[gemini_request] {last_error}", flush=True)
+                    break
+                data = r.json()
+                if 'error' in data:
+                    msg = data['error'].get('message', 'Error desconocido')
+                    print(f"[gemini_request] Error API: {msg}", flush=True)
+                    last_error = msg
+                    if 'demand' in msg.lower() or 'demanda' in msg.lower():
+                        if intento < 1:
+                            time.sleep(20)
+                            continue
+                    break
+                texto = data['candidates'][0]['content']['parts'][0]['text']
+                return texto, None
+            except Exception as e:
+                last_error = str(e)
+                print(f"[gemini_request] Excepcion: {e}", flush=True)
+                if intento < 1:
+                    time.sleep(10)
+    return None, last_error
 
 def consultar_bcra(cuit, reintentos=3):
     url = "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit
