@@ -422,17 +422,11 @@ def procesar_veraz():
             {"inline_data": {"mime_type": "application/pdf", "data": pdf_base64}},
             {"text": prompt}
         ]}]}
-        # Modelo desde variable GEMINI_MODEL
-        url = "https://generativelanguage.googleapis.com/v1beta/models/" + GEMINI_MODEL + ":generateContent?key=" + GEMINI_KEY
-        r = requests.post(url, headers={"Content-Type": "application/json"}, json=payload, timeout=90)
-        data = r.json()
-        if "error" in data:
-            msg = data["error"].get("message", "Error desconocido")
-            print(f"[procesar-informe] Error Gemini: {msg}", flush=True)
-            return jsonify({"error": "Error de Gemini: " + msg}), 503
-        if "candidates" not in data:
-            return jsonify({"error": "Respuesta inesperada de Gemini: " + str(data)}), 503
-        texto = data["candidates"][0]["content"]["parts"][0]["text"]
+        # Usar gemini_request con reintentos
+        texto, error = gemini_request(payload, timeout=90)
+        if error:
+            print(f"[procesar-informe] Error Gemini: {error}", flush=True)
+            return jsonify({"error": "Error de Gemini: " + error}), 503
         texto_limpio = texto.strip().replace("```json", "").replace("```", "").strip()
         import re as re_mod
         match = re_mod.search(r'\{[\s\S]+\}', texto_limpio)
