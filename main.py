@@ -415,8 +415,8 @@ def procesar_veraz():
             {"inline_data": {"mime_type": "application/pdf", "data": pdf_base64}},
             {"text": prompt}
         ]}]}
-        # Modelo fijo: gemini-1.5-flash via v1
-        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + GEMINI_KEY
+        # Modelo desde variable GEMINI_MODEL
+        url = "https://generativelanguage.googleapis.com/v1beta/models/" + GEMINI_MODEL + ":generateContent?key=" + GEMINI_KEY
         r = requests.post(url, headers={"Content-Type": "application/json"}, json=payload, timeout=90)
         data = r.json()
         if "error" in data:
