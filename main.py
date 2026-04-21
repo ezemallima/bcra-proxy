@@ -48,7 +48,7 @@ verificacion_estado = {
 }
 
 def gemini_request(payload, timeout=45):
-    url = "https://generativelanguage.googleapis.com/v1/models/" + GEMINI_MODEL + ":generateContent?key=" + GEMINI_KEY
+    url = "https://generativelanguage.googleapis.com/v1beta/models/" + GEMINI_MODEL + ":generateContent?key=" + GEMINI_KEY
     try:
         r = requests.post(url, headers={"Content-Type": "application/json"}, json=payload, timeout=timeout)
         data = r.json()
@@ -416,7 +416,7 @@ def procesar_veraz():
             {"text": prompt}
         ]}]}
         # Modelo fijo: gemini-1.5-flash via v1
-        url = "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=" + GEMINI_KEY
+        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + GEMINI_KEY
         r = requests.post(url, headers={"Content-Type": "application/json"}, json=payload, timeout=90)
         data = r.json()
         if "error" in data:
