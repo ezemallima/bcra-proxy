@@ -1691,91 +1691,84 @@ async function analizarCliente() {
   const resEl = document.getElementById('analisis-resultado');
   btn.disabled = true; btn.textContent = 'Analizando...'; resEl.style.display = 'none';
 
-  let prompt = 'Sos un analista de riesgo crediticio senior especializado en el sector vitivinícola argentino. Tu trabajo es evaluar clientes para ' + getNombreBodega() + ' y emitir un informe completo de riesgo crediticio.\n\nCUIT consultado: ' + cuit + '\n\n';
-  if (mora) prompt += '⚠️ ALERTA CRÍTICA - MORA CON PIATTELLI:\n' + mora.nombre + ' tiene deuda impaga desde ' + mora.fecha_mora + '.\nSaldo adeudado: $' + mora.saldo.toLocaleString('es-AR') + ' — Estado: ' + mora.estado + '\nEste antecedente es determinante para el análisis.\n\n';
+  // Construir datos para el prompt
+  var datosVeraz = '';
   if (verazData) {
-    prompt += `INFORME VERAZ/EQUIFAX — EMPRESA:
-- Score crediticio: ${verazData.score}/9 ${verazData.score <= 3 ? '(MUY BAJO - alto riesgo)' : verazData.score <= 5 ? '(MEDIO - revisar)' : '(BUENO)'}
-- Cheques rechazados: ${verazData.cheques_rechazados} ${verazData.cheques_rechazados > 0 ? '⚠️ ATENCIÓN' : '✓'}
-- Situación BCRA: ${verazData.situacion_bcra}
-- Saldo vencido: ${verazData.saldo_vencido}
-- Deuda total en sistema financiero: ${verazData.deuda_sistema_financiero}
-- Máximo atraso últimos 24 meses: ${verazData.maximo_atraso}
-- Entidades con problemas: ${verazData.entidades_problema?.join(', ') || 'Ninguna'}
-
-`;
+    datosVeraz += `Score crediticio: ${verazData.score}/9\n`;
+    datosVeraz += `Cheques rechazados: ${verazData.cheques_rechazados}\n`;
+    datosVeraz += `Situación BCRA: ${verazData.situacion_bcra}\n`;
+    datosVeraz += `Saldo vencido: ${verazData.saldo_vencido}\n`;
+    datosVeraz += `Deuda total sistema financiero: ${verazData.deuda_sistema_financiero}\n`;
+    datosVeraz += `Máximo atraso 24 meses: ${verazData.maximo_atraso}\n`;
+    if (verazData.entidades_problema?.length) datosVeraz += `Entidades con problemas: ${verazData.entidades_problema.join(', ')}\n`;
     if (verazData.socios_directores?.length) {
-      const sociosTexto = verazData.socios_directores.map(function(s) {
-        return '- ' + s.nombre + ' (' + (s.cargo||'socio') + '): Score ' + (s.score||'N/D') + '/9 | Situación: ' + (s.situacion||'N/D') + ' | ID: ' + (s.cuit_dni||'N/D');
-      }).join('\n');
-      prompt += 'SOCIOS / DIRECTORES (información de contexto — NO son el cliente principal):\n';
-      prompt += 'IMPORTANTE: El análisis principal debe basarse en el CUIT de la empresa.\n';
-      prompt += sociosTexto + '\n\n';
+      datosVeraz += `\nSOCIOS/DIRECTORES:\n`;
+      verazData.socios_directores.forEach(function(s) {
+        datosVeraz += `- ${s.nombre} (${s.cargo||'socio'}): Score ${s.score||'N/D'}/9 | Sit: ${s.situacion||'N/D'}\n`;
+      });
     }
+  } else {
+    datosVeraz = 'No se adjuntó informe Veraz/Nosis.';
   }
+
+  var datosHistorial = '';
+  if (mora) datosHistorial += `⚠ MORA CON ${getNombreBodega().toUpperCase()}: $${mora.saldo.toLocaleString('es-AR')} desde ${mora.fecha_mora} (${mora.estado})\n`;
+  if (piat) datosHistorial += `Historial interno: ${piat}\n`;
   if (wspThreads?.length) {
-    prompt += `HISTORIAL EN GRUPO DE BODEGAS (referencia del mercado):
-`;
-    wspThreads.forEach(t => t.mensajes.slice(0,5).forEach(m => { prompt += `${m.autor}: ${m.texto}\n`; }));
-    prompt += `\n`;
+    datosHistorial += `Menciones en grupo bodegas:\n`;
+    wspThreads.forEach(t => t.mensajes.slice(0,5).forEach(m => { datosHistorial += `${m.autor}: ${m.texto}\n`; }));
   }
-  if (piat) prompt += 'HISTORIAL CON ' + getNombreBodega().toUpperCase() + ':\n' + piat + '\n\n';
-  // Agregar límite y plazo si el cliente está en cartera
+  if (!datosHistorial) datosHistorial = 'Sin historial comercial registrado.';
+
   var clienteCartera = cartera.find(function(c) { return c.cuit === cuit; });
+  var condicionesActuales = '';
   if (clienteCartera && (clienteCartera.limiteCreditoARS || clienteCartera.plazoDias)) {
-    prompt += 'CONDICIONES ACTUALES CON ESTA BODEGA:\n';
-    if (clienteCartera.limiteCreditoARS) prompt += '- Límite de crédito: $' + clienteCartera.limiteCreditoARS.toLocaleString('es-AR') + '\n';
-    if (clienteCartera.plazoDias) prompt += '- Plazo de pago: ' + clienteCartera.plazoDias + ' días\n';
-    prompt += '\n';
+    if (clienteCartera.limiteCreditoARS) condicionesActuales += `Límite actual: $${clienteCartera.limiteCreditoARS.toLocaleString('es-AR')}\n`;
+    if (clienteCartera.plazoDias) condicionesActuales += `Plazo actual: ${clienteCartera.plazoDias} días\n`;
   }
-  prompt += `CRITERIOS DE EVALUACIÓN:
-- Situación BCRA ideal: 1 (Normal). Situación 2 requiere garantías. Situación 3+ es rechazo automático.
-- Score Veraz ideal: 7 o más. Entre 5-6 requiere condiciones. Menos de 5 es rechazo.
-- Cheques rechazados: cualquier antecedente reciente es señal de alerta grave.
-- Mora registrada: es condición de rechazo automático hasta regularización.
-- Historial en grupo de bodegas: referencias negativas de colegas del sector pesan mucho.
 
-MODALIDADES DE VENTA DISPONIBLES:
-1. CUENTA CORRIENTE 30/60/90 días — para clientes AAA sin antecedentes
-2. CHEQUE A 30/60 DÍAS — para clientes buenos con alguna observación menor
-3. CHEQUE CONTRA ENTREGA — para clientes nuevos o con historial mixto
-4. PAGO ANTICIPADO — para clientes con antecedentes negativos pero con potencial
-5. RECHAZO TOTAL — para clientes con mora activa, situación 3+ o cheques rechazados recientes
+  var ubicacion = obtenerPromptUbicacion();
 
-PARÁMETROS DE NEGOCIO PARA EL LÍMITE DE CRÉDITO (OBLIGATORIO USAR):
-- Precio promedio por botella: $10.000
-- Volumen estándar: 120 botellas = 1 operación estándar
-- Valor de compra estándar: $1.200.000
-- Regla de cálculo por score Veraz:
-  * Score > 800 (bueno): límite MÍNIMO $1.200.000 (1 operación estándar)
-  * Score 600-800 (medio): límite $600.000 (50% de operación estándar)
-  * Score < 600 (malo): límite $0 — prepago obligatorio
-- Si no hay score disponible, basar el límite en la situación BCRA:
-  * Situación 1 sin antecedentes: $1.200.000
-  * Situación 1 con algún antecedente menor: $600.000
-  * Situación 2: $300.000 máximo con garantías
-  * Situación 3+: $0 — rechazo
-- El límite propuesto DEBE justificarse citando estos parámetros. No seas conservador sin justificación. Un cliente limpio merece un límite operativo real.
+  var prompt = `Actuá como un Auditor Senior de Riesgos Crediticios especializado en la industria vitivinícola argentina. Tu objetivo es realizar un informe de evaluación de riesgo crediticio para un cliente de ${getNombreBodega()}.
 
-FORMATO DE RESPUESTA REQUERIDO:
-**VEREDICTO: [APROBAR / APROBAR CON CONDICIONES / REVISAR / RECHAZAR]**
+CLIENTE: CUIT ${cuit}
+${condicionesActuales ? 'CONDICIONES ACTUALES:\n' + condicionesActuales : ''}
 
-**MODALIDAD DE VENTA RECOMENDADA:** [elegí una de las 5 opciones y justificá]
+[DATOS_PDF_VERAZ]:
+${datosVeraz}
 
-**LÍMITE DE CRÉDITO SUGERIDO:** $[monto] — [justificá en base al score/situación BCRA. NO mencionar precio por botella, volumen ni parámetros internos en el informe. Solo el monto y el fundamento crediticio.]
+[HISTORIAL_CHAT_BODEGA]:
+${datosHistorial}
 
-**ANÁLISIS DE RIESGO:**
-[3-4 líneas con los puntos más importantes del perfil crediticio]
+${ubicacion}
 
-**SEÑALES DE ALERTA:**
-[listá las alertas encontradas, o "Sin alertas" si el perfil es limpio]
+INSTRUCCIONES DE ANÁLISIS:
+- El valor promedio de venta es de $15.000 ARS por botella. Usá este parámetro para determinar el límite de crédito operativo.
+- Si el Veraz muestra riesgo alto pero el historial con la bodega es impecable, priorizá el historial comercial.
+- Si el Veraz es excelente pero el historial es inexistente o dudoso, sugerí venta contra entrega o cupos reducidos.
+- Situación BCRA 3+ es rechazo automático. Mora activa es rechazo hasta regularización.
+- NO menciones el precio por botella ni los parámetros internos en el informe final.
 
-**CONDICIONES ESPECIALES (si aplica):**
-[cualquier condición adicional que recomendés, como garantías, avales, límite de plazo, etc.]
+FORMATO DE RESPUESTA:
 
-' + obtenerPromptUbicacion() + '
+**RESUMEN EJECUTIVO:** [Estado del cliente en una oración]
 
-Sé directo, profesional y específico. El equipo de ventas va a usar este informe para tomar decisiones comerciales reales. Tu análisis puede evitar pérdidas millonarias.`;
+**ANÁLISIS DE RIESGO:** [Comparativa técnica entre salud financiera externa y conducta interna con la bodega]
+
+**MODALIDAD DE VENTA RECOMENDADA:**
+1. Cuenta corriente 30/60/90 días — clientes AAA
+2. Cheque a 30/60 días — clientes buenos con observación menor
+3. Cheque contra entrega — clientes nuevos o historial mixto
+4. Pago anticipado — antecedentes negativos con potencial
+5. Rechazo total — mora activa, sit 3+ o cheques sin levantar
+
+**LÍMITE DE CRÉDITO SUGERIDO:** $[monto] equivalente a [X botellas] — [justificación crediticia]
+
+**SEÑALES DE ALERTA:** [alertas encontradas o "Sin alertas"]
+
+**CONCLUSIÓN FINAL:** [Decisión: APROBAR / APROBAR CON CONDICIONES / REVISAR / RECHAZAR]
+
+Sé directo y profesional. Este informe lo usa el equipo de ventas para decisiones comerciales reales.`;
 
   try {
     const r = await fetch('/analizar', {
@@ -2542,21 +2535,9 @@ async function analizarCheque() {
 }
 
 async function consultarBCRA(cuit) {
-  // Intento 1: via allorigins (proxy CORS gratuito)
+  // Solo via servidor — sin allorigins
   try {
-    const url = encodeURIComponent(`https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/${cuit}`);
-    const r = await fetch(`https://api.allorigins.win/get?url=${url}`, {
-      signal: AbortSignal.timeout(15000)
-    });
-    if (r.ok) {
-      const wrapper = await r.json();
-      const data = JSON.parse(wrapper.contents);
-      if (data.status === 200) return data;
-    }
-  } catch(e) {}
-  // Intento 2: via proxy del servidor
-  try {
-    const r = await fetch(`/deudas/${cuit}`, {signal: AbortSignal.timeout(20000)});
+    const r = await fetch('/deudas/' + cuit, {signal: AbortSignal.timeout(20000)});
     return await r.json();
   } catch(e) {}
   return null;
