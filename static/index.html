@@ -1781,50 +1781,56 @@ async function analizarCliente() {
 
   var ubicacion = obtenerPromptUbicacion();
 
-  var prompt = `<contexto>
-Actúa como un Auditor Senior de Riesgos Crediticios para ${getNombreBodega()}. Tu objetivo es realizar un análisis de riesgo comercial combinando datos técnicos del PDF y comportamiento comercial del historial de chats.
-</contexto>
+  var prompt = `<rol>
+Actúa como un Gerente de Créditos Senior. Tu tarea es procesar el riesgo crediticio de un cliente combinando estrictamente los datos financieros y la experiencia comercial de ${getNombreBodega()}.
+</rol>
 
-<fase_1_extraccion>
-Analizá los datos en pdf_data y extraé los valores exactos. Si un dato no figura, escribí "No disponible". NO INVENTES.
-- Score Equifax:
-- Saldo Vencido Total:
-- Deuda Sistema Financiero:
-- Situación BCRA Actual:
-- Antecedentes (cheques/mora):
-</fase_1_extraccion>
+<fuentes_de_informacion>
+1. DATOS_VERAZ: Reporte financiero extraído del PDF. Aquí buscarás el Score, Saldo Vencido y especialmente el ESTADO BCRA (Situación 1 a 6).
+2. HISTORIAL_BODEGA: Comportamiento previo del cliente en nuestra base de datos y grupo de bodegas.
+</fuentes_de_informacion>
 
-<fase_2_analisis>
-Basándote exclusivamente en los datos extraídos y en el historial_chats, realizá el informe comercial:
-1. CRITERIO DE EVALUACIÓN:
-   - Priorizá la Situación BCRA Actual (Situación 1 = apto).
-   - Antecedentes pasados (más de 6 meses) son contexto, no rechazo automático.
-   - Si el cliente es cumplidor en la bodega, su historial comercial pesa más que un antecedente bancario antiguo.
-2. CÁLCULO DE LÍMITE (Valor botella: $15.000 ARS):
-   - Determiná un cupo sugerido según su capacidad de pago actual, expresado en pesos y cantidad de botellas.
-3. DECISIÓN: Aprobado / Condicionado / Rechazado.
-</fase_2_analisis>
-
-<formato_salida>
-Presentá el resultado de manera fluida y profesional. No muestres el proceso interno, solo el informe final con estas secciones:
-1. RESUMEN EJECUTIVO
-2. ANÁLISIS DE RIESGO
-3. MODALIDAD Y LÍMITE SUGERIDO
-4. CONCLUSIÓN FINAL
-</formato_salida>
+<instrucciones>
+1. ANALISIS INTEGRAL: Cruzá el estado financiero del PDF con el comportamiento histórico.
+   - Si el cliente es nuevo y no hay registros, indicá "Sin antecedentes comerciales registrados en nuestra base".
+2. PRIORIDAD BCRA: El estado del BCRA (Situación 1, 2, 3, etc.) es el eje central para determinar la solvencia actual.
+3. REGLAS PROHIBIDAS (CUMPLIMIENTO ESTRICTO):
+   - PROHIBIDO mencionar cálculos de cantidad de botellas.
+   - PROHIBIDO mencionar precios unitarios, fórmulas de deuda o valores arbitrarios de venta.
+   - PROHIBIDO inventar datos. Si algo no está en el PDF ni en el historial, decí "No disponible".
+</instrucciones>
 
 <cliente>
 CUIT: ${cuit}
 ${condicionesActuales}${ubicacion}
 </cliente>
 
-<pdf_data>
+<DATOS_VERAZ>
 ${datosVeraz}
-</pdf_data>
+</DATOS_VERAZ>
 
-<historial_chats>
+<HISTORIAL_BODEGA>
 ${datosHistorial}
-</historial_chats>`;
+</HISTORIAL_BODEGA>
+
+<formato_salida>
+PERFIL DE RIESGO
+[Resumen ejecutivo unificado: Riesgo externo financiero + Comportamiento interno]
+
+HISTORIAL COMERCIAL EN BODEGA
+[Detalle de comportamiento previo o "Sin antecedentes comerciales registrados en nuestra base"]
+
+ANÁLISIS DE SOLVENCIA
+- Estado BCRA: [Situación actual]
+- Endeudamiento: [Monto total en sistema financiero]
+- Comportamiento: [Interpretación de saldos y señales de alerta]
+
+DECISIÓN COMERCIAL
+[APROBADO / CONDICIONADO / RECHAZADO]
+
+RECOMENDACIÓN OPERATIVA
+[Instrucción clara para ventas: ej: "Solo contado", "Habilitar cuenta hasta X monto"]
+</formato_salida>`;
 
   try {
     const r = await fetch('/analizar', {
