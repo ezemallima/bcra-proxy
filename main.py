@@ -466,15 +466,49 @@ def procesar_veraz():
             "El array socios_directores debe incluir todos los socios, directores o representantes "
             "legales con su informacion crediticia. Si no hay, dejar array vacio []."
         )
-        payload = {"contents": [{"parts": [
-            {"inline_data": {"mime_type": "application/pdf", "data": pdf_base64}},
-            {"text": prompt}
-        ]}]}
-        # Usar gemini_request con reintentos
-        texto, error = gemini_request(payload, timeout=90)
-        if error:
-            print(f"[procesar-informe] Error Gemini: {error}", flush=True)
-            return jsonify({"error": "Error de Gemini: " + error}), 503
+        # OpenAI gpt-4o con vision para leer PDFs
+        if not OPENAI_KEY:
+            return jsonify({"error": "No hay API key de OpenAI configurada"}), 500
+        texto = None
+        headers_oai = {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + OPENAI_KEY
+        }
+        body_oai = {
+            "model": "gpt-4o",
+            "max_tokens": 1500,
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": prompt
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "data:application/pdf;base64," + pdf_base64
+                        }
+                    }
+                ]
+            }]
+        }
+        try:
+            r_oai = requests.post("https://api.openai.com/v1/chat/completions",
+                headers=headers_oai, json=body_oai, timeout=120)
+            d_oai = r_oai.json()
+            print(f"[procesar-informe] OpenAI status {r_oai.status_code}", flush=True)
+            if r_oai.status_code == 200:
+                texto = d_oai["choices"][0]["message"]["content"]
+            else:
+                msg = d_oai.get("error", {}).get("message", "Error OpenAI")
+                print(f"[procesar-informe] OpenAI error: {msg}", flush=True)
+                return jsonify({"error": "Error OpenAI: " + msg}), 503
+        except Exception as ex:
+            print(f"[procesar-informe] Excepcion OpenAI: {ex}", flush=True)
+            return jsonify({"error": str(ex)}), 503
+        if not texto:
+            return jsonify({"error": "No se pudo procesar el PDF."}), 503
         texto_limpio = texto.strip().replace("```json", "").replace("```", "").strip()
         import re as re_mod
         match = re_mod.search(r'\{[\s\S]+\}', texto_limpio)
