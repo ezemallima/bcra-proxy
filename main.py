@@ -466,10 +466,33 @@ def procesar_veraz():
             "El array socios_directores debe incluir todos los socios, directores o representantes "
             "legales con su informacion crediticia. Si no hay, dejar array vacio []."
         )
-        # OpenAI gpt-4o con vision para leer PDFs
+        # Convertir PDF a imagenes y enviar a OpenAI gpt-4o
         if not OPENAI_KEY:
             return jsonify({"error": "No hay API key de OpenAI configurada"}), 500
-        texto = None
+        try:
+            import base64 as b64mod
+            import fitz  # PyMuPDF
+            pdf_bytes = b64mod.b64decode(pdf_base64)
+            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            imagenes_b64 = []
+            for page in doc:
+                mat = fitz.Matrix(2, 2)  # zoom 2x para mejor calidad
+                pix = page.get_pixmap(matrix=mat)
+                img_bytes = pix.tobytes("png")
+                imagenes_b64.append(b64mod.b64encode(img_bytes).decode())
+            doc.close()
+            print(f"[procesar-informe] PDF convertido a {len(imagenes_b64)} paginas", flush=True)
+        except Exception as ex:
+            print(f"[procesar-informe] Error convirtiendo PDF: {ex}", flush=True)
+            return jsonify({"error": "No se pudo convertir el PDF: " + str(ex)}), 500
+
+        content_oai = [{"type": "text", "text": prompt}]
+        for img_b64 in imagenes_b64[:4]:  # max 4 paginas
+            content_oai.append({
+                "type": "image_url",
+                "image_url": {"url": "data:image/png;base64," + img_b64}
+            })
+
         headers_oai = {
             "Content-Type": "application/json",
             "Authorization": "Bearer " + OPENAI_KEY
@@ -477,21 +500,7 @@ def procesar_veraz():
         body_oai = {
             "model": "gpt-4o",
             "max_tokens": 1500,
-            "messages": [{
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": prompt
-                    },
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": "data:application/pdf;base64," + pdf_base64
-                        }
-                    }
-                ]
-            }]
+            "messages": [{"role": "user", "content": content_oai}]
         }
         try:
             r_oai = requests.post("https://api.openai.com/v1/chat/completions",
