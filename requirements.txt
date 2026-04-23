@@ -6,3 +6,4 @@ gunicorn
 urllib3
 pandas
 openpyxl
+PyMuPDF
