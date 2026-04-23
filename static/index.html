@@ -1729,44 +1729,50 @@ async function analizarCliente() {
 
   var ubicacion = obtenerPromptUbicacion();
 
-  var prompt = `<rol>
-Actúa como un Analista de Riesgos Senior con visión comercial para ${getNombreBodega()}. Tu enfoque no es solo detectar riesgo, sino evaluar la viabilidad de negocio.
-</rol>
+  var prompt = `<contexto>
+Actúa como un Auditor Senior de Riesgos Crediticios para ${getNombreBodega()}. Tu objetivo es realizar un análisis de riesgo comercial combinando datos técnicos del PDF y comportamiento comercial del historial de chats.
+</contexto>
 
-<instrucciones>
-1. ANALIZA LOS DATOS: Utilizá únicamente la información proporcionada. Si un dato no está presente, indicá "No especificado". NO inventes información.
-2. PRIORIDAD DE CRITERIO:
-   - Situación BCRA Actual (Situación 1): Es el indicador principal de aptitud.
-   - Situación BCRA Pasada (Situación 3+ hace más de 6 meses): Usalo solo como contexto bajo "Observación de antecedentes". NO es causal de rechazo si la situación actual es 1.
-   - Cheques rechazados ya pagados: Priorizá la regularización actual (aprobación condicionada).
-3. MÉTRICA DE CRÉDITO:
-   - Valor promedio botella: $15.000 ARS.
-   - Calculá el cupo sugerido basándote en la deuda actual y el score, traduciéndolo a cantidad de botellas.
-4. DECISIÓN:
-   - Situación 1 sin antecedentes: Aprobar con crédito.
-   - Situación 1 con antecedentes pagados: Aprobar condicionado (límite reducido o pago a 30 días).
-   - Situación 3, 4, 5 o 6 actual: Rechazar.
-</instrucciones>
+<fase_1_extraccion>
+Analizá los datos en pdf_data y extraé los valores exactos. Si un dato no figura, escribí "No disponible". NO INVENTES.
+- Score Equifax:
+- Saldo Vencido Total:
+- Deuda Sistema Financiero:
+- Situación BCRA Actual:
+- Antecedentes (cheques/mora):
+</fase_1_extraccion>
+
+<fase_2_analisis>
+Basándote exclusivamente en los datos extraídos y en el historial_chats, realizá el informe comercial:
+1. CRITERIO DE EVALUACIÓN:
+   - Priorizá la Situación BCRA Actual (Situación 1 = apto).
+   - Antecedentes pasados (más de 6 meses) son contexto, no rechazo automático.
+   - Si el cliente es cumplidor en la bodega, su historial comercial pesa más que un antecedente bancario antiguo.
+2. CÁLCULO DE LÍMITE (Valor botella: $15.000 ARS):
+   - Determiná un cupo sugerido según su capacidad de pago actual, expresado en pesos y cantidad de botellas.
+3. DECISIÓN: Aprobado / Condicionado / Rechazado.
+</fase_2_analisis>
+
+<formato_salida>
+Presentá el resultado de manera fluida y profesional. No muestres el proceso interno, solo el informe final con estas secciones:
+1. RESUMEN EJECUTIVO
+2. ANÁLISIS DE RIESGO
+3. MODALIDAD Y LÍMITE SUGERIDO
+4. CONCLUSIÓN FINAL
+</formato_salida>
 
 <cliente>
 CUIT: ${cuit}
 ${condicionesActuales}${ubicacion}
 </cliente>
 
-<veraz_data>
+<pdf_data>
 ${datosVeraz}
-</veraz_data>
+</pdf_data>
 
-<chat_history>
+<historial_chats>
 ${datosHistorial}
-</chat_history>
-
-<formato_salida>
-1. RESUMEN EJECUTIVO: (Situación actual + score + capacidad de pago)
-2. ANÁLISIS DE RIESGO: (Salud financiera actual y contextualización de antecedentes)
-3. MODALIDAD Y LÍMITE SUGERIDO: (Define modalidad de venta, cantidad de botellas y monto en pesos)
-4. CONCLUSIÓN FINAL: (Decisión clara: Aprobado / Condicionado / Rechazado)
-</formato_salida>`;
+</historial_chats>`;
 
   try {
     const r = await fetch('/analizar', {
