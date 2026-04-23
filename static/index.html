@@ -1729,46 +1729,44 @@ async function analizarCliente() {
 
   var ubicacion = obtenerPromptUbicacion();
 
-  var prompt = `Actuá como un Auditor Senior de Riesgos Crediticios especializado en la industria vitivinícola argentina. Tu objetivo es realizar un informe de evaluación de riesgo crediticio para un cliente de ${getNombreBodega()}.
+  var prompt = `<rol>
+Actúa como un Analista de Riesgos Senior con visión comercial para ${getNombreBodega()}. Tu enfoque no es solo detectar riesgo, sino evaluar la viabilidad de negocio.
+</rol>
 
-CLIENTE: CUIT ${cuit}
-${condicionesActuales ? 'CONDICIONES ACTUALES:\n' + condicionesActuales : ''}
+<instrucciones>
+1. ANALIZA LOS DATOS: Utilizá únicamente la información proporcionada. Si un dato no está presente, indicá "No especificado". NO inventes información.
+2. PRIORIDAD DE CRITERIO:
+   - Situación BCRA Actual (Situación 1): Es el indicador principal de aptitud.
+   - Situación BCRA Pasada (Situación 3+ hace más de 6 meses): Usalo solo como contexto bajo "Observación de antecedentes". NO es causal de rechazo si la situación actual es 1.
+   - Cheques rechazados ya pagados: Priorizá la regularización actual (aprobación condicionada).
+3. MÉTRICA DE CRÉDITO:
+   - Valor promedio botella: $15.000 ARS.
+   - Calculá el cupo sugerido basándote en la deuda actual y el score, traduciéndolo a cantidad de botellas.
+4. DECISIÓN:
+   - Situación 1 sin antecedentes: Aprobar con crédito.
+   - Situación 1 con antecedentes pagados: Aprobar condicionado (límite reducido o pago a 30 días).
+   - Situación 3, 4, 5 o 6 actual: Rechazar.
+</instrucciones>
 
-[DATOS_PDF_VERAZ]:
+<cliente>
+CUIT: ${cuit}
+${condicionesActuales}${ubicacion}
+</cliente>
+
+<veraz_data>
 ${datosVeraz}
+</veraz_data>
 
-[HISTORIAL_CHAT_BODEGA]:
+<chat_history>
 ${datosHistorial}
+</chat_history>
 
-${ubicacion}
-
-INSTRUCCIONES DE ANÁLISIS:
-- El valor promedio de venta es de $15.000 ARS por botella. Usá este parámetro para determinar el límite de crédito operativo.
-- Si el Veraz muestra riesgo alto pero el historial con la bodega es impecable, priorizá el historial comercial.
-- Si el Veraz es excelente pero el historial es inexistente o dudoso, sugerí venta contra entrega o cupos reducidos.
-- Situación BCRA 3+ es rechazo automático. Mora activa es rechazo hasta regularización.
-- NO menciones el precio por botella ni los parámetros internos en el informe final.
-
-FORMATO DE RESPUESTA:
-
-**RESUMEN EJECUTIVO:** [Estado del cliente en una oración]
-
-**ANÁLISIS DE RIESGO:** [Comparativa técnica entre salud financiera externa y conducta interna con la bodega]
-
-**MODALIDAD DE VENTA RECOMENDADA:**
-1. Cuenta corriente 30/60/90 días — clientes AAA
-2. Cheque a 30/60 días — clientes buenos con observación menor
-3. Cheque contra entrega — clientes nuevos o historial mixto
-4. Pago anticipado — antecedentes negativos con potencial
-5. Rechazo total — mora activa, sit 3+ o cheques sin levantar
-
-**LÍMITE DE CRÉDITO SUGERIDO:** $[monto] equivalente a [X botellas] — [justificación crediticia]
-
-**SEÑALES DE ALERTA:** [alertas encontradas o "Sin alertas"]
-
-**CONCLUSIÓN FINAL:** [Decisión: APROBAR / APROBAR CON CONDICIONES / REVISAR / RECHAZAR]
-
-Sé directo y profesional. Este informe lo usa el equipo de ventas para decisiones comerciales reales.`;
+<formato_salida>
+1. RESUMEN EJECUTIVO: (Situación actual + score + capacidad de pago)
+2. ANÁLISIS DE RIESGO: (Salud financiera actual y contextualización de antecedentes)
+3. MODALIDAD Y LÍMITE SUGERIDO: (Define modalidad de venta, cantidad de botellas y monto en pesos)
+4. CONCLUSIÓN FINAL: (Decisión clara: Aprobado / Condicionado / Rechazado)
+</formato_salida>`;
 
   try {
     const r = await fetch('/analizar', {
