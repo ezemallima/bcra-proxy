@@ -1782,22 +1782,17 @@ async function analizarCliente() {
   var ubicacion = obtenerPromptUbicacion();
 
   var prompt = `<rol>
-Actúa como un Gerente de Créditos Senior. Tu tarea es procesar el riesgo crediticio de un cliente combinando estrictamente los datos financieros y la experiencia comercial de ${getNombreBodega()}.
+Actúa como un Analista de Riesgo Crediticio Senior para ${getNombreBodega()}. Tu objetivo es brindar un informe descriptivo y detallado para apoyar la toma de decisiones. Tu rol es puramente analítico: presentá los hechos y la interpretación financiera, pero NO tomes decisiones comerciales ni sugieras restricciones de venta.
 </rol>
 
-<fuentes_de_informacion>
-1. DATOS_VERAZ: Reporte financiero extraído del PDF. Aquí buscarás el Score, Saldo Vencido y especialmente el ESTADO BCRA (Situación 1 a 6).
-2. HISTORIAL_BODEGA: Comportamiento previo del cliente en nuestra base de datos y grupo de bodegas.
-</fuentes_de_informacion>
-
 <instrucciones>
-1. ANALISIS INTEGRAL: Cruzá el estado financiero del PDF con el comportamiento histórico.
-   - Si el cliente es nuevo y no hay registros, indicá "Sin antecedentes comerciales registrados en nuestra base".
-2. PRIORIDAD BCRA: El estado del BCRA (Situación 1, 2, 3, etc.) es el eje central para determinar la solvencia actual.
-3. REGLAS PROHIBIDAS (CUMPLIMIENTO ESTRICTO):
-   - PROHIBIDO mencionar cálculos de cantidad de botellas.
-   - PROHIBIDO mencionar precios unitarios, fórmulas de deuda o valores arbitrarios de venta.
-   - PROHIBIDO inventar datos. Si algo no está en el PDF ni en el historial, decí "No disponible".
+1. INTEGRACIÓN: Analizá los datos del reporte financiero en DATOS_VERAZ y cruzalos con el comportamiento histórico en HISTORIAL_BODEGA.
+2. DESCRIPCIÓN EXHAUSTIVA: En la sección "ANÁLISIS DE SOLVENCIA", no te limités a listar datos. Profundizá en qué significa la deuda del cliente, su estado BCRA y cómo esto impacta en su liquidez actual.
+3. RESTRICCIONES CRÍTICAS:
+   - PROHIBIDO sugerir decisiones (Aprobado/Rechazado) o recomendaciones operativas (Vender/No vender).
+   - PROHIBIDO mencionar cálculos de cantidad de botellas o precios unitarios.
+   - El tono debe ser profesional, analítico y neutral.
+   - PROHIBIDO inventar datos. Si algo no está en las fuentes, decí "No disponible".
 </instrucciones>
 
 <cliente>
@@ -1822,14 +1817,8 @@ HISTORIAL COMERCIAL EN BODEGA
 
 ANÁLISIS DE SOLVENCIA
 - Estado BCRA: [Situación actual]
-- Endeudamiento: [Monto total en sistema financiero]
-- Comportamiento: [Interpretación de saldos y señales de alerta]
-
-DECISIÓN COMERCIAL
-[APROBADO / CONDICIONADO / RECHAZADO]
-
-RECOMENDACIÓN OPERATIVA
-[Instrucción clara para ventas: ej: "Solo contado", "Habilitar cuenta hasta X monto"]
+- Endeudamiento Total: [Monto total en sistema financiero]
+- Análisis de Capacidad de Pago: [Interpretación detallada: cómo el nivel de deuda y el estado BCRA afectan la liquidez del cliente y la estabilidad de sus compromisos]
 </formato_salida>`;
 
   try {
