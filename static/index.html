@@ -478,6 +478,23 @@
         <input type="file" id="veraz-pdf" accept=".pdf" style="display:none;" onchange="procesarVeraz(this)" />
         <div id="veraz-status" style="display:none;font-size:13px;color:#888;margin-bottom:8px;"></div>
         <div id="veraz-datos" style="display:none;padding:12px;background:#f9f9f7;border-radius:8px;border:1px solid #e0e0d8;margin-bottom:12px;"></div>
+
+        <!-- Carga manual de datos Veraz -->
+        <div id="veraz-manual-toggle" style="margin-bottom:8px;">
+          <button onclick="toggleVerazManual()" style="font-size:12px;color:#64748b;background:none;border:1px dashed #cbd5e1;border-radius:6px;padding:5px 12px;cursor:pointer;">✏ Cargar datos manualmente</button>
+        </div>
+        <div id="veraz-manual" style="display:none;padding:12px;background:#f0f9ff;border-radius:8px;border:1px solid #bae6fd;margin-bottom:12px;">
+          <div style="font-size:12px;color:#0369a1;font-weight:600;margin-bottom:10px;">Carga manual de datos crediticios</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <div><label style="font-size:11px;color:#64748b;">Score (ej: 399)</label><input type="number" id="manual-score" placeholder="399" style="width:100%;font-size:13px;padding:6px;border:1px solid #cbd5e1;border-radius:6px;"></div>
+            <div><label style="font-size:11px;color:#64748b;">Cheques rechazados</label><input type="number" id="manual-cheques" placeholder="0" style="width:100%;font-size:13px;padding:6px;border:1px solid #cbd5e1;border-radius:6px;"></div>
+            <div><label style="font-size:11px;color:#64748b;">Situación BCRA</label><input type="text" id="manual-situacion" placeholder="ej: Normal / Sit. 1" style="width:100%;font-size:13px;padding:6px;border:1px solid #cbd5e1;border-radius:6px;"></div>
+            <div><label style="font-size:11px;color:#64748b;">Saldo vencido</label><input type="text" id="manual-saldo" placeholder="ej: $10.949" style="width:100%;font-size:13px;padding:6px;border:1px solid #cbd5e1;border-radius:6px;"></div>
+            <div><label style="font-size:11px;color:#64748b;">Deuda sistema financiero</label><input type="text" id="manual-deuda" placeholder="ej: $849.000" style="width:100%;font-size:13px;padding:6px;border:1px solid #cbd5e1;border-radius:6px;"></div>
+            <div><label style="font-size:11px;color:#64748b;">Máximo atraso 24 meses</label><input type="text" id="manual-atraso" placeholder="ej: 30-90 días" style="width:100%;font-size:13px;padding:6px;border:1px solid #cbd5e1;border-radius:6px;"></div>
+          </div>
+          <button onclick="aplicarVerazManual()" style="margin-top:10px;font-size:12px;padding:6px 14px;background:#0369a1;color:#fff;border-radius:6px;border:none;cursor:pointer;">✓ Aplicar datos</button>
+        </div>
       </div>
 
       <div id="analisis-resultado" style="display:none;margin-bottom:1rem;padding:1.25rem;background:#fff;border-radius:12px;border:1px solid #e0e0d8;"></div>
@@ -1235,6 +1252,41 @@ async function cargarDesdServidor() {
     }
     return true;
   } catch(e) { return false; }
+}
+
+function toggleVerazManual() {
+  var el = document.getElementById('veraz-manual');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function aplicarVerazManual() {
+  var score = parseInt(document.getElementById('manual-score').value) || 0;
+  var cheques = parseInt(document.getElementById('manual-cheques').value) || 0;
+  var situacion = document.getElementById('manual-situacion').value.trim() || '-';
+  var saldo = document.getElementById('manual-saldo').value.trim() || '-';
+  var deuda = document.getElementById('manual-deuda').value.trim() || '-';
+  var atraso = document.getElementById('manual-atraso').value.trim() || '-';
+  if (!score && !cheques && situacion === '-') { alert('Completá al menos un campo'); return; }
+  verazData = {
+    score: score, cheques_rechazados: cheques,
+    situacion_bcra: situacion, saldo_vencido: saldo,
+    deuda_sistema_financiero: deuda, maximo_atraso: atraso,
+    entidades_problema: [], resumen: 'Datos cargados manualmente.',
+    socios_directores: []
+  };
+  document.getElementById('veraz-manual').style.display = 'none';
+  document.getElementById('veraz-datos').style.display = 'block';
+  var scoreColor = score <= 400 ? '#991b1b' : score <= 600 ? '#854d0e' : '#166534';
+  document.getElementById('veraz-datos').innerHTML =
+    '<div style="font-size:12px;color:#888;font-weight:600;margin-bottom:8px;">Datos ingresados manualmente</div>' +
+    '<div class="info-grid">' +
+    '<div><span class="lbl">Score:</span> <strong style="color:' + scoreColor + '">' + score + '</strong></div>' +
+    '<div><span class="lbl">Cheques rechazados:</span> <strong style="color:' + (cheques > 0 ? '#991b1b' : '#166534') + '">' + cheques + '</strong></div>' +
+    '<div><span class="lbl">Situación BCRA:</span> <strong>' + situacion + '</strong></div>' +
+    '<div><span class="lbl">Saldo vencido:</span> <strong>' + saldo + '</strong></div>' +
+    '<div class="full"><span class="lbl">Deuda sistema financiero:</span> <strong>' + deuda + '</strong></div>' +
+    '<div class="full"><span class="lbl">Máximo atraso 24 meses:</span> <strong>' + atraso + '</strong></div>' +
+    '</div>';
 }
 
 async function init() {
