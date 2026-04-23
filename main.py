@@ -456,22 +456,15 @@ def procesar_veraz():
         if len(pdf_base64) * 3 // 4 > 20 * 1024 * 1024:
             return jsonify({"error": "PDF demasiado grande (max 20MB)"}), 400
         prompt = (
-            "Sos un extractor de datos financieros. Leé el PDF adjunto (informe Veraz/Equifax o Nosis) y extraé SOLO los valores que aparecen EXPLICITAMENTE en el documento. "
-"REGLA ESTRICTA: Si un valor no figura claramente en el PDF, usá null para numeros y string vacio para texto. NUNCA inventes ni estimes valores. "
-"Responde SOLO con un objeto JSON valido, sin markdown, sin texto adicional. "
-"Estructura exacta: "
-'{"nombre":"","cuit":"","score":0,"situacion_bcra":"","cheques_rechazados":0,'
-'"monto_cheques":"","saldo_vencido":"","deuda_sistema_financiero":"",'
-'"maximo_atraso":"","entidades_problema":[],"resumen":"",'
-'"socios_directores":[{"nombre":"","cuit_dni":"","cargo":"","score":0,"situacion":""}]} '
-"EJEMPLOS DE MAPEO CORRECTO: "
-"- 'Score 399' → score: 399 "
-"- 'Cantidad Cheques Rechazados: 1' → cheques_rechazados: 1 "
-"- 'Saldo Vencido $10.949' → saldo_vencido: '$10.949' "
-"- 'Saldo Deudores del Sistema Financiero $849.000' → deuda_sistema_financiero: '$849.000' "
-"- 'Situación Actual 0-30 días' → situacion_bcra: '0-30 dias' "
-"- 'Máximo Atraso 30-90 días' → maximo_atraso: '30-90 dias' "
-"El array socios_directores solo si el PDF los menciona explicitamente, sino dejar vacio []."
+            "Este puede ser un informe de Veraz/Equifax o de Nosis. Detecta el formato automaticamente y extrae los mismos campos. "
+            "Responde SOLO con un objeto JSON valido, sin markdown, sin texto adicional. "
+            "Estructura exacta: "
+            '{"nombre":"","cuit":"","score":0,"situacion_bcra":"","cheques_rechazados":0,'
+            '"monto_cheques":"","saldo_vencido":"","deuda_sistema_financiero":"",'
+            '"maximo_atraso":"","entidades_problema":[],"resumen":"",'
+            '"socios_directores":[{"nombre":"","cuit_dni":"","cargo":"","score":0,"situacion":""}]} '
+            "El array socios_directores debe incluir todos los socios, directores o representantes "
+            "legales con su informacion crediticia. Si no hay, dejar array vacio []."
         )
         payload = {"contents": [{"parts": [
             {"inline_data": {"mime_type": "application/pdf", "data": pdf_base64}},
