@@ -143,28 +143,46 @@ def consultar_bcra(cuit, reintentos=3):
     return None, "timeout"
 
 def analizar_bodegas_server(cuit, nombre, mensajes):
-    if not GEMINI_KEY or not mensajes:
+    if not mensajes:
         return False, ""
     try:
-        mensajes_texto = "\n".join(["- " + m for m in mensajes[:10]])
+        mensajes_texto = "\n".join(["- " + m for m in mensajes[:20]])
         prompt = (
-            "Analiza estos mensajes del grupo de bodegas sobre " + nombre + " (CUIT: " + cuit + ").\n"
-            "Determina si hay riesgo crediticio REAL para este cliente especifico.\n\n"
-            "MENSAJES:\n" + mensajes_texto + "\n\n"
+            "Sos un Analista de Riesgo Crediticio experto en el sector vitinicola argentino.\n"
+            "Analiza estos mensajes del grupo de bodegas sobre " + nombre + " (CUIT: " + cuit + ").\n\n"
+            "DICCIONARIO DE TERMINOS (OBLIGATORIO USAR):\n"
+            "- LC: Limite de Credito\n"
+            "- MM: Millones de pesos\n"
+            "- s/ CP: Segun condiciones de pago pactadas\n"
+            "- fct: Facturas\n"
+            "- opera con...: Relacion comercial activa\n"
+            "- contado anticipado: Paga antes de recibir mercaderia (mejor escenario)\n"
+            "- pagar con +X dias: Cliente se financia con la bodega (riesgo de flujo)\n"
+            "- cheque reemplazado / repuesto: Problema resuelto, NO es negativo\n\n"
             "REGLAS:\n"
+            "- Priorizá el chat sobre el reporte financiero. El chat es la realidad operativa.\n"
             "- Solo negativo si hay deudas impagas NO resueltas, estafas o desaparicion.\n"
+            "- Si distintas bodegas dicen cosas contradictorias, marcalo como comportamiento_inconsistente=true.\n"
             "- Cheques rechazados pero reemplazados = NO negativo.\n"
             "- Mensaje sobre OTRO CUIT diferente = NO negativo para este cliente.\n"
-            "- Buen cliente, paga en termino = POSITIVO.\n\n"
-            'Responde SOLO con este JSON: {"es_negativo": false, "motivo": "texto"}'
+            "- NUNCA digas que no hay antecedentes si el chat tiene mensajes. Usa la informacion disponible.\n\n"
+            "MENSAJES:\n" + mensajes_texto + "\n\n"
+            'Responde SOLO con este JSON sin markdown: {"es_negativo": false, "motivo": "texto descriptivo", "comportamiento_inconsistente": false}'
         )
         payload = {"contents": [{"parts": [{"text": prompt}]}]}
         texto, error = gemini_request(payload, timeout=30)
         if error or not texto:
             return False, ""
         texto_limpio = texto.strip().replace("```json", "").replace("```", "").strip()
+        import re as re_mod
+        match = re_mod.search(r'\{[\s\S]+\}', texto_limpio)
+        if match:
+            texto_limpio = match.group(0)
         resultado = json.loads(texto_limpio)
-        return resultado.get("es_negativo", False), resultado.get("motivo", "")
+        motivo = resultado.get("motivo", "")
+        if resultado.get("comportamiento_inconsistente"):
+            motivo = "⚠ Comportamiento Inconsistente: " + motivo
+        return resultado.get("es_negativo", False), motivo
     except Exception:
         return False, ""
 
