@@ -1525,9 +1525,9 @@ async function consultarCliente() {
     }
     // Mostrar situación BCRA
     if (bcraData.error === 'timeout') {
-      mostrarResultado(raw, null, true);
+      mostrarResultado(raw, null, true, estadoAfip, domicilioAfip);
     } else {
-      mostrarResultado(raw, bcraData, false);
+      mostrarResultado(raw, bcraData, false, estadoAfip, domicilioAfip);
     }
   } catch(e) {
     mostrarResultado(raw, null, true);
@@ -1584,7 +1584,9 @@ function agregarDesdConsulta(cuit, nombre) {
   renderCartera();
 }
 
-function mostrarResultado(cuit, data, esTimeout) {
+function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip) {
+  estadoAfip = estadoAfip || "";
+  domicilioAfip = domicilioAfip || "";
   const res = data?.results;
   // Juntar entidades de todos los periodos, quedarse con la mas reciente por entidad
   var todasEntidades = [];
