@@ -448,6 +448,7 @@
       <div id="mora-alert-container"></div>
       <div id="cliente-header" class="card" style="margin-bottom:8px;"></div>
       <div id="verdict-container"></div>
+      <div id="vende-score-container"></div>
 
       <div class="card" style="margin-bottom:8px;">
         <div class="card-title">Situación BCRA</div>
@@ -1289,6 +1290,122 @@ function aplicarVerazManual() {
     '</div>';
 }
 
+
+function calcularVendeScore(cuit, bcraData, mora, wspThreads) {
+  var puntos = 0;
+  var detalle = [];
+
+  // ── SITUACION BCRA ACTUAL (400 pts) ──
+  var entidades = [];
+  if (bcraData && bcraData.results && bcraData.results.periodos) {
+    var periodos = bcraData.results.periodos;
+    var vistas = {};
+    periodos.slice().sort(function(a,b){ return (b.periodo||'').localeCompare(a.periodo||''); })
+      .forEach(function(p) {
+        (p.entidades||[]).forEach(function(e) {
+          var k = e.entidad || e.codigo;
+          if (!vistas[k]) { vistas[k] = true; entidades.push(e); }
+        });
+      });
+  }
+  var maxSit = entidades.length ? entidades.reduce(function(m,e){ return Math.max(m, e.situacion||1); }, 1) : 1;
+  var pBCRA = maxSit === 1 ? 400 : maxSit === 2 ? 200 : maxSit === 3 ? 50 : 0;
+  puntos += pBCRA;
+  detalle.push({ label: 'Situación BCRA', valor: 'Sit. ' + maxSit, puntos: pBCRA, max: 400 });
+
+  // ── CHEQUES RECHAZADOS (150 pts) ──
+  var pCheques = 150; // sin datos = neutro
+  detalle.push({ label: 'Cheques rechazados', valor: 'Sin datos', puntos: pCheques, max: 150 });
+
+  // ── MORA CON PIATTELLI (150 pts) ──
+  var pMora = mora ? 0 : 150;
+  detalle.push({ label: 'Historial Piattelli', valor: mora ? 'En mora' : 'Sin mora', puntos: pMora, max: 150 });
+
+  // ── DSO INDIVIDUAL (100 pts) ──
+  var pDSO = 100;
+  var dsoLabel = 'Sin datos';
+  if (typeof dso_datos !== 'undefined' && dso_datos) {
+    var dsoCliente = dso_datos.find(function(d) {
+      return d.nombre && entidades.length >= 0 && 
+             cartera.some(function(c) { return c.cuit === cuit && c.nombre && 
+               d.nombre.toLowerCase().includes(c.nombre.split(' ')[0].toLowerCase()); });
+    });
+    if (!dsoCliente) {
+      var enCart = cartera.find(function(c) { return c.cuit === cuit; });
+      if (enCart) dsoCliente = dso_datos.find(function(d) {
+        return d.nombre && enCart.nombre && 
+               d.nombre.toLowerCase().includes(enCart.nombre.split(' ')[0].toLowerCase());
+      });
+    }
+    if (dsoCliente && dsoCliente.dso != null) {
+      var dso = dsoCliente.dso;
+      dsoLabel = dso + ' días';
+      pDSO = dso <= 30 ? 100 : dso <= 60 ? 70 : dso <= 90 ? 40 : 10;
+    }
+  }
+  puntos += pDSO;
+  detalle.push({ label: 'DSO (días cobro)', valor: dsoLabel, puntos: pDSO, max: 100 });
+
+  // ── RED DE BODEGAS (100 pts) ──
+  var pBodegas = 100;
+  var bodegasLabel = 'Sin menciones';
+  if (wspThreads && wspThreads.length > 0) {
+    var textos = [];
+    wspThreads.forEach(function(t) { (t.mensajes||[]).forEach(function(m) { textos.push((m.texto||'').toLowerCase()); }); });
+    var negativas = textos.filter(function(t) {
+      return /no paga|rechaz|mora|deuda|cuidado|estafa|problema|ojo|judicial/.test(t);
+    });
+    var positivas = textos.filter(function(t) {
+      return /paga bien|buen cliente|cumple|recomend|contado|ok/.test(t);
+    });
+    if (negativas.length > 0 && positivas.length > 0) { pBodegas = 50; bodegasLabel = 'Inconsistente'; }
+    else if (negativas.length > 0) { pBodegas = 0; bodegasLabel = negativas.length + ' menciones negativas'; }
+    else if (positivas.length > 0) { pBodegas = 100; bodegasLabel = positivas.length + ' referencias positivas'; }
+  }
+  puntos += pBodegas;
+  detalle.push({ label: 'Red de Bodegas', valor: bodegasLabel, puntos: pBodegas, max: 100 });
+
+  // ── MORA (ya restado arriba, agregar 99 pts estado AFIP) ──
+  puntos += 99; // base por defecto activo
+  detalle.push({ label: 'Estado AFIP', valor: 'Activo', puntos: 99, max: 99 });
+
+  // Score final 1-999
+  var scoreTotal = Math.min(999, Math.max(1, puntos));
+
+  // Rango
+  var rango, color, emoji;
+  if (scoreTotal >= 800) { rango = 'Excelente'; color = '#166534'; emoji = '🟢'; }
+  else if (scoreTotal >= 600) { rango = 'Bueno'; color = '#854d0e'; emoji = '🟡'; }
+  else if (scoreTotal >= 400) { rango = 'Revisar'; color = '#9a3412'; emoji = '🟠'; }
+  else if (scoreTotal >= 200) { rango = 'Alto riesgo'; color = '#991b1b'; emoji = '🔴'; }
+  else { rango = 'Rechazar'; color = '#7f1d1d'; emoji = '⛔'; }
+
+  return { score: scoreTotal, rango: rango, color: color, emoji: emoji, detalle: detalle };
+}
+
+function renderVendeScore(scoreObj) {
+  if (!scoreObj) return '';
+  var barWidth = Math.round(scoreObj.score / 999 * 100);
+  var barColor = scoreObj.color;
+  var filas = scoreObj.detalle.map(function(d) {
+    var pct = Math.round(d.puntos / d.max * 100);
+    var c = pct >= 80 ? '#166534' : pct >= 50 ? '#854d0e' : '#991b1b';
+    return '<tr><td style="font-size:12px;color:#334155;padding:3px 8px;">' + d.label + '</td>' +
+           '<td style="font-size:12px;color:#64748b;padding:3px 8px;">' + d.valor + '</td>' +
+           '<td style="font-size:12px;font-weight:600;color:' + c + ';padding:3px 8px;text-align:right;">' + d.puntos + '/' + d.max + '</td></tr>';
+  }).join('');
+  return '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px;margin-bottom:8px;">' +
+    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">' +
+    '<div style="font-size:13px;font-weight:700;color:#334155;">Score Vende Seguro</div>' +
+    '<div style="font-size:28px;font-weight:800;color:' + barColor + ';">' + scoreObj.score + '</div>' +
+    '<div style="font-size:12px;font-weight:600;color:' + barColor + ';">' + scoreObj.emoji + ' ' + scoreObj.rango + '</div>' +
+    '</div>' +
+    '<div style="background:#f1f5f9;border-radius:6px;height:8px;margin-bottom:10px;">' +
+    '<div style="background:' + barColor + ';height:8px;border-radius:6px;width:' + barWidth + '%;transition:width 0.5s;"></div></div>' +
+    '<details style="cursor:pointer;"><summary style="font-size:11px;color:#94a3b8;margin-bottom:6px;">Ver detalle del score</summary>' +
+    '<table style="width:100%;border-collapse:collapse;">' + filas + '</table></details></div>';
+}
+
 async function init() {
   checkProxy();
   // Cargar datos persistentes del servidor (sincroniza entre dispositivos)
@@ -1651,6 +1768,13 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip) {
   else if (maxSit === 2) v = `<div class="verdict-box revisar"><div class="verdict-title revisar">⚠ Revisar — Seguimiento especial</div><div class="verdict-detail">Situación 2 en al menos una entidad. Recomendable solicitar Veraz completo.</div></div>`;
   else v = `<div class="verdict-box rechazar"><div class="verdict-title rechazar">✗ Alerta — Situación crítica</div><div class="verdict-detail">Situación ${maxSit} (${sitNombre(maxSit)}) en el sistema financiero. Alto riesgo.</div></div>`;
   document.getElementById('verdict-container').innerHTML = v;
+
+  // ── SCORE VENDE SEGURO ──
+  var _scoreMora = buscarEnMoras ? buscarEnMoras(cuit) : null;
+  var _scoreWsp = buscarEnWSP ? buscarEnWSP(cuit) : [];
+  var scoreObj = calcularVendeScore(cuit, data, _scoreMora, _scoreWsp);
+  var scoreEl = document.getElementById('vende-score-container');
+  if (scoreEl) scoreEl.innerHTML = renderVendeScore(scoreObj);
   if (esTimeout) {
     document.getElementById('bcra-data').innerHTML = `<div style="font-size:13px;color:#854d0e;padding:8px;background:#fefce8;border-radius:8px;border:1px solid #fde047;">El BCRA no respondió en este momento. Esto puede significar que el cliente no tiene deudas registradas, o que el servicio está temporalmente caído. Intentá de nuevo en unos segundos o consultá directamente en <a href="https://www.bcra.gob.ar/BCRAyVos/Situacion_Crediticia.asp" target="_blank" style="color:#854d0e;">bcra.gob.ar</a>.</div>`;
   } else if (!entidades.length) {
