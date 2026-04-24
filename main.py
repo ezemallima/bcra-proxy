@@ -434,37 +434,21 @@ def get_afip(cuit):
     except Exception:
         pass
 
-    # Intento 4: API TangoFactura (ARCA/AFIP) — trae nombre, domicilio, estado
-    try:
-        r = requests.get(
-            "https://afip.tangofactura.com/Rest/GetContribuyenteFull?cuit=" + cuit,
-            timeout=10, verify=False,
-            headers={"User-Agent": "Mozilla/5.0"}
-        )
-        print(f"[afip] TangoFactura status: {r.status_code}, bytes: {len(r.content)}", flush=True)
-        if r.status_code == 200:
-            data4 = r.json()
-            print(f"[afip] TangoFactura response: {str(data4)[:300]}", flush=True)
-            # TangoFactura puede devolver el objeto directo o dentro de 'contribuyente'
-            contrib = data4.get('contribuyente') or data4.get('Contribuyente') or data4 or {}
-            nombre4 = contrib.get('nombreApellidoRazonSocial', '')
-            estado4 = contrib.get('estadoClave', '')
-            domicilio4 = ''
-            dom = contrib.get('domicilioFiscal') or {}
-            partes = [
-                dom.get('direccion',''),
-                dom.get('localidad',''),
-                dom.get('descripcionProvincia','')
-            ]
-            domicilio4 = ', '.join([p for p in partes if p])
-            if nombre4:
-                return jsonify({
-                    "nombre": nombre4,
-                    "estado_afip": estado4,
-                    "domicilio": domicilio4
-                })
-    except Exception:
-        pass
+    # Intento 4: API datos.gob.ar — padrón ARCA oficial
+    apis_afip = [
+        "https://apis.datos.gob.ar/georef/api/direcciones?cuit=" + cuit,
+        "https://www.padronenlinea.com.ar/api/v1/personas/" + cuit,
+        "https://afip.datoscontribuyente.api.gob.ar/api/v1/Contribuyente/" + cuit,
+    ]
+    for api_url in apis_afip:
+        try:
+            r = requests.get(api_url, timeout=8, verify=False, headers={"User-Agent": "Mozilla/5.0"})
+            print(f"[afip] {api_url[:50]} status: {r.status_code}", flush=True)
+            if r.status_code == 200:
+                d = r.json()
+                print(f"[afip] response: {str(d)[:200]}", flush=True)
+        except Exception as ex:
+            print(f"[afip] {api_url[:50]} error: {ex}", flush=True)
 
     # Fallback: CUIT formateado
     return jsonify({"nombre": cuit_fmt})
