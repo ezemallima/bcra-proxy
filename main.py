@@ -434,6 +434,34 @@ def get_afip(cuit):
     except Exception:
         pass
 
+    # Intento 4: API TangoFactura (ARCA/AFIP) — trae nombre, domicilio, estado
+    try:
+        r = requests.get(
+            "https://afip.tangofactura.com/Rest/GetContribuyenteFull?cuit=" + cuit,
+            timeout=10, verify=False
+        )
+        if r.status_code == 200:
+            data4 = r.json()
+            contrib = data4.get('contribuyente') or {}
+            nombre4 = contrib.get('nombreApellidoRazonSocial', '')
+            estado4 = contrib.get('estadoClave', '')
+            domicilio4 = ''
+            dom = contrib.get('domicilioFiscal') or {}
+            partes = [
+                dom.get('direccion',''),
+                dom.get('localidad',''),
+                dom.get('descripcionProvincia','')
+            ]
+            domicilio4 = ', '.join([p for p in partes if p])
+            if nombre4:
+                return jsonify({
+                    "nombre": nombre4,
+                    "estado_afip": estado4,
+                    "domicilio": domicilio4
+                })
+    except Exception:
+        pass
+
     # Fallback: CUIT formateado
     return jsonify({"nombre": cuit_fmt})
 
