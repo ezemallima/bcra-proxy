@@ -1479,8 +1479,11 @@ async function consultarCliente() {
   // Prioridad: 1) cartera local, 2) AFIP/BCRA, 3) CUIT formateado
   var cuitFmtLocal = raw.slice(0,2)+'-'+raw.slice(2,10)+'-'+raw.slice(10);
   var enCarteraLocal = cartera.find(function(c) { return c.cuit === raw; });
-  var nombreFinal = (enCarteraLocal && enCarteraLocal.nombre && !enCarteraLocal.nombre.includes(',')) 
-    ? enCarteraLocal.nombre.split(',')[0].trim() : '';
+  var nombreFinal = '';
+  if (enCarteraLocal && enCarteraLocal.nombre) {
+    // Tomar solo la parte antes de la coma (sin suffijos tipo "contacto", "entrega")
+    nombreFinal = enCarteraLocal.nombre.split(',')[0].trim();
+  }
   var estadoAfip = '';
   var domicilioAfip = '';
   if (!nombreFinal) {
