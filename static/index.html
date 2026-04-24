@@ -1420,6 +1420,54 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads) {
   return { score:scoreTotal, rango:rango, color:color, emoji:emoji, detalle:detalle };
 }
 
+// Alias compatible con formato objeto {bcra, cheques, dso, piattelli, red, afip}
+function calcularScore(datos) {
+  if (!datos) return calcularVendeScore(null, null, null, []);
+  var puntos = 0;
+  var detalle = [];
+
+  // BCRA
+  var sit = parseInt((datos.bcra||'').replace(/\D/g,'')) || null;
+  var pBCRA = sit===null?200 : sit===1?400 : sit===2?200 : sit===3?50 : 0;
+  puntos += pBCRA;
+  detalle.push({label:'Situación BCRA', valor: sit?'Sit.'+sit:'Sin datos', puntos:pBCRA, max:400});
+
+  // Historial
+  puntos += 75; detalle.push({label:'Historial BCRA 12m', valor:'Sin datos', puntos:75, max:150});
+
+  // Cheques
+  var ch = parseInt(datos.cheques||'0');
+  var pCh = isNaN(ch)?75 : ch===0?150 : 0;
+  puntos += pCh; detalle.push({label:'Cheques rechazados', valor:isNaN(ch)?'Sin datos':ch+' cheques', puntos:pCh, max:150});
+
+  // DSO
+  var dsoMap = {'<30':100,'30-60':70,'60-90':40,'90+':10};
+  var pDSO = dsoMap[datos.dso||''] !== undefined ? dsoMap[datos.dso] : 50;
+  puntos += pDSO; detalle.push({label:'DSO', valor:datos.dso||'Sin datos', puntos:pDSO, max:100});
+
+  // Piattelli
+  var pPiat = datos.piattelli==='ok'?100 : datos.piattelli==='atraso'?50 : datos.piattelli==='mora'?0 : 50;
+  puntos += pPiat; detalle.push({label:'Historial Piattelli', valor:datos.piattelli||'Sin datos', puntos:pPiat, max:100});
+
+  // Red bodegas
+  var pRed = datos.red==='sin'?60 : datos.red==='inconsistente'?30 : datos.red==='negativo'?0 : 30;
+  puntos += pRed; detalle.push({label:'Red Bodegas', valor:datos.red||'Sin datos', puntos:pRed, max:60});
+
+  // AFIP
+  var pAFIP = datos.afip==='activo'?39 : datos.afip==='suspendido'?10 : datos.afip==='inactivo'?0 : 20;
+  puntos += pAFIP; detalle.push({label:'Estado AFIP', valor:datos.afip||'Sin datos', puntos:pAFIP, max:39});
+
+  var score = Math.min(999, Math.max(1, Math.round(puntos)));
+  var rango, color, emoji;
+  if      (score>=800){rango='Excelente'; color='#166534'; emoji='🟢';}
+  else if (score>=600){rango='Bueno';     color='#854d0e'; emoji='🟡';}
+  else if (score>=400){rango='Revisar';   color='#9a3412'; emoji='🟠';}
+  else if (score>=200){rango='Alto riesgo';color='#991b1b';emoji='🔴';}
+  else                {rango='Rechazar';  color='#7f1d1d'; emoji='⛔';}
+
+  return {score:score, rango:rango, veredict:rango, color:color, emoji:emoji, detalle:detalle};
+}
+
 function renderVendeScore(scoreObj) {
   if (!scoreObj) return '';
   var barWidth = Math.round(scoreObj.score / 999 * 100);
