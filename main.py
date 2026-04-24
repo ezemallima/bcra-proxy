@@ -434,21 +434,49 @@ def get_afip(cuit):
     except Exception:
         pass
 
-    # Intento 4: API datos.gob.ar — padrón ARCA oficial
-    apis_afip = [
-        "https://apis.datos.gob.ar/georef/api/direcciones?cuit=" + cuit,
-        "https://www.padronenlinea.com.ar/api/v1/personas/" + cuit,
-        "https://afip.datoscontribuyente.api.gob.ar/api/v1/Contribuyente/" + cuit,
-    ]
-    for api_url in apis_afip:
+    # Intento 4: historial BCRA — siempre tiene denominacion aunque no haya deuda activa
+    try:
+        r = requests.get(
+            "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit,
+            timeout=15, verify=False
+        )
+        if r.status_code == 200:
+            dh = r.json()
+            nombre_h = dh.get('results', {}).get('denominacion', '')
+            if nombre_h:
+                return jsonify({"nombre": nombre_h})
+    except Exception:
+        pass
+
+    # Intento 5: OpenAI busca la razón social por CUIT
+    if OPENAI_KEY:
         try:
-            r = requests.get(api_url, timeout=8, verify=False, headers={"User-Agent": "Mozilla/5.0"})
-            print(f"[afip] {api_url[:50]} status: {r.status_code}", flush=True)
-            if r.status_code == 200:
-                d = r.json()
-                print(f"[afip] response: {str(d)[:200]}", flush=True)
+            headers_oai = {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + OPENAI_KEY
+            }
+            body_oai = {
+                "model": "gpt-4o-mini",
+                "max_tokens": 100,
+                "messages": [{
+                    "role": "system",
+                    "content": "Sos un asistente especializado en datos fiscales argentinos. Cuando te den un CUIT, respondé SOLO con la razón social o nombre completo del titular, sin ningún texto adicional. Si no lo sabés con certeza, respondé exactamente: NO_ENCONTRADO"
+                }, {
+                    "role": "user",
+                    "content": "¿Cuál es la razón social del CUIT " + cuit + " en Argentina?"
+                }]
+            }
+            r_oai = requests.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers=headers_oai, json=body_oai, timeout=15
+            )
+            if r_oai.status_code == 200:
+                nombre_oai = r_oai.json()['choices'][0]['message']['content'].strip()
+                if nombre_oai and nombre_oai != 'NO_ENCONTRADO' and len(nombre_oai) < 100:
+                    print(f"[afip] OpenAI encontró: {nombre_oai}", flush=True)
+                    return jsonify({"nombre": nombre_oai})
         except Exception as ex:
-            print(f"[afip] {api_url[:50]} error: {ex}", flush=True)
+            print(f"[afip] OpenAI error: {ex}", flush=True)
 
     # Fallback: CUIT formateado
     return jsonify({"nombre": cuit_fmt})
