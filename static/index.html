@@ -1557,7 +1557,25 @@ function agregarDesdConsulta(cuit, nombre) {
 
 function mostrarResultado(cuit, data, esTimeout) {
   const res = data?.results;
-  const entidades = res?.periodos?.[0]?.entidades || [];
+  // Juntar entidades de todos los periodos, quedarse con la mas reciente por entidad
+  var todasEntidades = [];
+  if (res?.periodos?.length) {
+    // Ordenar periodos de mas reciente a mas antiguo
+    var periodosOrdenados = res.periodos.slice().sort(function(a, b) {
+      return (b.periodo||'').localeCompare(a.periodo||'');
+    });
+    var entidadesVistas = {};
+    periodosOrdenados.forEach(function(p) {
+      (p.entidades||[]).forEach(function(e) {
+        var key = e.entidad || e.codigo;
+        if (!entidadesVistas[key]) {
+          entidadesVistas[key] = true;
+          todasEntidades.push(e);
+        }
+      });
+    });
+  }
+  const entidades = todasEntidades;
   const nombre = res?.denominacion || data?.denominacion || '';
   const maxSit = entidades.length ? entidades.reduce((m,e) => Math.max(m, e.situacion||1), 1) : 1;
   // Jerarquía: BCRA > AFIP async > CUIT formateado
@@ -1596,9 +1614,18 @@ function mostrarResultado(cuit, data, esTimeout) {
   } else if (!entidades.length) {
     document.getElementById('bcra-data').innerHTML = `<div class="empty-state" style="color:#166534;">✓ Sin deudas registradas en el BCRA para este CUIT.</div>`;
   } else {
-    let t = `<table class="bcra-table"><thead><tr><th>Entidad</th><th>Monto</th><th>Situación</th><th>Días atraso</th></tr></thead><tbody>`;
-    entidades.forEach(e => { t += `<tr><td>${e.entidad||'-'}</td><td>$${(e.monto||0).toLocaleString('es-AR')}</td><td class="sit-${e.situacion}">${e.situacion} — ${sitNombre(e.situacion)}</td><td>${e.diasAtrasoPago||0}</td></tr>`; });
+    var conMonto = entidades.filter(function(e) { return e.monto > 0; });
+    var sinMonto = entidades.filter(function(e) { return !e.monto || e.monto === 0; });
+    let t = `<table class="bcra-table"><thead><tr><th>Entidad</th><th>Período</th><th>Monto (miles $)</th><th>Situación</th><th>Días atraso</th></tr></thead><tbody>`;
+    entidades.forEach(function(e) {
+      var monto = e.monto > 0 ? '$' + (e.monto * 1000).toLocaleString('es-AR') : '-';
+      t += `<tr><td>${e.entidad||'-'}</td><td>${e.periodo||'-'}</td><td>${monto}</td><td class="sit-${e.situacion}">${e.situacion} — ${sitNombre(e.situacion)}</td><td>${e.diasAtrasoPago||0}</td></tr>`;
+    });
     t += `</tbody></table>`;
+    if (conMonto.length) {
+      var totalMiles = conMonto.reduce(function(s,e) { return s + (e.monto||0); }, 0);
+      t += `<div style="font-size:12px;color:#64748b;margin-top:6px;text-align:right;">Total deuda sistema financiero: <strong>$${(totalMiles*1000).toLocaleString('es-AR')}</strong></div>`;
+    }
     document.getElementById('bcra-data').innerHTML = t;
   }
 }
