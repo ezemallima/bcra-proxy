@@ -1295,116 +1295,159 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads) {
   var puntos = 0;
   var detalle = [];
 
-  // ── SITUACION BCRA ACTUAL (400 pts) ──
+  // 1. SITUACION BCRA ACTUAL (Max 400)
   var entidades = [];
   if (bcraData && bcraData.results && bcraData.results.periodos) {
-    var periodos = bcraData.results.periodos;
     var vistas = {};
-    periodos.slice().sort(function(a,b){ return (b.periodo||'').localeCompare(a.periodo||''); })
+    bcraData.results.periodos.slice()
+      .sort(function(a,b){ return (b.periodo||'').localeCompare(a.periodo||''); })
       .forEach(function(p) {
         (p.entidades||[]).forEach(function(e) {
           var k = e.entidad || e.codigo;
-          if (!vistas[k]) { vistas[k] = true; entidades.push(e); }
+          if (!vistas[k]) { vistas[k]=true; entidades.push(e); }
         });
       });
   }
-  var maxSit = entidades.length ? entidades.reduce(function(m,e){ return Math.max(m, e.situacion||1); }, 1) : 1;
-  var pBCRA = maxSit === 1 ? 400 : maxSit === 2 ? 200 : maxSit === 3 ? 50 : 0;
+  var maxSit = entidades.length
+    ? entidades.reduce(function(m,e){ return Math.max(m, e.situacion||1); }, 1)
+    : null;
+  var pBCRA = maxSit === null ? 200  // neutral 50%
+    : maxSit === 1 ? 400
+    : maxSit === 2 ? 200
+    : maxSit === 3 ? 50
+    : 0;
   puntos += pBCRA;
-  detalle.push({ label: 'Situación BCRA', valor: 'Sit. ' + maxSit, puntos: pBCRA, max: 400 });
+  detalle.push({ label:'Situación BCRA', valor: maxSit ? 'Sit. '+maxSit : 'Sin datos', puntos:pBCRA, max:400 });
 
-  // ── CHEQUES RECHAZADOS (150 pts) ──
-  var pCheques = 150; // sin datos = neutro
-  detalle.push({ label: 'Cheques rechazados', valor: 'Sin datos', puntos: pCheques, max: 150 });
-
-  // ── MORA CON PIATTELLI (150 pts) ──
-  var pMora = mora ? 0 : 150;
-  detalle.push({ label: 'Historial Piattelli', valor: mora ? 'En mora' : 'Sin mora', puntos: pMora, max: 150 });
-
-  // ── DSO INDIVIDUAL (100 pts) ──
-  var pDSO = 100;
-  var dsoLabel = 'Sin datos';
-  if (typeof dso_datos !== 'undefined' && dso_datos) {
-    var dsoCliente = dso_datos.find(function(d) {
-      return d.nombre && entidades.length >= 0 && 
-             cartera.some(function(c) { return c.cuit === cuit && c.nombre && 
-               d.nombre.toLowerCase().includes(c.nombre.split(' ')[0].toLowerCase()); });
+  // 2. HISTORIAL BCRA 12 MESES (Max 150)
+  var pHistorial = 75; // neutral por defecto
+  var historialLabel = 'Sin datos';
+  if (bcraData && bcraData.results && bcraData.results.periodos && bcraData.results.periodos.length > 0) {
+    var mesesMalos = 0;
+    bcraData.results.periodos.slice(0, 12).forEach(function(p) {
+      var sitMax = (p.entidades||[]).reduce(function(m,e){ return Math.max(m, e.situacion||1); }, 1);
+      if (sitMax > 1) mesesMalos++;
     });
-    if (!dsoCliente) {
-      var enCart = cartera.find(function(c) { return c.cuit === cuit; });
-      if (enCart) dsoCliente = dso_datos.find(function(d) {
-        return d.nombre && enCart.nombre && 
-               d.nombre.toLowerCase().includes(enCart.nombre.split(' ')[0].toLowerCase());
+    if (mesesMalos === 0)      { pHistorial = 150; historialLabel = 'Sin cambios negativos'; }
+    else if (mesesMalos <= 2)  { pHistorial = 75;  historialLabel = mesesMalos+' mes(es) irregular(es)'; }
+    else                       { pHistorial = 0;   historialLabel = mesesMalos+' meses irregulares'; }
+  }
+  puntos += pHistorial;
+  detalle.push({ label:'Historial BCRA 12m', valor:historialLabel, puntos:pHistorial, max:150 });
+
+  // 3. CHEQUES RECHAZADOS (Max 150) — datos del servidor si están disponibles
+  var pCheques = 75; // neutral sin datos
+  var chequesLabel = 'Sin datos';
+  puntos += pCheques;
+  detalle.push({ label:'Cheques rechazados', valor:chequesLabel, puntos:pCheques, max:150 });
+
+  // 4. DSO INDIVIDUAL (Max 100)
+  var pDSO = 50; // neutral sin datos
+  var dsoLabel = 'Sin datos';
+  if (typeof dso_datos !== 'undefined' && dso_datos && cuit) {
+    var enCart = cartera.find(function(c){ return c.cuit === cuit; });
+    var dsoCliente = null;
+    if (enCart && enCart.nombre) {
+      var nombreBase = enCart.nombre.split(',')[0].trim().split(' ')[0].toLowerCase();
+      dsoCliente = dso_datos.find(function(d){
+        return d.nombre && d.nombre.toLowerCase().indexOf(nombreBase) !== -1;
       });
     }
     if (dsoCliente && dsoCliente.dso != null) {
       var dso = dsoCliente.dso;
       dsoLabel = dso + ' días';
-      pDSO = dso <= 30 ? 100 : dso <= 60 ? 70 : dso <= 90 ? 40 : 10;
+      pDSO = dso < 30 ? 100 : dso <= 60 ? 70 : dso <= 90 ? 40 : 10;
     }
   }
   puntos += pDSO;
-  detalle.push({ label: 'DSO (días cobro)', valor: dsoLabel, puntos: pDSO, max: 100 });
+  detalle.push({ label:'DSO individual', valor:dsoLabel, puntos:pDSO, max:100 });
 
-  // ── RED DE BODEGAS (100 pts) ──
-  var pBodegas = 100;
-  var bodegasLabel = 'Sin menciones';
+  // 5. HISTORIAL PIATTELLI (Max 100)
+  var pMora = 50; // neutral sin datos
+  var moraLabel = 'Sin datos';
+  if (mora !== null && mora !== undefined) {
+    if (mora) { pMora = 0; moraLabel = 'En mora'; }
+    else      { pMora = 100; moraLabel = 'Paga en término'; }
+  }
+  puntos += pMora;
+  detalle.push({ label:'Historial Piattelli', valor:moraLabel, puntos:pMora, max:100 });
+
+  // 6. RED DE BODEGAS (Max 60)
+  var pBodegas = 30; // neutral sin datos
+  var bodegasLabel = 'Sin datos';
   if (wspThreads && wspThreads.length > 0) {
     var textos = [];
-    wspThreads.forEach(function(t) { (t.mensajes||[]).forEach(function(m) { textos.push((m.texto||'').toLowerCase()); }); });
-    var negativas = textos.filter(function(t) {
+    wspThreads.forEach(function(t){
+      (t.mensajes||[]).forEach(function(m){ textos.push((m.texto||'').toLowerCase()); });
+    });
+    var negativas = textos.filter(function(t){
       return /no paga|rechaz|mora|deuda|cuidado|estafa|problema|ojo|judicial/.test(t);
-    });
-    var positivas = textos.filter(function(t) {
-      return /paga bien|buen cliente|cumple|recomend|contado|ok/.test(t);
-    });
-    if (negativas.length > 0 && positivas.length > 0) { pBodegas = 50; bodegasLabel = 'Inconsistente'; }
-    else if (negativas.length > 0) { pBodegas = 0; bodegasLabel = negativas.length + ' menciones negativas'; }
-    else if (positivas.length > 0) { pBodegas = 100; bodegasLabel = positivas.length + ' referencias positivas'; }
+    }).length;
+    var positivas = textos.filter(function(t){
+      return /paga bien|buen cliente|cumple|recomend|contado anticipado|ok/.test(t);
+    }).length;
+    if (negativas > 0 && positivas > 0) { pBodegas=30; bodegasLabel='Inconsistente'; }
+    else if (negativas > 0)             { pBodegas=0;  bodegasLabel=negativas+' menciones negativas'; }
+    else if (positivas > 0)             { pBodegas=60; bodegasLabel=positivas+' referencias positivas'; }
+    else                                { pBodegas=30; bodegasLabel='Sin menciones'; }
   }
   puntos += pBodegas;
-  detalle.push({ label: 'Red de Bodegas', valor: bodegasLabel, puntos: pBodegas, max: 100 });
+  detalle.push({ label:'Red de Bodegas', valor:bodegasLabel, puntos:pBodegas, max:60 });
 
-  // ── MORA (ya restado arriba, agregar 99 pts estado AFIP) ──
-  puntos += 99; // base por defecto activo
-  detalle.push({ label: 'Estado AFIP', valor: 'Activo', puntos: 99, max: 99 });
+  // 7. ESTADO AFIP (Max 39)
+  var pAFIP = 20; // neutral sin datos
+  var afipLabel = 'Sin datos';
+  // estadoAfip viene como parámetro global cuando se consultó
+  if (typeof estadoAfipGlobal !== 'undefined' && estadoAfipGlobal) {
+    if (estadoAfipGlobal === 'ACTIVO')      { pAFIP=39; afipLabel='Activo'; }
+    else if (estadoAfipGlobal === 'SUSPENDIDO') { pAFIP=10; afipLabel='Suspendido'; }
+    else                                    { pAFIP=0;  afipLabel='Inactivo'; }
+  }
+  puntos += pAFIP;
+  detalle.push({ label:'Estado AFIP', valor:afipLabel, puntos:pAFIP, max:39 });
 
-  // Score final 1-999
-  var scoreTotal = Math.min(999, Math.max(1, puntos));
+  // TOTAL (1-999)
+  var scoreTotal = Math.min(999, Math.max(1, Math.round(puntos)));
 
-  // Rango
+  // SEMAFORO
   var rango, color, emoji;
-  if (scoreTotal >= 800) { rango = 'Excelente'; color = '#166534'; emoji = '🟢'; }
-  else if (scoreTotal >= 600) { rango = 'Bueno'; color = '#854d0e'; emoji = '🟡'; }
-  else if (scoreTotal >= 400) { rango = 'Revisar'; color = '#9a3412'; emoji = '🟠'; }
-  else if (scoreTotal >= 200) { rango = 'Alto riesgo'; color = '#991b1b'; emoji = '🔴'; }
-  else { rango = 'Rechazar'; color = '#7f1d1d'; emoji = '⛔'; }
+  if      (scoreTotal >= 800) { rango='Excelente';   color='#166534'; emoji='🟢'; }
+  else if (scoreTotal >= 600) { rango='Bueno';        color='#854d0e'; emoji='🟡'; }
+  else if (scoreTotal >= 400) { rango='Revisar';      color='#9a3412'; emoji='🟠'; }
+  else if (scoreTotal >= 200) { rango='Alto riesgo';  color='#991b1b'; emoji='🔴'; }
+  else                        { rango='Rechazar';     color='#7f1d1d'; emoji='⛔'; }
 
-  return { score: scoreTotal, rango: rango, color: color, emoji: emoji, detalle: detalle };
+  return { score:scoreTotal, rango:rango, color:color, emoji:emoji, detalle:detalle };
 }
 
 function renderVendeScore(scoreObj) {
   if (!scoreObj) return '';
   var barWidth = Math.round(scoreObj.score / 999 * 100);
-  var barColor = scoreObj.color;
   var filas = scoreObj.detalle.map(function(d) {
     var pct = Math.round(d.puntos / d.max * 100);
-    var c = pct >= 80 ? '#166534' : pct >= 50 ? '#854d0e' : '#991b1b';
-    return '<tr><td style="font-size:12px;color:#334155;padding:3px 8px;">' + d.label + '</td>' +
-           '<td style="font-size:12px;color:#64748b;padding:3px 8px;">' + d.valor + '</td>' +
-           '<td style="font-size:12px;font-weight:600;color:' + c + ';padding:3px 8px;text-align:right;">' + d.puntos + '/' + d.max + '</td></tr>';
+    var c = pct >= 80 ? '#166534' : pct >= 50 ? '#92400e' : '#991b1b';
+    return '<tr>' +
+      '<td style="font-size:12px;color:#334155;padding:3px 6px;">' + d.label + '</td>' +
+      '<td style="font-size:12px;color:#64748b;padding:3px 6px;">' + d.valor + '</td>' +
+      '<td style="font-size:12px;font-weight:600;color:'+c+';padding:3px 6px;text-align:right;">' +
+        d.puntos + '/' + d.max + '</td></tr>';
   }).join('');
   return '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px;margin-bottom:8px;">' +
-    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">' +
-    '<div style="font-size:13px;font-weight:700;color:#334155;">Score Vende Seguro</div>' +
-    '<div style="font-size:28px;font-weight:800;color:' + barColor + ';">' + scoreObj.score + '</div>' +
-    '<div style="font-size:12px;font-weight:600;color:' + barColor + ';">' + scoreObj.emoji + ' ' + scoreObj.rango + '</div>' +
+    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">' +
+      '<div style="font-size:13px;font-weight:700;color:#334155;">Score Vende Seguro</div>' +
+      '<div style="font-size:32px;font-weight:800;color:'+scoreObj.color+';">' + scoreObj.score + '</div>' +
+      '<div style="font-size:13px;font-weight:600;color:'+scoreObj.color+';">' + scoreObj.emoji + ' ' + scoreObj.rango + '</div>' +
+      '<div style="font-size:11px;color:#94a3b8;margin-left:auto;">máx. 999</div>' +
     '</div>' +
     '<div style="background:#f1f5f9;border-radius:6px;height:8px;margin-bottom:10px;">' +
-    '<div style="background:' + barColor + ';height:8px;border-radius:6px;width:' + barWidth + '%;transition:width 0.5s;"></div></div>' +
-    '<details style="cursor:pointer;"><summary style="font-size:11px;color:#94a3b8;margin-bottom:6px;">Ver detalle del score</summary>' +
-    '<table style="width:100%;border-collapse:collapse;">' + filas + '</table></details></div>';
+      '<div style="background:'+scoreObj.color+';height:8px;border-radius:6px;width:'+barWidth+'%;transition:width 0.6s;"></div>' +
+    '</div>' +
+    '<details><summary style="font-size:11px;color:#94a3b8;cursor:pointer;margin-bottom:4px;">Ver desglose del score</summary>' +
+      '<table style="width:100%;border-collapse:collapse;margin-top:4px;">' + filas + '</table>' +
+    '</details>' +
+  '</div>';
 }
+
 
 async function init() {
   checkProxy();
@@ -1544,6 +1587,7 @@ async function consultarCliente() {
   const raw = document.getElementById('cuit-input').value.replace(/-/g,'').trim();
   if (!raw || raw.length < 10) { alert('Ingresá un CUIT válido'); return; }
   // ── RESET COMPLETO DE UI antes de nueva consulta ──
+  estadoAfipGlobal = '';
   document.getElementById('resultado').style.display = 'none';
   document.getElementById('loading-state').style.display = 'block';
   document.getElementById('analisis-resultado').style.display = 'none';
@@ -1610,6 +1654,7 @@ async function consultarCliente() {
       var afipNombre = afipData.nombre || '';
       if (afipNombre && afipNombre !== cuitFmtLocal) nombreFinal = afipNombre;
       estadoAfip = afipData.estado_afip || '';
+      estadoAfipGlobal = estadoAfip;
       domicilioAfip = afipData.domicilio || '';
       // Autocompletar campo dirección si está vacío
       var dirEl = document.getElementById('input-direccion-cliente');
@@ -1623,6 +1668,7 @@ async function consultarCliente() {
       var afipR2 = await fetch('/afip/' + raw, {signal: AbortSignal.timeout(10000)});
       var afipData2 = await afipR2.json();
       estadoAfip = afipData2.estado_afip || '';
+      estadoAfipGlobal = estadoAfip;
       domicilioAfip = afipData2.domicilio || '';
       var dirEl2 = document.getElementById('input-direccion-cliente');
       if (dirEl2 && !dirEl2.value && domicilioAfip) {
@@ -1991,6 +2037,7 @@ Actúa como un Analista de Riesgo Crediticio Senior para ${getNombreBodega()}. T
 
 <cliente>
 CUIT: ${cuit}
+Score Vende Seguro: ${scorePreAnalisis ? scorePreAnalisis.score + '/999 (' + scorePreAnalisis.rango + ')' : 'No calculado'}
 ${condicionesActuales}${ubicacion}
 </cliente>
 
