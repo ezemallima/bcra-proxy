@@ -1645,9 +1645,9 @@ async function consultarCliente() {
     }
     // Mostrar situación BCRA
     if (bcraData.error === 'timeout') {
-      mostrarResultado(raw, null, true, estadoAfip, domicilioAfip);
+      mostrarResultado(raw, null, true, estadoAfip, domicilioAfip, nombreFinal);
     } else {
-      mostrarResultado(raw, bcraData, false, estadoAfip, domicilioAfip);
+      mostrarResultado(raw, bcraData, false, estadoAfip, domicilioAfip, nombreFinal);
     }
   } catch(e) {
     mostrarResultado(raw, null, true);
@@ -1704,9 +1704,10 @@ function agregarDesdConsulta(cuit, nombre) {
   renderCartera();
 }
 
-function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip) {
+function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nombreExterno) {
   estadoAfip = estadoAfip || "";
   domicilioAfip = domicilioAfip || "";
+  nombreExterno = nombreExterno || "";
   const res = data?.results;
   // Juntar entidades de todos los periodos, quedarse con la mas reciente por entidad
   var todasEntidades = [];
@@ -1731,7 +1732,7 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip) {
   const maxSit = entidades.length ? entidades.reduce((m,e) => Math.max(m, e.situacion||1), 1) : 1;
   // Jerarquía: BCRA > AFIP async > CUIT formateado
   var cuitFmt2 = cuit.length === 11 ? cuit.slice(0,2)+'-'+cuit.slice(2,10)+'-'+cuit.slice(10) : cuit;
-  var nombreMostrar = nombre || cuitFmt2;
+  var nombreMostrar = nombreExterno || nombre || cuitFmt2;
   if (!nombre) {
     obtenerNombre(cuit).then(function(n) {
       if (n && n !== cuitFmt2) {
