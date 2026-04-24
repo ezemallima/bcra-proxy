@@ -444,7 +444,9 @@ def get_afip(cuit):
         print(f"[afip] TangoFactura status: {r.status_code}, bytes: {len(r.content)}", flush=True)
         if r.status_code == 200:
             data4 = r.json()
-            contrib = data4.get('contribuyente') or {}
+            print(f"[afip] TangoFactura response: {str(data4)[:300]}", flush=True)
+            # TangoFactura puede devolver el objeto directo o dentro de 'contribuyente'
+            contrib = data4.get('contribuyente') or data4.get('Contribuyente') or data4 or {}
             nombre4 = contrib.get('nombreApellidoRazonSocial', '')
             estado4 = contrib.get('estadoClave', '')
             domicilio4 = ''
