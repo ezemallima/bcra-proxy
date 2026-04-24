@@ -394,7 +394,9 @@ def analizar_bodegas():
 
 @app.route("/afip/<cuit>")
 def get_afip(cuit):
-    # Intento 1: via caché/proxy interno
+    cuit_fmt = cuit[:2] + '-' + cuit[2:10] + '-' + cuit[10:] if len(cuit) == 11 else cuit
+
+    # Intento 1: deudas activas (tiene denominacion si hay deuda)
     try:
         data, error = consultar_bcra_cached(cuit)
         if data and not error:
@@ -403,10 +405,11 @@ def get_afip(cuit):
                 return jsonify({"nombre": nombre})
     except Exception:
         pass
-    # Intento 2: directo al BCRA con timeout extendido
+
+    # Intento 2: historial 24 meses (tiene denominacion aunque no haya deuda activa)
     try:
         r = requests.get(
-            "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit,
+            "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit,
             timeout=15, verify=False
         )
         if r.status_code == 200:
@@ -416,8 +419,22 @@ def get_afip(cuit):
                 return jsonify({"nombre": nombre2})
     except Exception:
         pass
-    # Fallback: devolver CUIT formateado
-    cuit_fmt = cuit[:2] + '-' + cuit[2:10] + '-' + cuit[10:] if len(cuit) == 11 else cuit
+
+    # Intento 3: directo deudas sin cache
+    try:
+        r = requests.get(
+            "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit,
+            timeout=15, verify=False
+        )
+        if r.status_code == 200:
+            data3 = r.json()
+            nombre3 = data3.get('results', {}).get('denominacion', '')
+            if nombre3:
+                return jsonify({"nombre": nombre3})
+    except Exception:
+        pass
+
+    # Fallback: CUIT formateado
     return jsonify({"nombre": cuit_fmt})
 
 @app.route("/deudas/<cuit>")
