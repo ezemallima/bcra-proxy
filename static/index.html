@@ -1476,12 +1476,41 @@ async function consultarCliente() {
   mostrarWSP(raw);
 
   // Traer razón social (AFIP + BCRA como fallback) y situación BCRA
-  var nombreFinal = '';
-  try {
-    var afipR = await fetch('/afip/' + raw, {signal: AbortSignal.timeout(8000)});
-    var afipData = await afipR.json();
-    nombreFinal = afipData.nombre || '';
-  } catch(e) {}
+  // Prioridad: 1) cartera local, 2) AFIP/BCRA, 3) CUIT formateado
+  var cuitFmtLocal = raw.slice(0,2)+'-'+raw.slice(2,10)+'-'+raw.slice(10);
+  var enCarteraLocal = cartera.find(function(c) { return c.cuit === raw; });
+  var nombreFinal = (enCarteraLocal && enCarteraLocal.nombre && !enCarteraLocal.nombre.includes(',')) 
+    ? enCarteraLocal.nombre.split(',')[0].trim() : '';
+  var estadoAfip = '';
+  var domicilioAfip = '';
+  if (!nombreFinal) {
+    try {
+      var afipR = await fetch('/afip/' + raw, {signal: AbortSignal.timeout(10000)});
+      var afipData = await afipR.json();
+      var afipNombre = afipData.nombre || '';
+      if (afipNombre && afipNombre !== cuitFmtLocal) nombreFinal = afipNombre;
+      estadoAfip = afipData.estado_afip || '';
+      domicilioAfip = afipData.domicilio || '';
+      // Autocompletar campo dirección si está vacío
+      var dirEl = document.getElementById('input-direccion-cliente');
+      if (dirEl && !dirEl.value && domicilioAfip) {
+        dirEl.value = domicilioAfip;
+      }
+    } catch(e) {}
+  } else {
+    // También llamar para obtener domicilio aunque tengamos nombre de cartera
+    try {
+      var afipR2 = await fetch('/afip/' + raw, {signal: AbortSignal.timeout(10000)});
+      var afipData2 = await afipR2.json();
+      estadoAfip = afipData2.estado_afip || '';
+      domicilioAfip = afipData2.domicilio || '';
+      var dirEl2 = document.getElementById('input-direccion-cliente');
+      if (dirEl2 && !dirEl2.value && domicilioAfip) {
+        dirEl2.value = domicilioAfip;
+      }
+    } catch(e) {}
+  }
+  if (!nombreFinal) nombreFinal = cuitFmtLocal;
 
   // Asegurar que el div resultado esté visible antes de llamar mostrarResultado
   document.getElementById('loading-state').style.display = 'none';
@@ -1598,7 +1627,15 @@ function mostrarResultado(cuit, data, esTimeout) {
   var headerHtml = '<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">';
   headerHtml += '<div class="avatar">' + (nombreMostrar !== 'Sin denominación' ? nombreMostrar.charAt(0) : '?') + '</div>';
   headerHtml += '<div style="flex:1;"><div style="font-size:16px;font-weight:600;" class="nombre-cliente">' + nombreMostrar + '</div>';
-  headerHtml += '<div style="font-size:12px;color:#64748b;margin-top:2px;">CUIT: ' + cuit + '</div></div>';
+  headerHtml += '<div style="font-size:12px;color:#64748b;margin-top:2px;">CUIT: ' + cuit + '</div>';
+  if (estadoAfip) {
+    var colorEstado = estadoAfip === 'ACTIVO' ? '#166534' : '#991b1b';
+    headerHtml += '<div style="font-size:11px;font-weight:600;color:' + colorEstado + ';margin-top:2px;">AFIP: ' + estadoAfip + '</div>';
+  }
+  if (domicilioAfip) {
+    headerHtml += '<div style="font-size:11px;color:#94a3b8;margin-top:1px;">📍 ' + domicilioAfip + '</div>';
+  }
+  headerHtml += '</div>';
   headerHtml += getBadge(maxSit);
   headerHtml += '<div>' + botonCartera + '</div>';
   headerHtml += '</div>';
