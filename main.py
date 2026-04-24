@@ -438,8 +438,10 @@ def get_afip(cuit):
     try:
         r = requests.get(
             "https://afip.tangofactura.com/Rest/GetContribuyenteFull?cuit=" + cuit,
-            timeout=10, verify=False
+            timeout=10, verify=False,
+            headers={"User-Agent": "Mozilla/5.0"}
         )
+        print(f"[afip] TangoFactura status: {r.status_code}, bytes: {len(r.content)}", flush=True)
         if r.status_code == 200:
             data4 = r.json()
             contrib = data4.get('contribuyente') or {}
