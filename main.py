@@ -135,24 +135,33 @@ def consultar_bcra(cuit, reintentos=3):
     url = "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit
     for i in range(reintentos):
         try:
-            r = requests.get(url, timeout=12, verify=False)
+            r = requests.get(url, timeout=15, verify=False)
             if r.status_code == 200:
                 return r.json(), None
             elif r.status_code == 404:
                 return {"results": {"denominacion": "", "periodos": []}, "sin_deudas": True}, None
             elif r.status_code in [500, 503]:
                 if i < reintentos - 1:
-                    time.sleep(2)
+                    time.sleep(3)
                     continue
-                return None, "timeout"
+                return None, f"HTTP_{r.status_code}"
             else:
-                return None, "Error " + str(r.status_code)
-        except requests.Timeout:
+                return None, f"HTTP_{r.status_code}"
+        except (requests.Timeout, requests.exceptions.Timeout):
+            print(f"[bcra] Timeout intento {i+1} para {cuit}", flush=True)
             if i < reintentos - 1:
-                time.sleep(2)
+                time.sleep(3)
                 continue
             return None, "timeout"
+        except requests.exceptions.ConnectionError as e:
+            # BCRA corta la conexion — reintentar
+            print(f"[bcra] ConnectionError intento {i+1} para {cuit}: {e}", flush=True)
+            if i < reintentos - 1:
+                time.sleep(5)
+                continue
+            return None, "connection_error"
         except Exception as e:
+            print(f"[bcra] Error inesperado {cuit}: {e}", flush=True)
             return None, str(e)
     return None, "timeout"
 
