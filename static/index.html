@@ -1457,10 +1457,12 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads) {
       (t.mensajes||[]).forEach(function(m){ textos.push((m.texto||'').toLowerCase()); });
     });
     var negativas = textos.filter(function(t){
-      return /no paga|rechaz|mora|deuda|cuidado|estafa|problema|ojo|judicial/.test(t);
+      // Solo negativo si hay riesgo REAL — no incluir "no es cliente" ni "no opera"
+      return /no paga|rechaz|mora activa|deuda impaga|cuidado|estafa|problema grave|ojo con|judicial|incobrable|desapareci|fuga/.test(t)
+        && !/no es cliente|no opera|sin operaciones|cuenta abierta|no trabaja/.test(t);
     }).length;
     var positivas = textos.filter(function(t){
-      return /paga bien|buen cliente|cumple|recomend|contado anticipado|ok/.test(t);
+      return /paga bien|buen cliente|cumple|recomend|contado anticipado|sin problemas|lc |limite de credito|plazo \d|mm plazo|usd/.test(t);
     }).length;
     if (negativas > 0 && positivas > 0) { pBodegas=30; bodegasLabel='Inconsistente'; }
     else if (negativas > 0)             { pBodegas=0;  bodegasLabel=negativas+' menciones negativas'; }
