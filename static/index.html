@@ -1103,6 +1103,35 @@ async function procesarDSO() {
     localStorage.setItem('piat_dso_datos', JSON.stringify(dsoDatos));
     sincronizarServidor();
 
+    // ── GUARDAR HISTORIAL DE VENTAS EN SERVIDOR (acumula 4 meses) ──
+    if (rowsVentas && rowsVentas.length > 0) {
+      try {
+        var hV2 = Object.keys(rowsVentas[0]);
+        var cV2 = mapearColumna(hV2, DSO_ALIASES.ventas.contacto);
+        var mV2 = mapearColumna(hV2, DSO_ALIASES.ventas.monto);
+        var fV2 = mapearColumna(hV2, DSO_ALIASES.ventas.fecha);
+        var ventasParaGuardar = [];
+        rowsVentas.forEach(function(row) {
+          var cliente = (row[cV2]||'').toString().trim();
+          var monto = parseFloat((row[mV2]||'0').toString().replace(/[^0-9.-]/g,'')) || 0;
+          var fecha = (row[fV2]||'').toString().trim();
+          if (cliente && fecha) {
+            ventasParaGuardar.push({ cliente: cliente, fecha: fecha, total: monto });
+          }
+        });
+        if (ventasParaGuardar.length > 0) {
+          fetch('/dso-ventas', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ ventas: ventasParaGuardar })
+          }).then(function(r) { return r.json(); })
+            .then(function(d) {
+              console.log('[DSO] Ventas guardadas:', d.agregadas, 'nuevas, total:', d.total);
+            }).catch(function(e) { console.warn('[DSO] Error guardando ventas:', e); });
+        }
+      } catch(e) { console.warn('[DSO] Error preparando ventas:', e); }
+    }
+
     // KPIs
     var colDSO = colorDSO(dsoGlobal);
     document.getElementById('dso-numero').textContent = dsoGlobal;
@@ -1231,6 +1260,18 @@ async function sincronizarServidor() {
   } catch(e) {}
 }
 
+async function cargarHistorialVentas() {
+  try {
+    var r = await fetch('/dso-ventas');
+    var d = await r.json();
+    if (d.ventas && d.ventas.length > 0) {
+      // Guardar en variable global para usar en score DSO
+      window.ventasHistoricas = d.ventas;
+      console.log('[DSO] Historial cargado:', d.ventas.length, 'registros hasta', d.ultima_actualizacion);
+    }
+  } catch(e) { console.warn('[DSO] No se pudo cargar historial:', e); }
+}
+
 async function cargarDesdServidor() {
   try {
     var r = await fetch('/datos-bodega');
@@ -1308,10 +1349,12 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads) {
         });
       });
   }
+  // Si bcraData llegó sin error pero sin entidades = sin deuda = Sit. 1
+  var tuvoDatos = bcraData && bcraData.results && !bcraData.error;
   var maxSit = entidades.length
     ? entidades.reduce(function(m,e){ return Math.max(m, e.situacion||1); }, 1)
-    : null;
-  var pBCRA = maxSit === null ? 200  // neutral 50%
+    : tuvoDatos ? 1 : null; // sin deuda = sit 1, sin datos = neutral
+  var pBCRA = maxSit === null ? 200
     : maxSit === 1 ? 400
     : maxSit === 2 ? 200
     : maxSit === 3 ? 50
@@ -1344,14 +1387,41 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads) {
   // 4. DSO INDIVIDUAL (Max 100)
   var pDSO = 50; // neutral sin datos
   var dsoLabel = 'Sin datos';
-  if (typeof dso_datos !== 'undefined' && dso_datos && cuit) {
+  if (cuit) {
     var enCart = cartera.find(function(c){ return c.cuit === cuit; });
+    var nombreCliente = enCart ? enCart.nombre.split(',')[0].trim() : '';
     var dsoCliente = null;
-    if (enCart && enCart.nombre) {
-      var nombreBase = enCart.nombre.split(',')[0].trim().split(' ')[0].toLowerCase();
+    // Prioridad 1: dso_datos del cálculo actual
+    if (typeof dso_datos !== 'undefined' && dso_datos && nombreCliente) {
+      var nombreBase = nombreCliente.split(' ')[0].toLowerCase();
       dsoCliente = dso_datos.find(function(d){
         return d.nombre && d.nombre.toLowerCase().indexOf(nombreBase) !== -1;
       });
+    }
+    // Prioridad 2: calcular DSO desde ventasHistoricas
+    if (!dsoCliente && window.ventasHistoricas && window.ventasHistoricas.length > 0 && nombreCliente) {
+      var nombreBase2 = nombreCliente.split(' ')[0].toLowerCase();
+      var ventasCliente = window.ventasHistoricas.filter(function(v) {
+        return v.cliente && v.cliente.toLowerCase().indexOf(nombreBase2) !== -1;
+      });
+      if (ventasCliente.length > 0) {
+        var totalVentas = ventasCliente.reduce(function(s,v){ return s + (v.total||0); }, 0);
+        // Calcular período en días
+        var fechas2 = ventasCliente.map(function(v){ return new Date(v.fecha); }).filter(function(f){ return !isNaN(f); });
+        if (fechas2.length > 0 && totalVentas > 0) {
+          var minF = new Date(Math.min.apply(null, fechas2));
+          var maxF = new Date(Math.max.apply(null, fechas2));
+          var dias2 = Math.max(1, Math.round((maxF - minF) / (1000*60*60*24))) + 1;
+          // Usar saldo de dso_datos si existe, sino 0
+          var saldoH = 0;
+          if (typeof dso_datos !== 'undefined' && dso_datos) {
+            var found = dso_datos.find(function(d){ return d.nombre && d.nombre.toLowerCase().indexOf(nombreBase2) !== -1; });
+            if (found) saldoH = found.saldo || 0;
+          }
+          var dsoCalc = Math.round((saldoH / totalVentas) * dias2);
+          if (dsoCalc > 0) dsoCliente = { dso: dsoCalc, nombre: nombreCliente };
+        }
+      }
     }
     if (dsoCliente && dsoCliente.dso != null) {
       var dso = dsoCliente.dso;
@@ -1501,6 +1571,7 @@ async function init() {
   checkProxy();
   // Cargar datos persistentes del servidor (sincroniza entre dispositivos)
   await cargarDesdServidor();
+  await cargarHistorialVentas();
   await Promise.all([cargarWSP(), cargarMoras(), cargarCarteraServidor()]);
   actualizarMetricas();
   // Restaurar DSO en dashboard si hay datos guardados
