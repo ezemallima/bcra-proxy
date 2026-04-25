@@ -1468,11 +1468,14 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
   detalle.push({ label:'DSO individual', valor:dsoLabel, puntos:pDSO, max:100 });
 
   // 5. HISTORIAL PIATTELLI (Max 100)
-  var pMora = 50; // neutral sin datos
+  // Si morasIndex está cargado y el cliente no aparece = sin mora = 100 pts
+  var pMora = 50; // neutral si no hay datos de moras en absoluto
   var moraLabel = 'Sin datos';
-  if (mora !== null && mora !== undefined) {
-    if (mora) { pMora = 0; moraLabel = 'En mora'; }
-    else      { pMora = 100; moraLabel = 'Paga en término'; }
+  if (mora) {
+    pMora = 0; moraLabel = 'En mora';
+  } else if (morasIndex && Object.keys(morasIndex).length > 0) {
+    // El archivo de moras está cargado y el cliente no está en él
+    pMora = 100; moraLabel = 'Sin mora registrada';
   }
   puntos += pMora;
   detalle.push({ label:'Historial Piattelli', valor:moraLabel, puntos:pMora, max:100 });
