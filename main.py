@@ -131,33 +131,37 @@ def gemini_request(payload, timeout=120):
 
     return None, "No hay APIs de IA disponibles. Configurá GEMINI_API_KEY o OPENAI_API_KEY."
 
+BCRA_WORKER = "https://orange-recipe-3bb1.ezetombacapo.workers.dev"
+
 def consultar_bcra(cuit, reintentos=3):
-    url = "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit
+    # Usar Cloudflare Worker como proxy para evitar bloqueos del BCRA
+    url = BCRA_WORKER + "/deudas/" + cuit
     for i in range(reintentos):
         try:
-            r = requests.get(url, timeout=15, verify=False)
+            r = requests.get(url, timeout=15)
             if r.status_code == 200:
-                return r.json(), None
+                data = r.json()
+                if data.get('error'):
+                    print(f"[bcra] Worker error para {cuit}: {data['error']}", flush=True)
+                    if i < reintentos - 1:
+                        time.sleep(3)
+                        continue
+                    return None, data['error']
+                # Si no tiene periodos = sin deudas
+                if data.get('results') and not data['results'].get('periodos'):
+                    data['sin_deudas'] = True
+                return data, None
             elif r.status_code == 404:
                 return {"results": {"denominacion": "", "periodos": []}, "sin_deudas": True}, None
-            elif r.status_code in [500, 503]:
+            else:
                 if i < reintentos - 1:
                     time.sleep(3)
                     continue
                 return None, f"HTTP_{r.status_code}"
-            else:
-                return None, f"HTTP_{r.status_code}"
-        except (requests.Timeout, requests.exceptions.Timeout):
-            print(f"[bcra] Timeout intento {i+1} para {cuit}", flush=True)
+        except requests.exceptions.ConnectionError as e:
+            print(f"[bcra] ConnectionError Worker intento {i+1} para {cuit}", flush=True)
             if i < reintentos - 1:
                 time.sleep(3)
-                continue
-            return None, "timeout"
-        except requests.exceptions.ConnectionError as e:
-            # BCRA corta la conexion — reintentar
-            print(f"[bcra] ConnectionError intento {i+1} para {cuit}: {e}", flush=True)
-            if i < reintentos - 1:
-                time.sleep(5)
                 continue
             return None, "connection_error"
         except Exception as e:
@@ -500,10 +504,10 @@ def get_deudas(cuit):
 
 @app.route("/deudas/<cuit>/cheques")
 def get_cheques(cuit):
-    url = "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/" + cuit
+    url = BCRA_WORKER + "/deudas/" + cuit + "/cheques"
     for intento in range(3):
         try:
-            r = requests.get(url, timeout=15, verify=False)
+            r = requests.get(url, timeout=15)
             if r.status_code == 200:
                 data = r.json()
                 results = data.get('results', data) if isinstance(data, dict) else data
@@ -511,9 +515,9 @@ def get_cheques(cuit):
             print(f"[cheques] HTTP {r.status_code} para {cuit}", flush=True)
             return jsonify({"results": None, "sin_deudas": None, "error_bcra": f"HTTP {r.status_code}"}), 200
         except requests.exceptions.ConnectionError as e:
-            print(f"[cheques] ConnectionError intento {intento+1} para {cuit}: {e}", flush=True)
+            print(f"[cheques] ConnectionError intento {intento+1} para {cuit}", flush=True)
             if intento < 2:
-                time.sleep(5)
+                time.sleep(3)
                 continue
             return jsonify({"results": None, "sin_deudas": None, "error_bcra": "connection_error"}), 200
         except Exception as e:
@@ -523,18 +527,18 @@ def get_cheques(cuit):
 
 @app.route("/deudas/<cuit>/historial")
 def get_historial(cuit):
-    url = "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit
+    url = BCRA_WORKER + "/deudas/" + cuit + "/historial"
     for intento in range(3):
         try:
-            r = requests.get(url, timeout=15, verify=False)
+            r = requests.get(url, timeout=15)
             if r.status_code == 200:
                 return jsonify(r.json()), 200
             print(f"[historial] HTTP {r.status_code} para {cuit}", flush=True)
             return jsonify({"results": None, "sin_deudas": None, "error_bcra": f"HTTP {r.status_code}"}), 200
         except requests.exceptions.ConnectionError as e:
-            print(f"[historial] ConnectionError intento {intento+1} para {cuit}: {e}", flush=True)
+            print(f"[historial] ConnectionError intento {intento+1} para {cuit}", flush=True)
             if intento < 2:
-                time.sleep(5)
+                time.sleep(3)
                 continue
             return jsonify({"results": None, "sin_deudas": None, "error_bcra": "connection_error"}), 200
         except Exception as e:
