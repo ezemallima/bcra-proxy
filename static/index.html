@@ -1350,11 +1350,13 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
       });
   }
   // Si bcraData llegó sin error = sin deuda = Sit. 1
-  var tuvoDatos = bcraData && bcraData.results && !bcraData.error;
-  var sinDeudas = tuvoDatos && (bcraData.sin_deudas === true || bcraData.results.periodos && bcraData.results.periodos.length === 0);
+  // sin_deudas: true = cliente sin deudas reales = Sit 1
+  // sin_deudas: null = error técnico BCRA = neutral (no asumir sit 1)
+  var sinDeudasReal = bcraData && bcraData.sin_deudas === true;
+  var errorTecnico = !bcraData || bcraData.sin_deudas === null || bcraData.error_bcra;
   var maxSit = entidades.length
     ? entidades.reduce(function(m,e){ return Math.max(m, e.situacion||1); }, 1)
-    : (tuvoDatos || sinDeudas) ? 1 : null;
+    : sinDeudasReal ? 1 : null;
   var pBCRA = maxSit === null ? 200
     : maxSit === 1 ? 400
     : maxSit === 2 ? 200
