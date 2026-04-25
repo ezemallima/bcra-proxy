@@ -27,17 +27,31 @@ WSP_FILE = os.path.join(os.getcwd(), 'whatsapp_index.json')
 bcra_cache = {}  # {cuit: {data: ..., timestamp: ...}}
 CACHE_TTL = 60 * 60 * 24  # 24 horas en segundos
 
+CACHE_TTL_ERROR = 300  # 5 min para errores
+BCRA_VACIO = {"results": None, "sin_deudas": None, "error_bcra": None}
+
 def consultar_bcra_cached(cuit):
+    """Siempre devuelve (dict, error_str|None). Nunca devuelve data=None."""
     ahora = time.time()
     if cuit in bcra_cache:
         entrada = bcra_cache[cuit]
-        if ahora - entrada['timestamp'] < CACHE_TTL:
-            return entrada['data'], None  # hit de caché
+        ttl = CACHE_TTL_ERROR if entrada.get('es_error') else CACHE_TTL
+        if ahora - entrada['timestamp'] < ttl:
+            origen = "cache-error" if entrada.get('es_error') else "cache"
+            print(f"[bcra] {cuit} desde {origen}", flush=True)
+            return entrada['data'], entrada.get('error')
     # Miss — consultar BCRA real
+    print(f"[bcra] {cuit} consultando BCRA...", flush=True)
     data, error = consultar_bcra(cuit)
-    if data and not error:
-        bcra_cache[cuit] = {'data': data, 'timestamp': ahora}
-    return data, error
+    if error or not data:
+        # Siempre guardar objeto consistente, nunca None
+        data_cache = {"results": None, "sin_deudas": None, "error_bcra": str(error or "sin_respuesta")}
+        bcra_cache[cuit] = {'data': data_cache, 'error': error, 'es_error': True, 'timestamp': ahora}
+        print(f"[bcra] {cuit} error: {error} (cacheado 5min)", flush=True)
+        return data_cache, error
+    bcra_cache[cuit] = {'data': data, 'error': None, 'es_error': False, 'timestamp': ahora}
+    print(f"[bcra] {cuit} OK desde BCRA", flush=True)
+    return data, None
 
 # Estado de verificación en memoria
 verificacion_estado = {
@@ -226,12 +240,11 @@ def ejecutar_verificacion(cartera_data):
         try:
             # Consultar BCRA
             bcra_data, error = consultar_bcra_cached(cuit)
-            if bcra_data and not error:
+            if bcra_data.get('results') is not None:
                 entidades = []
-                try:
-                    entidades = bcra_data['results']['periodos'][0]['entidades']
-                except Exception:
-                    pass
+                periodos = (bcra_data.get('results') or {}).get('periodos') or []
+                if periodos:
+                    entidades = periodos[0].get('entidades', [])
                 max_sit = 1
                 if entidades:
                     max_sit = max((e.get('situacion', 1) or 1) for e in entidades)
@@ -399,10 +412,8 @@ def get_afip(cuit):
     # Intento 1: deudas activas (tiene denominacion si hay deuda)
     try:
         data, error = consultar_bcra_cached(cuit)
-        if data and not error:
-            nombre = data.get('results', {}).get('denominacion', '')
-            if nombre:
-                return jsonify({"nombre": nombre})
+        if data.get('results') and data['results'].get('denominacion'):
+            return jsonify({"nombre": data['results']['denominacion']})
     except Exception:
         pass
 
@@ -434,21 +445,7 @@ def get_afip(cuit):
     except Exception:
         pass
 
-    # Intento 4: historial BCRA — siempre tiene denominacion aunque no haya deuda activa
-    try:
-        r = requests.get(
-            "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit,
-            timeout=15, verify=False
-        )
-        if r.status_code == 200:
-            dh = r.json()
-            nombre_h = dh.get('results', {}).get('denominacion', '')
-            if nombre_h:
-                return jsonify({"nombre": nombre_h})
-    except Exception:
-        pass
-
-    # Intento 5: OpenAI busca la razón social por CUIT
+    # Intento 4: OpenAI busca la razón social por CUIT
     if OPENAI_KEY:
         try:
             headers_oai = {
@@ -483,28 +480,44 @@ def get_afip(cuit):
 
 @app.route("/deudas/<cuit>")
 def get_deudas(cuit):
-    data, error = consultar_bcra_cached(cuit)
-    if error == "timeout":
-        return jsonify({"error": "timeout", "mensaje": "El BCRA no respondio."}), 200
-    if error:
-        return jsonify({"error": error}), 500
-    return jsonify(data), 200
+    try:
+        data, error = consultar_bcra_cached(cuit)
+        # data siempre es un dict consistente, nunca None
+        return jsonify(data), 200
+    except Exception as e:
+        import traceback
+        print(f"[deudas] Excepcion {cuit}: {traceback.format_exc()}", flush=True)
+        return jsonify({"results": None, "sin_deudas": None, "error_bcra": str(e)}), 200
 
 @app.route("/deudas/<cuit>/cheques")
 def get_cheques(cuit):
     try:
         r = requests.get("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/" + cuit, timeout=12, verify=False)
-        return jsonify(r.json()), r.status_code
+        if r.status_code == 200:
+            data = r.json()
+            # Normalizar estructura consistente
+            results = data.get('results', data) if isinstance(data, dict) else data
+            return jsonify({"results": results, "sin_deudas": None, "error_bcra": None}), 200
+        print(f"[cheques] BCRA status {r.status_code} para {cuit}", flush=True)
+        return jsonify({"results": None, "sin_deudas": None, "error_bcra": f"HTTP {r.status_code}"}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        import traceback
+        print(f"[cheques] Excepcion {cuit}: {traceback.format_exc()}", flush=True)
+        return jsonify({"results": None, "sin_deudas": None, "error_bcra": str(e)}), 200
 
 @app.route("/deudas/<cuit>/historial")
 def get_historial(cuit):
     try:
         r = requests.get("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit, timeout=12, verify=False)
-        return jsonify(r.json()), r.status_code
+        if r.status_code == 200:
+            return jsonify(r.json()), 200
+        # Error HTTP del BCRA — no asumir sin deudas
+        print(f"[historial] BCRA status {r.status_code} para {cuit}", flush=True)
+        return jsonify({"results": None, "sin_deudas": None, "error_bcra": f"HTTP {r.status_code}"}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        import traceback
+        print(f"[historial] Excepcion {cuit}: {traceback.format_exc()}", flush=True)
+        return jsonify({"results": None, "sin_deudas": None, "error_bcra": str(e)}), 200
 
 @app.route("/analizar", methods=["POST"])
 def analizar():
