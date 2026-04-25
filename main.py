@@ -500,33 +500,47 @@ def get_deudas(cuit):
 
 @app.route("/deudas/<cuit>/cheques")
 def get_cheques(cuit):
-    try:
-        r = requests.get("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/" + cuit, timeout=12, verify=False)
-        if r.status_code == 200:
-            data = r.json()
-            # Normalizar estructura consistente
-            results = data.get('results', data) if isinstance(data, dict) else data
-            return jsonify({"results": results, "sin_deudas": None, "error_bcra": None}), 200
-        print(f"[cheques] BCRA status {r.status_code} para {cuit}", flush=True)
-        return jsonify({"results": None, "sin_deudas": None, "error_bcra": f"HTTP {r.status_code}"}), 200
-    except Exception as e:
-        import traceback
-        print(f"[cheques] Excepcion {cuit}: {traceback.format_exc()}", flush=True)
-        return jsonify({"results": None, "sin_deudas": None, "error_bcra": str(e)}), 200
+    url = "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/" + cuit
+    for intento in range(3):
+        try:
+            r = requests.get(url, timeout=15, verify=False)
+            if r.status_code == 200:
+                data = r.json()
+                results = data.get('results', data) if isinstance(data, dict) else data
+                return jsonify({"results": results, "sin_deudas": None, "error_bcra": None}), 200
+            print(f"[cheques] HTTP {r.status_code} para {cuit}", flush=True)
+            return jsonify({"results": None, "sin_deudas": None, "error_bcra": f"HTTP {r.status_code}"}), 200
+        except requests.exceptions.ConnectionError as e:
+            print(f"[cheques] ConnectionError intento {intento+1} para {cuit}: {e}", flush=True)
+            if intento < 2:
+                time.sleep(5)
+                continue
+            return jsonify({"results": None, "sin_deudas": None, "error_bcra": "connection_error"}), 200
+        except Exception as e:
+            print(f"[cheques] Error {cuit}: {e}", flush=True)
+            return jsonify({"results": None, "sin_deudas": None, "error_bcra": str(e)}), 200
+    return jsonify({"results": None, "sin_deudas": None, "error_bcra": "timeout"}), 200
 
 @app.route("/deudas/<cuit>/historial")
 def get_historial(cuit):
-    try:
-        r = requests.get("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit, timeout=12, verify=False)
-        if r.status_code == 200:
-            return jsonify(r.json()), 200
-        # Error HTTP del BCRA — no asumir sin deudas
-        print(f"[historial] BCRA status {r.status_code} para {cuit}", flush=True)
-        return jsonify({"results": None, "sin_deudas": None, "error_bcra": f"HTTP {r.status_code}"}), 200
-    except Exception as e:
-        import traceback
-        print(f"[historial] Excepcion {cuit}: {traceback.format_exc()}", flush=True)
-        return jsonify({"results": None, "sin_deudas": None, "error_bcra": str(e)}), 200
+    url = "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit
+    for intento in range(3):
+        try:
+            r = requests.get(url, timeout=15, verify=False)
+            if r.status_code == 200:
+                return jsonify(r.json()), 200
+            print(f"[historial] HTTP {r.status_code} para {cuit}", flush=True)
+            return jsonify({"results": None, "sin_deudas": None, "error_bcra": f"HTTP {r.status_code}"}), 200
+        except requests.exceptions.ConnectionError as e:
+            print(f"[historial] ConnectionError intento {intento+1} para {cuit}: {e}", flush=True)
+            if intento < 2:
+                time.sleep(5)
+                continue
+            return jsonify({"results": None, "sin_deudas": None, "error_bcra": "connection_error"}), 200
+        except Exception as e:
+            print(f"[historial] Error {cuit}: {e}", flush=True)
+            return jsonify({"results": None, "sin_deudas": None, "error_bcra": str(e)}), 200
+    return jsonify({"results": None, "sin_deudas": None, "error_bcra": "timeout"}), 200
 
 @app.route("/analizar", methods=["POST"])
 def analizar():
