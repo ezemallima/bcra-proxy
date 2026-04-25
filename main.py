@@ -147,9 +147,13 @@ def consultar_bcra(cuit, reintentos=3):
                         time.sleep(3)
                         continue
                     return None, data['error']
-                # Si no tiene periodos = sin deudas
-                if data.get('results') and not data['results'].get('periodos'):
+                # Normalizar sin_deudas
+                results = data.get('results') or {}
+                periodos = results.get('periodos') or []
+                if not periodos:
                     data['sin_deudas'] = True
+                else:
+                    data['sin_deudas'] = False
                 return data, None
             elif r.status_code == 404:
                 return {"results": {"denominacion": "", "periodos": []}, "sin_deudas": True}, None
