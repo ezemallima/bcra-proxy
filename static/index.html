@@ -1973,14 +1973,13 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
   // ── SCORE VENDE SEGURO ──
   var _scoreMora = buscarEnMoras ? buscarEnMoras(cuit) : null;
   var _scoreWsp = buscarEnWSP ? buscarEnWSP(cuit) : [];
-  // Mostrar score inicial sin historial
-  var scoreObjInicial = calcularVendeScore(cuit, data, _scoreMora, _scoreWsp, null);
+  // Mostrar score provisional
   var scoreEl = document.getElementById('vende-score-container');
-  if (scoreEl) scoreEl.innerHTML = renderVendeScore(scoreObjInicial);
-  // Cargar historial 24m y cheques en paralelo, recalcular score con todo
+  if (scoreEl) scoreEl.innerHTML = '<div style="padding:12px;color:#94a3b8;font-size:13px;">Calculando score...</div>';
+  // Cargar historial 24m y cheques en paralelo
   Promise.all([
-    fetch('/deudas/' + cuit + '/historial', {signal: AbortSignal.timeout(10000)}).then(function(r){ return r.json(); }).catch(function(){ return null; }),
-    fetch('/deudas/' + cuit + '/cheques', {signal: AbortSignal.timeout(10000)}).then(function(r){ return r.json(); }).catch(function(){ return null; })
+    fetch('/deudas/' + cuit + '/historial', {signal: AbortSignal.timeout(15000)}).then(function(r){ return r.json(); }).catch(function(){ return null; }),
+    fetch('/deudas/' + cuit + '/cheques', {signal: AbortSignal.timeout(15000)}).then(function(r){ return r.json(); }).catch(function(){ return null; })
   ]).then(function(resultados) {
     var historial = resultados[0];
     var cheques = resultados[1];
