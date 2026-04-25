@@ -633,6 +633,86 @@ def cache_stats():
 def health():
     return jsonify({"status": "ok", "gemini": bool(GEMINI_KEY)})
 
+@app.route("/dso-ventas", methods=["GET"])
+def get_dso_ventas():
+    """Devuelve el historial acumulado de ventas DSO"""
+    try:
+        dso_file = os.path.join(DATA_DIR, 'dso_ventas_historico.json')
+        if os.path.exists(dso_file):
+            with open(dso_file, 'r', encoding='utf-8') as f:
+                return jsonify(json.load(f))
+        return jsonify({"ventas": [], "ultima_actualizacion": ""})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/dso-ventas", methods=["POST"])
+def save_dso_ventas():
+    """Acumula ventas nuevas manteniendo max 4 meses de historial"""
+    try:
+        body = request.get_json(force=True)
+        nuevas_ventas = body.get('ventas', [])
+        if not nuevas_ventas:
+            return jsonify({"error": "Sin ventas"}), 400
+
+        dso_file = os.path.join(DATA_DIR, 'dso_ventas_historico.json')
+
+        # Cargar historial existente
+        historico = []
+        if os.path.exists(dso_file):
+            with open(dso_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                historico = data.get('ventas', [])
+
+        # Determinar corte de 4 meses atrás
+        from datetime import datetime, timedelta
+        hoy = datetime.now()
+        hace_4_meses = hoy - timedelta(days=120)
+
+        # Filtrar historial: solo mantener los últimos 4 meses
+        historico_filtrado = []
+        for v in historico:
+            try:
+                # Fecha puede venir como DD/MM/YYYY o YYYY-MM-DD
+                fecha_str = v.get('fecha', '')
+                if '/' in fecha_str:
+                    partes = fecha_str.split('/')
+                    if len(partes) == 3:
+                        fecha = datetime(int(partes[2]), int(partes[1]), int(partes[0]))
+                    else:
+                        continue
+                else:
+                    fecha = datetime.fromisoformat(fecha_str[:10])
+                if fecha >= hace_4_meses:
+                    historico_filtrado.append(v)
+            except Exception:
+                pass
+
+        # Agregar nuevas ventas evitando duplicados exactos
+        existentes = set((v.get('cliente',''), v.get('fecha',''), str(v.get('total',''))) for v in historico_filtrado)
+        agregadas = 0
+        for v in nuevas_ventas:
+            key = (v.get('cliente',''), v.get('fecha',''), str(v.get('total','')))
+            if key not in existentes:
+                historico_filtrado.append(v)
+                existentes.add(key)
+                agregadas += 1
+
+        # Guardar
+        resultado = {
+            "ventas": historico_filtrado,
+            "ultima_actualizacion": hoy.strftime('%d/%m/%Y %H:%M'),
+            "total_registros": len(historico_filtrado)
+        }
+        with open(dso_file, 'w', encoding='utf-8') as f:
+            json.dump(resultado, f, ensure_ascii=False, indent=2)
+
+        print(f"[dso-ventas] Agregadas {agregadas} ventas nuevas, total: {len(historico_filtrado)}", flush=True)
+        return jsonify({"ok": True, "agregadas": agregadas, "total": len(historico_filtrado)})
+    except Exception as e:
+        import traceback
+        print(f"[dso-ventas] Error: {traceback.format_exc()}", flush=True)
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/test-modelos")
 def test_modelos():
     if not GEMINI_KEY:
