@@ -1332,7 +1332,7 @@ function aplicarVerazManual() {
 }
 
 
-function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA) {
+function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, chequesBCRA) {
   var puntos = 0;
   var detalle = [];
 
@@ -1390,9 +1390,24 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA) {
   puntos += pHistorial;
   detalle.push({ label:'Historial BCRA 24m', valor:historialLabel, puntos:pHistorial, max:150 });
 
-  // 3. CHEQUES RECHAZADOS (Max 150) — datos del servidor si están disponibles
+  // 3. CHEQUES RECHAZADOS (Max 150)
   var pCheques = 75; // neutral sin datos
   var chequesLabel = 'Sin datos';
+  if (chequesBCRA !== null && chequesBCRA !== undefined) {
+    var listaCheques = chequesBCRA.results || chequesBCRA.cheques || chequesBCRA || [];
+    if (Array.isArray(listaCheques)) {
+      var activos = listaCheques.filter(function(c){ 
+        var estado = (c.estado||c.estadoCheque||'').toLowerCase();
+        return estado && estado !== 'pagado' && estado !== 'acreditado';
+      }).length;
+      var total = listaCheques.length;
+      if (total === 0)   { pCheques = 150; chequesLabel = 'Sin cheques rechazados'; }
+      else if (activos === 0) { pCheques = 75; chequesLabel = total + ' cheque(s) — todos regularizados'; }
+      else               { pCheques = 0;   chequesLabel = activos + ' cheque(s) activo(s)'; }
+    } else {
+      pCheques = 150; chequesLabel = 'Sin cheques rechazados';
+    }
+  }
   puntos += pCheques;
   detalle.push({ label:'Cheques rechazados', valor:chequesLabel, puntos:pCheques, max:150 });
 
@@ -1962,14 +1977,17 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
   var scoreObjInicial = calcularVendeScore(cuit, data, _scoreMora, _scoreWsp, null);
   var scoreEl = document.getElementById('vende-score-container');
   if (scoreEl) scoreEl.innerHTML = renderVendeScore(scoreObjInicial);
-  // Cargar historial 24 meses y recalcular
-  fetch('/deudas/' + cuit + '/historial', {signal: AbortSignal.timeout(10000)})
-    .then(function(r){ return r.json(); })
-    .then(function(historial) {
-      var scoreObjFinal = calcularVendeScore(cuit, data, _scoreMora, _scoreWsp, historial);
-      var scoreElF = document.getElementById('vende-score-container');
-      if (scoreElF) scoreElF.innerHTML = renderVendeScore(scoreObjFinal);
-    }).catch(function(){});
+  // Cargar historial 24m y cheques en paralelo, recalcular score con todo
+  Promise.all([
+    fetch('/deudas/' + cuit + '/historial', {signal: AbortSignal.timeout(10000)}).then(function(r){ return r.json(); }).catch(function(){ return null; }),
+    fetch('/deudas/' + cuit + '/cheques', {signal: AbortSignal.timeout(10000)}).then(function(r){ return r.json(); }).catch(function(){ return null; })
+  ]).then(function(resultados) {
+    var historial = resultados[0];
+    var cheques = resultados[1];
+    var scoreObjFinal = calcularVendeScore(cuit, data, _scoreMora, _scoreWsp, historial, cheques);
+    var scoreElF = document.getElementById('vende-score-container');
+    if (scoreElF) scoreElF.innerHTML = renderVendeScore(scoreObjFinal);
+  });
   if (esTimeout) {
     document.getElementById('bcra-data').innerHTML = `<div style="font-size:13px;color:#854d0e;padding:8px;background:#fefce8;border-radius:8px;border:1px solid #fde047;">El BCRA no respondió en este momento. Esto puede significar que el cliente no tiene deudas registradas, o que el servicio está temporalmente caído. Intentá de nuevo en unos segundos o consultá directamente en <a href="https://www.bcra.gob.ar/BCRAyVos/Situacion_Crediticia.asp" target="_blank" style="color:#854d0e;">bcra.gob.ar</a>.</div>`;
   } else if (!entidades.length) {
