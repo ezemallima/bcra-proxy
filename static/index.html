@@ -1442,7 +1442,22 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
       if (ventasCliente.length > 0) {
         var totalVentas = ventasCliente.reduce(function(s,v){ return s + (v.total||0); }, 0);
         // Calcular período en días
-        var fechas2 = ventasCliente.map(function(v){ return new Date(v.fecha); }).filter(function(f){ return !isNaN(f); });
+        var fechas2 = ventasCliente.map(function(v){
+        var f = v.fecha || '';
+        // Soportar múltiples formatos: DD/MM/YY, M/DD/YY, DD/MM/YYYY, YYYY-MM-DD
+        var partes = f.split('/');
+        if (partes.length === 3) {
+          var a = parseInt(partes[0]), b = parseInt(partes[1]), c = parseInt(partes[2]);
+          var anio = c < 100 ? 2000 + c : c;
+          // Si el segundo número > 12 = formato M/DD/YY (americano)
+          if (b > 12) return new Date(anio, a - 1, b);
+          // Si el primer número > 12 = formato DD/MM/YY
+          if (a > 12) return new Date(anio, b - 1, a);
+          // Ambiguo — asumir DD/MM/YY
+          return new Date(anio, b - 1, a);
+        }
+        return new Date(f);
+      }).filter(function(f){ return !isNaN(f); });
         if (fechas2.length > 0 && totalVentas > 0) {
           var minF = new Date(Math.min.apply(null, fechas2));
           var maxF = new Date(Math.max.apply(null, fechas2));
@@ -1496,9 +1511,10 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
     var positivas = textos.filter(function(t){
       return /paga bien|buen cliente|cumple|recomend|contado anticipado|sin problemas|lc |limite de credito|plazo \d|mm plazo|usd/.test(t);
     }).length;
-    if (negativas > 0 && positivas > 0) { pBodegas=30; bodegasLabel='Inconsistente'; }
-    else if (negativas > 0)             { pBodegas=0;  bodegasLabel=negativas+' menciones negativas'; }
-    else if (positivas > 0)             { pBodegas=60; bodegasLabel=positivas+' referencias positivas'; }
+    // Datos de bodegas de 2025 — reducir peso hasta tener info actualizada
+    if (negativas > 0 && positivas > 0) { pBodegas=30; bodegasLabel='Inconsistente (ref. 2025)'; }
+    else if (negativas > 0)             { pBodegas=0;  bodegasLabel=negativas+' menciones negativas (ref. 2025)'; }
+    else if (positivas > 0)             { pBodegas=40; bodegasLabel=positivas+' refs positivas (ref. 2025)'; }
     else                                { pBodegas=30; bodegasLabel='Sin menciones'; }
   }
   puntos += pBodegas;
