@@ -1132,6 +1132,64 @@ async function procesarDSO() {
       } catch(e) { console.warn('[DSO] Error preparando ventas:', e); }
     }
 
+    // ── GUARDAR SALDOS HISTORICOS (4 meses) ──
+    if (rowsSaldos && rowsSaldos.length > 0) {
+      try {
+        var hS2 = Object.keys(rowsSaldos[0]);
+        var cS2 = mapearColumna(hS2, DSO_ALIASES.saldos.contacto);
+        var mS2 = mapearColumna(hS2, DSO_ALIASES.saldos.monto);
+        var fS2 = mapearColumna(hS2, DSO_ALIASES.saldos.fecha || DSO_ALIASES.saldos.fecha_factura || 'Fecha de factura');
+        var fpS2 = mapearColumna(hS2, ['Fecha de pago', 'fecha_pago', 'fecha pago']);
+        var saldosParaGuardar = [];
+        rowsSaldos.forEach(function(row) {
+          var cliente = (row[cS2]||'').toString().trim();
+          var saldo = parseFloat((row[mS2]||'0').toString().replace(/[^0-9.-]/g,'')) || 0;
+          var fecha_factura = (row[fS2]||'').toString().trim();
+          var fecha_pago = fpS2 ? (row[fpS2]||'').toString().trim() : '';
+          if (cliente && fecha_factura) {
+            saldosParaGuardar.push({ cliente: cliente, fecha_factura: fecha_factura, fecha_pago: fecha_pago, saldo: saldo });
+          }
+        });
+        if (saldosParaGuardar.length > 0) {
+          fetch('/dso-saldos', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ saldos: saldosParaGuardar })
+          }).then(function(r) { return r.json(); })
+            .then(function(d) { console.log('[DSO] Saldos guardados:', d.agregados, 'nuevos, total:', d.total); })
+            .catch(function(e) { console.warn('[DSO] Error guardando saldos:', e); });
+        }
+      } catch(e) { console.warn('[DSO] Error preparando saldos:', e); }
+    }
+
+    // ── GUARDAR CHEQUES HISTORICOS (4 meses) ──
+    if (rowsCheques && rowsCheques.length > 0) {
+      try {
+        var hC2 = Object.keys(rowsCheques[0]);
+        var cC2 = mapearColumna(hC2, DSO_ALIASES.cheques.contacto);
+        var mC2 = mapearColumna(hC2, DSO_ALIASES.cheques.monto);
+        var fC2 = mapearColumna(hC2, DSO_ALIASES.cheques.fecha || ['Fecha de Pago', 'fecha_pago', 'fecha pago']);
+        var chequesParaGuardar = [];
+        rowsCheques.forEach(function(row) {
+          var cliente = (row[cC2]||'').toString().trim();
+          var total = parseFloat((row[mC2]||'0').toString().replace(/[^0-9.-]/g,'')) || 0;
+          var fecha_pago = (row[fC2]||'').toString().trim();
+          if (cliente && fecha_pago) {
+            chequesParaGuardar.push({ cliente: cliente, fecha_pago: fecha_pago, total: total });
+          }
+        });
+        if (chequesParaGuardar.length > 0) {
+          fetch('/dso-cheques', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ cheques: chequesParaGuardar })
+          }).then(function(r) { return r.json(); })
+            .then(function(d) { console.log('[DSO] Cheques guardados:', d.agregados, 'nuevos, total:', d.total); })
+            .catch(function(e) { console.warn('[DSO] Error guardando cheques:', e); });
+        }
+      } catch(e) { console.warn('[DSO] Error preparando cheques:', e); }
+    }
+
     // KPIs
     var colDSO = colorDSO(dsoGlobal);
     document.getElementById('dso-numero').textContent = dsoGlobal;
@@ -1265,11 +1323,28 @@ async function cargarHistorialVentas() {
     var r = await fetch('/dso-ventas');
     var d = await r.json();
     if (d.ventas && d.ventas.length > 0) {
-      // Guardar en variable global para usar en score DSO
       window.ventasHistoricas = d.ventas;
-      console.log('[DSO] Historial cargado:', d.ventas.length, 'registros hasta', d.ultima_actualizacion);
+      console.log('[DSO] Ventas históricas:', d.ventas.length, 'registros hasta', d.ultima_actualizacion);
     }
-  } catch(e) { console.warn('[DSO] No se pudo cargar historial:', e); }
+  } catch(e) { console.warn('[DSO] No se pudo cargar ventas:', e); }
+
+  try {
+    var r2 = await fetch('/dso-saldos');
+    var d2 = await r2.json();
+    if (d2.saldos && d2.saldos.length > 0) {
+      window.saldosHistoricos = d2.saldos;
+      console.log('[DSO] Saldos históricos:', d2.saldos.length, 'registros');
+    }
+  } catch(e) { console.warn('[DSO] No se pudo cargar saldos:', e); }
+
+  try {
+    var r3 = await fetch('/dso-cheques');
+    var d3 = await r3.json();
+    if (d3.cheques && d3.cheques.length > 0) {
+      window.chequesHistoricos = d3.cheques;
+      console.log('[DSO] Cheques históricos:', d3.cheques.length, 'registros');
+    }
+  } catch(e) { console.warn('[DSO] No se pudo cargar cheques:', e); }
 }
 
 async function cargarDesdServidor() {
@@ -1427,56 +1502,55 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
         return d.nombre && d.nombre.toLowerCase().indexOf(nombreBase) !== -1;
       });
     }
-    // Prioridad 2: calcular DSO desde ventasHistoricas
-    if (!dsoCliente && window.ventasHistoricas && window.ventasHistoricas.length > 0 && nombreCliente) {
-      // Matching por múltiples palabras — más preciso que solo primera palabra
-      var palabrasNombre = nombreCliente.replace(/[^a-zA-Z0-9 ]/g,' ')
+    // Prioridad 2: calcular DSO desde historial de ventas y saldos
+    if (!dsoCliente && nombreCliente) {
+      var palabrasNombre2 = nombreCliente.replace(/[^a-zA-Z0-9 ]/g,' ')
         .split(' ').filter(function(p){ return p.length > 3; })
         .map(function(p){ return p.toLowerCase(); });
-      var ventasCliente = window.ventasHistoricas.filter(function(v) {
-        if (!v.cliente) return false;
-        var vc = v.cliente.toLowerCase().replace(/[^a-zA-Z0-9 ]/g,' ');
-        var hits = palabrasNombre.filter(function(p){ return vc.indexOf(p) !== -1; }).length;
-        return hits >= Math.min(2, palabrasNombre.length);
-      });
-      if (ventasCliente.length > 0) {
-        var totalVentas = ventasCliente.reduce(function(s,v){ return s + (v.total||0); }, 0);
-        // Calcular período en días
-        var fechas2 = ventasCliente.map(function(v){
-        var f = v.fecha || '';
-        // Soportar múltiples formatos: DD/MM/YY, M/DD/YY, DD/MM/YYYY, YYYY-MM-DD
-        var partes = f.split('/');
+
+      function matchCliente2(nombre) {
+        if (!nombre) return false;
+        var n = nombre.toLowerCase().replace(/[^a-zA-Z0-9 ]/g,' ');
+        var hits = palabrasNombre2.filter(function(p){ return n.indexOf(p) !== -1; }).length;
+        return hits >= Math.min(2, palabrasNombre2.length);
+      }
+
+      function parseFechaFlex(f) {
+        if (!f) return null;
+        var partes = f.toString().split('/');
         if (partes.length === 3) {
           var a = parseInt(partes[0]), b = parseInt(partes[1]), c = parseInt(partes[2]);
           var anio = c < 100 ? 2000 + c : c;
-          // Si el segundo número > 12 = formato M/DD/YY (americano)
-          if (b > 12) return new Date(anio, a - 1, b);
-          // Si el primer número > 12 = formato DD/MM/YY
-          if (a > 12) return new Date(anio, b - 1, a);
-          // Ambiguo — asumir DD/MM/YY
-          return new Date(anio, b - 1, a);
+          if (b > 12) return new Date(anio, a-1, b);
+          if (a > 12) return new Date(anio, b-1, a);
+          return new Date(anio, b-1, a);
         }
-        return new Date(f);
-      }).filter(function(f){ return !isNaN(f); });
-        if (fechas2.length > 0 && totalVentas > 0) {
-          var minF = new Date(Math.min.apply(null, fechas2));
-          var maxF = new Date(Math.max.apply(null, fechas2));
-          var dias2 = Math.max(1, Math.round((maxF - minF) / (1000*60*60*24))) + 1;
-          // Usar saldo de dso_datos si existe, sino 0
-          var saldoH = 0;
-          // Prioridad: dso_datos calculado > cartera limiteCreditoARS > 0
-          if (typeof dso_datos !== 'undefined' && dso_datos) {
-            var found = dso_datos.find(function(d){ return d.nombre && d.nombre.toLowerCase().indexOf(nombreBase2) !== -1; });
-            if (found) saldoH = found.saldo || 0;
-          }
-          if (!saldoH && enCart && enCart.limiteCreditoARS) {
-            saldoH = enCart.limiteCreditoARS;
-          }
-          if (totalVentas > 0 && dias2 > 0) {
-            var dsoCalc = Math.round((saldoH / totalVentas) * dias2);
-            dsoCliente = { dso: dsoCalc, nombre: nombreCliente };
-          }
-        }
+        var d = new Date(f); return isNaN(d) ? null : d;
+      }
+
+      var ventasCliente = (window.ventasHistoricas||[]).filter(function(v){ return matchCliente2(v.cliente); });
+      var totalVentas = ventasCliente.reduce(function(s,v){ return s + Math.max(0, v.total||0); }, 0);
+
+      var saldosCliente = (window.saldosHistoricos||[]).filter(function(s){ return matchCliente2(s.cliente); });
+      var saldoPromedio = 0;
+      if (saldosCliente.length > 0) {
+        saldoPromedio = saldosCliente.reduce(function(s,v){ return s + (v.saldo||0); }, 0) / saldosCliente.length;
+      } else if (typeof dso_datos !== 'undefined' && dso_datos) {
+        var fdso = dso_datos.find(function(d){ return d.nombre && matchCliente2(d.nombre); });
+        if (fdso) saldoPromedio = fdso.saldo || 0;
+      }
+
+      var fechasV = ventasCliente.map(function(v){ return parseFechaFlex(v.fecha); }).filter(Boolean);
+      var diasP = 90;
+      if (fechasV.length > 1) {
+        var minFv = new Date(Math.min.apply(null, fechasV));
+        var maxFv = new Date(Math.max.apply(null, fechasV));
+        diasP = Math.max(30, Math.round((maxFv - minFv) / (1000*60*60*24)) + 1);
+      }
+
+      if (totalVentas > 0) {
+        var dsoCalc2 = saldoPromedio > 0 ? Math.round((saldoPromedio / totalVentas) * diasP) : 0;
+        dsoCliente = { dso: dsoCalc2, nombre: nombreCliente };
       }
     }
     if (dsoCliente && dsoCliente.dso != null) {
