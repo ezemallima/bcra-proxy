@@ -1016,10 +1016,27 @@ async function procesarDSO() {
     }
 
     // Período
+    // diasPeriodo = días entre primera venta y fecha del saldo (más reciente)
+    // Esto da el período real de cobro
     var diasPeriodo = 90;
     if (fechas.length >= 2) {
       fechas.sort(function(a,b){return a-b;});
-      diasPeriodo = Math.max(1, Math.round((fechas[fechas.length-1]-fechas[0])/(1000*60*60*24)));
+      var primerVenta = fechas[0];
+      // Usar fecha de saldo más reciente como cierre del período
+      var fechaCierre = fechas[fechas.length-1];
+      if (rowsSaldos && rowsSaldos.length > 0) {
+        var hFecha = Object.keys(rowsSaldos[0]);
+        var colFecha = mapearColumna(hFecha, ['Fecha de pago', 'fecha_pago', 'Fecha de factura', 'fecha_factura']);
+        if (colFecha) {
+          var fechasSaldo = rowsSaldos.map(function(r){
+            return parseFecha ? parseFecha(r[colFecha]) : new Date(r[colFecha]);
+          }).filter(function(f){ return f && !isNaN(f); });
+          if (fechasSaldo.length > 0) {
+            fechaCierre = new Date(Math.max.apply(null, fechasSaldo));
+          }
+        }
+      }
+      diasPeriodo = Math.max(30, Math.round((fechaCierre - primerVenta)/(1000*60*60*24)));
     }
 
     // ── SALDOS ──
