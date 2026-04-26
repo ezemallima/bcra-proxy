@@ -1064,10 +1064,17 @@ async function procesarDSO() {
       var mS = mapearColumna(hS, DSO_ALIASES.saldos.monto);
       if (!cS) throw new Error('Archivo de saldos: no se encontró columna de cliente. Columnas: ' + hS.join(', '));
       if (!mS) throw new Error('Archivo de saldos: no se encontró columna de monto. Columnas: ' + hS.join(', '));
+      var hoy120 = new Date();
+      var corte120 = new Date(hoy120.getTime() - 120 * 24 * 60 * 60 * 1000);
+      var colFechaS = mapearColumna(hS, ['Fecha de factura','fecha_factura','fecha']);
       rowsSaldos.forEach(function(r) {
         var contacto = String(r[cS] || '').trim();
-        var saldo = parseMonto(r[mS]); // respetar signo — negativos son NC y restan
+        var saldo = parseMonto(r[mS]);
         if (!contacto || saldo === 0) return;
+        if (colFechaS && r[colFechaS]) {
+          var fSaldo = parseFecha(r[colFechaS]);
+          if (fSaldo && fSaldo < corte120) return;
+        }
         saldosPorCliente[contacto] = (saldosPorCliente[contacto] || 0) + saldo;
       });
     }
