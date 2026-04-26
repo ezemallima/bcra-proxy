@@ -1119,10 +1119,14 @@ async function procesarDSO() {
     });
 
     // ── DSO GLOBAL ──
-    var dsoGlobal = (ventasNetasTotal > 0 && activoTotalDSO > 0)
-      ? Math.round((activoTotalDSO / ventasNetasTotal) * diasPeriodo)
+    // Activo total = suma directa de saldos + cheques del archivo subido
+    var activoDirecto = Object.values(saldosPorCliente).reduce(function(s,v){ return s+v; }, 0)
+                      + Object.values(chequesPorCliente).reduce(function(s,v){ return s+v; }, 0);
+
+    var dsoGlobal = (ventasNetasTotal > 0 && activoDirecto > 0)
+      ? Math.round((activoDirecto / ventasNetasTotal) * diasPeriodo)
       : 0;
-    console.log('[DSO DEBUG] ventas:', ventasNetasTotal.toFixed(0), 'activo:', activoTotalDSO.toFixed(0), 'dias:', diasPeriodo, 'resultado:', dsoGlobal);
+    console.log('[DSO DEBUG] ventas:', ventasNetasTotal.toFixed(0), 'activo:', activoDirecto.toFixed(0), 'dias:', diasPeriodo, 'resultado:', dsoGlobal);
 
     var estaCompleto = !!(dsoArchivos.ventas && dsoArchivos.saldos);
     dsoDatos = dsoDatos.filter(function(c){return c.dso > 0;}).sort(function(a,b){return b.dso-a.dso;});
