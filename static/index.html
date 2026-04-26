@@ -1464,12 +1464,18 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
           var dias2 = Math.max(1, Math.round((maxF - minF) / (1000*60*60*24))) + 1;
           // Usar saldo de dso_datos si existe, sino 0
           var saldoH = 0;
+          // Prioridad: dso_datos calculado > cartera limiteCreditoARS > 0
           if (typeof dso_datos !== 'undefined' && dso_datos) {
             var found = dso_datos.find(function(d){ return d.nombre && d.nombre.toLowerCase().indexOf(nombreBase2) !== -1; });
             if (found) saldoH = found.saldo || 0;
           }
-          var dsoCalc = Math.round((saldoH / totalVentas) * dias2);
-          if (dsoCalc > 0) dsoCliente = { dso: dsoCalc, nombre: nombreCliente };
+          if (!saldoH && enCart && enCart.limiteCreditoARS) {
+            saldoH = enCart.limiteCreditoARS;
+          }
+          if (totalVentas > 0 && dias2 > 0) {
+            var dsoCalc = Math.round((saldoH / totalVentas) * dias2);
+            dsoCliente = { dso: dsoCalc, nombre: nombreCliente };
+          }
         }
       }
     }
@@ -1880,10 +1886,11 @@ async function consultarCliente() {
   // Mostrar cheques rechazados si el BCRA los trajo
   try {
     var chequesUrl = encodeURIComponent('https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/' + raw);
-    var chR = await fetch('https://api.allorigins.win/get?url=' + chequesUrl, {signal: AbortSignal.timeout(10000)});
+    var chR = await fetch('/deudas/' + raw + '/cheques', {signal: AbortSignal.timeout(10000)});
     if (chR.ok) {
-      var chW = await chR.json();
-      var chData = JSON.parse(chW.contents);
+      var chData = await chR.json();
+      // Normalizar — el servidor devuelve {results: [...]}
+      if (chData.results !== undefined) chData = chData.results || [];
       var chequesCard = document.getElementById('cheques-rechazados-card');
       var chequesEl = document.getElementById('cheques-rechazados-data');
       var todosChq = [];
