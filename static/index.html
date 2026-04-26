@@ -996,9 +996,23 @@ async function procesarDSO() {
 
     // parseMonto y parseFecha son globales
 
-    // ── VENTAS ──
+    // ── VENTAS ── usar historial del servidor + archivo subido
     var ventasPorCliente = {};
     var fechas = [];
+
+    // Primero cargar del historial del servidor (ya guardado)
+    if (window.ventasHistoricas && window.ventasHistoricas.length > 0) {
+      window.ventasHistoricas.forEach(function(v) {
+        var contacto = (v.cliente || '').trim();
+        var total = parseFloat(v.total) || 0;
+        if (!contacto || total === 0) return;
+        ventasPorCliente[contacto] = (ventasPorCliente[contacto] || 0) + total;
+        var d = v.fecha ? new Date(v.fecha) : null;
+        if (d && !isNaN(d) && total > 0) fechas.push(d);
+      });
+    }
+
+    // Luego agregar el archivo subido (puede tener datos nuevos no guardados aún)
     if (rowsVentas.length) {
       var hV = Object.keys(rowsVentas[0]);
       var cV = mapearColumna(hV, DSO_ALIASES.ventas.contacto);
@@ -1009,9 +1023,12 @@ async function procesarDSO() {
       rowsVentas.forEach(function(r) {
         var contacto = String(r[cV] || '').trim();
         var total = parseMonto(r[mV]);
-        if (!contacto || total === 0) return; // solo excluir vacíos — NC (negativos) restan
-        ventasPorCliente[contacto] = (ventasPorCliente[contacto] || 0) + total;
-        if (fV && total > 0) { var d = parseFecha(r[fV]); if (d) fechas.push(d); }
+        if (!contacto || total === 0) return;
+        // Solo agregar si no está ya en el histórico para evitar duplicados
+        if (!window.ventasHistoricas || !window.ventasHistoricas.some(function(v){ return v.cliente === contacto && String(v.total) === String(total); })) {
+          ventasPorCliente[contacto] = (ventasPorCliente[contacto] || 0) + total;
+          if (fV && total > 0) { var d = parseFecha(r[fV]); if (d) fechas.push(d); }
+        }
       });
     }
 
