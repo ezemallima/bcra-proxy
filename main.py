@@ -147,6 +147,9 @@ def consultar_bcra(cuit, reintentos=3):
                         time.sleep(3)
                         continue
                     return None, data['error']
+                # El BCRA devuelve {"status":200,"results":{...}} — normalizar
+                if 'status' in data and 'results' in data:
+                    data = data  # ya tiene results
                 # Normalizar sin_deudas
                 results = data.get('results') or {}
                 periodos = results.get('periodos') or []
@@ -154,6 +157,7 @@ def consultar_bcra(cuit, reintentos=3):
                     data['sin_deudas'] = True
                 else:
                     data['sin_deudas'] = False
+                print(f"[bcra] {cuit} sin_deudas={data['sin_deudas']} periodos={len(periodos)}", flush=True)
                 return data, None
             elif r.status_code == 404:
                 return {"results": {"denominacion": "", "periodos": []}, "sin_deudas": True}, None
@@ -462,36 +466,6 @@ def get_afip(cuit):
     except Exception:
         pass
 
-    # Intento 4: OpenAI busca la razón social por CUIT
-    if OPENAI_KEY:
-        try:
-            headers_oai = {
-                "Content-Type": "application/json",
-                "Authorization": "Bearer " + OPENAI_KEY
-            }
-            body_oai = {
-                "model": "gpt-4o-mini",
-                "max_tokens": 100,
-                "messages": [{
-                    "role": "system",
-                    "content": "Sos un asistente especializado en datos fiscales argentinos. Cuando te den un CUIT, respondé SOLO con la razón social o nombre completo del titular, sin ningún texto adicional. Si no lo sabés con certeza, respondé exactamente: NO_ENCONTRADO"
-                }, {
-                    "role": "user",
-                    "content": "¿Cuál es la razón social del CUIT " + cuit + " en Argentina?"
-                }]
-            }
-            r_oai = requests.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers=headers_oai, json=body_oai, timeout=15
-            )
-            if r_oai.status_code == 200:
-                nombre_oai = r_oai.json()['choices'][0]['message']['content'].strip()
-                if nombre_oai and nombre_oai != 'NO_ENCONTRADO' and len(nombre_oai) < 100:
-                    print(f"[afip] OpenAI encontró: {nombre_oai}", flush=True)
-                    return jsonify({"nombre": nombre_oai})
-        except Exception as ex:
-            print(f"[afip] OpenAI error: {ex}", flush=True)
-
     # Fallback: CUIT formateado
     return jsonify({"nombre": cuit_fmt})
 
@@ -676,6 +650,128 @@ def cache_stats():
 @app.route("/health")
 def health():
     return jsonify({"status": "ok", "gemini": bool(GEMINI_KEY)})
+
+@app.route("/dso-saldos", methods=["GET"])
+def get_dso_saldos():
+    try:
+        f_path = os.path.join(DATA_DIR, 'dso_saldos_historico.json')
+        if os.path.exists(f_path):
+            with open(f_path, 'r', encoding='utf-8') as f:
+                return jsonify(json.load(f))
+        return jsonify({"saldos": [], "ultima_actualizacion": ""})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/dso-saldos", methods=["POST"])
+def save_dso_saldos():
+    try:
+        body = request.get_json(force=True)
+        nuevos = body.get('saldos', [])
+        if not nuevos:
+            return jsonify({"error": "Sin saldos"}), 400
+        f_path = os.path.join(DATA_DIR, 'dso_saldos_historico.json')
+        historico = []
+        if os.path.exists(f_path):
+            with open(f_path, 'r', encoding='utf-8') as f:
+                historico = json.load(f).get('saldos', [])
+        from datetime import datetime, timedelta
+        hoy = datetime.now()
+        hace_4_meses = hoy - timedelta(days=120)
+        # Filtrar últimos 4 meses
+        filtrado = []
+        for s in historico:
+            try:
+                fecha_str = s.get('fecha_factura', s.get('fecha', ''))
+                if '/' in fecha_str:
+                    partes = fecha_str.split('/')
+                    if len(partes[2]) == 2:
+                        fecha = datetime(2000+int(partes[2]), int(partes[1]), int(partes[0]))
+                    else:
+                        fecha = datetime(int(partes[2]), int(partes[1]), int(partes[0]))
+                else:
+                    fecha = datetime.fromisoformat(fecha_str[:10])
+                if fecha >= hace_4_meses:
+                    filtrado.append(s)
+            except:
+                pass
+        # Agregar nuevos evitando duplicados
+        existentes = set((s.get('cliente',''), s.get('fecha_factura',''), str(s.get('saldo',''))) for s in filtrado)
+        agregados = 0
+        for s in nuevos:
+            key = (s.get('cliente',''), s.get('fecha_factura',''), str(s.get('saldo','')))
+            if key not in existentes:
+                filtrado.append(s)
+                existentes.add(key)
+                agregados += 1
+        resultado = {"saldos": filtrado, "ultima_actualizacion": hoy.strftime('%d/%m/%Y %H:%M'), "total_registros": len(filtrado)}
+        with open(f_path, 'w', encoding='utf-8') as f:
+            json.dump(resultado, f, ensure_ascii=False, indent=2)
+        print(f"[dso-saldos] Agregados {agregados} saldos, total: {len(filtrado)}", flush=True)
+        return jsonify({"ok": True, "agregados": agregados, "total": len(filtrado)})
+    except Exception as e:
+        import traceback
+        print(f"[dso-saldos] Error: {traceback.format_exc()}", flush=True)
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/dso-cheques", methods=["GET"])
+def get_dso_cheques():
+    try:
+        f_path = os.path.join(DATA_DIR, 'dso_cheques_historico.json')
+        if os.path.exists(f_path):
+            with open(f_path, 'r', encoding='utf-8') as f:
+                return jsonify(json.load(f))
+        return jsonify({"cheques": [], "ultima_actualizacion": ""})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/dso-cheques", methods=["POST"])
+def save_dso_cheques():
+    try:
+        body = request.get_json(force=True)
+        nuevos = body.get('cheques', [])
+        if not nuevos:
+            return jsonify({"error": "Sin cheques"}), 400
+        f_path = os.path.join(DATA_DIR, 'dso_cheques_historico.json')
+        historico = []
+        if os.path.exists(f_path):
+            with open(f_path, 'r', encoding='utf-8') as f:
+                historico = json.load(f).get('cheques', [])
+        from datetime import datetime, timedelta
+        hoy = datetime.now()
+        hace_4_meses = hoy - timedelta(days=120)
+        filtrado = []
+        for c in historico:
+            try:
+                fecha_str = c.get('fecha_pago', c.get('fecha', ''))
+                if '/' in fecha_str:
+                    partes = fecha_str.split('/')
+                    if len(partes[2]) == 2:
+                        fecha = datetime(2000+int(partes[2]), int(partes[1]), int(partes[0]))
+                    else:
+                        fecha = datetime(int(partes[2]), int(partes[1]), int(partes[0]))
+                else:
+                    fecha = datetime.fromisoformat(fecha_str[:10])
+                if fecha >= hace_4_meses:
+                    filtrado.append(c)
+            except:
+                pass
+        existentes = set((c.get('cliente',''), c.get('fecha_pago',''), str(c.get('total',''))) for c in filtrado)
+        agregados = 0
+        for c in nuevos:
+            key = (c.get('cliente',''), c.get('fecha_pago',''), str(c.get('total','')))
+            if key not in existentes:
+                filtrado.append(c)
+                existentes.add(key)
+                agregados += 1
+        resultado = {"cheques": filtrado, "ultima_actualizacion": hoy.strftime('%d/%m/%Y %H:%M'), "total_registros": len(filtrado)}
+        with open(f_path, 'w', encoding='utf-8') as f:
+            json.dump(resultado, f, ensure_ascii=False, indent=2)
+        print(f"[dso-cheques] Agregados {agregados} cheques, total: {len(filtrado)}", flush=True)
+        return jsonify({"ok": True, "agregados": agregados, "total": len(filtrado)})
+    except Exception as e:
+        import traceback
+        print(f"[dso-cheques] Error: {traceback.format_exc()}", flush=True)
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/dso-ventas", methods=["GET"])
 def get_dso_ventas():
