@@ -1105,35 +1105,69 @@ async function procesarDSO() {
     // ── KPI saldo: suma directa del diccionario de saldos (sin pasar por todosClientes)
     var saldoTotalKPI = Object.values(saldosPorCliente).reduce(function(s, v) { return s + v; }, 0);
 
-    var ventasNetasTotal = 0;
-    var activoTotalDSO = 0;
-    dsoDatos = [];
+    // ── DSO GLOBAL FIX DEFINITIVO ──
+    // Ventas = historial del servidor (todos los meses)
+    var ventasNetasTotal = (window.ventasHistoricas || []).reduce(function(s, v) {
+      return s + (parseFloat(v.total) || 0);
+    }, 0);
 
-    todosClientes.forEach(function(contacto) {
+    // Activo = SOLO el archivo subido en esta sesión (sin histórico)
+    var mSaldo = mapearColumna(Object.keys(rowsSaldos[0]||{}), DSO_ALIASES.saldos.monto);
+    var mCheque = mapearColumna(Object.keys(rowsCheques[0]||{}), DSO_ALIASES.cheques.monto);
+    var totalSaldo = rowsSaldos.reduce(function(s, r) {
+      return s + (parseMonto(r[mSaldo]) || 0);
+    }, 0);
+    var totalCheques = rowsCheques.reduce(function(s, r) {
+      return s + Math.abs(parseMonto(r[mCheque]) || 0);
+    }, 0);
+    var activoTotalDSO = totalSaldo + totalCheques;
+
+    // Días del período = desde primera venta hasta última fecha de saldo
+    var fechasVentasH = (window.ventasHistoricas || []).map(function(v) {
+      if (!v.fecha) return null;
+      var partes = v.fecha.toString().split('/');
+      if (partes.length === 3) {
+        var a = parseInt(partes[0]), b = parseInt(partes[1]), c = parseInt(partes[2]);
+        var anio = c < 100 ? 2000 + c : c;
+        if (b > 12) return new Date(anio, a-1, b);
+        if (a > 12) return new Date(anio, b-1, a);
+        return new Date(anio, b-1, a);
+      }
+      return new Date(v.fecha);
+    }).filter(function(f){ return f && !isNaN(f); });
+
+    var fechaMin = fechasVentasH.length > 0 ? new Date(Math.min.apply(null, fechasVentasH)) : new Date();
+    var fechaMax = new Date(); // hoy como cierre
+    diasPeriodo = Math.max(30, Math.round((fechaMax - fechaMin) / (1000*60*60*24)));
+
+    // DSO individual por cliente (para la tabla)
+    dsoDatos = [];
+    var todosClientesDSO = new Set(
+      Object.keys(saldosPorCliente).concat(Object.keys(chequesPorCliente))
+    );
+    todosClientesDSO.forEach(function(contacto) {
       if (!contacto) return;
-      var ventas  = ventasPorCliente[contacto]  || 0;
-      var saldo   = saldosPorCliente[contacto]  || 0;
+      var ventas = ventasPorCliente[contacto] || 0;
+      var saldo = saldosPorCliente[contacto] || 0;
       var cheques = chequesPorCliente[contacto] || 0;
-      var activoDSO = saldo + cheques;
-      ventasNetasTotal += ventas;
-      activoTotalDSO  += activoDSO;
-      var dsoCliente = (ventas > 0 && activoDSO > 0)
-        ? Math.round((activoDSO / ventas) * diasPeriodo)
-        : 0;
-      if (activoDSO > 0 || ventas > 0) {
-        dsoDatos.push({nombre: contacto, saldo: saldo, dso: dsoCliente});
+      var activo = saldo + cheques;
+      if (ventas > 0 && activo > 0) {
+        var dsoCliente = Math.round((activo / ventas) * diasPeriodo);
+        dsoDatos.push({nombre: contacto, saldo: activo, dso: dsoCliente});
       }
     });
 
-    // ── DSO GLOBAL ──
-    // Activo total = suma directa de saldos + cheques del archivo subido
-    var activoDirecto = Object.values(saldosPorCliente).reduce(function(s,v){ return s+v; }, 0)
-                      + Object.values(chequesPorCliente).reduce(function(s,v){ return s+v; }, 0);
-
-    var dsoGlobal = (ventasNetasTotal > 0 && activoDirecto > 0)
-      ? Math.round((activoDirecto / ventasNetasTotal) * diasPeriodo)
+    var dsoGlobal = (ventasNetasTotal > 0 && activoTotalDSO > 0)
+      ? Math.round((activoTotalDSO / ventasNetasTotal) * diasPeriodo)
       : 0;
-    console.log('[DSO DEBUG] ventas:', ventasNetasTotal.toFixed(0), 'activo:', activoDirecto.toFixed(0), 'dias:', diasPeriodo, 'resultado:', dsoGlobal);
+
+    console.log('[DSO FIX]');
+    console.log('Ventas:', ventasNetasTotal.toFixed(0));
+    console.log('Saldo actual:', totalSaldo.toFixed(0));
+    console.log('Cheques actual:', totalCheques.toFixed(0));
+    console.log('Activo:', activoTotalDSO.toFixed(0));
+    console.log('Dias:', diasPeriodo);
+    console.log('DSO:', dsoGlobal);
 
     var estaCompleto = !!(dsoArchivos.ventas && dsoArchivos.saldos);
     dsoDatos = dsoDatos.filter(function(c){return c.dso > 0;}).sort(function(a,b){return b.dso-a.dso;});
