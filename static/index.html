@@ -1576,7 +1576,7 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
   // 3. CHEQUES RECHAZADOS (Max 150)
   var pCheques = 75; // neutral sin datos
   var chequesLabel = 'Sin datos';
-  if (chequesBCRA !== null && chequesBCRA !== undefined) {
+  if (chequesBCRA !== null && chequesBCRA !== undefined && !chequesBCRA.error_bcra) {
     var listaCheques = chequesBCRA.results || chequesBCRA.cheques || chequesBCRA || [];
     if (Array.isArray(listaCheques)) {
       var activos = listaCheques.filter(function(c){ 
@@ -1584,11 +1584,12 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
         return estado && estado !== 'pagado' && estado !== 'acreditado';
       }).length;
       var total = listaCheques.length;
-      if (total === 0)   { pCheques = 150; chequesLabel = 'Sin cheques rechazados'; }
-      else if (activos === 0) { pCheques = 75; chequesLabel = total + ' cheque(s) — todos regularizados'; }
-      else               { pCheques = 0;   chequesLabel = activos + ' cheque(s) activo(s)'; }
+      if (total === 0)        { pCheques = 150; chequesLabel = 'Sin cheques rechazados'; }
+      else if (activos === 0) { pCheques = 75;  chequesLabel = total + ' cheque(s) regularizados'; }
+      else                    { pCheques = 0;   chequesLabel = activos + ' cheque(s) activo(s)'; }
     } else {
-      pCheques = 150; chequesLabel = 'Sin cheques rechazados';
+      // Respuesta con error o vacía = neutro, no asumir sin cheques
+      pCheques = 75; chequesLabel = 'Sin datos (error BCRA)';
     }
   }
   puntos += pCheques;
@@ -1696,21 +1697,21 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
     var positivas = textos.filter(function(t){
       return /paga bien|buen cliente|cumple|recomend|contado anticipado|sin problemas|lc |limite de credito|plazo \d|mm plazo|usd/.test(t);
     }).length;
-    // Verificar antigüedad — chat > 1 año = peso reducido
+    // Chat > 6 meses = neutro (situaciones cambian mes a mes)
     var hoyB = new Date();
-    var hace1anioB = new Date(hoyB.getFullYear()-1, hoyB.getMonth(), hoyB.getDate());
-    var chatAntiguo = true; // asumir antiguo hasta probar lo contrario
+    var hace6meses = new Date(hoyB.getFullYear(), hoyB.getMonth()-6, hoyB.getDate());
+    var chatReciente = false;
     wspThreads.forEach(function(t){
       var fechaT = t.fecha || (t.mensajes && t.mensajes[0] && t.mensajes[0].fecha);
-      if (fechaT && new Date(fechaT) > hace1anioB) chatAntiguo = false;
+      if (fechaT && new Date(fechaT) > hace6meses) chatReciente = true;
     });
 
-    if (negativas > 0 && positivas > 0) { pBodegas=30; bodegasLabel='Inconsistente'; }
+    if (!chatReciente) {
+      // Info vieja — neutro
+      pBodegas = 30; bodegasLabel = 'Info desactualizada (+6 meses)';
+    } else if (negativas > 0 && positivas > 0) { pBodegas=30; bodegasLabel='Inconsistente'; }
     else if (negativas > 0)             { pBodegas=0;  bodegasLabel=negativas+' menciones negativas'; }
-    else if (positivas > 0) {
-      pBodegas = chatAntiguo ? 30 : 60;
-      bodegasLabel = positivas+' refs positivas'+(chatAntiguo?' (ref. anterior)':'');
-    }
+    else if (positivas > 0)             { pBodegas=60; bodegasLabel=positivas+' referencias positivas'; }
     else                                { pBodegas=30; bodegasLabel='Sin menciones'; }
   }
   puntos += pBodegas;
@@ -2112,12 +2113,13 @@ async function consultarCliente() {
   // mostrarResultado ya maneja el header completo con nombre, badge y botón cartera
   // No reescribir el header acá
 
-  // Mostrar cheques rechazados si el BCRA los trajo
+  // Mostrar cheques rechazados — guardar resultado para el score
+  window._chequesUltimaConsulta = null; // resetear
   try {
-    var chequesUrl = encodeURIComponent('https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/' + raw);
     var chR = await fetch('/deudas/' + raw + '/cheques', {signal: AbortSignal.timeout(10000)});
     if (chR.ok) {
       var chData = await chR.json();
+      window._chequesUltimaConsulta = chData; // guardar para el score
       // Normalizar — el servidor devuelve {results: [...]}
       if (chData.results !== undefined) chData = chData.results || [];
       var chequesCard = document.getElementById('cheques-rechazados-card');
@@ -2236,7 +2238,10 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
   // Cargar historial 24m y cheques en paralelo
   Promise.all([
     fetch('/deudas/' + cuit + '/historial', {signal: AbortSignal.timeout(15000)}).then(function(r){ return r.json(); }).catch(function(){ return null; }),
-    fetch('/deudas/' + cuit + '/cheques', {signal: AbortSignal.timeout(15000)}).then(function(r){ return r.json(); }).catch(function(){ return null; })
+    // Usar cheques ya consultados si están disponibles — evita segunda consulta fallida
+    window._chequesUltimaConsulta
+      ? Promise.resolve(window._chequesUltimaConsulta)
+      : fetch('/deudas/' + cuit + '/cheques', {signal: AbortSignal.timeout(15000)}).then(function(r){ return r.json(); }).catch(function(){ return null; })
   ]).then(function(resultados) {
     var historial = resultados[0];
     var cheques = resultados[1];
@@ -3056,7 +3061,14 @@ function renderAlertas() {
     html += '<div class="client-name">' + c.nombre + '</div>';
     html += '<div class="client-meta">CUIT: ' + c.cuit + verificadoTxt + '</div>';
     html += '</div>';
-    html += '<div class="client-right">';
+    html += '<div class="client-right" style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">';
+    // Score rápido basado en datos disponibles
+    var bcraDataC = {results: {periodos:[]}, sin_deudas: c.ultimaSit === 1};
+    if (c.ultimaSit) bcraDataC = {results: {periodos: [{entidades: [{situacion: c.ultimaSit, entidad: 'BCRA', monto:0}]}]}};
+    var scoreC = calcularVendeScore(c.cuit, bcraDataC, mora, buscarEnWSP(c.cuit)||[]);
+    var scoreColor = scoreC.color;
+    html += '<div style="font-size:13px;font-weight:700;color:'+scoreColor+';">'+scoreC.score+'</div>';
+    html += '<div style="font-size:10px;color:'+scoreColor+';">'+scoreC.emoji+' '+scoreC.rango+'</div>';
     if (mora) html += '<span class="badge badge-mora">Mora</span>';
     if (buscarEnWSP(c.cuit)) html += '<span class="badge badge-wsp">En bodegas</span>';
     html += c.ultimaSit ? getBadge(c.ultimaSit) : '<span style="font-size:11px;color:#aaa;">Pendiente</span>';
