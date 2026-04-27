@@ -670,6 +670,17 @@ def _fecha_valida(fecha_str, desde):
 def health():
     return jsonify({"status": "ok", "gemini": bool(GEMINI_KEY)})
 
+@app.route("/dso-ventas/limpiar", methods=["POST"])
+def limpiar_dso_ventas():
+    """Elimina el historial de ventas para re-carga limpia"""
+    try:
+        dso_file = os.path.join(DATA_DIR, 'dso_ventas_historico.json')
+        if os.path.exists(dso_file):
+            os.remove(dso_file)
+        return jsonify({"ok": True, "mensaje": "Historial limpiado"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/dso-saldos", methods=["GET"])
 def get_dso_saldos():
     try:
@@ -842,12 +853,20 @@ def save_dso_ventas():
             if '/' in s:
                 p = s.split('/')
                 if len(p) == 3:
-                    a, b, c = int(p[0]), int(p[1]), int(p[2])
-                    anio = 2000 + c if c < 100 else c
-                    if b > 12: dia, mes = b, a
-                    elif a > 12: dia, mes = a, b
-                    else: dia, mes = a, b
-                    return f"{anio}-{mes:02d}-{dia:02d}"
+                    try:
+                        a, b, c = int(p[0]), int(p[1]), int(p[2])
+                        anio = 2000 + c if c < 100 else c
+                        # Formato M/DD/YY (americano): si b > 12, entonces a=mes, b=dia
+                        if b > 12: mes, dia = a, b
+                        # Formato DD/MM/YY: si a > 12, entonces a=dia, b=mes
+                        elif a > 12: dia, mes = a, b
+                        # Ambiguo: en Argentina es DD/MM/YY
+                        else: dia, mes = a, b
+                        # Validar rango
+                        if 1 <= mes <= 12 and 1 <= dia <= 31:
+                            return f"{anio}-{mes:02d}-{dia:02d}"
+                    except:
+                        pass
             return s
 
         # Agregar nuevas ventas evitando duplicados exactos
