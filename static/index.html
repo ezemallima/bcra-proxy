@@ -1659,11 +1659,19 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
         var dsoCalc2 = saldoPromedio > 0 ? Math.round((saldoPromedio / totalVentas) * diasP) : 0;
         dsoCliente = { dso: dsoCalc2, nombre: nombreCliente };
       }
+      // Sin ventas históricas = sin datos DSO (neutral 50)
     }
-    if (dsoCliente && dsoCliente.dso != null) {
+    if (mora) {
+      // Cliente en mora = DSO irrelevante, no vender
+      pDSO = 0; dsoLabel = 'En mora';
+    } else if (dsoCliente && dsoCliente.dso != null) {
       var dso = dsoCliente.dso;
-      dsoLabel = dso + ' días';
-      pDSO = dso < 30 ? 100 : dso <= 60 ? 70 : dso <= 90 ? 40 : 10;
+      if (dso === 0 && totalVentas === 0) {
+        pDSO = 50; dsoLabel = 'Sin ventas registradas';
+      } else {
+        dsoLabel = dso + ' días';
+        pDSO = dso < 30 ? 100 : dso <= 60 ? 70 : dso <= 90 ? 40 : 10;
+      }
     }
   }
   puntos += pDSO;
