@@ -134,48 +134,51 @@ def gemini_request(payload, timeout=120):
 BCRA_WORKER = "https://orange-recipe-3bb1.ezetombacapo.workers.dev"
 
 def consultar_bcra(cuit, reintentos=3):
-    # Usar Cloudflare Worker como proxy para evitar bloqueos del BCRA
-    url = BCRA_WORKER + "/deudas/" + cuit
-    for i in range(reintentos):
-        try:
-            r = requests.get(url, timeout=15)
-            if r.status_code == 200:
-                data = r.json()
-                if data.get('error'):
-                    print(f"[bcra] Worker error para {cuit}: {data['error']}", flush=True)
-                    if i < reintentos - 1:
+    # Worker primero, BCRA directo como fallback
+    endpoints = [
+        (BCRA_WORKER + "/deudas/" + cuit, False),
+        ("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit, False)
+    ]
+    for ep_url, ep_verify in endpoints:
+        via = "Worker" if "workers.dev" in ep_url else "directo"
+        intentos = reintentos if via == "Worker" else 2
+        for i in range(intentos):
+            try:
+                print(f"[bcra] {cuit} consultando via {via}...", flush=True)
+                r = requests.get(ep_url, timeout=15, verify=ep_verify)
+                if r.status_code == 200:
+                    data = r.json()
+                    if data.get('error'):
+                        print(f"[bcra] Worker error para {cuit}: {data['error']}", flush=True)
+                        if i < intentos - 1:
+                            time.sleep(3)
+                            continue
+                        break  # pasar al fallback
+                    results = data.get('results') or {}
+                    periodos = results.get('periodos') or []
+                    data['sin_deudas'] = len(periodos) == 0
+                    print(f"[bcra] {cuit} OK via {via} sin_deudas={data['sin_deudas']}", flush=True)
+                    return data, None
+                elif r.status_code == 404:
+                    return {"results": {"denominacion": "", "periodos": []}, "sin_deudas": True}, None
+                elif r.status_code in [520, 521, 522, 523, 524]:
+                    print(f"[bcra] Cloudflare error {r.status_code} para {cuit}, probando fallback", flush=True)
+                    break  # pasar al fallback directo
+                else:
+                    if i < intentos - 1:
                         time.sleep(3)
                         continue
-                    return None, data['error']
-                # El BCRA devuelve {"status":200,"results":{...}} — normalizar
-                if 'status' in data and 'results' in data:
-                    data = data  # ya tiene results
-                # Normalizar sin_deudas
-                results = data.get('results') or {}
-                periodos = results.get('periodos') or []
-                if not periodos:
-                    data['sin_deudas'] = True
-                else:
-                    data['sin_deudas'] = False
-                print(f"[bcra] {cuit} sin_deudas={data['sin_deudas']} periodos={len(periodos)}", flush=True)
-                return data, None
-            elif r.status_code == 404:
-                return {"results": {"denominacion": "", "periodos": []}, "sin_deudas": True}, None
-            else:
-                if i < reintentos - 1:
-                    time.sleep(3)
+                    break
+            except requests.exceptions.ConnectionError as e:
+                print(f"[bcra] ConnectionError via {via} intento {i+1} para {cuit}: {e}", flush=True)
+                if i < intentos - 1:
+                    time.sleep(5)
                     continue
-                return None, f"HTTP_{r.status_code}"
-        except requests.exceptions.ConnectionError as e:
-            print(f"[bcra] ConnectionError Worker intento {i+1} para {cuit}", flush=True)
-            if i < reintentos - 1:
-                time.sleep(3)
-                continue
-            return None, "connection_error"
-        except Exception as e:
-            print(f"[bcra] Error inesperado {cuit}: {e}", flush=True)
-            return None, str(e)
-    return None, "timeout"
+                break
+            except Exception as e:
+                print(f"[bcra] Error inesperado via {via} {cuit}: {e}", flush=True)
+                break
+    return None, "sin_respuesta"
 
 def analizar_bodegas_server(cuit, nombre, mensajes):
     if not mensajes:
@@ -482,47 +485,67 @@ def get_deudas(cuit):
 
 @app.route("/deudas/<cuit>/cheques")
 def get_cheques(cuit):
-    url = BCRA_WORKER + "/deudas/" + cuit + "/cheques"
-    for intento in range(3):
-        try:
-            r = requests.get(url, timeout=15)
-            if r.status_code == 200:
-                data = r.json()
-                results = data.get('results', data) if isinstance(data, dict) else data
-                return jsonify({"results": results, "sin_deudas": None, "error_bcra": None}), 200
-            print(f"[cheques] HTTP {r.status_code} para {cuit}", flush=True)
-            return jsonify({"results": None, "sin_deudas": None, "error_bcra": f"HTTP {r.status_code}"}), 200
-        except requests.exceptions.ConnectionError as e:
-            print(f"[cheques] ConnectionError intento {intento+1} para {cuit}", flush=True)
-            if intento < 2:
-                time.sleep(3)
-                continue
-            return jsonify({"results": None, "sin_deudas": None, "error_bcra": "connection_error"}), 200
-        except Exception as e:
-            print(f"[cheques] Error {cuit}: {e}", flush=True)
-            return jsonify({"results": None, "sin_deudas": None, "error_bcra": str(e)}), 200
-    return jsonify({"results": None, "sin_deudas": None, "error_bcra": "timeout"}), 200
+    # Intentar primero via Worker, luego directo al BCRA como fallback
+    urls = [
+        BCRA_WORKER + "/deudas/" + cuit + "/cheques",
+        "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/" + cuit
+    ]
+    for url_idx, url in enumerate(urls):
+        via = "Worker" if url_idx == 0 else "BCRA directo"
+        for intento in range(2):
+            try:
+                kwargs = {"timeout": 15}
+                if url_idx == 1:
+                    kwargs["verify"] = False  # BCRA directo necesita esto
+                r = requests.get(url, **kwargs)
+                if r.status_code == 200:
+                    data = r.json()
+                    # Normalizar estructura
+                    results = data.get('results', data) if isinstance(data, dict) else data
+                    print(f"[cheques] OK via {via} para {cuit}", flush=True)
+                    return jsonify({"results": results, "sin_deudas": None, "error_bcra": None}), 200
+                print(f"[cheques] HTTP {r.status_code} via {via} para {cuit}", flush=True)
+                if r.status_code in [520, 521, 522, 523, 524]:
+                    break  # Cloudflare error — pasar al fallback directo
+            except requests.exceptions.ConnectionError as e:
+                print(f"[cheques] ConnectionError via {via} intento {intento+1} para {cuit}", flush=True)
+                if intento < 1:
+                    time.sleep(3)
+                    continue
+            except Exception as e:
+                print(f"[cheques] Error via {via} {cuit}: {e}", flush=True)
+                break
+    return jsonify({"results": None, "sin_deudas": None, "error_bcra": "sin_respuesta"}), 200
 
 @app.route("/deudas/<cuit>/historial")
 def get_historial(cuit):
-    url = BCRA_WORKER + "/deudas/" + cuit + "/historial"
-    for intento in range(3):
-        try:
-            r = requests.get(url, timeout=15)
-            if r.status_code == 200:
-                return jsonify(r.json()), 200
-            print(f"[historial] HTTP {r.status_code} para {cuit}", flush=True)
-            return jsonify({"results": None, "sin_deudas": None, "error_bcra": f"HTTP {r.status_code}"}), 200
-        except requests.exceptions.ConnectionError as e:
-            print(f"[historial] ConnectionError intento {intento+1} para {cuit}", flush=True)
-            if intento < 2:
-                time.sleep(3)
-                continue
-            return jsonify({"results": None, "sin_deudas": None, "error_bcra": "connection_error"}), 200
-        except Exception as e:
-            print(f"[historial] Error {cuit}: {e}", flush=True)
-            return jsonify({"results": None, "sin_deudas": None, "error_bcra": str(e)}), 200
-    return jsonify({"results": None, "sin_deudas": None, "error_bcra": "timeout"}), 200
+    urls = [
+        BCRA_WORKER + "/deudas/" + cuit + "/historial",
+        "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit
+    ]
+    for url_idx, url in enumerate(urls):
+        via = "Worker" if url_idx == 0 else "BCRA directo"
+        for intento in range(2):
+            try:
+                kwargs = {"timeout": 15}
+                if url_idx == 1:
+                    kwargs["verify"] = False
+                r = requests.get(url, **kwargs)
+                if r.status_code == 200:
+                    print(f"[historial] OK via {via} para {cuit}", flush=True)
+                    return jsonify(r.json()), 200
+                print(f"[historial] HTTP {r.status_code} via {via} para {cuit}", flush=True)
+                if r.status_code in [520, 521, 522, 523, 524]:
+                    break
+            except requests.exceptions.ConnectionError as e:
+                print(f"[historial] ConnectionError via {via} intento {intento+1} para {cuit}", flush=True)
+                if intento < 1:
+                    time.sleep(3)
+                    continue
+            except Exception as e:
+                print(f"[historial] Error via {via} {cuit}: {e}", flush=True)
+                break
+    return jsonify({"results": None, "sin_deudas": None, "error_bcra": "sin_respuesta"}), 200
 
 @app.route("/analizar", methods=["POST"])
 def analizar():
