@@ -1105,27 +1105,18 @@ async function procesarDSO() {
     // ── KPI saldo: suma directa del diccionario de saldos (sin pasar por todosClientes)
     var saldoTotalKPI = Object.values(saldosPorCliente).reduce(function(s, v) { return s + v; }, 0);
 
-    // ── DSO GLOBAL FIX DEFINITIVO ──
-    // Ventas = historial del servidor (todos los meses)
-    var ventasNetasTotal = (window.ventasHistoricas || []).reduce(function(s, v) {
-      return s + (parseFloat(v.total) || 0);
-    }, 0);
+    // ── DSO GLOBAL — MÉTODO ROLLING/BACKWARD ──
+    // Activo actual = solo archivo subido en esta sesión
+    var mSaldoR = mapearColumna(Object.keys(rowsSaldos[0]||{}), DSO_ALIASES.saldos.monto);
+    var mChequeR = mapearColumna(Object.keys(rowsCheques[0]||{}), DSO_ALIASES.cheques.monto);
+    var totalSaldoR = rowsSaldos.reduce(function(s, r) { return s + (parseMonto(r[mSaldoR]) || 0); }, 0);
+    var totalChequesR = rowsCheques.reduce(function(s, r) { return s + Math.abs(parseMonto(r[mChequeR]) || 0); }, 0);
+    var activoObjetivo = totalSaldoR + totalChequesR;
 
-    // Activo = SOLO el archivo subido en esta sesión (sin histórico)
-    var mSaldo = mapearColumna(Object.keys(rowsSaldos[0]||{}), DSO_ALIASES.saldos.monto);
-    var mCheque = mapearColumna(Object.keys(rowsCheques[0]||{}), DSO_ALIASES.cheques.monto);
-    var totalSaldo = rowsSaldos.reduce(function(s, r) {
-      return s + (parseMonto(r[mSaldo]) || 0);
-    }, 0);
-    var totalCheques = rowsCheques.reduce(function(s, r) {
-      return s + Math.abs(parseMonto(r[mCheque]) || 0);
-    }, 0);
-    var activoTotalDSO = totalSaldo + totalCheques;
-
-    // Días del período = desde primera venta hasta última fecha de saldo
-    var fechasVentasH = (window.ventasHistoricas || []).map(function(v) {
-      if (!v.fecha) return null;
-      var partes = v.fecha.toString().split('/');
+    // Ordenar ventas históricas de más nueva a más vieja
+    function parseFechaVenta(f) {
+      if (!f) return null;
+      var partes = f.toString().split('/');
       if (partes.length === 3) {
         var a = parseInt(partes[0]), b = parseInt(partes[1]), c = parseInt(partes[2]);
         var anio = c < 100 ? 2000 + c : c;
@@ -1133,41 +1124,59 @@ async function procesarDSO() {
         if (a > 12) return new Date(anio, b-1, a);
         return new Date(anio, b-1, a);
       }
-      return new Date(v.fecha);
-    }).filter(function(f){ return f && !isNaN(f); });
+      var d = new Date(f); return isNaN(d) ? null : d;
+    }
 
-    var fechaMin = fechasVentasH.length > 0 ? new Date(Math.min.apply(null, fechasVentasH)) : new Date();
-    var fechaMax = new Date(); // hoy como cierre
-    diasPeriodo = Math.max(30, Math.round((fechaMax - fechaMin) / (1000*60*60*24)));
+    var ventasOrdenadas = (window.ventasHistoricas || [])
+      .filter(function(v){ return v.fecha && v.total && parseFloat(v.total) > 0; })
+      .map(function(v){ return { fecha: parseFechaVenta(v.fecha), total: parseFloat(v.total) }; })
+      .filter(function(v){ return v.fecha && !isNaN(v.fecha); })
+      .sort(function(a, b){ return b.fecha - a.fecha; });
 
-    // DSO individual por cliente (para la tabla)
+    // Acumular ventas hacia atrás hasta cubrir el activo
+    var acumulado = 0;
+    var fechaInicio = null;
+    var fechaFin = null;
+    for (var vi = 0; vi < ventasOrdenadas.length; vi++) {
+      var vv = ventasOrdenadas[vi];
+      acumulado += vv.total;
+      if (!fechaFin) fechaFin = vv.fecha;
+      fechaInicio = vv.fecha;
+      if (acumulado >= activoObjetivo) break;
+    }
+
+    var dsoGlobal = 0;
+    if (fechaFin && fechaInicio) {
+      dsoGlobal = Math.ceil((fechaFin - fechaInicio) / (1000 * 60 * 60 * 24));
+      if (dsoGlobal === 0) dsoGlobal = 1;
+    }
+
+    // Para compatibilidad con el resto del código
+    var ventasNetasTotal = acumulado;
+    var activoTotalDSO = activoObjetivo;
+    var diasPeriodo = dsoGlobal || 90;
+
+    console.log('[DSO ROLLING]');
+    console.log('Activo objetivo:', activoObjetivo.toFixed(0));
+    console.log('Ventas acumuladas:', acumulado.toFixed(0));
+    console.log('Fecha inicio:', fechaInicio);
+    console.log('Fecha fin:', fechaFin);
+    console.log('DSO:', dsoGlobal);
+
+    // DSO individual por cliente
     dsoDatos = [];
     var todosClientesDSO = new Set(
       Object.keys(saldosPorCliente).concat(Object.keys(chequesPorCliente))
     );
     todosClientesDSO.forEach(function(contacto) {
       if (!contacto) return;
+      var saldo = (saldosPorCliente[contacto] || 0) + (chequesPorCliente[contacto] || 0);
       var ventas = ventasPorCliente[contacto] || 0;
-      var saldo = saldosPorCliente[contacto] || 0;
-      var cheques = chequesPorCliente[contacto] || 0;
-      var activo = saldo + cheques;
-      if (ventas > 0 && activo > 0) {
-        var dsoCliente = Math.round((activo / ventas) * diasPeriodo);
-        dsoDatos.push({nombre: contacto, saldo: activo, dso: dsoCliente});
+      if (saldo > 0 && ventas > 0) {
+        dsoDatos.push({nombre: contacto, saldo: saldo, dso: Math.round((saldo / ventas) * diasPeriodo)});
       }
     });
 
-    var dsoGlobal = (ventasNetasTotal > 0 && activoTotalDSO > 0)
-      ? Math.round((activoTotalDSO / ventasNetasTotal) * diasPeriodo)
-      : 0;
-
-    console.log('[DSO FIX]');
-    console.log('Ventas:', ventasNetasTotal.toFixed(0));
-    console.log('Saldo actual:', totalSaldo.toFixed(0));
-    console.log('Cheques actual:', totalCheques.toFixed(0));
-    console.log('Activo:', activoTotalDSO.toFixed(0));
-    console.log('Dias:', diasPeriodo);
-    console.log('DSO:', dsoGlobal);
 
     var estaCompleto = !!(dsoArchivos.ventas && dsoArchivos.saldos);
     dsoDatos = dsoDatos.filter(function(c){return c.dso > 0;}).sort(function(a,b){return b.dso-a.dso;});
