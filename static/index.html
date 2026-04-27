@@ -1107,12 +1107,10 @@ async function procesarDSO() {
 
     // ── DSO GLOBAL ROLLING/BACKWARD ──
 
-    // 1. Activo actual — solo archivos subidos en esta sesión
-    var mSaldoR = mapearColumna(Object.keys(rowsSaldos[0]||{}), DSO_ALIASES.saldos.monto);
-    var mChequeR = mapearColumna(Object.keys(rowsCheques[0]||{}), DSO_ALIASES.cheques.monto);
-    var totalSaldoR = rowsSaldos.reduce(function(s,r){ return s + (parseMonto(r[mSaldoR])||0); }, 0);
-    var totalChequesR = rowsCheques.reduce(function(s,r){ return s + Math.abs(parseMonto(r[mChequeR])||0); }, 0);
-    var activoObjetivo = totalSaldoR + totalChequesR;
+    // 1. Activo actual — usar saldosPorCliente y chequesPorCliente ya calculados
+    var totalSaldoR = Object.values(saldosPorCliente).reduce(function(s,v){ return s+v; }, 0);
+    var totalChequesR = Object.values(chequesPorCliente).reduce(function(s,v){ return s+v; }, 0);
+    var activoObjetivo = Math.abs(totalSaldoR) + Math.abs(totalChequesR);
 
     // 2. Fecha de corte = fecha más reciente del archivo de saldos
     var colFechaCorte = mapearColumna(Object.keys(rowsSaldos[0]||{}), ['Fecha de factura','fecha_factura','Fecha factura']);
