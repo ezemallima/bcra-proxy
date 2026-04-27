@@ -1166,15 +1166,28 @@ async function procesarDSO() {
       .filter(function(v){ return v.total>0 && v.fecha && !isNaN(v.fecha) && v.fecha<=fechaCorteDS; })
       .sort(function(a,b){ return b.fecha-a.fecha; });
 
-    // 4. Acumular hacia atrás hasta cubrir activo
+    // 4. Acumular hacia atrás hasta cubrir activo — con interpolación del último mes
     var acumRolling=0, fechaInicioR=null, fechaFinR=fechaCorteDS;
+    var ventasAntesDelUltimo=0;
     for (var ri=0; ri<ventasRolling.length; ri++) {
-      acumRolling += ventasRolling[ri].total;
+      var ventaActual = ventasRolling[ri].total;
+      if (acumRolling + ventaActual >= activoObjetivo) {
+        // Cuánto del mes anterior necesitamos realmente
+        var fraccionNecesaria = (activoObjetivo - acumRolling) / ventaActual;
+        // Días del período de esa venta (distancia a la siguiente fecha)
+        var fechaSig = ri > 0 ? ventasRolling[ri-1].fecha : fechaFinR;
+        var diasMes = Math.ceil((fechaSig - ventasRolling[ri].fecha) / (1000*60*60*24)) || 30;
+        var diasParciales = Math.ceil(diasMes * fraccionNecesaria);
+        // Fecha de inicio ajustada proporcionalmente
+        fechaInicioR = new Date(fechaSig.getTime() - diasParciales * 24*60*60*1000);
+        acumRolling += ventaActual;
+        break;
+      }
+      acumRolling += ventaActual;
       fechaInicioR = ventasRolling[ri].fecha;
-      if (acumRolling >= activoObjetivo) break;
     }
 
-    // 5. DSO = días entre primera venta usada y fecha de corte
+    // 5. DSO = días reales interpolados
     var dsoGlobal = 1;
     if (fechaInicioR && fechaFinR) {
       dsoGlobal = Math.ceil((fechaFinR - fechaInicioR) / (1000*60*60*24));
