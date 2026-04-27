@@ -147,6 +147,10 @@ def consultar_bcra(cuit, reintentos=3):
                 print(f"[bcra] {cuit} consultando via {via}...", flush=True)
                 r = requests.get(ep_url, timeout=15, verify=ep_verify)
                 if r.status_code == 200:
+                    text = r.text.strip()
+                    if not text or len(text) < 10:
+                        print(f"[bcra] Respuesta vacía via {via_b} para {cuit} — usando fallback", flush=True)
+                        break
                     data = r.json()
                     if data.get('error'):
                         print(f"[bcra] Worker error para {cuit}: {data['error']}", flush=True)
@@ -499,14 +503,17 @@ def get_cheques(cuit):
                     kwargs["verify"] = False  # BCRA directo necesita esto
                 r = requests.get(url, **kwargs)
                 if r.status_code == 200:
+                    text = r.text.strip()
+                    if not text or len(text) < 10:
+                        print(f"[cheques] Respuesta vacía via {via} para {cuit} — fallback", flush=True)
+                        break
                     data = r.json()
-                    # Normalizar estructura
                     results = data.get('results', data) if isinstance(data, dict) else data
                     print(f"[cheques] OK via {via} para {cuit}", flush=True)
                     return jsonify({"results": results, "sin_deudas": None, "error_bcra": None}), 200
                 print(f"[cheques] HTTP {r.status_code} via {via} para {cuit}", flush=True)
                 if r.status_code in [520, 521, 522, 523, 524]:
-                    break  # Cloudflare error — pasar al fallback directo
+                    break
             except requests.exceptions.ConnectionError as e:
                 print(f"[cheques] ConnectionError via {via} intento {intento+1} para {cuit}", flush=True)
                 if intento < 1:
@@ -532,6 +539,10 @@ def get_historial(cuit):
                     kwargs["verify"] = False
                 r = requests.get(url, **kwargs)
                 if r.status_code == 200:
+                    text = r.text.strip()
+                    if not text or len(text) < 10:
+                        print(f"[historial] Respuesta vacía via {via} para {cuit} — fallback", flush=True)
+                        break
                     print(f"[historial] OK via {via} para {cuit}", flush=True)
                     return jsonify(r.json()), 200
                 print(f"[historial] HTTP {r.status_code} via {via} para {cuit}", flush=True)
