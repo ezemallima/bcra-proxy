@@ -1104,15 +1104,14 @@ async function procesarDSO() {
     // ── KPI saldo: suma directa del diccionario de saldos (sin pasar por todosClientes)
     var saldoTotalKPI = Object.values(saldosPorCliente).reduce(function(s, v) { return s + v; }, 0);
 
-    // ── DSO GLOBAL ROLLING/BACKWARD ──
-
-    // 1. Activo = total del servidor (limpio, sin duplicados por nombres)
-    // Activo = saldos + cheques del servidor (fecha de corte = hoy, no importa fecha del cheque)
+    // ── DSO GLOBAL — FÓRMULA CLÁSICA ──
+    // Activo = saldos + cheques del servidor (último subido)
     var activoSaldoServidor = 0;
     var activoChequeServidor = 0;
+    var dActS = {saldos:[]};
     try {
       var rActS = await fetch('/dso-saldos?modo=actual');
-      var dActS = await rActS.json();
+      dActS = await rActS.json();
       activoSaldoServidor = (dActS.saldos||[]).reduce(function(s,v){ return s+(v.saldo||0); }, 0);
     } catch(e) {}
     try {
@@ -1121,96 +1120,47 @@ async function procesarDSO() {
       activoChequeServidor = (dActC.cheques||[]).reduce(function(s,v){ return s+Math.abs(v.total||0); }, 0);
     } catch(e) {}
     var activoObjetivo = activoSaldoServidor + activoChequeServidor;
-    console.log('[DSO FINAL] Activo servidor: saldos=$' + (activoSaldoServidor/1000000).toFixed(0) + 'M cheques=$' + (activoChequeServidor/1000000).toFixed(0) + 'M total=$' + (activoObjetivo/1000000).toFixed(0) + 'M');
 
-    // Fecha de corte = fecha de factura más reciente del reporte de saldos
-    // SOLO usa saldos — los cheques tienen fecha de pago futura que no sirve como corte
+    // Ventas = historial del servidor (todos los meses, solo positivas)
+    var ventasBrutas = (window.ventasHistoricas||[]).reduce(function(s,v){
+      var t = parseFloat(v.total)||0;
+      return s + (t > 0 ? t : 0);
+    }, 0);
+
+    // Fecha de corte = fecha más reciente de saldos
     var fechaCorteDS = new Date();
+    var fechaMinVentas = new Date();
     try {
       var fechasSaldo = (dActS.saldos||[]).map(function(s){
         if (!s.fecha_factura) return null;
-        var p = s.fecha_factura.toString().split('/');
-        if (p.length===3) {
-          var a=parseInt(p[0]),b=parseInt(p[1]),c=parseInt(p[2]);
-          var anio=c<100?2000+c:c;
-          // Ignorar fechas futuras (año > actual)
-          if (anio > 2026) return null;
-          if (b>12) return new Date(anio,a-1,b);
-          if (a>12) return new Date(anio,b-1,a);
-          return new Date(anio,b-1,a);
-        }
-        return null;
-      }).filter(function(f){ return f && !isNaN(f) && f <= new Date(); });
+        var d = new Date(s.fecha_factura);
+        return isNaN(d) ? null : d;
+      }).filter(Boolean);
       if (fechasSaldo.length) {
         fechaCorteDS = new Date(Math.max.apply(null, fechasSaldo));
-        console.log('[DSO] Fecha de corte:', fechaCorteDS.toISOString().slice(0,10));
       }
     } catch(e) {}
 
-    // 3. Ventas ordenadas de más nueva a más vieja hasta fecha de corte
-    function parseFVenta(f) {
-      if (!f) return null;
-      var p = f.toString().split('/');
-      if (p.length===3) {
-        var a=parseInt(p[0]),b=parseInt(p[1]),c=parseInt(p[2]);
-        var anio=c<100?2000+c:c;
-        if (b>12) return new Date(anio,a-1,b);
-        if (a>12) return new Date(anio,b-1,a);
-        return new Date(anio,b-1,a);
-      }
-      var d=new Date(f); return isNaN(d)?null:d;
+    // Fecha mínima de ventas históricas
+    var fechasVentas = (window.ventasHistoricas||[]).map(function(v){
+      return v.fecha ? new Date(v.fecha) : null;
+    }).filter(function(f){ return f && !isNaN(f); });
+    if (fechasVentas.length) {
+      fechaMinVentas = new Date(Math.min.apply(null, fechasVentas));
     }
 
-    // Agrupar ventas por día (netas: positivas - notas de crédito)
-    var ventasPorDia = {};
-    (window.ventasHistoricas||[]).forEach(function(v){
-      var f = parseFVenta(v.fecha);
-      var t = parseFloat(v.total)||0;
-      if (!f || isNaN(f) || f > fechaCorteDS) return;
-      var key = f.toISOString().slice(0,10);
-      ventasPorDia[key] = (ventasPorDia[key]||0) + t;
-    });
-    var ventasRolling = Object.keys(ventasPorDia)
-      .map(function(k){ return {total: ventasPorDia[k], fecha: new Date(k+'T12:00:00')}; })
-      .filter(function(v){ return v.total > 0; })
-      .sort(function(a,b){ return b.fecha-a.fecha; });
+    // Días del período
+    var diasPeriodo = Math.max(1, Math.ceil((fechaCorteDS - fechaMinVentas) / (1000*60*60*24)));
 
-    // 4. Acumular hacia atrás hasta cubrir activo — con interpolación del último mes
-    var acumRolling=0, fechaInicioR=null, fechaFinR=fechaCorteDS;
-    var ventasAntesDelUltimo=0;
-    for (var ri=0; ri<ventasRolling.length; ri++) {
-      var ventaActual = ventasRolling[ri].total;
-      if (acumRolling + ventaActual >= activoObjetivo) {
-        // Cuánto del mes anterior necesitamos realmente
-        var fraccionNecesaria = (activoObjetivo - acumRolling) / ventaActual;
-        // Días del período de esa venta (distancia a la siguiente fecha)
-        var fechaSig = ri > 0 ? ventasRolling[ri-1].fecha : fechaFinR;
-        var diasMes = Math.ceil((fechaSig - ventasRolling[ri].fecha) / (1000*60*60*24)) || 30;
-        var diasParciales = Math.ceil(diasMes * fraccionNecesaria);
-        // Fecha de inicio ajustada proporcionalmente
-        fechaInicioR = new Date(fechaSig.getTime() - diasParciales * 24*60*60*1000);
-        acumRolling += ventaActual;
-        break;
-      }
-      acumRolling += ventaActual;
-      fechaInicioR = ventasRolling[ri].fecha;
-    }
+    // DSO clásico = (Activo / Ventas brutas) × días
+    var dsoGlobal = ventasBrutas > 0
+      ? Math.round((activoObjetivo / ventasBrutas) * diasPeriodo)
+      : 0;
 
-    // 5. DSO = días reales interpolados
-    var dsoGlobal = 1;
-    if (fechaInicioR && fechaFinR) {
-      dsoGlobal = Math.ceil((fechaFinR - fechaInicioR) / (1000*60*60*24));
-    }
-
-    var ventasNetasTotal = acumRolling;
+    var ventasNetasTotal = ventasBrutas;
     var activoTotalDSO = activoObjetivo;
-    var diasPeriodo = dsoGlobal || 90;
 
-    console.log('[DSO FINAL] corte=' + fechaCorteDS.toISOString().slice(0,10) +
-      ' activo=' + activoObjetivo.toFixed(0) +
-      ' ventas_acum=' + acumRolling.toFixed(0) +
-      ' inicio=' + (fechaInicioR ? fechaInicioR.toISOString().slice(0,10) : 'null') +
-      ' DSO=' + dsoGlobal);
+    console.log('[DSO CLASICO] activo=$' + (activoObjetivo/1e6).toFixed(0) + 'M ventas=$' + (ventasBrutas/1e6).toFixed(0) + 'M dias=' + diasPeriodo + ' DSO=' + dsoGlobal);
 
     // DSO individual por cliente
     dsoDatos = [];
