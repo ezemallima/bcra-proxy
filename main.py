@@ -230,6 +230,120 @@ def analizar_bodegas_server(cuit, nombre, mensajes):
     except Exception:
         return False, ""
 
+def calcular_score_servidor(cuit, bcra_data, en_mora=None):
+    """Calcula el score Vende Seguro en el servidor con los datos disponibles"""
+    puntos = 0
+
+    # 1. Situación BCRA actual
+    periodos = (bcra_data.get('results') or {}).get('periodos') or []
+    max_sit = 1
+    nro_entidades = 0
+    monto_total_m = 0
+    if periodos:
+        entidades = periodos[0].get('entidades', [])
+        nro_entidades = len(entidades)
+        if entidades:
+            max_sit = max((e.get('situacion', 1) or 1) for e in entidades)
+            monto_total_m = sum(e.get('monto', 0) or 0 for e in entidades) / 1000
+    elif bcra_data.get('sin_deudas'):
+        max_sit = 1
+
+    pts_sit = {1: 400, 2: 200, 3: 50}.get(max_sit, 0)
+    puntos += pts_sit
+
+    # 2. Historial 24m — consultar
+    pts_hist = 75  # neutral sin datos
+    try:
+        urls_h = [BCRA_WORKER + "/deudas/" + cuit + "/historial",
+                  BCRA_WORKER_2 + "/deudas/" + cuit + "/historial"]
+        for url_h in urls_h:
+            try:
+                r_h = requests.get(url_h, timeout=10)
+                if r_h.status_code == 200 and len(r_h.text.strip()) > 10:
+                    hist = r_h.json()
+                    periodos_h = (hist.get('results') or {}).get('periodos') or []
+                    meses_irreg = sum(1 for p in periodos_h
+                        if any((e.get('situacion') or 1) > 1 for e in p.get('entidades', [])))
+                    if meses_irreg == 0: pts_hist = 150
+                    elif meses_irreg <= 2: pts_hist = 75
+                    else: pts_hist = 0
+                    break
+            except: continue
+    except: pass
+    puntos += pts_hist
+
+    # 3. Cheques rechazados
+    pts_cheq = 75  # neutral sin datos
+    try:
+        urls_c = [BCRA_WORKER + "/deudas/" + cuit + "/cheques",
+                  BCRA_WORKER_2 + "/deudas/" + cuit + "/cheques"]
+        for url_c in urls_c:
+            try:
+                r_c = requests.get(url_c, timeout=10)
+                if r_c.status_code == 200 and len(r_c.text.strip()) > 10:
+                    ch = r_c.json()
+                    res_c = ch.get('results') or {}
+                    causales = res_c.get('causales') or [] if isinstance(res_c, dict) else []
+                    detalles = []
+                    for causal in causales:
+                        for ent in causal.get('entidades', []):
+                            detalles.extend(ent.get('detalle', []))
+                    total_ch = len(detalles)
+                    activos_ch = sum(1 for d in detalles if not d.get('fechaPago') or d.get('estadoMulta') == 'IMPAGA')
+                    if total_ch == 0: pts_cheq = 150
+                    elif activos_ch == 0: pts_cheq = 75
+                    else: pts_cheq = 0
+                    break
+            except: continue
+    except: pass
+    puntos += pts_cheq
+
+    # 4. Mora Piattelli
+    if en_mora is None:
+        try:
+            moras_file = 'moras.json'
+            if os.path.exists(os.path.join(DATA_DIR, 'moras.json')):
+                moras_file = os.path.join(DATA_DIR, 'moras.json')
+            with open(moras_file, 'r', encoding='utf-8') as mf:
+                moras_d = json.load(mf)
+            en_mora = cuit.replace('-', '') in moras_d
+        except:
+            en_mora = False
+
+    pts_mora = 0 if en_mora else 100
+    puntos += pts_mora
+
+    # 5. DSO individual — neutral sin datos
+    puntos += 50
+
+    # 6. Red de bodegas — neutral
+    puntos += 30
+
+    # 7. Concentración deuda
+    if nro_entidades == 0 or bcra_data.get('sin_deudas'):
+        pts_conc = 39
+    elif nro_entidades == 1 and monto_total_m < 50: pts_conc = 35
+    elif nro_entidades <= 2 and monto_total_m < 100: pts_conc = 28
+    elif nro_entidades <= 3 and monto_total_m < 500: pts_conc = 20
+    elif nro_entidades <= 5 and monto_total_m < 2000: pts_conc = 10
+    else: pts_conc = 0
+    puntos += pts_conc
+
+    # Techos duros
+    if en_mora: puntos = min(puntos, 300)
+    if max_sit >= 4: puntos = min(puntos, 250)
+    elif max_sit == 3: puntos = min(puntos, 400)
+
+    score = max(1, min(999, round(puntos)))
+    if score >= 700: rango, color, emoji = 'Excelente', '#16a34a', '🟢'
+    elif score >= 400: rango, color, emoji = 'Bueno', '#ca8a04', '🟡'
+    elif score >= 200: rango, color, emoji = 'Revisar', '#ea580c', '🟠'
+    elif score >= 100: rango, color, emoji = 'Alto riesgo', '#dc2626', '🔴'
+    else: rango, color, emoji = 'Rechazar', '#7f1d1d', '⛔'
+
+    return {"score": score, "rango": rango, "color": color, "emoji": emoji}
+
+
 def ejecutar_verificacion(cartera_data):
     global verificacion_estado
     verificacion_estado["corriendo"] = True
@@ -268,7 +382,7 @@ def ejecutar_verificacion(cartera_data):
         cliente_actualizado = dict(cliente)
 
         try:
-            # Consultar BCRA
+            # Consultar BCRA principal
             bcra_data, error = consultar_bcra_cached(cuit)
             if bcra_data.get('results') is not None:
                 entidades = []
@@ -283,13 +397,19 @@ def ejecutar_verificacion(cartera_data):
                 cliente_actualizado['ultimaVerif'] = time.strftime('%d/%m/%Y')
 
                 if max_sit > sit_anterior or max_sit >= 3:
+                    # Calcular score COMPLETO
+                    score_data = calcular_score_servidor(cuit, bcra_data, en_mora=None)
                     nuevas_alertas.append({
                         "nombre": nombre,
                         "cuit": cuit,
                         "sitAnterior": sit_anterior,
                         "sitActual": max_sit,
                         "fecha": time.strftime('%d/%m/%Y'),
-                        "tipo": "bcra"
+                        "tipo": "bcra",
+                        "scoreCompleto": score_data["score"],
+                        "scoreRango": score_data["rango"],
+                        "scoreColor": score_data["color"],
+                        "scoreEmoji": score_data["emoji"]
                     })
         except Exception:
             pass
