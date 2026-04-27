@@ -1674,8 +1674,6 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
   var moraLabel = 'Sin datos';
   if (mora) {
     pMora = 0; moraLabel = 'En mora';
-    // Cliente en mora: techo duro de 400 puntos totales
-    puntos = Math.min(puntos, 200);
   } else if (morasIndex && Object.keys(morasIndex).length > 0) {
     pMora = 100; moraLabel = 'Sin mora registrada';
   }
@@ -1729,6 +1727,19 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
   }
   puntos += pAFIP;
   detalle.push({ label:'Estado AFIP', valor:afipLabel, puntos:pAFIP, max:39 });
+
+  // Techo duro por condiciones críticas
+  if (mora) {
+    // En mora con Piattelli: máximo 300
+    puntos = Math.min(puntos, 300);
+  }
+  if (maxSit >= 4) {
+    // Situación 4+ en BCRA: máximo 250
+    puntos = Math.min(puntos, 250);
+  } else if (maxSit === 3) {
+    // Situación 3: máximo 400
+    puntos = Math.min(puntos, 400);
+  }
 
   // TOTAL (1-999)
   var scoreTotal = Math.min(999, Math.max(1, Math.round(puntos)));
