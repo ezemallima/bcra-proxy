@@ -1064,19 +1064,8 @@ async function procesarDSO() {
       var hoy120 = new Date();
       var corte120 = new Date(hoy120.getTime() - 120 * 24 * 60 * 60 * 1000);
       var colFechaS = mapearColumna(hS, ['Fecha de factura','fecha_factura','fecha']);
-      // Calcular total directo de saldos sin agrupar
-      window._saldoTotalDirecto = 0;
-      rowsSaldos.forEach(function(r) {
-        var s = parseMonto(r[mS]);
-        if (s > 0) window._saldoTotalDirecto += s;
-      });
-      // Agregar cheques
-      if (rowsCheques.length) {
-        var hC0 = Object.keys(rowsCheques[0]);
-        var mC0 = mapearColumna(hC0, DSO_ALIASES.cheques.monto);
-        if (mC0) rowsCheques.forEach(function(r){ var v = Math.abs(parseMonto(r[mC0])||0); window._saldoTotalDirecto += v; });
-      }
-      console.log('[DSO] Activo directo calculado:', window._saldoTotalDirecto.toFixed(0));
+      // Activo = suma directa del servidor (ya limpio y guardado)
+      window._saldoTotalDirecto = 0; // se carga async abajo
       rowsSaldos.forEach(function(r) {
         var contacto = normalizarNombre(r[cS] || '');
         var saldo = parseMonto(r[mS]);
@@ -1117,78 +1106,83 @@ async function procesarDSO() {
 
     // ── DSO GLOBAL ROLLING/BACKWARD ──
 
-    // 1. Activo actual — suma directa de filas del archivo (sin agrupar)
-    var activoObjetivo = 0;
-    if (window._saldoTotalDirecto) {
-      activoObjetivo = window._saldoTotalDirecto;
-    } else {
-      // Fallback: sumar saldosPorCliente
-      activoObjetivo = Object.values(saldosPorCliente).reduce(function(s,v){ return s+(v>0?v:0); }, 0)
-                     + Object.values(chequesPorCliente).reduce(function(s,v){ return s+(v>0?v:0); }, 0);
-    }
+    // 1. Activo = total del servidor (limpio, sin duplicados por nombres)
+    var activoSaldoServidor = 0;
+    var activoChequeServidor = 0;
+    try {
+      var rActS = await fetch('/dso-saldos');
+      var dActS = await rActS.json();
+      activoSaldoServidor = (dActS.saldos||[]).reduce(function(s,v){ return s+(v.saldo||0); }, 0);
+    } catch(e) {}
+    try {
+      var rActC = await fetch('/dso-cheques');
+      var dActC = await rActC.json();
+      activoChequeServidor = (dActC.cheques||[]).reduce(function(s,v){ return s+(v.total||0); }, 0);
+    } catch(e) {}
+    var activoObjetivo = activoSaldoServidor + activoChequeServidor;
+    console.log('[DSO] Activo servidor: saldos=' + activoSaldoServidor.toFixed(0) + ' cheques=' + activoChequeServidor.toFixed(0) + ' total=' + activoObjetivo.toFixed(0));
 
-    // 2. Fecha de corte = fecha más reciente del archivo de saldos
-    var colFechaCorte = mapearColumna(Object.keys(rowsSaldos[0]||{}), ['Fecha de factura','fecha_factura','Fecha factura']);
-    var fechasValidasCorte = rowsSaldos.map(function(r){
-      var f = colFechaCorte ? r[colFechaCorte] : null;
-      if (!f) return null;
-      var d = parseFecha(f); return (d && !isNaN(d)) ? d : null;
-    }).filter(Boolean);
-    var fechaCorte = fechasValidasCorte.length
-      ? new Date(Math.max.apply(null, fechasValidasCorte))
-      : new Date();
+    // 2. Fecha de corte = fecha de factura más reciente del servidor
+    var fechaCorteDS = new Date();
+    try {
+      var dActS2 = dActS || {saldos:[]};
+      var fechasS = (dActS2.saldos||[]).map(function(s){
+        if (!s.fecha_factura) return null;
+        var p = s.fecha_factura.toString().split('/');
+        if (p.length===3) {
+          var a=parseInt(p[0]),b=parseInt(p[1]),c=parseInt(p[2]);
+          var anio=c<100?2000+c:c;
+          if (b>12) return new Date(anio,a-1,b);
+          if (a>12) return new Date(anio,b-1,a);
+          return new Date(anio,b-1,a);
+        }
+        return new Date(s.fecha_factura);
+      }).filter(function(f){ return f && !isNaN(f); });
+      if (fechasS.length) fechaCorteDS = new Date(Math.max.apply(null, fechasS));
+    } catch(e) {}
 
-    // 3. Preparar ventas históricas hasta la fecha de corte
-    function parseFechaVenta(f) {
+    // 3. Ventas ordenadas de más nueva a más vieja hasta fecha de corte
+    function parseFVenta(f) {
       if (!f) return null;
-      var s = f.toString();
-      // Formato YYYY-MM-DD
-      if (s.match(/^\d{4}-\d{2}-\d{2}/)) return new Date(s.slice(0,10));
-      // Formato DD/MM/YYYY o M/DD/YY
-      var p = s.split('/');
-      if (p.length === 3) {
-        var a = parseInt(p[0]), b = parseInt(p[1]), c = parseInt(p[2]);
-        var anio = c < 100 ? 2000+c : c;
-        if (b > 12) return new Date(anio, a-1, b);
-        if (a > 12) return new Date(anio, b-1, a);
-        return new Date(anio, b-1, a);
+      var p = f.toString().split('/');
+      if (p.length===3) {
+        var a=parseInt(p[0]),b=parseInt(p[1]),c=parseInt(p[2]);
+        var anio=c<100?2000+c:c;
+        if (b>12) return new Date(anio,a-1,b);
+        if (a>12) return new Date(anio,b-1,a);
+        return new Date(anio,b-1,a);
       }
-      var d = new Date(s); return isNaN(d) ? null : d;
+      var d=new Date(f); return isNaN(d)?null:d;
     }
 
-    var ventasOrdenadas = (window.ventasHistoricas || [])
-      .map(function(v){ return { total: parseFloat(v.total)||0, fechaObj: parseFechaVenta(v.fecha) }; })
-      .filter(function(v){ return v.total > 0 && v.fechaObj && !isNaN(v.fechaObj) && v.fechaObj <= fechaCorte; })
-      .sort(function(a,b){ return b.fechaObj - a.fechaObj; });
+    var ventasRolling = (window.ventasHistoricas||[])
+      .map(function(v){ return {total:parseFloat(v.total)||0, fecha:parseFVenta(v.fecha)}; })
+      .filter(function(v){ return v.total>0 && v.fecha && !isNaN(v.fecha) && v.fecha<=fechaCorteDS; })
+      .sort(function(a,b){ return b.fecha-a.fecha; });
 
-    // 4. Acumular hacia atrás hasta cubrir el activo
-    var acumulado = 0;
-    var fechaInicio = null;
-    var fechaFin = fechaCorte;
-    for (var vi = 0; vi < ventasOrdenadas.length; vi++) {
-      acumulado += ventasOrdenadas[vi].total;
-      fechaInicio = ventasOrdenadas[vi].fechaObj;
-      if (acumulado >= activoObjetivo) break;
+    // 4. Acumular hacia atrás hasta cubrir activo
+    var acumRolling=0, fechaInicioR=null, fechaFinR=fechaCorteDS;
+    for (var ri=0; ri<ventasRolling.length; ri++) {
+      acumRolling += ventasRolling[ri].total;
+      fechaInicioR = ventasRolling[ri].fecha;
+      if (acumRolling >= activoObjetivo) break;
     }
 
-    // 5. Calcular DSO
-    var dsoGlobal = 0;
-    if (fechaInicio && fechaFin) {
-      dsoGlobal = Math.ceil((fechaFin - fechaInicio) / (1000*60*60*24));
+    // 5. DSO = días entre primera venta usada y fecha de corte
+    var dsoGlobal = 1;
+    if (fechaInicioR && fechaFinR) {
+      dsoGlobal = Math.ceil((fechaFinR - fechaInicioR) / (1000*60*60*24));
     }
 
-    // Para compatibilidad
-    var ventasNetasTotal = acumulado;
+    var ventasNetasTotal = acumRolling;
     var activoTotalDSO = activoObjetivo;
     var diasPeriodo = dsoGlobal || 90;
 
-    console.log('[DSO FINAL]');
-    console.log('Fecha corte:', fechaCorte.toISOString().slice(0,10));
-    console.log('Activo objetivo:', activoObjetivo.toFixed(0));
-    console.log('Ventas acumuladas:', acumulado.toFixed(0));
-    console.log('Fecha inicio:', fechaInicio ? fechaInicio.toISOString().slice(0,10) : 'null');
-    console.log('Fecha fin:', fechaFin ? fechaFin.toISOString().slice(0,10) : 'null');
-    console.log('DSO días:', dsoGlobal);
+    console.log('[DSO FINAL] corte=' + fechaCorteDS.toISOString().slice(0,10) +
+      ' activo=' + activoObjetivo.toFixed(0) +
+      ' ventas_acum=' + acumRolling.toFixed(0) +
+      ' inicio=' + (fechaInicioR ? fechaInicioR.toISOString().slice(0,10) : 'null') +
+      ' DSO=' + dsoGlobal);
 
     // DSO individual por cliente
     dsoDatos = [];
