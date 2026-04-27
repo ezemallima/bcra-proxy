@@ -1003,7 +1003,7 @@ async function procesarDSO() {
     // Primero cargar del historial del servidor (ya guardado)
     if (window.ventasHistoricas && window.ventasHistoricas.length > 0) {
       window.ventasHistoricas.forEach(function(v) {
-        var contacto = (v.cliente || '').trim();
+        var contacto = normalizarNombre(v.cliente || '');
         var total = parseFloat(v.total) || 0;
         if (!contacto || total === 0) return;
         ventasPorCliente[contacto] = (ventasPorCliente[contacto] || 0) + total;
@@ -1021,14 +1021,11 @@ async function procesarDSO() {
       if (!cV) throw new Error('Archivo de ventas: no se encontró columna de cliente. Columnas: ' + hV.join(', '));
       if (!mV) throw new Error('Archivo de ventas: no se encontró columna de monto. Columnas: ' + hV.join(', '));
       rowsVentas.forEach(function(r) {
-        var contacto = String(r[cV] || '').trim();
+        var contacto = normalizarNombre(r[cV] || '');
         var total = parseMonto(r[mV]);
         if (!contacto || total === 0) return;
-        // Solo agregar si no está ya en el histórico para evitar duplicados
-        if (!window.ventasHistoricas || !window.ventasHistoricas.some(function(v){ return v.cliente === contacto && String(v.total) === String(total); })) {
-          ventasPorCliente[contacto] = (ventasPorCliente[contacto] || 0) + total;
-          if (fV && total > 0) { var d = parseFecha(r[fV]); if (d) fechas.push(d); }
-        }
+        ventasPorCliente[contacto] = (ventasPorCliente[contacto] || 0) + total;
+        if (fV && total > 0) { var d = parseFecha(r[fV]); if (d) fechas.push(d); }
       });
     }
 
@@ -1067,8 +1064,21 @@ async function procesarDSO() {
       var hoy120 = new Date();
       var corte120 = new Date(hoy120.getTime() - 120 * 24 * 60 * 60 * 1000);
       var colFechaS = mapearColumna(hS, ['Fecha de factura','fecha_factura','fecha']);
+      // Calcular total directo de saldos sin agrupar
+      window._saldoTotalDirecto = 0;
       rowsSaldos.forEach(function(r) {
-        var contacto = String(r[cS] || '').trim();
+        var s = parseMonto(r[mS]);
+        if (s > 0) window._saldoTotalDirecto += s;
+      });
+      // Agregar cheques
+      if (rowsCheques.length) {
+        var hC0 = Object.keys(rowsCheques[0]);
+        var mC0 = mapearColumna(hC0, DSO_ALIASES.cheques.monto);
+        if (mC0) rowsCheques.forEach(function(r){ var v = Math.abs(parseMonto(r[mC0])||0); window._saldoTotalDirecto += v; });
+      }
+      console.log('[DSO] Activo directo calculado:', window._saldoTotalDirecto.toFixed(0));
+      rowsSaldos.forEach(function(r) {
+        var contacto = normalizarNombre(r[cS] || '');
         var saldo = parseMonto(r[mS]);
         if (!contacto || saldo === 0) return;
         if (colFechaS && r[colFechaS]) {
@@ -1088,7 +1098,7 @@ async function procesarDSO() {
       if (!cC) throw new Error('Archivo de cheques: no se encontró columna de cliente. Columnas: ' + hC.join(', '));
       if (!mC) throw new Error('Archivo de cheques: no se encontró columna de monto. Columnas: ' + hC.join(', '));
       rowsCheques.forEach(function(r) {
-        var contacto = String(r[cC] || '').trim();
+        var contacto = normalizarNombre(r[cC] || '');
         var importe = Math.abs(parseMonto(r[mC]));
         if (!contacto || importe === 0) return;
         chequesPorCliente[contacto] = (chequesPorCliente[contacto] || 0) + importe;
@@ -1107,10 +1117,15 @@ async function procesarDSO() {
 
     // ── DSO GLOBAL ROLLING/BACKWARD ──
 
-    // 1. Activo actual — usar saldosPorCliente y chequesPorCliente ya calculados
-    var totalSaldoR = Object.values(saldosPorCliente).reduce(function(s,v){ return s+v; }, 0);
-    var totalChequesR = Object.values(chequesPorCliente).reduce(function(s,v){ return s+v; }, 0);
-    var activoObjetivo = Math.abs(totalSaldoR) + Math.abs(totalChequesR);
+    // 1. Activo actual — suma directa de filas del archivo (sin agrupar)
+    var activoObjetivo = 0;
+    if (window._saldoTotalDirecto) {
+      activoObjetivo = window._saldoTotalDirecto;
+    } else {
+      // Fallback: sumar saldosPorCliente
+      activoObjetivo = Object.values(saldosPorCliente).reduce(function(s,v){ return s+(v>0?v:0); }, 0)
+                     + Object.values(chequesPorCliente).reduce(function(s,v){ return s+(v>0?v:0); }, 0);
+    }
 
     // 2. Fecha de corte = fecha más reciente del archivo de saldos
     var colFechaCorte = mapearColumna(Object.keys(rowsSaldos[0]||{}), ['Fecha de factura','fecha_factura','Fecha factura']);
@@ -1803,6 +1818,32 @@ function renderVendeScore(scoreObj) {
   '</div>';
 }
 
+
+// Normalizar nombre para comparación — ignora puntuación, tildes, mayúsculas
+function normalizarNombre(n) {
+  if (!n) return '';
+  return n.toString()
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '') // quitar tildes
+    .replace(/[^a-z0-9 ]/g, ' ') // quitar puntuación
+    .replace(/(sa|srl|sas|sl|inc|spa|scrl|ltda|coop|sa i|s\.a|s\.r\.l)/g, '') // quitar formas jurídicas
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Comparar dos nombres normalizados — true si son el mismo cliente
+function mismoCliente(a, b) {
+  var na = normalizarNombre(a);
+  var nb = normalizarNombre(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  // Verificar palabras en común (mínimo 2 palabras de 4+ letras)
+  var pa = na.split(' ').filter(function(p){ return p.length > 3; });
+  var pb = nb.split(' ').filter(function(p){ return p.length > 3; });
+  if (!pa.length || !pb.length) return false;
+  var hits = pa.filter(function(p){ return pb.indexOf(p) !== -1; }).length;
+  return hits >= Math.min(2, pa.length, pb.length);
+}
 
 async function init() {
   checkProxy();
