@@ -1111,12 +1111,12 @@ async function procesarDSO() {
     var activoSaldoServidor = 0;
     var activoChequeServidor = 0;
     try {
-      var rActS = await fetch('/dso-saldos');
+      var rActS = await fetch('/dso-saldos?modo=actual');
       var dActS = await rActS.json();
       activoSaldoServidor = (dActS.saldos||[]).reduce(function(s,v){ return s+(v.saldo||0); }, 0);
     } catch(e) {}
     try {
-      var rActC = await fetch('/dso-cheques');
+      var rActC = await fetch('/dso-cheques?modo=actual');
       var dActC = await rActC.json();
       activoChequeServidor = (dActC.cheques||[]).reduce(function(s,v){ return s+Math.abs(v.total||0); }, 0);
     } catch(e) {}
@@ -1124,25 +1124,26 @@ async function procesarDSO() {
     console.log('[DSO FINAL] Activo servidor: saldos=$' + (activoSaldoServidor/1000000).toFixed(0) + 'M cheques=$' + (activoChequeServidor/1000000).toFixed(0) + 'M total=$' + (activoObjetivo/1000000).toFixed(0) + 'M');
 
     // Fecha de corte = fecha de factura más reciente del reporte de saldos
+    // SOLO usa saldos — los cheques tienen fecha de pago futura que no sirve como corte
     var fechaCorteDS = new Date();
     try {
-      var rActS2 = await fetch('/dso-saldos');
-      var dActS2 = await rActS2.json();
-      var fechasSaldo = (dActS2.saldos||[]).map(function(s){
+      var fechasSaldo = (dActS.saldos||[]).map(function(s){
         if (!s.fecha_factura) return null;
         var p = s.fecha_factura.toString().split('/');
         if (p.length===3) {
           var a=parseInt(p[0]),b=parseInt(p[1]),c=parseInt(p[2]);
           var anio=c<100?2000+c:c;
+          // Ignorar fechas futuras (año > actual)
+          if (anio > 2026) return null;
           if (b>12) return new Date(anio,a-1,b);
           if (a>12) return new Date(anio,b-1,a);
           return new Date(anio,b-1,a);
         }
-        return new Date(s.fecha_factura);
-      }).filter(function(f){ return f && !isNaN(f); });
+        return null;
+      }).filter(function(f){ return f && !isNaN(f) && f <= new Date(); });
       if (fechasSaldo.length) {
         fechaCorteDS = new Date(Math.max.apply(null, fechasSaldo));
-        console.log('[DSO] Fecha de corte (factura más reciente):', fechaCorteDS.toISOString().slice(0,10));
+        console.log('[DSO] Fecha de corte:', fechaCorteDS.toISOString().slice(0,10));
       }
     } catch(e) {}
 
