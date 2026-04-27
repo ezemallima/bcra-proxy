@@ -1107,6 +1107,7 @@ async function procesarDSO() {
     // ── DSO GLOBAL ROLLING/BACKWARD ──
 
     // 1. Activo = total del servidor (limpio, sin duplicados por nombres)
+    // Activo = saldos + cheques del servidor (fecha de corte = hoy, no importa fecha del cheque)
     var activoSaldoServidor = 0;
     var activoChequeServidor = 0;
     try {
@@ -1117,16 +1118,17 @@ async function procesarDSO() {
     try {
       var rActC = await fetch('/dso-cheques');
       var dActC = await rActC.json();
-      activoChequeServidor = (dActC.cheques||[]).reduce(function(s,v){ return s+(v.total||0); }, 0);
+      activoChequeServidor = (dActC.cheques||[]).reduce(function(s,v){ return s+Math.abs(v.total||0); }, 0);
     } catch(e) {}
     var activoObjetivo = activoSaldoServidor + activoChequeServidor;
-    console.log('[DSO] Activo servidor: saldos=' + activoSaldoServidor.toFixed(0) + ' cheques=' + activoChequeServidor.toFixed(0) + ' total=' + activoObjetivo.toFixed(0));
+    console.log('[DSO FINAL] Activo servidor: saldos=$' + (activoSaldoServidor/1000000).toFixed(0) + 'M cheques=$' + (activoChequeServidor/1000000).toFixed(0) + 'M total=$' + (activoObjetivo/1000000).toFixed(0) + 'M');
 
-    // 2. Fecha de corte = fecha de factura más reciente del servidor
+    // Fecha de corte = fecha de factura más reciente del reporte de saldos
     var fechaCorteDS = new Date();
     try {
-      var dActS2 = dActS || {saldos:[]};
-      var fechasS = (dActS2.saldos||[]).map(function(s){
+      var rActS2 = await fetch('/dso-saldos');
+      var dActS2 = await rActS2.json();
+      var fechasSaldo = (dActS2.saldos||[]).map(function(s){
         if (!s.fecha_factura) return null;
         var p = s.fecha_factura.toString().split('/');
         if (p.length===3) {
@@ -1138,7 +1140,10 @@ async function procesarDSO() {
         }
         return new Date(s.fecha_factura);
       }).filter(function(f){ return f && !isNaN(f); });
-      if (fechasS.length) fechaCorteDS = new Date(Math.max.apply(null, fechasS));
+      if (fechasSaldo.length) {
+        fechaCorteDS = new Date(Math.max.apply(null, fechasSaldo));
+        console.log('[DSO] Fecha de corte (factura más reciente):', fechaCorteDS.toISOString().slice(0,10));
+      }
     } catch(e) {}
 
     // 3. Ventas ordenadas de más nueva a más vieja hasta fecha de corte
