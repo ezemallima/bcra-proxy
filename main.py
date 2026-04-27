@@ -25,7 +25,7 @@ WSP_FILE = os.path.join(os.getcwd(), 'whatsapp_index.json')
 
 # Caché de consultas BCRA — evita re-consultar el mismo CUIT en 24hs
 bcra_cache = {}  # {cuit: {data: ..., timestamp: ...}}
-CACHE_TTL = 60 * 60 * 24  # 24 horas en segundos
+CACHE_TTL = 60 * 60 * 2   # 2 horas — más fresco para detectar cambios de situación
 
 CACHE_TTL_ERROR = 300  # 5 min para errores
 BCRA_VACIO = {"results": None, "sin_deudas": None, "error_bcra": None}
@@ -669,6 +669,26 @@ def _fecha_valida(fecha_str, desde):
 @app.route("/health")
 def health():
     return jsonify({"status": "ok", "gemini": bool(GEMINI_KEY)})
+
+@app.route("/cache/limpiar/<cuit>", methods=["POST", "GET"])
+def limpiar_cache_cuit(cuit):
+    """Limpia el caché BCRA para un CUIT específico"""
+    cuit_limpio = cuit.replace("-", "")
+    eliminados = []
+    for key in list(bcra_cache.keys()):
+        if key == cuit_limpio:
+            del bcra_cache[key]
+            eliminados.append(key)
+    print(f"[cache] Limpiado CUIT {cuit_limpio}: {eliminados}", flush=True)
+    return jsonify({"ok": True, "cuit": cuit_limpio, "eliminados": len(eliminados)})
+
+@app.route("/cache/limpiar-todo", methods=["POST", "GET"])
+def limpiar_cache_todo():
+    """Limpia todo el caché BCRA"""
+    total = len(bcra_cache)
+    bcra_cache.clear()
+    print(f"[cache] Cache completo limpiado: {total} entradas", flush=True)
+    return jsonify({"ok": True, "eliminados": total})
 
 @app.route("/dso-ventas/limpiar", methods=["POST"])
 def limpiar_dso_ventas():
