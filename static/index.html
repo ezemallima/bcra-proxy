@@ -1161,9 +1161,18 @@ async function procesarDSO() {
       var d=new Date(f); return isNaN(d)?null:d;
     }
 
-    var ventasRolling = (window.ventasHistoricas||[])
-      .map(function(v){ return {total:parseFloat(v.total)||0, fecha:parseFVenta(v.fecha)}; })
-      .filter(function(v){ return v.total>0 && v.fecha && !isNaN(v.fecha) && v.fecha<=fechaCorteDS; })
+    // Agrupar ventas por día (netas: positivas - notas de crédito)
+    var ventasPorDia = {};
+    (window.ventasHistoricas||[]).forEach(function(v){
+      var f = parseFVenta(v.fecha);
+      var t = parseFloat(v.total)||0;
+      if (!f || isNaN(f) || f > fechaCorteDS) return;
+      var key = f.toISOString().slice(0,10);
+      ventasPorDia[key] = (ventasPorDia[key]||0) + t;
+    });
+    var ventasRolling = Object.keys(ventasPorDia)
+      .map(function(k){ return {total: ventasPorDia[k], fecha: new Date(k+'T12:00:00')}; })
+      .filter(function(v){ return v.total > 0; })
       .sort(function(a,b){ return b.fecha-a.fecha; });
 
     // 4. Acumular hacia atrás hasta cubrir activo — con interpolación del último mes
@@ -1452,7 +1461,25 @@ async function cargarHistorialVentas() {
     var r = await fetch('/dso-ventas');
     var d = await r.json();
     if (d.ventas && d.ventas.length > 0) {
-      window.ventasHistoricas = d.ventas;
+      // Normalizar todas las fechas a formato YYYY-MM-DD
+      window.ventasHistoricas = d.ventas.map(function(v) {
+        if (!v.fecha) return v;
+        var f = v.fecha.toString();
+        // Si ya es YYYY-MM-DD no tocar
+        if (/^\d{4}-\d{2}-\d{2}/.test(f)) return v;
+        // Convertir DD/MM/YY o M/DD/YY a YYYY-MM-DD
+        var p = f.split('/');
+        if (p.length === 3) {
+          var a=parseInt(p[0]), b=parseInt(p[1]), c=parseInt(p[2]);
+          var anio = c < 100 ? 2000+c : c;
+          var dia, mes;
+          if (b > 12) { dia=b; mes=a; }      // M/DD/YY
+          else if (a > 12) { dia=a; mes=b; } // DD/MM/YY
+          else { dia=a; mes=b; }             // asumir DD/MM/YY
+          return Object.assign({}, v, {fecha: anio+'-'+String(mes).padStart(2,'0')+'-'+String(dia).padStart(2,'0')});
+        }
+        return v;
+      });
       console.log('[DSO] Ventas históricas:', d.ventas.length, 'registros hasta', d.ultima_actualizacion);
     }
   } catch(e) { console.warn('[DSO] No se pudo cargar ventas:', e); }
