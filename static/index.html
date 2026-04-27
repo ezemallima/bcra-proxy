@@ -1731,17 +1731,35 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
   puntos += pBodegas;
   detalle.push({ label:'Red de Bodegas', valor:bodegasLabel, puntos:pBodegas, max:60 });
 
-  // 7. ESTADO AFIP (Max 39)
-  var pAFIP = 20; // neutral sin datos
-  var afipLabel = 'Sin datos';
-  // estadoAfip viene como parámetro global cuando se consultó
-  if (typeof estadoAfipGlobal !== 'undefined' && estadoAfipGlobal) {
-    if (estadoAfipGlobal === 'ACTIVO')      { pAFIP=39; afipLabel='Activo'; }
-    else if (estadoAfipGlobal === 'SUSPENDIDO') { pAFIP=10; afipLabel='Suspendido'; }
-    else                                    { pAFIP=0;  afipLabel='Inactivo'; }
+  // 7. CONCENTRACIÓN DE DEUDA BCRA (Max 39)
+  // Cuántas entidades financieras le prestaron + monto total
+  var pConc = 20; // neutral sin datos
+  var concLabel = 'Sin datos';
+  if (bcraData && bcraData.results && bcraData.results.periodos && bcraData.results.periodos.length > 0) {
+    var ultimoPeriodo = bcraData.results.periodos[0];
+    var entidades = ultimoPeriodo.entidades || [];
+    var nroEntidades = entidades.length;
+    var montoTotal = entidades.reduce(function(s,e){ return s + (e.monto||0); }, 0); // en miles de pesos
+    var montoM = montoTotal / 1000; // en millones
+
+    if (nroEntidades === 0) {
+      pConc = 39; concLabel = 'Sin deuda en el sistema';
+    } else if (nroEntidades === 1 && montoM < 50) {
+      pConc = 35; concLabel = '1 entidad — deuda baja';
+    } else if (nroEntidades <= 2 && montoM < 100) {
+      pConc = 28; concLabel = nroEntidades+' entidades — deuda moderada';
+    } else if (nroEntidades <= 3 && montoM < 500) {
+      pConc = 20; concLabel = nroEntidades+' entidades — $'+montoM.toFixed(0)+'M';
+    } else if (nroEntidades <= 5 && montoM < 2000) {
+      pConc = 10; concLabel = nroEntidades+' entidades — $'+montoM.toFixed(0)+'M';
+    } else {
+      pConc = 0; concLabel = nroEntidades+' entidades — $'+montoM.toFixed(0)+'M (alto)';
+    }
+  } else if (bcraData && bcraData.sin_deudas) {
+    pConc = 39; concLabel = 'Sin deuda en el sistema';
   }
-  puntos += pAFIP;
-  detalle.push({ label:'Estado AFIP', valor:afipLabel, puntos:pAFIP, max:39 });
+  puntos += pConc;
+  detalle.push({ label:'Concentración deuda BCRA', valor:concLabel, puntos:pConc, max:39 });
 
   // Techo duro por condiciones críticas
   if (mora) {
@@ -2870,6 +2888,15 @@ function renderCartera() {
           ${(c.limiteCreditoARS || c.plazoDias) ? '<div style="font-size:11px;color:var(--azul-claro);margin-top:2px;">' + (c.limiteCreditoARS ? 'Límite: $'+c.limiteCreditoARS.toLocaleString('es-AR') : '') + (c.limiteCreditoARS && c.plazoDias ? ' · ' : '') + (c.plazoDias ? 'Plazo: '+c.plazoDias+' días' : '') + '</div>' : ''}
         </div>
       <div class="client-right">
+        ${(function(){
+          var mora = buscarEnMoras(c.cuit);
+          var sit = c.ultimaSit || 0;
+          var pts = sit===1?400:sit===2?200:sit===3?50:sit>=4?0:200;
+          if(mora) pts=Math.min(pts,300);
+          var color = pts>=700?'var(--verde)':pts>=400?'#f59e0b':pts>=200?'#f97316':'var(--rojo)';
+          var emoji = pts>=700?'🟢':pts>=400?'🟡':pts>=200?'🟠':'🔴';
+          return '<div style="text-align:right;margin-bottom:4px;"><span style="font-weight:700;font-size:13px;color:'+color+';">'+emoji+' '+pts+'</span></div>';
+        })()}
         ${c.ultimaSit ? getBadge(c.ultimaSit) : '<span style="font-size:11px;color:#aaa;">Sin verificar</span>'}
         ${buscarEnMoras(c.cuit) ? '<span class="badge badge-mora">Mora</span>' : ''}
         ${buscarEnWSP(c.cuit) ? '<span class="badge badge-wsp">En bodegas</span>' : ''}
@@ -3012,6 +3039,14 @@ function renderAlertas() {
       html += '<div style="flex:1;">';
       html += '<div style="font-size:14px;font-weight:600;">' + a.nombre + '</div>';
       html += '<div style="font-size:12px;color:#888;margin-top:2px;">CUIT: ' + a.cuit + ' · ' + a.fecha + '</div>';
+      // Score estimado en alerta
+      var moraA = buscarEnMoras(a.cuit) ? true : false;
+      var sitA = a.sitActual || a.sitAnterior || 0;
+      var ptsA = sitA===1?400:sitA===2?200:sitA===3?50:sitA>=4?0:200;
+      if(moraA) ptsA=Math.min(ptsA,300);
+      var colorA = ptsA>=700?'var(--verde)':ptsA>=400?'#f59e0b':ptsA>=200?'#f97316':'var(--rojo)';
+      var emojiA = ptsA>=700?'🟢':ptsA>=400?'🟡':ptsA>=200?'🟠':'🔴';
+      html += '<div style="font-size:12px;margin-top:4px;">Score estimado: <span style="font-weight:700;color:'+colorA+';">'+emojiA+' '+ptsA+'</span></div>';
       if (a.tipo === 'bcra') {
         html += '<div style="font-size:13px;margin-top:8px;color:#991b1b;font-weight:500;">';
         html += 'BCRA: Situación ' + a.sitAnterior + ' → ' + a.sitActual + ' (' + sitNombre(a.sitActual) + ')';
