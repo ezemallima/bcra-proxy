@@ -132,11 +132,13 @@ def gemini_request(payload, timeout=120):
     return None, "No hay APIs de IA disponibles. Configurá GEMINI_API_KEY o OPENAI_API_KEY."
 
 BCRA_WORKER = "https://orange-recipe-3bb1.ezetombacapo.workers.dev"
+BCRA_WORKER_2 = "https://little-feather-5b68.ezequielmallima.workers.dev"
 
 def consultar_bcra(cuit, reintentos=3):
     # Worker primero, BCRA directo como fallback
     endpoints = [
         (BCRA_WORKER + "/deudas/" + cuit, False),
+        (BCRA_WORKER_2 + "/deudas/" + cuit, False),
         ("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit, False)
     ]
     for ep_url, ep_verify in endpoints:
@@ -492,6 +494,7 @@ def get_cheques(cuit):
     # Intentar primero via Worker, luego directo al BCRA como fallback
     urls = [
         BCRA_WORKER + "/deudas/" + cuit + "/cheques",
+        BCRA_WORKER_2 + "/deudas/" + cuit + "/cheques",
         "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/" + cuit
     ]
     for url_idx, url in enumerate(urls):
@@ -528,6 +531,7 @@ def get_cheques(cuit):
 def get_historial(cuit):
     urls = [
         BCRA_WORKER + "/deudas/" + cuit + "/historial",
+        BCRA_WORKER_2 + "/deudas/" + cuit + "/historial",
         "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit
     ]
     for url_idx, url in enumerate(urls):
