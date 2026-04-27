@@ -1674,8 +1674,9 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
   var moraLabel = 'Sin datos';
   if (mora) {
     pMora = 0; moraLabel = 'En mora';
+    // Cliente en mora: techo duro de 400 puntos totales
+    puntos = Math.min(puntos, 200);
   } else if (morasIndex && Object.keys(morasIndex).length > 0) {
-    // El archivo de moras está cargado y el cliente no está en él
     pMora = 100; moraLabel = 'Sin mora registrada';
   }
   puntos += pMora;
@@ -1697,10 +1698,21 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
     var positivas = textos.filter(function(t){
       return /paga bien|buen cliente|cumple|recomend|contado anticipado|sin problemas|lc |limite de credito|plazo \d|mm plazo|usd/.test(t);
     }).length;
-    // Datos de bodegas de 2025 — reducir peso hasta tener info actualizada
-    if (negativas > 0 && positivas > 0) { pBodegas=30; bodegasLabel='Inconsistente (ref. 2025)'; }
-    else if (negativas > 0)             { pBodegas=0;  bodegasLabel=negativas+' menciones negativas (ref. 2025)'; }
-    else if (positivas > 0)             { pBodegas=40; bodegasLabel=positivas+' refs positivas (ref. 2025)'; }
+    // Verificar antigüedad — chat > 1 año = peso reducido
+    var hoyB = new Date();
+    var hace1anioB = new Date(hoyB.getFullYear()-1, hoyB.getMonth(), hoyB.getDate());
+    var chatAntiguo = true; // asumir antiguo hasta probar lo contrario
+    wspThreads.forEach(function(t){
+      var fechaT = t.fecha || (t.mensajes && t.mensajes[0] && t.mensajes[0].fecha);
+      if (fechaT && new Date(fechaT) > hace1anioB) chatAntiguo = false;
+    });
+
+    if (negativas > 0 && positivas > 0) { pBodegas=30; bodegasLabel='Inconsistente'; }
+    else if (negativas > 0)             { pBodegas=0;  bodegasLabel=negativas+' menciones negativas'; }
+    else if (positivas > 0) {
+      pBodegas = chatAntiguo ? 30 : 60;
+      bodegasLabel = positivas+' refs positivas'+(chatAntiguo?' (ref. anterior)':'');
+    }
     else                                { pBodegas=30; bodegasLabel='Sin menciones'; }
   }
   puntos += pBodegas;
