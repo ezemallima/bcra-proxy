@@ -834,10 +834,27 @@ def save_dso_ventas():
             except Exception:
                 pass
 
+        def normalizar_fecha(f):
+            """Convierte cualquier formato a YYYY-MM-DD"""
+            if not f: return f
+            s = str(f).strip()
+            if len(s) >= 10 and s[4] == '-': return s[:10]  # ya es YYYY-MM-DD
+            if '/' in s:
+                p = s.split('/')
+                if len(p) == 3:
+                    a, b, c = int(p[0]), int(p[1]), int(p[2])
+                    anio = 2000 + c if c < 100 else c
+                    if b > 12: dia, mes = b, a
+                    elif a > 12: dia, mes = a, b
+                    else: dia, mes = a, b
+                    return f"{anio}-{mes:02d}-{dia:02d}"
+            return s
+
         # Agregar nuevas ventas evitando duplicados exactos
         existentes = set((v.get('cliente',''), v.get('fecha',''), str(v.get('total',''))) for v in historico_filtrado)
         agregadas = 0
         for v in nuevas_ventas:
+            v['fecha'] = normalizar_fecha(v.get('fecha',''))
             key = (v.get('cliente',''), v.get('fecha',''), str(v.get('total','')))
             if key not in existentes:
                 historico_filtrado.append(v)
