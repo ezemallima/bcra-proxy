@@ -30,6 +30,34 @@ CACHE_TTL = 60 * 60 * 2   # 2 horas — más fresco para detectar cambios de sit
 CACHE_TTL_ERROR = 300  # 5 min para errores
 BCRA_VACIO = {"results": None, "sin_deudas": None, "error_bcra": None}
 
+def cache_get(cuit):
+    try:
+        cf = os.path.join(DATA_DIR, 'bcra_cache.json') if os.path.exists(DATA_DIR) else '/tmp/bcra_cache.json'
+        if os.path.exists(cf):
+            with open(cf, 'r') as f:
+                cache = json.load(f)
+            if cuit in cache:
+                entry = cache[cuit]
+                ttl = 300 if entry.get('error') else CACHE_TTL
+                if time.time() - entry.get('ts', 0) < ttl:
+                    return entry.get('data'), entry.get('error')
+    except: pass
+    return None, None
+
+def cache_set(cuit, data, error=None):
+    try:
+        cf = os.path.join(DATA_DIR, 'bcra_cache.json') if os.path.exists(DATA_DIR) else '/tmp/bcra_cache.json'
+        cache = {}
+        if os.path.exists(cf):
+            with open(cf, 'r') as f:
+                cache = json.load(f)
+        cache[cuit] = {'data': data, 'error': error, 'ts': time.time()}
+        ahora = time.time()
+        cache = {k: v for k, v in cache.items() if ahora - v.get('ts', 0) < CACHE_TTL * 2}
+        with open(cf, 'w') as f:
+            json.dump(cache, f)
+    except: pass
+
 def consultar_bcra_cached(cuit):
     """Siempre devuelve (dict, error_str|None). Caché compartido en disco entre workers."""
     print(f"[bcra] {cuit} consultando BCRA...", flush=True)
