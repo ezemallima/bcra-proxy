@@ -2959,14 +2959,21 @@ async function verificarTodos(forzar) {
     prog.textContent = 'Todos los clientes ya fueron verificados hoy.';
     return;
   }
-  prog.textContent = 'Verificando ' + cartFiltrada.length + ' clientes pendientes (de ' + cartera.length + ' en cartera)...';
+  // Agregar clientes con alertas activas aunque hayan sido verificados recientemente
+  var cuitsEnAlertas = new Set(alertas.map(function(a){ return a.cuit; }));
+  var cartConAlertas = cartera.filter(function(c){
+    return cuitsEnAlertas.has(c.cuit) && !cartFiltrada.find(function(x){ return x.cuit === c.cuit; });
+  });
+  var cartTotal = cartFiltrada.concat(cartConAlertas);
+
+  prog.textContent = 'Verificando ' + cartTotal.length + ' clientes (de ' + cartera.length + ' en cartera)...';
 
   // Iniciar verificacion en el servidor
   try {
     const r = await fetch('/verificar-cartera', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({cartera: cartFiltrada})
+      body: JSON.stringify({cartera: cartTotal})
     });
     const data = await r.json();
     if (data.error) {
