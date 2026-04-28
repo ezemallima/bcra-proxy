@@ -263,50 +263,72 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
     pts_sit = {1: 400, 2: 200, 3: 50}.get(max_sit, 0)
     puntos += pts_sit
 
-    # 2. Historial 24m — consultar
+    # 2. Historial 24m — usar caché en disco primero
     pts_hist = 75  # neutral sin datos
     try:
-        urls_h = [BCRA_WORKER + "/deudas/" + cuit + "/historial",
-                  BCRA_WORKER_2 + "/deudas/" + cuit + "/historial"]
-        for url_h in urls_h:
-            try:
-                r_h = requests.get(url_h, timeout=10)
-                if r_h.status_code == 200 and len(r_h.text.strip()) > 10:
-                    hist = r_h.json()
-                    periodos_h = (hist.get('results') or {}).get('periodos') or []
-                    meses_irreg = sum(1 for p in periodos_h
-                        if any((e.get('situacion') or 1) > 1 for e in p.get('entidades', [])))
-                    if meses_irreg == 0: pts_hist = 150
-                    elif meses_irreg <= 2: pts_hist = 75
-                    else: pts_hist = 0
-                    break
-            except: continue
+        hist_cached = None
+        hist_path = os.path.join(DATA_DIR, f'historial_{cuit}.json')
+        if os.path.exists(hist_path):
+            with open(hist_path, 'r') as f:
+                hc = json.load(f)
+            if time.time() - hc.get('ts', 0) < 86400:
+                hist_cached = hc.get('payload')
+        if not hist_cached:
+            for url_h in [BCRA_WORKER + "/deudas/" + cuit + "/historial",
+                          BCRA_WORKER_2 + "/deudas/" + cuit + "/historial"]:
+                try:
+                    r_h = requests.get(url_h, timeout=10)
+                    if r_h.status_code == 200 and len(r_h.text.strip()) > 10:
+                        hist_cached = r_h.json()
+                        with open(hist_path, 'w') as f:
+                            json.dump({'payload': hist_cached, 'ts': time.time()}, f)
+                        break
+                except: continue
+        if hist_cached:
+            periodos_h = (hist_cached.get('results') or {}).get('periodos') or []
+            meses_irreg = sum(1 for p in periodos_h
+                if any((e.get('situacion') or 1) > 1 for e in p.get('entidades', [])))
+            if meses_irreg == 0: pts_hist = 150
+            elif meses_irreg <= 2: pts_hist = 75
+            else: pts_hist = 0
     except: pass
     puntos += pts_hist
 
-    # 3. Cheques rechazados
+    # 3. Cheques rechazados — usar caché en disco primero
     pts_cheq = 75  # neutral sin datos
     try:
-        urls_c = [BCRA_WORKER + "/deudas/" + cuit + "/cheques",
-                  BCRA_WORKER_2 + "/deudas/" + cuit + "/cheques"]
-        for url_c in urls_c:
-            try:
-                r_c = requests.get(url_c, timeout=10)
-                if r_c.status_code == 200 and len(r_c.text.strip()) > 10:
-                    ch = r_c.json()
-                    res_c = ch.get('results') or {}
-                    causales = res_c.get('causales') or [] if isinstance(res_c, dict) else []
-                    detalles = []
-                    for causal in causales:
-                        for ent in causal.get('entidades', []):
-                            detalles.extend(ent.get('detalle', []))
-                    total_ch = len(detalles)
-                    activos_ch = sum(1 for d in detalles if not d.get('fechaPago') or d.get('estadoMulta') == 'IMPAGA')
-                    if total_ch == 0: pts_cheq = 150
-                    elif activos_ch == 0: pts_cheq = 75
-                    else: pts_cheq = 0
-                    break
-            except: continue
+        cheq_cached = None
+        cheq_path = os.path.join(DATA_DIR, f'cheques_{cuit}.json')
+        if os.path.exists(cheq_path):
+            with open(cheq_path, 'r') as f:
+                cc = json.load(f)
+            if time.time() - cc.get('ts', 0) < 86400:
+                cheq_cached = cc.get('payload')
+        if not cheq_cached:
+            for url_c in [BCRA_WORKER + "/deudas/" + cuit + "/cheques",
+                          BCRA_WORKER_2 + "/deudas/" + cuit + "/cheques"]:
+                try:
+                    r_c = requests.get(url_c, timeout=10)
+                    if r_c.status_code == 200 and len(r_c.text.strip()) > 10:
+                        cheq_cached = r_c.json()
+                        with open(cheq_path, 'w') as f:
+                            json.dump({'payload': cheq_cached, 'ts': time.time()}, f)
+                        break
+                except: continue
+        if cheq_cached:
+            res_c = (cheq_cached.get('results') or {}) if isinstance(cheq_cached, dict) else {}
+            if cheq_cached.get('sin_deudas'): pts_cheq = 150
+            else:
+                causales = res_c.get('causales') or [] if isinstance(res_c, dict) else []
+                detalles = []
+                for causal in causales:
+                    for ent in causal.get('entidades', []):
+                        detalles.extend(ent.get('detalle', []))
+                total_ch = len(detalles)
+                activos_ch = sum(1 for d in detalles if not d.get('fechaPago') or d.get('estadoMulta') == 'IMPAGA')
+                if total_ch == 0: pts_cheq = 150
+                elif activos_ch == 0: pts_cheq = 75
+                else: pts_cheq = 0
     except: pass
     puntos += pts_cheq
 
@@ -472,37 +494,15 @@ def ejecutar_verificacion(cartera_data):
             pass
 
         cartera_actualizada.append(cliente_actualizado)
-
+        # Pausa corta entre clientes para no saturar el BCRA
         if i < len(cartera_data) - 1:
-            time.sleep(5)
+            time.sleep(2)
 
-    # Guardar resultados — combinar alertas nuevas con alertas existentes actualizadas
+    # Guardar resultados
     ahora = time.strftime('%d/%m/%Y %H:%M')
     try:
-        # Cargar alertas existentes
-        alertas_existentes = []
-        if os.path.exists(ALERTAS_FILE):
-            with open(ALERTAS_FILE, 'r', encoding='utf-8') as f:
-                datos_prev = json.load(f)
-                alertas_existentes = datos_prev.get('alertas', [])
-
-        # Actualizar score de alertas existentes con datos frescos
-        cuits_verificados = {c.get('cuit'): c for c in cartera_actualizada}
-        for alerta in alertas_existentes:
-            cuit_a = alerta.get('cuit', '').replace('-', '')
-            if cuit_a in cuits_verificados:
-                bcra_fresh, _ = consultar_bcra_cached(cuit_a)
-                if bcra_fresh:
-                    score_data = calcular_score_servidor(cuit_a, bcra_fresh)
-                    alerta['scoreCompleto'] = score_data['score']
-                    alerta['scoreRango'] = score_data['rango']
-                    alerta['scoreColor'] = score_data['color']
-                    alerta['scoreEmoji'] = score_data['emoji']
-
-        # Agregar nuevas alertas (evitar duplicados por CUIT+tipo)
-        cuits_nuevos = {(a['cuit'], a['tipo']) for a in nuevas_alertas}
-        alertas_finales = [a for a in alertas_existentes if (a.get('cuit'), a.get('tipo')) not in cuits_nuevos]
-        alertas_finales = nuevas_alertas + alertas_finales
+        # Solo usar las alertas nuevas de esta verificación
+        alertas_finales = nuevas_alertas
 
         datos_guardar = {
             "alertas": alertas_finales,
