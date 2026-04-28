@@ -691,44 +691,75 @@ def get_deudas(cuit):
         print(f"[deudas] Excepcion {cuit}: {traceback.format_exc()}", flush=True)
         return jsonify({"results": None, "sin_deudas": None, "error_bcra": str(e)}), 200
 
+def _cheques_cache_path(cuit):
+    return os.path.join(DATA_DIR, f'cheques_{cuit}.json')
+
+def _cheques_cache_get(cuit):
+    """Obtener cheques desde caché en disco"""
+    try:
+        path = _cheques_cache_path(cuit)
+        if os.path.exists(path):
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            # TTL 24 horas
+            if time.time() - data.get('ts', 0) < 86400:
+                print(f"[cheques] {cuit} desde caché disco", flush=True)
+                return data.get('payload')
+    except: pass
+    return None
+
+def _cheques_cache_set(cuit, payload):
+    """Guardar cheques en caché en disco"""
+    try:
+        path = _cheques_cache_path(cuit)
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump({'payload': payload, 'ts': time.time()}, f, ensure_ascii=False)
+    except: pass
+
 @app.route("/deudas/<cuit>/cheques")
 def get_cheques(cuit):
-    # Intentar primero via Worker, luego directo al BCRA como fallback
     urls = [
         BCRA_WORKER + "/deudas/" + cuit + "/cheques",
         BCRA_WORKER_2 + "/deudas/" + cuit + "/cheques",
         "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/" + cuit
     ]
-    todos_vacios = True  # asumir vacío hasta que alguno responda con datos
+    todos_vacios = True
     for url_idx, url in enumerate(urls):
-        via = "Worker" if url_idx < 2 else "BCRA directo"
+        via = "Worker1" if url_idx == 0 else "Worker2" if url_idx == 1 else "directo"
         for intento in range(2):
             try:
-                kwargs = {"timeout": 15, "verify": False}
-                r = requests.get(url, **kwargs)
+                r = requests.get(url, timeout=15, verify=False)
                 if r.status_code == 200:
                     text = r.text.strip()
                     if not text or len(text) < 10:
-                        print(f"[cheques] Respuesta vacía via {via} para {cuit}", flush=True)
-                        break  # probar siguiente endpoint
-                    # Tiene contenido — procesar
+                        print(f"[cheques] Vacío via {via} para {cuit}", flush=True)
+                        break
                     todos_vacios = False
                     data = r.json()
                     results = data.get('results', data) if isinstance(data, dict) else data
+                    payload = {"results": results, "sin_deudas": None, "error_bcra": None}
+                    _cheques_cache_set(cuit, payload)  # guardar en disco
                     print(f"[cheques] OK via {via} para {cuit}", flush=True)
-                    return jsonify({"results": results, "sin_deudas": None, "error_bcra": None}), 200
+                    return jsonify(payload), 200
                 if r.status_code in [520, 521, 522, 523, 524]:
                     break
             except Exception as e:
-                print(f"[cheques] Error via {via} {cuit}: {e}", flush=True)
+                print(f"[cheques] Error via {via} intento {intento+1} para {cuit}: {e}", flush=True)
                 if intento < 1:
                     time.sleep(2)
                     continue
                 break
-    # Todos los endpoints devolvieron vacío = genuinamente sin cheques
+
+    # Todos fallaron — intentar caché en disco
+    cached = _cheques_cache_get(cuit)
+    if cached:
+        print(f"[cheques] {cuit} desde caché (BCRA no disponible)", flush=True)
+        return jsonify(cached), 200
+
     if todos_vacios:
-        print(f"[cheques] Sin cheques rechazados para {cuit}", flush=True)
+        print(f"[cheques] Sin cheques para {cuit}", flush=True)
         return jsonify({"results": {"causales": []}, "sin_deudas": True, "error_bcra": None}), 200
+
     return jsonify({"results": None, "sin_deudas": None, "error_bcra": "sin_respuesta"}), 200
 
 @app.route("/deudas/<cuit>/historial")
@@ -739,31 +770,40 @@ def get_historial(cuit):
         "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit
     ]
     for url_idx, url in enumerate(urls):
-        via = "Worker" if url_idx == 0 else "BCRA directo"
+        via = "Worker1" if url_idx == 0 else "Worker2" if url_idx == 1 else "directo"
         for intento in range(2):
             try:
-                kwargs = {"timeout": 15}
-                if url_idx == 1:
-                    kwargs["verify"] = False
-                r = requests.get(url, **kwargs)
+                r = requests.get(url, timeout=15, verify=False)
                 if r.status_code == 200:
                     text = r.text.strip()
                     if not text or len(text) < 10:
-                        print(f"[historial] Respuesta vacía via {via} para {cuit} — fallback", flush=True)
                         break
+                    data = r.json()
+                    try:
+                        hist_path = os.path.join(DATA_DIR, f'historial_{cuit}.json')
+                        with open(hist_path, 'w', encoding='utf-8') as f:
+                            json.dump({'payload': data, 'ts': time.time()}, f, ensure_ascii=False)
+                    except: pass
                     print(f"[historial] OK via {via} para {cuit}", flush=True)
-                    return jsonify(r.json()), 200
-                print(f"[historial] HTTP {r.status_code} via {via} para {cuit}", flush=True)
+                    return jsonify(data), 200
                 if r.status_code in [520, 521, 522, 523, 524]:
                     break
-            except requests.exceptions.ConnectionError as e:
-                print(f"[historial] ConnectionError via {via} intento {intento+1} para {cuit}", flush=True)
-                if intento < 1:
-                    time.sleep(3)
-                    continue
             except Exception as e:
-                print(f"[historial] Error via {via} {cuit}: {e}", flush=True)
+                print(f"[historial] Error via {via} intento {intento+1} para {cuit}: {e}", flush=True)
+                if intento < 1:
+                    time.sleep(2)
+                    continue
                 break
+    # Fallback caché en disco
+    try:
+        hist_path = os.path.join(DATA_DIR, f'historial_{cuit}.json')
+        if os.path.exists(hist_path):
+            with open(hist_path, 'r', encoding='utf-8') as f:
+                cached = json.load(f)
+            if time.time() - cached.get('ts', 0) < 86400:
+                print(f"[historial] {cuit} desde caché disco", flush=True)
+                return jsonify(cached['payload']), 200
+    except: pass
     return jsonify({"results": None, "sin_deudas": None, "error_bcra": "sin_respuesta"}), 200
 
 @app.route("/analizar", methods=["POST"])
