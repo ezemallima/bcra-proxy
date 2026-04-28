@@ -31,25 +31,20 @@ CACHE_TTL_ERROR = 300  # 5 min para errores
 BCRA_VACIO = {"results": None, "sin_deudas": None, "error_bcra": None}
 
 def consultar_bcra_cached(cuit):
-    """Siempre devuelve (dict, error_str|None). Nunca devuelve data=None."""
-    ahora = time.time()
-    if cuit in bcra_cache:
-        entrada = bcra_cache[cuit]
-        ttl = CACHE_TTL_ERROR if entrada.get('es_error') else CACHE_TTL
-        if ahora - entrada['timestamp'] < ttl:
-            origen = "cache-error" if entrada.get('es_error') else "cache"
-            print(f"[bcra] {cuit} desde {origen}", flush=True)
-            return entrada['data'], entrada.get('error')
-    # Miss — consultar BCRA real
+    """Siempre devuelve (dict, error_str|None). Caché compartido en disco entre workers."""
     print(f"[bcra] {cuit} consultando BCRA...", flush=True)
+    cached_data, cached_error = cache_get(cuit)
+    if cached_data is not None:
+        origen = "cache-error" if cached_error else "caché"
+        print(f"[bcra] {cuit} desde {origen}", flush=True)
+        return cached_data, cached_error
     data, error = consultar_bcra(cuit)
     if error or not data:
-        # Siempre guardar objeto consistente, nunca None
         data_cache = {"results": None, "sin_deudas": None, "error_bcra": str(error or "sin_respuesta")}
-        bcra_cache[cuit] = {'data': data_cache, 'error': error, 'es_error': True, 'timestamp': ahora}
-        print(f"[bcra] {cuit} error: {error} (cacheado 5min)", flush=True)
+        cache_set(cuit, data_cache, error)
+        print(f"[bcra] {cuit} error: {error}", flush=True)
         return data_cache, error
-    bcra_cache[cuit] = {'data': data, 'error': None, 'es_error': False, 'timestamp': ahora}
+    cache_set(cuit, data)
     print(f"[bcra] {cuit} OK desde BCRA", flush=True)
     return data, None
 
