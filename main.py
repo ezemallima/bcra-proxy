@@ -459,18 +459,43 @@ def ejecutar_verificacion(cartera_data):
         if i < len(cartera_data) - 1:
             time.sleep(5)
 
-    # Guardar resultados
+    # Guardar resultados — combinar alertas nuevas con alertas existentes actualizadas
     ahora = time.strftime('%d/%m/%Y %H:%M')
     try:
+        # Cargar alertas existentes
+        alertas_existentes = []
+        if os.path.exists(ALERTAS_FILE):
+            with open(ALERTAS_FILE, 'r', encoding='utf-8') as f:
+                datos_prev = json.load(f)
+                alertas_existentes = datos_prev.get('alertas', [])
+
+        # Actualizar score de alertas existentes con datos frescos
+        cuits_verificados = {c.get('cuit'): c for c in cartera_actualizada}
+        for alerta in alertas_existentes:
+            cuit_a = alerta.get('cuit', '').replace('-', '')
+            if cuit_a in cuits_verificados:
+                bcra_fresh, _ = consultar_bcra_cached(cuit_a)
+                if bcra_fresh:
+                    score_data = calcular_score_servidor(cuit_a, bcra_fresh)
+                    alerta['scoreCompleto'] = score_data['score']
+                    alerta['scoreRango'] = score_data['rango']
+                    alerta['scoreColor'] = score_data['color']
+                    alerta['scoreEmoji'] = score_data['emoji']
+
+        # Agregar nuevas alertas (evitar duplicados por CUIT+tipo)
+        cuits_nuevos = {(a['cuit'], a['tipo']) for a in nuevas_alertas}
+        alertas_finales = [a for a in alertas_existentes if (a.get('cuit'), a.get('tipo')) not in cuits_nuevos]
+        alertas_finales = nuevas_alertas + alertas_finales
+
         datos_guardar = {
-            "alertas": nuevas_alertas,
+            "alertas": alertas_finales,
             "ultima_verif": ahora,
             "cartera": [{"cuit": c.get('cuit'), "ultimaSit": c.get('ultimaSit'), "ultimaVerif": c.get('ultimaVerif')} for c in cartera_actualizada]
         }
         with open(ALERTAS_FILE, 'w', encoding='utf-8') as f:
             json.dump(datos_guardar, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[verif] Error guardando alertas: {e}", flush=True)
 
     verificacion_estado["corriendo"] = False
     verificacion_estado["mensaje"] = "Verificacion completada. " + str(len(nuevas_alertas)) + " alerta(s) detectada(s)."
