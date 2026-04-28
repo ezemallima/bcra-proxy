@@ -135,55 +135,44 @@ BCRA_WORKER = "https://orange-recipe-3bb1.ezetombacapo.workers.dev"
 BCRA_WORKER_2 = "https://little-feather-5b68.ezequielmallima.workers.dev"
 
 def consultar_bcra(cuit, reintentos=3):
-    # Worker primero, BCRA directo como fallback
     endpoints = [
-        (BCRA_WORKER + "/deudas/" + cuit, False),
-        (BCRA_WORKER_2 + "/deudas/" + cuit, False),
-        ("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit, False)
+        (BCRA_WORKER + "/deudas/" + cuit, "Worker1"),
+        (BCRA_WORKER_2 + "/deudas/" + cuit, "Worker2"),
+        ("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit, "directo")
     ]
-    for ep_url, ep_verify in endpoints:
-        via = "Worker" if "workers.dev" in ep_url else "directo"
-        intentos = reintentos if via == "Worker" else 2
+    for ep_url, via in endpoints:
+        intentos = reintentos if "Worker" in via else 2
         for i in range(intentos):
             try:
                 print(f"[bcra] {cuit} consultando via {via}...", flush=True)
-                r = requests.get(ep_url, timeout=15, verify=ep_verify)
+                r = requests.get(ep_url, timeout=15, verify=False)
                 if r.status_code == 200:
                     text = r.text.strip()
                     if not text or len(text) < 10:
-                        print(f"[bcra] Respuesta vacía via {via_b} para {cuit} — usando fallback", flush=True)
-                        break
+                        print(f"[bcra] Respuesta vacía via {via} para {cuit} — siguiente", flush=True)
+                        break  # siguiente endpoint
                     data = r.json()
                     if data.get('error'):
-                        print(f"[bcra] Worker error para {cuit}: {data['error']}", flush=True)
                         if i < intentos - 1:
                             time.sleep(3)
                             continue
-                        break  # pasar al fallback
+                        break
                     results = data.get('results') or {}
                     periodos = results.get('periodos') or []
                     data['sin_deudas'] = len(periodos) == 0
-                    print(f"[bcra] {cuit} OK via {via} sin_deudas={data['sin_deudas']}", flush=True)
+                    print(f"[bcra] {cuit} OK via {via}", flush=True)
                     return data, None
                 elif r.status_code == 404:
                     return {"results": {"denominacion": "", "periodos": []}, "sin_deudas": True}, None
-                elif r.status_code in [520, 521, 522, 523, 524]:
-                    print(f"[bcra] Cloudflare error {r.status_code} para {cuit}, probando fallback", flush=True)
-                    break  # pasar al fallback directo
                 else:
-                    if i < intentos - 1:
-                        time.sleep(3)
-                        continue
-                    break
-            except requests.exceptions.ConnectionError as e:
-                print(f"[bcra] ConnectionError via {via} intento {i+1} para {cuit}: {e}", flush=True)
-                if i < intentos - 1:
-                    time.sleep(5)
-                    continue
-                break
+                    print(f"[bcra] HTTP {r.status_code} via {via} para {cuit}", flush=True)
+                    break  # siguiente endpoint
             except Exception as e:
-                print(f"[bcra] Error inesperado via {via} {cuit}: {e}", flush=True)
-                break
+                print(f"[bcra] Error via {via} intento {i+1} para {cuit}: {e}", flush=True)
+                if i < intentos - 1:
+                    time.sleep(3)
+                    continue
+                break  # siguiente endpoint
     return None, "sin_respuesta"
 
 def analizar_bodegas_server(cuit, nombre, mensajes):
