@@ -2083,7 +2083,7 @@ async function consultarCliente() {
   document.getElementById('mora-alert-container').innerHTML = mora ? `
     <div class="mora-alert">
       <div class="mora-alert-title">⚠ Cliente con mora registrada</div>
-      <div class="mora-alert-detail"><strong>${mora.nombre}</strong> tiene facturas impagas desde <strong>${mora.fecha_mora}</strong>.<br>Saldo adeudado: <strong>$${mora.saldo.toLocaleString('es-AR')}</strong> — Estado: ${mora.estado}</div>
+      <div class="mora-alert-detail"><strong>${mora.nombre}</strong> tiene facturas impagas desde <strong>${mora.fecha_mora}</strong>.<br>Saldo adeudado: <strong>$${(mora.saldo||0).toLocaleString('es-AR')}</strong> — Estado: ${mora.estado}</div>
     </div>` : '';
 
   document.getElementById('loading-state').style.display = 'none';
@@ -2501,7 +2501,7 @@ async function analizarCliente() {
   }
 
   var datosHistorial = '';
-  if (mora) datosHistorial += `⚠ MORA CON ${getNombreBodega().toUpperCase()}: $${mora.saldo.toLocaleString('es-AR')} desde ${mora.fecha_mora} (${mora.estado})\n`;
+  if (mora) datosHistorial += `⚠ MORA CON ${getNombreBodega().toUpperCase()}: $${(mora.saldo||0).toLocaleString('es-AR')} desde ${mora.fecha_mora} (${mora.estado})\n`;
   if (piat) datosHistorial += `Historial interno: ${piat}\n`;
   if (wspThreads?.length) {
     datosHistorial += `Menciones en grupo bodegas:\n`;
@@ -2617,7 +2617,7 @@ function exportarReporte() {
   doc.setDrawColor(200,215,255); doc.line(20, y, 190, y); y += 8;
   if (mora) {
     doc.setTextColor(153, 27, 27);
-    doc.text(`MORA: $${mora.saldo.toLocaleString('es-AR')} desde ${mora.fecha_mora} (${mora.estado})`, 20, y); y += 10;
+    doc.text(`MORA: $${(mora.saldo||0).toLocaleString('es-AR')} desde ${mora.fecha_mora} (${mora.estado})`, 20, y); y += 10;
   }
   if (verazData) {
     doc.setTextColor(30); doc.setFontSize(12);
@@ -2988,6 +2988,11 @@ async function verificarTodos(forzar) {
     return cuitsEnAlertas.has(c.cuit) && !cartFiltrada.find(function(x){ return x.cuit === c.cuit; });
   });
   var cartTotal = cartFiltrada.concat(cartConAlertas);
+
+  // Si no hay nada para verificar, usar toda la cartera
+  if (!cartTotal.length) {
+    cartTotal = cartera.slice();
+  }
 
   prog.textContent = 'Verificando ' + cartTotal.length + ' clientes (de ' + cartera.length + ' en cartera)...';
 
