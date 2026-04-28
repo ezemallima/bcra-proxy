@@ -1993,10 +1993,9 @@ async function cargarCarteraServidor() {
     const data = await r.json();
     if (data && !data.error) {
       // Siempre priorizar alertas del servidor — son la fuente de verdad
-      if (data.alertas) {
-        alertas = data.alertas;
-        localStorage.setItem('piat_alertas', JSON.stringify(alertas));
-      }
+      // Siempre usar alertas del servidor — incluso si están vacías
+      alertas = data.alertas || [];
+      localStorage.setItem('piat_alertas', JSON.stringify(alertas));
       if (data.ultima_verif) {
         localStorage.setItem('piat_ultima_verif', data.ultima_verif);
       }
