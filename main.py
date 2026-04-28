@@ -699,7 +699,7 @@ def get_cheques(cuit):
         BCRA_WORKER_2 + "/deudas/" + cuit + "/cheques",
         "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/" + cuit
     ]
-    hubo_respuesta_vacia = False
+    todos_vacios = True  # asumir vacío hasta que alguno responda con datos
     for url_idx, url in enumerate(urls):
         via = "Worker" if url_idx < 2 else "BCRA directo"
         for intento in range(2):
@@ -709,10 +709,10 @@ def get_cheques(cuit):
                 if r.status_code == 200:
                     text = r.text.strip()
                     if not text or len(text) < 10:
-                        # Respuesta vacía del BCRA = sin cheques rechazados
-                        hubo_respuesta_vacia = True
-                        print(f"[cheques] Sin cheques via {via} para {cuit}", flush=True)
-                        break
+                        print(f"[cheques] Respuesta vacía via {via} para {cuit}", flush=True)
+                        break  # probar siguiente endpoint
+                    # Tiene contenido — procesar
+                    todos_vacios = False
                     data = r.json()
                     results = data.get('results', data) if isinstance(data, dict) else data
                     print(f"[cheques] OK via {via} para {cuit}", flush=True)
@@ -725,8 +725,9 @@ def get_cheques(cuit):
                     time.sleep(2)
                     continue
                 break
-    # Si algún endpoint devolvió vacío = sin cheques rechazados
-    if hubo_respuesta_vacia:
+    # Todos los endpoints devolvieron vacío = genuinamente sin cheques
+    if todos_vacios:
+        print(f"[cheques] Sin cheques rechazados para {cuit}", flush=True)
         return jsonify({"results": {"causales": []}, "sin_deudas": True, "error_bcra": None}), 200
     return jsonify({"results": None, "sin_deudas": None, "error_bcra": "sin_respuesta"}), 200
 
