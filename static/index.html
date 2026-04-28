@@ -815,7 +815,7 @@ function getNombreBodega() {
 }
 let cartera = JSON.parse(localStorage.getItem('piat_cartera') || '[]');
 let situaciones = JSON.parse(localStorage.getItem('piat_situaciones') || '{}');
-let alertas = JSON.parse(localStorage.getItem('piat_alertas') || '[]');
+let alertas = []; // siempre cargar desde servidor al inicio
 
 
 // ─── RED BODEGAS ─────────────────────────────────────────────
@@ -2034,8 +2034,9 @@ async function checkProxy() {
   dot.className = 'dot';
   label.textContent = '';
   try {
-    const r = await fetch('https://api.allorigins.win/get?url=' + encodeURIComponent('https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/20213106008'), {signal: AbortSignal.timeout(8000)});
-    if (r.ok) {
+    const r = await fetch('/deudas/20213106008', {signal: AbortSignal.timeout(8000)});
+    const rd = await r.json();
+    if (r.ok && !rd.error_bcra) {
       dot.className = 'dot online';
       label.textContent = 'BCRA conectado';
     } else {
