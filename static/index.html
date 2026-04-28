@@ -659,6 +659,10 @@
       <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
         <button class="primary" onclick="verificarTodos()" id="btn-verificar" style="flex:1;">Verificar toda la cartera →</button>
         <button onclick="limpiarAlertas()" style="font-size:13px;color:#991b1b;">Limpiar alertas</button>
+        <label style="font-size:13px;cursor:pointer;padding:6px 12px;background:var(--bg2);border-radius:8px;border:1px solid var(--border);display:inline-flex;align-items:center;gap:4px;">
+          📂 Actualizar moras
+          <input type="file" accept=".xlsx,.xls" style="display:none;" onchange="subirMoras(this)">
+        </label>
       </div>
       <div class="progress-msg" id="verificar-progress"></div>
     </div>
@@ -1866,6 +1870,25 @@ function renderVendeScore(scoreObj) {
 
 
 // Normalizar nombre para comparación — ignora puntuación, tildes, mayúsculas
+async function subirMoras(input) {
+  var file = input.files[0];
+  if (!file) return;
+  var formData = new FormData();
+  formData.append('file', file);
+  try {
+    var r = await fetch('/upload-moras', {method:'POST', body: formData});
+    var d = await r.json();
+    if (d.ok) {
+      alert('✅ ' + d.total + ' clientes en mora cargados correctamente');
+      location.reload();
+    } else {
+      alert('❌ Error: ' + (d.error || 'desconocido'));
+    }
+  } catch(e) {
+    alert('❌ Error al subir: ' + e.message);
+  }
+}
+
 function normalizarNombre(n) {
   if (!n) return '';
   return n.toString()
