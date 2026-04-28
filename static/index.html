@@ -2070,6 +2070,18 @@ async function cargarMoras() {
 }
 
 function buscarEnWSP(cuit) { return wspIndex ? wspIndex[cuit.replace(/-/g,'')] || null : null; }
+
+function filtrarWSPReciente(threads) {
+  // Solo mantener mensajes de los últimos 6 meses
+  if (!threads || !threads.length) return [];
+  var hace6m = new Date();
+  hace6m.setMonth(hace6m.getMonth() - 6);
+  return threads.filter(function(t) {
+    var fecha = t.fecha || (t.mensajes && t.mensajes[0] && t.mensajes[0].fecha);
+    if (!fecha) return false;
+    return new Date(fecha) > hace6m;
+  });
+}
 function buscarEnMoras(cuit) { return morasIndex ? morasIndex[cuit.replace(/-/g,'')] || null : null; }
 
 function switchTab(tab, el) {
@@ -2322,7 +2334,7 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
 
   // ── SCORE VENDE SEGURO ──
   var _scoreMora = buscarEnMoras ? buscarEnMoras(cuit) : null;
-  var _scoreWsp = buscarEnWSP ? buscarEnWSP(cuit) : [];
+  var _scoreWsp = buscarEnWSP ? filtrarWSPReciente(buscarEnWSP(cuit)) : [];
   // Mostrar score provisional
   var scoreEl = document.getElementById('vende-score-container');
   if (scoreEl) scoreEl.innerHTML = '<div style="padding:12px;color:#94a3b8;font-size:13px;">Calculando score...</div>';
@@ -2401,8 +2413,16 @@ function mostrarAFIP(cuit) {
 
 function mostrarWSP(cuit) {
   const el = document.getElementById('wsp-data');
-  const threads = buscarEnWSP(cuit);
-  if (!threads || !threads.length) { el.innerHTML = `<div class="wsp-no-data">Este cliente no aparece en el historial del grupo de bodegas.</div>`; return; }
+  const threads = filtrarWSPReciente(buscarEnWSP(cuit));
+  var threadsAll = buscarEnWSP(cuit);
+  if (!threads || !threads.length) {
+    if (threadsAll && threadsAll.length > 0) {
+      el.innerHTML = `<div class="wsp-no-data">⚠ Hay ${threadsAll.length} mención(es) pero tienen más de 6 meses — no se consideran en el análisis.</div>`;
+    } else {
+      el.innerHTML = `<div class="wsp-no-data">Este cliente no aparece en el historial del grupo de bodegas.</div>`;
+    }
+    return;
+  }
   let html = `<div style="margin-bottom:8px;"><span class="badge badge-wsp">${threads.length} mención(es) en el grupo</span></div>`;
   threads.forEach(t => {
     html += `<div class="wsp-thread"><div class="wsp-thread-fecha">${t.fecha} — CUIT: ${t.cuit_mencionado}</div>`;
@@ -2511,7 +2531,7 @@ async function analizarCliente() {
   const piat = piatEl ? piatEl.value : '';
   const bcraEl = document.getElementById('bcra-data');
   const bcra = bcraEl ? bcraEl.innerText : '';
-  const wspThreads = buscarEnWSP(cuit);
+  const wspThreads = filtrarWSPReciente(buscarEnWSP(cuit));
   const mora = buscarEnMoras(cuit);
   // Calcular score para incluir en análisis
   var scorePreAnalisis = null;
