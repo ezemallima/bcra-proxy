@@ -3163,10 +3163,20 @@ function renderAlertas() {
       if(moraA) ptsA=Math.min(ptsA,300);
       var colorA = ptsA>=700?'var(--verde)':ptsA>=400?'#f59e0b':ptsA>=200?'#f97316':'var(--rojo)';
       var emojiA = ptsA>=700?'🟢':ptsA>=400?'🟡':ptsA>=200?'🟠':'🔴';
+      // Buscar score en cartera si no está en la alerta
+      if (!a.scoreCompleto) {
+        var cCliente = cartera.find(function(c){ return c.cuit === a.cuit; });
+        if (cCliente && cCliente.scoreCompleto) {
+          a.scoreCompleto = cCliente.scoreCompleto;
+          a.scoreRango = cCliente.scoreRango;
+          a.scoreColor = cCliente.scoreColor;
+          a.scoreEmoji = cCliente.scoreEmoji;
+        }
+      }
       if (a.scoreCompleto) {
         html += '<div style="font-size:12px;margin-top:4px;">Score Vende Seguro: <span style="font-weight:700;color:'+a.scoreColor+';">'+a.scoreEmoji+' '+a.scoreCompleto+'</span> <span style="color:#aaa;font-size:10px;">'+a.scoreRango+'</span></div>';
       } else {
-        html += '<div style="font-size:12px;margin-top:4px;">Score parcial: <span style="font-weight:700;color:'+colorA+';">'+emojiA+' '+ptsA+'</span> <span style="color:#aaa;font-size:10px;">(consultá el CUIT para score completo)</span></div>';
+        html += '<div style="font-size:12px;margin-top:4px;">Score parcial: <span style="font-weight:700;color:'+colorA+';">'+emojiA+' '+ptsA+'</span> <span style="color:#aaa;font-size:10px;">(verificá cartera para score completo)</span></div>';
       }
       if (a.tipo === 'bcra') {
         html += '<div style="font-size:13px;margin-top:8px;color:#991b1b;font-weight:500;">';
