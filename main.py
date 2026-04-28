@@ -408,9 +408,14 @@ def ejecutar_verificacion(cartera_data):
                 cliente_actualizado['ultimaSit'] = max_sit
                 cliente_actualizado['ultimaVerif'] = time.strftime('%d/%m/%Y')
 
+                # Calcular score COMPLETO para todos los clientes
+                score_data = calcular_score_servidor(cuit, bcra_data, en_mora=None)
+                cliente_actualizado['scoreCompleto'] = score_data['score']
+                cliente_actualizado['scoreRango'] = score_data['rango']
+                cliente_actualizado['scoreColor'] = score_data['color']
+                cliente_actualizado['scoreEmoji'] = score_data['emoji']
+
                 if max_sit > sit_anterior or max_sit >= 3:
-                    # Calcular score COMPLETO
-                    score_data = calcular_score_servidor(cuit, bcra_data, en_mora=None)
                     nuevas_alertas.append({
                         "nombre": nombre,
                         "cuit": cuit,
@@ -426,19 +431,31 @@ def ejecutar_verificacion(cartera_data):
         except Exception:
             pass
 
-        # Analizar grupo bodegas
+        # Analizar grupo bodegas — solo mensajes de los últimos 6 meses
         try:
             threads = wsp_index.get(cuit, [])
-            if threads:
+            from datetime import datetime, timedelta
+            hace_6_meses = datetime.now() - timedelta(days=180)
+            # Filtrar threads recientes
+            threads_recientes = []
+            for t in threads:
+                fecha_str = t.get('fecha') or (t.get('mensajes', [{}])[0].get('fecha') if t.get('mensajes') else None)
+                if fecha_str:
+                    try:
+                        fecha_t = datetime.fromisoformat(str(fecha_str)[:10])
+                        if fecha_t >= hace_6_meses:
+                            threads_recientes.append(t)
+                    except:
+                        pass
+            if threads_recientes:
                 todos_mensajes = []
                 tiene_sospecha = False
-                for t in threads:
+                for t in threads_recientes:
                     for m in t.get('mensajes', []):
                         texto_msg = m.get('texto', '')
                         todos_mensajes.append(m.get('autor', '') + ': ' + texto_msg)
                         if any(p in texto_msg.lower() for p in palabras_riesgo):
                             tiene_sospecha = True
-
                 if tiene_sospecha:
                     ya_existe = any(a['cuit'] == cuit and a['tipo'] == 'bodegas' for a in nuevas_alertas)
                     if not ya_existe:
@@ -490,7 +507,15 @@ def ejecutar_verificacion(cartera_data):
         datos_guardar = {
             "alertas": alertas_finales,
             "ultima_verif": ahora,
-            "cartera": [{"cuit": c.get('cuit'), "ultimaSit": c.get('ultimaSit'), "ultimaVerif": c.get('ultimaVerif')} for c in cartera_actualizada]
+            "cartera": [{
+                "cuit": c.get('cuit'),
+                "ultimaSit": c.get('ultimaSit'),
+                "ultimaVerif": c.get('ultimaVerif'),
+                "scoreCompleto": c.get('scoreCompleto'),
+                "scoreRango": c.get('scoreRango'),
+                "scoreColor": c.get('scoreColor'),
+                "scoreEmoji": c.get('scoreEmoji')
+            } for c in cartera_actualizada]
         }
         with open(ALERTAS_FILE, 'w', encoding='utf-8') as f:
             json.dump(datos_guardar, f, ensure_ascii=False, indent=2)
