@@ -699,34 +699,35 @@ def get_cheques(cuit):
         BCRA_WORKER_2 + "/deudas/" + cuit + "/cheques",
         "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/" + cuit
     ]
+    hubo_respuesta_vacia = False
     for url_idx, url in enumerate(urls):
-        via = "Worker" if url_idx == 0 else "BCRA directo"
+        via = "Worker" if url_idx < 2 else "BCRA directo"
         for intento in range(2):
             try:
-                kwargs = {"timeout": 15}
-                if url_idx == 1:
-                    kwargs["verify"] = False  # BCRA directo necesita esto
+                kwargs = {"timeout": 15, "verify": False}
                 r = requests.get(url, **kwargs)
                 if r.status_code == 200:
                     text = r.text.strip()
                     if not text or len(text) < 10:
-                        print(f"[cheques] Respuesta vacía via {via} para {cuit} — fallback", flush=True)
+                        # Respuesta vacía del BCRA = sin cheques rechazados
+                        hubo_respuesta_vacia = True
+                        print(f"[cheques] Sin cheques via {via} para {cuit}", flush=True)
                         break
                     data = r.json()
                     results = data.get('results', data) if isinstance(data, dict) else data
                     print(f"[cheques] OK via {via} para {cuit}", flush=True)
                     return jsonify({"results": results, "sin_deudas": None, "error_bcra": None}), 200
-                print(f"[cheques] HTTP {r.status_code} via {via} para {cuit}", flush=True)
                 if r.status_code in [520, 521, 522, 523, 524]:
                     break
-            except requests.exceptions.ConnectionError as e:
-                print(f"[cheques] ConnectionError via {via} intento {intento+1} para {cuit}", flush=True)
-                if intento < 1:
-                    time.sleep(3)
-                    continue
             except Exception as e:
                 print(f"[cheques] Error via {via} {cuit}: {e}", flush=True)
+                if intento < 1:
+                    time.sleep(2)
+                    continue
                 break
+    # Si algún endpoint devolvió vacío = sin cheques rechazados
+    if hubo_respuesta_vacia:
+        return jsonify({"results": {"causales": []}, "sin_deudas": True, "error_bcra": None}), 200
     return jsonify({"results": None, "sin_deudas": None, "error_bcra": "sin_respuesta"}), 200
 
 @app.route("/deudas/<cuit>/historial")
