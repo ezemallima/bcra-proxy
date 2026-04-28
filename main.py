@@ -513,7 +513,52 @@ def wsp_index_route():
 
 @app.route("/moras.json")
 def moras():
+    # Primero buscar en /data (disco persistente), luego en directorio local
+    moras_path = os.path.join(DATA_DIR, 'moras_piattelli.json')
+    if os.path.exists(moras_path):
+        return send_from_directory(DATA_DIR, 'moras_piattelli.json')
     return send_from_directory(os.getcwd(), 'moras_piattelli.json')
+
+@app.route("/upload-moras", methods=["POST"])
+def upload_moras():
+    """Sube archivo Excel de moras y lo convierte a JSON"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({"error": "Sin archivo"}), 400
+        file = request.files['file']
+        import io
+        import openpyxl
+        wb = openpyxl.load_workbook(io.BytesIO(file.read()))
+        ws = wb.active
+        headers = [str(c.value or '').strip().lower() for c in ws[1]]
+        
+        # Detectar columnas
+        col_cuit = next((i for i, h in enumerate(headers) if 'cuit' in h), 0)
+        col_fecha = next((i for i, h in enumerate(headers) if 'fecha' in h), 1)
+        col_saldo = next((i for i, h in enumerate(headers) if 'saldo' in h or 'deuda' in h or 'adeud' in h), 2)
+        
+        moras_dict = {}
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            cuit = str(row[col_cuit] or '').strip().replace('-', '').replace(' ', '')
+            if len(cuit) >= 10:
+                fecha = str(row[col_fecha] or '').strip()
+                saldo = row[col_saldo]
+                try:
+                    saldo = float(str(saldo).replace(',', '.').replace('$', '').replace('.', '').replace(',', '.'))
+                except:
+                    saldo = 0
+                moras_dict[cuit] = {"fechaMora": fecha, "saldoAdeudado": saldo, "enMora": True}
+        
+        moras_path = os.path.join(DATA_DIR, 'moras_piattelli.json')
+        with open(moras_path, 'w', encoding='utf-8') as f:
+            json.dump(moras_dict, f, ensure_ascii=False, indent=2)
+        
+        print(f"[moras] Subidas {len(moras_dict)} moras", flush=True)
+        return jsonify({"ok": True, "total": len(moras_dict)})
+    except Exception as e:
+        import traceback
+        print(f"[moras] Error: {traceback.format_exc()}", flush=True)
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/cartera_inicial.json")
 def cartera_inicial():
