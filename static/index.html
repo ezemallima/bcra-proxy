@@ -659,6 +659,7 @@
       <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
         <button class="primary" onclick="verificarTodos()" id="btn-verificar" style="flex:1;">Verificar toda la cartera →</button>
         <button onclick="limpiarAlertas()" style="font-size:13px;color:#991b1b;">Limpiar alertas</button>
+        <button onclick="actualizarScoresAlertas()" style="font-size:13px;color:#1d4ed8;">↻ Actualizar scores</button>
         <label style="font-size:13px;cursor:pointer;padding:6px 12px;background:var(--bg2);border-radius:8px;border:1px solid var(--border);display:inline-flex;align-items:center;gap:4px;">
           📂 Actualizar moras
           <input type="file" accept=".xlsx,.xls" style="display:none;" onchange="subirMoras(this)">
@@ -1580,7 +1581,10 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
   // 3. CHEQUES RECHAZADOS (Max 150)
   var pCheques = 75; // neutral sin datos
   var chequesLabel = 'Sin datos';
-  if (chequesBCRA !== null && chequesBCRA !== undefined && !chequesBCRA.error_bcra) {
+  // sin_deudas:true = confirmado sin cheques = 150. error_bcra = neutral 75. null = no consultado = 75
+  if (chequesBCRA && chequesBCRA.sin_deudas === true && !chequesBCRA.error_bcra) {
+    pCheques = 150; chequesLabel = 'Sin cheques rechazados';
+  } else if (chequesBCRA !== null && chequesBCRA !== undefined && !chequesBCRA.error_bcra) {
     var resC = chequesBCRA.results || chequesBCRA;
     // Estructura con causales: {causales: [{causal, entidades:[{detalle:[...]}]}]}
     var todosDetalles = [];
@@ -1870,6 +1874,36 @@ function renderVendeScore(scoreObj) {
 
 
 // Normalizar nombre para comparación — ignora puntuación, tildes, mayúsculas
+async function actualizarScoresAlertas() {
+  if (!alertas.length) { alert('No hay alertas activas'); return; }
+  var btn = event.target;
+  btn.disabled = true; btn.textContent = 'Actualizando...';
+  var actualizadas = 0;
+  for (var i = 0; i < alertas.length; i++) {
+    var a = alertas[i];
+    try {
+      var r = await fetch('/deudas/' + a.cuit.replace(/-/g,''), {signal: AbortSignal.timeout(15000)});
+      var bcraData = await r.json();
+      var mora = buscarEnMoras(a.cuit);
+      var wsp = buscarEnWSP(a.cuit) || [];
+      var scoreObj = calcularVendeScore(a.cuit, bcraData, mora, wsp);
+      alertas[i].scoreCompleto = scoreObj.score;
+      alertas[i].scoreRango = scoreObj.rango;
+      alertas[i].scoreColor = scoreObj.color;
+      alertas[i].scoreEmoji = scoreObj.emoji;
+      actualizadas++;
+      btn.textContent = 'Actualizando ' + actualizadas + '/' + alertas.length + '...';
+    } catch(e) {}
+    await new Promise(r => setTimeout(r, 1000));
+  }
+  // Guardar
+  localStorage.setItem('piat_alertas', JSON.stringify(alertas));
+  await fetch('/alertas', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({alertas: alertas})});
+  renderAlertas();
+  btn.disabled = false; btn.textContent = '↻ Actualizar scores';
+  alert('✅ ' + actualizadas + ' alertas actualizadas');
+}
+
 async function subirMoras(input) {
   var file = input.files[0];
   if (!file) return;
@@ -2083,7 +2117,7 @@ async function consultarCliente() {
   document.getElementById('mora-alert-container').innerHTML = mora ? `
     <div class="mora-alert">
       <div class="mora-alert-title">⚠ Cliente con mora registrada</div>
-      <div class="mora-alert-detail"><strong>${mora.nombre}</strong> tiene facturas impagas desde <strong>${mora.fecha_mora}</strong>.<br>Saldo adeudado: <strong>$${(mora.saldo||0).toLocaleString('es-AR')}</strong> — Estado: ${mora.estado}</div>
+      <div class="mora-alert-detail"><strong>${mora.nombre||''}</strong> tiene facturas impagas desde <strong>${mora.fechaMora||mora.fecha_mora||'fecha desconocida'}</strong>.<br>Saldo adeudado: <strong>$${((mora.saldoAdeudado||mora.saldo||0)).toLocaleString('es-AR')}</strong></div>
     </div>` : '';
 
   document.getElementById('loading-state').style.display = 'none';
@@ -2159,6 +2193,7 @@ async function consultarCliente() {
     if (bcraData.error === 'timeout') {
       mostrarResultado(raw, null, true, estadoAfip, domicilioAfip, nombreFinal);
     } else {
+      window._ultimoBcraData = bcraData;
       mostrarResultado(raw, bcraData, false, estadoAfip, domicilioAfip, nombreFinal);
     }
   } catch(e) {
@@ -2168,8 +2203,9 @@ async function consultarCliente() {
   // mostrarResultado ya maneja el header completo con nombre, badge y botón cartera
   // No reescribir el header acá
 
+  // Limpiar cache de cheques al inicio de cada consulta
+  window._chequesUltimaConsulta = null;
   // Mostrar cheques rechazados — guardar resultado para el score
-  window._chequesUltimaConsulta = null; // resetear
   try {
     var chR = await fetch('/deudas/' + raw + '/cheques', {signal: AbortSignal.timeout(10000)});
     if (chR.ok) {
@@ -2299,6 +2335,7 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
       : fetch('/deudas/' + cuit + '/cheques', {signal: AbortSignal.timeout(15000)}).then(function(r){ return r.json(); }).catch(function(){ return null; })
   ]).then(function(resultados) {
     var historial = resultados[0];
+    if (historial) window._ultimoHistorial = historial;
     var cheques = resultados[1];
     var scoreObjFinal = calcularVendeScore(cuit, data, _scoreMora, _scoreWsp, historial, cheques);
     var scoreElF = document.getElementById('vende-score-container');
@@ -2476,6 +2513,16 @@ async function analizarCliente() {
   const bcra = bcraEl ? bcraEl.innerText : '';
   const wspThreads = buscarEnWSP(cuit);
   const mora = buscarEnMoras(cuit);
+  // Calcular score para incluir en análisis
+  var scorePreAnalisis = null;
+  try {
+    var bcraDataAI = window._ultimoBcraData || null;
+    var histAI = window._ultimoHistorial || null;
+    var chAI = window._chequesUltimaConsulta || null;
+    if (bcraDataAI) {
+      scorePreAnalisis = calcularVendeScore(cuit, bcraDataAI, mora, wspThreads||[], histAI, chAI);
+    }
+  } catch(e) {}
   const btn = document.getElementById('btn-analizar');
   const resEl = document.getElementById('analisis-resultado');
   btn.disabled = true; btn.textContent = 'Analizando...'; resEl.style.display = 'none';
