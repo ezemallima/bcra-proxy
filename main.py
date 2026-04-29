@@ -418,40 +418,46 @@ def ejecutar_verificacion(cartera_data):
         try:
             # Consultar BCRA principal
             bcra_data, error = consultar_bcra_cached(cuit)
-            if bcra_data.get('results') is not None:
-                entidades = []
-                periodos = (bcra_data.get('results') or {}).get('periodos') or []
-                if periodos:
-                    entidades = periodos[0].get('entidades', [])
-                max_sit = 1
-                if entidades:
-                    max_sit = max((e.get('situacion', 1) or 1) for e in entidades)
-
-                cliente_actualizado['ultimaSit'] = max_sit
-                cliente_actualizado['ultimaVerif'] = time.strftime('%d/%m/%Y')
-
-                # Calcular score COMPLETO para todos los clientes
-                score_data = calcular_score_servidor(cuit, bcra_data, en_mora=None)
+            
+            # Calcular score siempre — aunque haya error BCRA da score parcial
+            score_data = None
+            try:
+                score_data = calcular_score_servidor(cuit, bcra_data or {}, en_mora=None)
                 cliente_actualizado['scoreCompleto'] = score_data['score']
                 cliente_actualizado['scoreRango'] = score_data['rango']
                 cliente_actualizado['scoreColor'] = score_data['color']
                 cliente_actualizado['scoreEmoji'] = score_data['emoji']
+                print(f"[verif] {cuit} score={score_data['score']}", flush=True)
+            except Exception as e_score:
+                print(f"[verif] Error score {cuit}: {e_score}", flush=True)
+
+            # Actualizar situación BCRA
+            if bcra_data and bcra_data.get('results') is not None:
+                periodos = (bcra_data.get('results') or {}).get('periodos') or []
+                entidades = periodos[0].get('entidades', []) if periodos else []
+                max_sit = max((e.get('situacion', 1) or 1) for e in entidades) if entidades else 1
+                cliente_actualizado['ultimaSit'] = max_sit
+                cliente_actualizado['ultimaVerif'] = time.strftime('%d/%m/%Y')
 
                 if max_sit > sit_anterior or max_sit >= 3:
-                    nuevas_alertas.append({
+                    alerta = {
                         "nombre": nombre,
                         "cuit": cuit,
                         "sitAnterior": sit_anterior,
                         "sitActual": max_sit,
                         "fecha": time.strftime('%d/%m/%Y'),
-                        "tipo": "bcra",
-                        "scoreCompleto": score_data["score"],
-                        "scoreRango": score_data["rango"],
-                        "scoreColor": score_data["color"],
-                        "scoreEmoji": score_data["emoji"]
-                    })
-        except Exception:
-            pass
+                        "tipo": "bcra"
+                    }
+                    if score_data:
+                        alerta["scoreCompleto"] = score_data["score"]
+                        alerta["scoreRango"] = score_data["rango"]
+                        alerta["scoreColor"] = score_data["color"]
+                        alerta["scoreEmoji"] = score_data["emoji"]
+                    nuevas_alertas.append(alerta)
+            else:
+                cliente_actualizado['ultimaVerif'] = time.strftime('%d/%m/%Y')
+        except Exception as e_verif:
+            print(f"[verif] Error {cuit}: {e_verif}", flush=True)
 
         # Analizar grupo bodegas — solo mensajes de los últimos 6 meses
         try:
