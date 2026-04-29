@@ -2586,17 +2586,23 @@ async function analizarCliente() {
   var ubicacion = obtenerPromptUbicacion();
 
   var prompt = `<rol>
-Actúa como un Analista de Riesgo Crediticio Senior para ${getNombreBodega()}. Tu objetivo es brindar un informe descriptivo y detallado para apoyar la toma de decisiones. Tu rol es puramente analítico: presentá los hechos y la interpretación financiera, pero NO tomes decisiones comerciales ni sugieras restricciones de venta.
+Actuá como un Analista de Riesgo Crediticio Senior para ${getNombreBodega()}, especializado en el sector vitivinícola argentino. Integrá TODOS los datos disponibles: Score Vende Seguro, BCRA, cheques rechazados, Veraz/Nosis, mora con la bodega e historial del sector.
 </rol>
 
 <instrucciones>
-1. INTEGRACIÓN: Analizá los datos del reporte financiero en DATOS_VERAZ y cruzalos con el comportamiento histórico en HISTORIAL_BODEGA.
-2. DESCRIPCIÓN EXHAUSTIVA: En la sección "ANÁLISIS DE SOLVENCIA", no te limités a listar datos. Profundizá en qué significa la deuda del cliente, su estado BCRA y cómo esto impacta en su liquidez actual.
-3. RESTRICCIONES CRÍTICAS:
-   - PROHIBIDO sugerir decisiones (Aprobado/Rechazado) o recomendaciones operativas (Vender/No vender).
-   - PROHIBIDO mencionar cálculos de cantidad de botellas o precios unitarios.
-   - El tono debe ser profesional, analítico y neutral.
-   - PROHIBIDO inventar datos. Si algo no está en las fuentes, decí "No disponible".
+1. INTEGRACIÓN COMPLETA: Cruzá Score Vende Seguro, situación BCRA, cheques rechazados, Veraz/Nosis, mora con Piattelli e historial de bodegas.
+2. ANÁLISIS PROFUNDO: Interpretá qué significa cada dato en términos de liquidez y riesgo real para la bodega.
+3. LÍMITE DE CRÉDITO SUGERIDO según Score Vende Seguro:
+   - Score menor a 200: No operar con este cliente
+   - Score 200-400: Solo operación contado, sin crédito
+   - Score 400-500: Límite hasta $300.000
+   - Score 500-700: Límite entre $600.000 y $800.000
+   - Score 700-850: Límite entre $1.000.000 y $2.000.000
+   - Score mayor a 850: Más de $2.000.000 según historial con la bodega
+4. RESTRICCIONES:
+   - PROHIBIDO inventar datos. Si no está disponible indicá "Sin datos".
+   - Tono profesional y orientado a la decisión comercial.
+   - NO mencionar precios por botella ni cálculos de unidades.
 </instrucciones>
 
 <cliente>
@@ -2615,15 +2621,21 @@ ${datosHistorial}
 
 <formato_salida>
 PERFIL DE RIESGO
-[Resumen ejecutivo unificado: Riesgo externo financiero + Comportamiento interno]
+[Resumen ejecutivo integrando Score Vende Seguro + BCRA + Veraz + comportamiento con Piattelli]
 
 HISTORIAL COMERCIAL EN BODEGA
-[Detalle de comportamiento previo o "Sin antecedentes comerciales registrados en nuestra base"]
+[Comportamiento previo con Piattelli y referencias del sector vitivinícola]
 
 ANÁLISIS DE SOLVENCIA
-- Estado BCRA: [Situación actual]
-- Endeudamiento Total: [Monto total en sistema financiero]
-- Análisis de Capacidad de Pago: [Interpretación detallada: cómo el nivel de deuda y el estado BCRA afectan la liquidez del cliente y la estabilidad de sus compromisos]
+- Score Vende Seguro: [Score y qué implica]
+- Estado BCRA: [Situación actual y deuda total]
+- Cheques Rechazados: [Cantidad y estado según BCRA]
+- Veraz/Nosis: [Score y datos si disponible]
+- Mora con Piattelli: [Estado y monto si corresponde]
+- Capacidad de Pago: [Interpretación integrada]
+
+LÍMITE DE CRÉDITO SUGERIDO
+[Monto concreto basado en Score Vende Seguro con justificación breve]
 </formato_salida>`;
 
   try {
