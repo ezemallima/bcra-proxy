@@ -1567,8 +1567,11 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
   } else if (bcraData && bcraData.results && bcraData.results.periodos) {
     periodosHist = bcraData.results.periodos;
   }
-  // Calcular nPeriodosH con periodosHist ya disponible
-  var nPeriodosH = periodosHist.length;
+  // Calcular nPeriodosH — solo períodos CON deuda activa, no períodos vacíos
+  var nPeriodosH = 0;
+  periodosHist.forEach(function(p) {
+    if (p.entidades && p.entidades.length > 0) nPeriodosH++;
+  });
 
   // Recalcular Situación BCRA con profundidad histórica real
   if (maxSit === 1) {
