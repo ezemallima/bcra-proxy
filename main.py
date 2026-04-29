@@ -585,10 +585,22 @@ def upload_moras():
                 fecha = str(row[col_fecha] or '').strip()
                 saldo = row[col_saldo]
                 try:
-                    saldo = float(str(saldo).replace(',', '.').replace('$', '').replace('.', '').replace(',', '.'))
+                    saldo_str = str(saldo).replace('$','').replace(' ','')
+                    # Formato argentino: punto=miles, coma=decimal
+                    if ',' in saldo_str and '.' in saldo_str:
+                        saldo_str = saldo_str.replace('.','').replace(',','.')
+                    elif ',' in saldo_str:
+                        saldo_str = saldo_str.replace(',','.')
+                    saldo_num = float(saldo_str)
                 except:
-                    saldo = 0
-                moras_dict[cuit] = {"fechaMora": fecha, "saldoAdeudado": saldo, "enMora": True}
+                    saldo_num = 0
+                if cuit in moras_dict:
+                    # Acumular saldos y tomar fecha más antigua
+                    moras_dict[cuit]['saldoAdeudado'] += saldo_num
+                    if fecha < moras_dict[cuit]['fechaMora']:
+                        moras_dict[cuit]['fechaMora'] = fecha
+                else:
+                    moras_dict[cuit] = {"fechaMora": fecha, "saldoAdeudado": saldo_num, "enMora": True}
         
         moras_path = os.path.join(DATA_DIR, 'moras_piattelli.json')
         with open(moras_path, 'w', encoding='utf-8') as f:
