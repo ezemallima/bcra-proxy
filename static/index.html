@@ -2487,7 +2487,7 @@ async function procesarVeraz(input) {
       const chequeColor = verazData.cheques_rechazados>0 ? '#991b1b' : '#166534';
       let verazHtml = '<div style="font-size:12px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Datos extraídos del Veraz</div>';
       verazHtml += '<div class="info-grid">';
-      verazHtml += '<div><span class="lbl">Score:</span> <strong style="color:' + scoreColor + '">' + verazData.score + '/9</strong></div>';
+      verazHtml += '<div><span class="lbl">Score:</span> <strong style="color:' + scoreColor + '">' + verazData.score + '/999</strong></div>';
       verazHtml += '<div><span class="lbl">Cheques rechazados:</span> <strong style="color:' + chequeColor + '">' + verazData.cheques_rechazados + '</strong></div>';
       verazHtml += '<div><span class="lbl">Situación BCRA:</span> <strong>' + (verazData.situacion_bcra||'-') + '</strong></div>';
       verazHtml += '<div><span class="lbl">Saldo vencido:</span> <strong>' + (verazData.saldo_vencido||'-') + '</strong></div>';
@@ -2615,6 +2615,7 @@ Actuá como un Analista de Riesgo Crediticio Senior para ${getNombreBodega()}, e
 2. ANÁLISIS PROFUNDO: Interpretá qué significa cada dato en términos de liquidez y riesgo real para la bodega.
 3. LÍMITE DE CRÉDITO SUGERIDO según Score Vende Seguro:
    - Score menor a 200: No operar con este cliente
+   - Score 200-400: No operar — riesgo muy alto
    - Score 200-400: Solo operación contado, sin crédito
    - Score 400-500: Límite hasta $300.000
    - Score 500-700: Límite entre $600.000 y $800.000
