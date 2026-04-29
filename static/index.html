@@ -1543,34 +1543,15 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
     ? entidades.reduce(function(m,e){ return Math.max(m, e.situacion||1); }, 1)
     : sinDeudasReal ? 1 : null;
 
-  // Calcular cantidad de períodos históricos para ponderar
-  var nPeriodosH = 0;
-  if (historialBCRA && historialBCRA.results && historialBCRA.results.periodos) {
-    nPeriodosH = historialBCRA.results.periodos.length;
-  }
-  if (nPeriodosH === 0 && bcraData && bcraData.results && bcraData.results.periodos) {
-    nPeriodosH = bcraData.results.periodos.length;
-  }
-  // También contar períodos del bcraData actual si historial no llegó
-  if (nPeriodosH === 0 && entidades.length > 0) {
-    // Tiene al menos el período actual
-    nPeriodosH = 1;
-  }
-  console.log('[score] nPeriodosH:', nPeriodosH, 'historialBCRA:', historialBCRA ? 'ok' : 'null');
-
-  var pBCRA = 200; // neutral sin datos
+  // nPeriodosH se calculará después del bloque 2 cuando periodosHist esté disponible
+  var pBCRA = 200;
   var sitLabel = 'Sin datos';
-  if (maxSit === null) {
-    pBCRA = 200; sitLabel = 'Sin datos';
-  } else if (maxSit === 1) {
-    // Sit.1 ponderada por profundidad histórica
-    if      (nPeriodosH >= 12) { pBCRA = 400; sitLabel = 'Sit. 1'; }
-    else if (nPeriodosH >= 6)  { pBCRA = 300; sitLabel = 'Sit. 1 ('+nPeriodosH+'m)'; }
-    else if (nPeriodosH >= 2)  { pBCRA = 200; sitLabel = 'Sit. 1 ('+nPeriodosH+'m — historial corto)'; }
-    else                       { pBCRA = 150; sitLabel = 'Sit. 1 (historial mínimo)'; }
-  } else if (maxSit === 2) { pBCRA = 200; sitLabel = 'Sit. 2'; }
+  if (maxSit === null)     { pBCRA = 200; sitLabel = 'Sin datos'; }
+  else if (maxSit === 2)   { pBCRA = 200; sitLabel = 'Sit. 2'; }
   else if (maxSit === 3)   { pBCRA = 50;  sitLabel = 'Sit. 3'; }
-  else                     { pBCRA = 0;   sitLabel = 'Sit. '+maxSit; }
+  else if (maxSit >= 4)    { pBCRA = 0;   sitLabel = 'Sit. '+maxSit; }
+  // Sit.1 se recalcula después con nPeriodosH real
+  else                     { pBCRA = 200; sitLabel = 'Sit. 1'; } // placeholder
 
   puntos += pBCRA;
   detalle.push({ label:'Situación BCRA', valor: sitLabel, puntos:pBCRA, max:400 });
@@ -1586,6 +1567,22 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
   } else if (bcraData && bcraData.results && bcraData.results.periodos) {
     periodosHist = bcraData.results.periodos;
   }
+  // Calcular nPeriodosH con periodosHist ya disponible
+  var nPeriodosH = periodosHist.length;
+
+  // Recalcular Situación BCRA con profundidad histórica real
+  if (maxSit === 1) {
+    var pBCRANew = 200; var sitLabelNew = 'Sit. 1';
+    if      (nPeriodosH >= 12) { pBCRANew = 400; sitLabelNew = 'Sit. 1'; }
+    else if (nPeriodosH >= 6)  { pBCRANew = 300; sitLabelNew = 'Sit. 1 ('+nPeriodosH+'m)'; }
+    else if (nPeriodosH >= 2)  { pBCRANew = 200; sitLabelNew = 'Sit. 1 ('+nPeriodosH+'m — historial corto)'; }
+    else                       { pBCRANew = 150; sitLabelNew = 'Sit. 1 (historial mínimo)'; }
+    // Actualizar puntos y detalle
+    puntos = puntos - pBCRA + pBCRANew;
+    pBCRA = pBCRANew;
+    detalle[0] = { label:'Situación BCRA', valor: sitLabelNew, puntos:pBCRANew, max:400 };
+  }
+
   if (periodosHist.length > 0) {
     var mesesMalos = 0;
     var nPeriodos = Math.min(periodosHist.length, 24);
@@ -1594,11 +1591,10 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
       if (sitMax > 1) mesesMalos++;
     });
     if (mesesMalos === 0) {
-      // Sin irregularidades — puntuar según actividad (más períodos = más confiable)
-      if (nPeriodos >= 12)      { pHistorial = 150; historialLabel = 'Sin irregularidades ('+nPeriodos+'m)'; }
-      else if (nPeriodos >= 6)  { pHistorial = 120; historialLabel = 'Sin irregularidades ('+nPeriodos+'m)'; }
-      else if (nPeriodos >= 3)  { pHistorial = 90;  historialLabel = 'Sin irregularidades ('+nPeriodos+'m — historial corto)'; }
-      else                      { pHistorial = 60;  historialLabel = 'Sin irregularidades ('+nPeriodos+'m — historial mínimo)'; }
+      if (nPeriodosH >= 12)      { pHistorial = 150; historialLabel = 'Sin irregularidades ('+nPeriodosH+'m)'; }
+      else if (nPeriodosH >= 6)  { pHistorial = 120; historialLabel = 'Sin irregularidades ('+nPeriodosH+'m)'; }
+      else if (nPeriodosH >= 3)  { pHistorial = 90;  historialLabel = 'Sin irregularidades ('+nPeriodosH+'m — historial corto)'; }
+      else                       { pHistorial = 60;  historialLabel = 'Sin irregularidades ('+nPeriodosH+'m — historial mínimo)'; }
     }
     else if (mesesMalos <= 2)   { pHistorial = 75;  historialLabel = mesesMalos+' mes(es) irregular(es)'; }
     else                        { pHistorial = 0;   historialLabel = mesesMalos+' meses irregulares'; }
@@ -1614,14 +1610,12 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
   var pCheques = 75; // neutral sin datos
   var chequesLabel = 'Sin datos';
   // sin_deudas:true = confirmado sin cheques = 150. error_bcra = neutral 75. null = no consultado = 75
-  // Cheques: cruzar con actividad del historial
-  var nPeriodosParaCheques = periodosHist ? periodosHist.length : 0;
+  // Cheques: cruzar con nPeriodosH ya calculado
   if (chequesBCRA && chequesBCRA.sin_deudas === true && !chequesBCRA.error_bcra) {
-    // Sin cheques confirmado — puntuar según actividad
-    if (nPeriodosParaCheques >= 12)     { pCheques = 150; chequesLabel = 'Sin cheques rechazados'; }
-    else if (nPeriodosParaCheques >= 6) { pCheques = 120; chequesLabel = 'Sin cheques rechazados'; }
-    else if (nPeriodosParaCheques >= 2) { pCheques = 70;  chequesLabel = 'Sin cheques (historial corto)'; }
-    else                                { pCheques = 40;  chequesLabel = 'Sin cheques (sin historial)'; }
+    if (nPeriodosH >= 12)     { pCheques = 150; chequesLabel = 'Sin cheques rechazados'; }
+    else if (nPeriodosH >= 6) { pCheques = 120; chequesLabel = 'Sin cheques rechazados'; }
+    else if (nPeriodosH >= 2) { pCheques = 70;  chequesLabel = 'Sin cheques (historial corto)'; }
+    else                      { pCheques = 40;  chequesLabel = 'Sin cheques (sin historial)'; }
   } else if (chequesBCRA !== null && chequesBCRA !== undefined && !chequesBCRA.error_bcra) {
     var resC = chequesBCRA.results || chequesBCRA;
     // Estructura con causales: {causales: [{causal, entidades:[{detalle:[...]}]}]}
