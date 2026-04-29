@@ -1573,11 +1573,14 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
   // Recalcular Situación BCRA con profundidad histórica real
   if (maxSit === 1) {
     var pBCRANew = 200; var sitLabelNew = 'Sit. 1';
-    if      (nPeriodosH >= 12) { pBCRANew = 400; sitLabelNew = 'Sit. 1'; }
-    else if (nPeriodosH >= 6)  { pBCRANew = 300; sitLabelNew = 'Sit. 1 ('+nPeriodosH+'m)'; }
-    else if (nPeriodosH >= 2)  { pBCRANew = 200; sitLabelNew = 'Sit. 1 ('+nPeriodosH+'m — historial corto)'; }
-    else                       { pBCRANew = 150; sitLabelNew = 'Sit. 1 (historial mínimo)'; }
-    // Actualizar puntos y detalle
+    var sinDeudas = bcraData && bcraData.sin_deudas === true;
+    if (sinDeudas) {
+      // Nunca usó crédito — no sabemos cómo paga
+      pBCRANew = 150; sitLabelNew = 'Sit. 1 (sin uso de crédito)';
+    } else if (nPeriodosH >= 12) { pBCRANew = 400; sitLabelNew = 'Sit. 1 ('+nPeriodosH+'m)'; }
+    else if (nPeriodosH >= 6)    { pBCRANew = 300; sitLabelNew = 'Sit. 1 ('+nPeriodosH+'m)'; }
+    else if (nPeriodosH >= 2)    { pBCRANew = 200; sitLabelNew = 'Sit. 1 ('+nPeriodosH+'m — historial corto)'; }
+    else                         { pBCRANew = 150; sitLabelNew = 'Sit. 1 (historial mínimo)'; }
     puntos = puntos - pBCRA + pBCRANew;
     pBCRA = pBCRANew;
     detalle[0] = { label:'Situación BCRA', valor: sitLabelNew, puntos:pBCRANew, max:400 };
