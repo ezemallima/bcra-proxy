@@ -2583,6 +2583,27 @@ async function analizarCliente() {
     if (clienteCartera.plazoDias) condicionesActuales += `Plazo actual: ${clienteCartera.plazoDias} días\n`;
   }
 
+  // Agregar mora y cheques a condiciones actuales
+  if (mora) {
+    var saldoMoraAI = mora.saldoAdeudado || mora.saldo || 0;
+    var fechaMoraAI = mora.fechaMora || mora.fecha_mora || 'fecha desconocida';
+    condicionesActuales += `Mora con Piattelli: SÍ — Saldo $${saldoMoraAI.toLocaleString('es-AR')} desde ${fechaMoraAI}\n`;
+  } else {
+    condicionesActuales += `Mora con Piattelli: Sin mora registrada\n`;
+  }
+  if (window._chequesUltimaConsulta && !window._chequesUltimaConsulta.error_bcra && window._chequesUltimaConsulta.results) {
+    var resChQ = window._chequesUltimaConsulta.results || {};
+    var causalesQ = resChQ.causales || [];
+    var detQ = [];
+    causalesQ.forEach(function(c){ (c.entidades||[]).forEach(function(e){ detQ = detQ.concat(e.detalle||[]); }); });
+    if (detQ.length > 0) {
+      var activosQ = detQ.filter(function(d){ return !d.fechaPago || d.estadoMulta === 'IMPAGA'; }).length;
+      condicionesActuales += `Cheques rechazados BCRA: ${detQ.length} total, ${activosQ} sin levantar\n`;
+    } else if (window._chequesUltimaConsulta.sin_deudas) {
+      condicionesActuales += `Cheques rechazados BCRA: Sin cheques rechazados\n`;
+    }
+  }
+
   var ubicacion = obtenerPromptUbicacion();
 
   var prompt = `<rol>
