@@ -1547,9 +1547,16 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
   var nPeriodosH = 0;
   if (historialBCRA && historialBCRA.results && historialBCRA.results.periodos) {
     nPeriodosH = historialBCRA.results.periodos.length;
-  } else if (bcraData && bcraData.results && bcraData.results.periodos) {
+  }
+  if (nPeriodosH === 0 && bcraData && bcraData.results && bcraData.results.periodos) {
     nPeriodosH = bcraData.results.periodos.length;
   }
+  // También contar períodos del bcraData actual si historial no llegó
+  if (nPeriodosH === 0 && entidades.length > 0) {
+    // Tiene al menos el período actual
+    nPeriodosH = 1;
+  }
+  console.log('[score] nPeriodosH:', nPeriodosH, 'historialBCRA:', historialBCRA ? 'ok' : 'null');
 
   var pBCRA = 200; // neutral sin datos
   var sitLabel = 'Sin datos';
