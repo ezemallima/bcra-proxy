@@ -263,15 +263,16 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
     pts_sit = {1: 400, 2: 200, 3: 50}.get(max_sit, 0)
     puntos += pts_sit
 
-    # 2. Historial 24m — usar caché en disco primero
+    # 2. Historial 24m — siempre consultar fresco durante verificación
     pts_hist = 75  # neutral sin datos
     try:
         hist_cached = None
         hist_path = os.path.join(DATA_DIR, f'historial_{cuit}.json')
+        # Solo usar caché si tiene menos de 1 hora (datos de esta misma verificación)
         if os.path.exists(hist_path):
             with open(hist_path, 'r') as f:
                 hc = json.load(f)
-            if time.time() - hc.get('ts', 0) < 86400:
+            if time.time() - hc.get('ts', 0) < 3600:
                 hist_cached = hc.get('payload')
         if not hist_cached:
             for url_h in [BCRA_WORKER + "/deudas/" + cuit + "/historial",
@@ -299,10 +300,11 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
     try:
         cheq_cached = None
         cheq_path = os.path.join(DATA_DIR, f'cheques_{cuit}.json')
+        # Solo usar caché si tiene menos de 1 hora (datos de esta misma verificación)
         if os.path.exists(cheq_path):
             with open(cheq_path, 'r') as f:
                 cc = json.load(f)
-            if time.time() - cc.get('ts', 0) < 86400:
+            if time.time() - cc.get('ts', 0) < 3600:
                 cheq_cached = cc.get('payload')
         if not cheq_cached:
             for url_c in [BCRA_WORKER + "/deudas/" + cuit + "/cheques",
@@ -403,6 +405,14 @@ def ejecutar_verificacion(cartera_data):
 
     nuevas_alertas = []
     cartera_actualizada = []
+
+    # Limpiar caché de disco para forzar consultas frescas al BCRA
+    try:
+        cache_file = os.path.join(DATA_DIR, 'bcra_cache.json')
+        if os.path.exists(cache_file):
+            os.remove(cache_file)
+            print("[verif] Caché BCRA limpiado para verificación fresca", flush=True)
+    except: pass
 
     for i, cliente in enumerate(cartera_data):
         cuit = cliente.get('cuit', '')
@@ -646,6 +656,7 @@ def verificar_cartera():
             return jsonify({"error": "Cartera vacia"}), 400
         t = threading.Thread(target=ejecutar_verificacion, args=(cartera_data,), daemon=True)
         t.start()
+        # Solo un worker puede iniciar la verificación
         return jsonify({"ok": True, "mensaje": "Verificacion iniciada en el servidor"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
