@@ -2106,8 +2106,10 @@ async function consultarCliente() {
   // mostrarResultado ya maneja el header completo con nombre, badge y botón cartera
   // No reescribir el header acá
 
-  // Limpiar cache de cheques al inicio de cada consulta
+  // Limpiar todos los datos del cliente anterior
   window._chequesUltimaConsulta = null;
+  window._ultimoBcraData = null;
+  window._ultimoHistorial = null;
   // Mostrar cheques rechazados — guardar resultado para el score
   try {
     var chR = await fetch('/deudas/' + raw + '/cheques', {signal: AbortSignal.timeout(10000)});
@@ -2232,10 +2234,7 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
   // Cargar historial 24m y cheques en paralelo
   Promise.all([
     fetch('/deudas/' + cuit + '/historial', {signal: AbortSignal.timeout(15000)}).then(function(r){ return r.json(); }).catch(function(){ return null; }),
-    // Usar cheques ya consultados si están disponibles — evita segunda consulta fallida
-    window._chequesUltimaConsulta
-      ? Promise.resolve(window._chequesUltimaConsulta)
-      : fetch('/deudas/' + cuit + '/cheques', {signal: AbortSignal.timeout(15000)}).then(function(r){ return r.json(); }).catch(function(){ return null; })
+    fetch('/deudas/' + cuit + '/cheques', {signal: AbortSignal.timeout(15000)}).then(function(r){ return r.json(); }).catch(function(){ return null; })
   ]).then(function(resultados) {
     var historial = resultados[0];
     if (historial) window._ultimoHistorial = historial;
