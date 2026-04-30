@@ -1,0 +1,4114 @@
+[
+  {
+    "nombre": "PANESSIDI S.R.L.",
+    "cuit": "30714840203",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Santa Fe",
+    "email": "pedidos@visiondistribuciones.com",
+    "limiteCredito": 1000000000000.0
+  },
+  {
+    "nombre": "Tu Bebida S.A.",
+    "cuit": "30714844462",
+    "vendedor": "Alejandro Valan",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "gonzalo@berlinbebidas.com.ar",
+    "limiteCredito": 30000000.0
+  },
+  {
+    "nombre": "Inc S. A.",
+    "cuit": "30687310434",
+    "vendedor": "Roberto Pascual",
+    "ciudad": "Martinez",
+    "email": "",
+    "limiteCredito": 100000000.0
+  },
+  {
+    "nombre": "Ortega Sebastian Ramon Horacio",
+    "cuit": "20258410336",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Yerba Buena",
+    "email": "noanegocios@gmail.com",
+    "limiteCredito": 15000000.0
+  },
+  {
+    "nombre": "Cencosud S A",
+    "cuit": "30590360763",
+    "vendedor": "Roberto Pascual",
+    "ciudad": "Martinez",
+    "email": "",
+    "limiteCredito": 100000000.0
+  },
+  {
+    "nombre": "COTO CENTRO INTEGRAL DE COMERCIALIZACION S.A.",
+    "cuit": "30548083156",
+    "vendedor": "Roberto Pascual",
+    "ciudad": "CIUDAD",
+    "email": "",
+    "limiteCredito": 80000000.0
+  },
+  {
+    "nombre": "MARKEN DRINKS SA",
+    "cuit": "30717706281",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "markendrink@gmail.com",
+    "limiteCredito": 2000000.0
+  },
+  {
+    "nombre": "LAS LUCIAS SRL",
+    "cuit": "30715410261",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "atrogliero@gmail.com",
+    "limiteCredito": 2000000.0
+  },
+  {
+    "nombre": "Compañia Argentina De Bebidas S.A.",
+    "cuit": "30715323539",
+    "vendedor": "Alejandro Valan",
+    "ciudad": "Escobar",
+    "email": "mbasile@cabesa.com.ar",
+    "limiteCredito": 15000000.0
+  },
+  {
+    "nombre": "WYPRA SA",
+    "cuit": "30718287495",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "infowypra@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "VIDELA ALEJANDRO MARTIN",
+    "cuit": "20213106008",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "alejandro-videla@hotmail.com",
+    "limiteCredito": 500.0
+  },
+  {
+    "nombre": "YANZI MARIANO",
+    "cuit": "20274042029",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "leonardorofrano@gmail.com",
+    "limiteCredito": 2000000.0
+  },
+  {
+    "nombre": "RUSTICO VINOS SRL",
+    "cuit": "30718910559",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "compras@rusticovinos.com.ar",
+    "limiteCredito": 2000000.0
+  },
+  {
+    "nombre": "H C A Sau",
+    "cuit": "30621630225",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "laura.cagnani@fourseasons.com",
+    "limiteCredito": 1500000.0
+  },
+  {
+    "nombre": "Pandolfi Edgardo",
+    "cuit": "20116816408",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "info@barondelvino.com",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "MATINA DITIES S.R.L",
+    "cuit": "30718214072",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "joselavinos@gmail.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "Vinacho S.R.L.",
+    "cuit": "30718144104",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "momentodebrindar@gmail.com",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "DE GREGORIO FEDERICO MARTIN (LAVIRON)",
+    "cuit": "20278612393",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Tigre",
+    "email": "fdg.degregorio@gmail.com",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "EL MIRASOL DE LA RECOVA SA",
+    "cuit": "30655719160",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "recova@elmirasol.com.ar",
+    "limiteCredito": 1500000.0
+  },
+  {
+    "nombre": "Rovlan S.A.",
+    "cuit": "30711379521",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "Godoy Cruz",
+    "email": "avilag@gobar.com.ar maraujo@gobar.com.ar mfernandez@artelbrands.com.ar",
+    "limiteCredito": 10000000.0
+  },
+  {
+    "nombre": "ABRIANI JUAN MANUEL",
+    "cuit": "20251151440",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Vicente Lopez",
+    "email": "guidoborzicchi94@gmail.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "LLANOS MIRTA YOLANDA",
+    "cuit": "27168991822",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "SALTA",
+    "email": "reinoso.ramon2017@gmail.com",
+    "limiteCredito": 3000000.0
+  },
+  {
+    "nombre": "BOADA MARIA SUSANA",
+    "cuit": "27065534628",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "mariajoseuriona@gmail.com",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "CARDOZO FEDERICO JOSE",
+    "cuit": "20224682701",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Cafayate",
+    "email": "vinotintocafayate@hotmail.com",
+    "limiteCredito": 4000000.0
+  },
+  {
+    "nombre": "LOYDIS S.A.",
+    "cuit": "30701589773",
+    "vendedor": "Alejandro Valan",
+    "ciudad": "Mar del Plata",
+    "email": "loydisrepresentaciones@gmail.com",
+    "limiteCredito": 20000000.0
+  },
+  {
+    "nombre": "PLA GROUP SA",
+    "cuit": "30714275670",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Escobar",
+    "email": "pascuel1@hotmail.com",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "Alvear Palace Hotel Sa I",
+    "cuit": "30527225988",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "CABA",
+    "email": "javier.miro@alvear.com.ar",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "PABLO GABRIEL CAPPUCCIO Y LUIS DARIO ARCIDIACONO",
+    "cuit": "30716109220",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "cappucciopablo@gmail.com",
+    "limiteCredito": 6000000.0
+  },
+  {
+    "nombre": "PATAGONIA VINOS SRL",
+    "cuit": "30708140216",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "bariloche",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "SCALLY TOMAS KEVIN",
+    "cuit": "20132775053",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "kscally@aointl.com",
+    "limiteCredito": 1300000.0
+  },
+  {
+    "nombre": "BONETTI GUILLERMO",
+    "cuit": "20208931742",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "ventas@terrumvinoteca.com",
+    "limiteCredito": 250000.0
+  },
+  {
+    "nombre": "EL TUFFI SA",
+    "cuit": "30715812742",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "bbaaargentina66@gmail.com",
+    "limiteCredito": 5000000.0
+  },
+  {
+    "nombre": "INTERNACIONAL PANAMERICANA SRL",
+    "cuit": "30629325588",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Vicente Lopez",
+    "email": "lacalesita.proveedores@gmail.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "SANTA BARBARA FOOD S.A.",
+    "cuit": "30711549478",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "alan@salimosfuerte.com",
+    "limiteCredito": 400000.0
+  },
+  {
+    "nombre": "VINOTECAS ROMA WINE SRL",
+    "cuit": "30717516431",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ramos Mejia",
+    "email": "romawine@gmail.com",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "CAMPOT RAFAEL GUSTAVO",
+    "cuit": "20265639721",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "ventas@vinosconsentidos.com.ar",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "SGRINIERO FRANCISCO JAVIER",
+    "cuit": "20218501010",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "pperticone@artelbrands.com.ar",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "LA BRIGADA SA",
+    "cuit": "30649635389",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "info@labrigada.com.ar",
+    "limiteCredito": 3000000.0
+  },
+  {
+    "nombre": "QUINTERO HUGO NORMANDO",
+    "cuit": "20201508720",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "hugonormandoquintero@gmail.com",
+    "limiteCredito": 500.0
+  },
+  {
+    "nombre": "WINEFLASH S.R.L.",
+    "cuit": "30719015049",
+    "vendedor": "Adrian Arango",
+    "ciudad": "caba",
+    "email": "distriwineflash@gmail.com",
+    "limiteCredito": 300000.0
+  },
+  {
+    "nombre": "PRIMERA ESQUINA SRL",
+    "cuit": "30715127616",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "Moreliacaballito@gmail.com",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "PROYECTO VALLE SRL",
+    "cuit": "30717550842",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "Fogosa.adm@gmail.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "PORTAL DE LOS ANDES SRL",
+    "cuit": "30717042499",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "laviejaestacionensalta@gmail.com",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "VACCARI DARIO",
+    "cuit": "20366883879",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Caseros",
+    "email": "dario_vaccari@hotmail.com",
+    "limiteCredito": 700000.0
+  },
+  {
+    "nombre": "AZARI WINES SEL",
+    "cuit": "30718155025",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "fede_CV@hotmail.com",
+    "limiteCredito": 4000000.0
+  },
+  {
+    "nombre": "DISTRIBUIDORA ZETA SRL",
+    "cuit": "30714965340",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "zetabebidas@hotmail.com",
+    "limiteCredito": 2000000.0
+  },
+  {
+    "nombre": "FERNANDEZ JOSE ANTONIO",
+    "cuit": "23126405219",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "cerdonegrok@gmail.com",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "VINOTECA QUILMES SA",
+    "cuit": "30711786887",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Quilmes",
+    "email": "vinosquilmes@gmail.com",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "DISTRIBUIDORA FERRARI SA",
+    "cuit": "30712108173",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "El Calafate",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "DISTRIBUIDORA FIORELLA SA",
+    "cuit": "30715541323",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Benavidez",
+    "email": "vinos_ariel@hotmail.com",
+    "limiteCredito": 50000.0
+  },
+  {
+    "nombre": "PEÑA CATALINA",
+    "cuit": "27283213868",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Benavidez",
+    "email": "hernan@laestaciondelvino.com.ar",
+    "limiteCredito": 300000.0
+  },
+  {
+    "nombre": "ROMA NOC S.A.",
+    "cuit": "30716441373",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "General Rodriguez",
+    "email": "fuenzalidamarcelo@hotmail.com",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "RUCAWINE DISTRIBUIDORA SRL",
+    "cuit": "30718166345",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "rucawine_club@hotmail.com",
+    "limiteCredito": 1900000.0
+  },
+  {
+    "nombre": "TELESA VICENTE Y TELESA FILOMENA",
+    "cuit": "30548102444",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ramos Mejia",
+    "email": "suvidany@yahoo.com.ar",
+    "limiteCredito": 3000000.0
+  },
+  {
+    "nombre": "DISTRIBUIDORA ENERGY NORTE SRL",
+    "cuit": "30712476539",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "rmaza@artelbrands.com.ar",
+    "limiteCredito": 2000000.0
+  },
+  {
+    "nombre": "ELISABEL SRL",
+    "cuit": "30678624361",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "proveedores@restlaslilas.com.ar",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "GIMARAL SRL",
+    "cuit": "30708285788",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "caldendelsoho@gmail.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "SATTA SA",
+    "cuit": "30718059212",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Tigre",
+    "email": "sfrusto@gmail.com",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "TANAG SA",
+    "cuit": "30717221709",
+    "vendedor": "Adrian Arango",
+    "ciudad": "San Isidro",
+    "email": "restaurantsanisidrogolf@gmail.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "WALTER DARUICH",
+    "cuit": "20128782932",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "CAFAYATE",
+    "email": "rmaza@artelbrands.com.ar",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "ACUÑA MARTIN",
+    "cuit": "20359760052",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "caballitobodegon@gmail.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "ALMACEN 1249 S.R.L.",
+    "cuit": "30714715522",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "msalazar@almacen1249.com.ar",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "ALMACEN JABUGO S.R.L.",
+    "cuit": "30716006367",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "nmartinez@almacen1249.com.ar",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "BASERGA MATIAS ADRIAN",
+    "cuit": "20270273743",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "varietalesargentinos@gmail.com",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "Bolsa De Gatos S.A.S.",
+    "cuit": "30716212978",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "malasanaproveedores@gmail.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "CONAMER SA",
+    "cuit": "30682584617",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "CIUDAD AUTONOMA  DE BS.AS.",
+    "email": "",
+    "limiteCredito": 10000000000.0
+  },
+  {
+    "nombre": "CZIMENT SABRINA",
+    "cuit": "27257053631",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "nicolas@selecciondevinos.com.ar",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "EL CHARRUA SRL",
+    "cuit": "30714434590",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "laloponce00@hotmail.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "ESPACIOVINO SRL",
+    "cuit": "30715640313",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "info@espaciovino.com.ar",
+    "limiteCredito": 1500000.0
+  },
+  {
+    "nombre": "FATUROS TEMISTOCLES",
+    "cuit": "20933808867",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "vinoteca.acropolis@gmail.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "FERNANDEZ JUAN MANUEL",
+    "cuit": "20304962829",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "juanmf_83@hotmail.com",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "FRIGONI GONZALO",
+    "cuit": "20160680904",
+    "vendedor": "Adrian Arango",
+    "ciudad": "BUENOS AIRES",
+    "email": "agustina.frigoni@gorroswine.com.ar",
+    "limiteCredito": 400000.0
+  },
+  {
+    "nombre": "HAPPY PEOPLE SA",
+    "cuit": "30716230704",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Tigre",
+    "email": "impresionesmanso@gmail.com",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "HI1208 SRL",
+    "cuit": "30716738570",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "restaurantvascofrances@gmail.com",
+    "limiteCredito": 4000000.0
+  },
+  {
+    "nombre": "MMC SRL",
+    "cuit": "33717861979",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Cafayate",
+    "email": "gdanese@gsanantonio.com.ar",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "SAN JUAN S.R.L",
+    "cuit": "33712310729",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Jujuy",
+    "email": "alfredo.vineriasanjuan@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "CAR SECURITY SA",
+    "cuit": "30698744177",
+    "vendedor": "Adrian Arango",
+    "ciudad": "olivos",
+    "email": "LNICOLINI@STRIX.COM.AR",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "D ALOISIO CAMILO GUILLERMO",
+    "cuit": "20203291052",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ensenada",
+    "email": "camilodaloisio1968@gmail.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "FRANCO JUANA",
+    "cuit": "27129998941",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "SALTA",
+    "email": "santosteoavril@gmail.com",
+    "limiteCredito": 5000000.0
+  },
+  {
+    "nombre": "JOSERAL SA",
+    "cuit": "33710920929",
+    "vendedor": "Adrian Arango",
+    "ciudad": "San Isidro",
+    "email": "info@1000rosanegra.com.ar",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "LAZARTE Y LEZA SA",
+    "cuit": "30717436497",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "haritz.restaurante@gmail.com",
+    "limiteCredito": 350000.0
+  },
+  {
+    "nombre": "ABDENUR CARLOS ENRIQUE",
+    "cuit": "20207336875",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "SALTA",
+    "email": "carlosabdenur35@gmail.com",
+    "limiteCredito": 2000000.0
+  },
+  {
+    "nombre": "BAUMOL SA",
+    "cuit": "30707939113",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "administracion@estilo-campo.com.ar",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "Gcm S.A.S.",
+    "cuit": "30716274086",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Usuhaia",
+    "email": "roucomatias001@gmail.com",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "Gimenez Fernando David",
+    "cuit": "20296007049",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Avellaneda",
+    "email": "camila.gimenz@hotmail.com",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "LONGONE CARLOS DANIEL",
+    "cuit": "20217398992",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "Nueva Galia",
+    "email": "cdlongone@yahoo.com.ar",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "ROMERO NOGUERA GUILLERMO ANDRES",
+    "cuit": "20254624749",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "San Juan",
+    "email": "guillermoandresromero@hotmail.com",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "Sanfelice Sergio Dario",
+    "cuit": "20259696934",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "General Pico",
+    "email": "Vinotecadonpedro@ceystel.com.ar",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "AIROLDES MAURO HERNAN",
+    "cuit": "20360864376",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Banfield",
+    "email": "mauro.air@live.com.ar",
+    "limiteCredito": 300000.0
+  },
+  {
+    "nombre": "ANDES DRIFTERS",
+    "cuit": "30716974185",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "SAN MARTIN DE LOS ANDES",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "BARBA MARCELO FEDERICO",
+    "cuit": "20329454763",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Villa Adelina",
+    "email": "barbavinos@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "CASTILLO SEBASTIAN ALEJANDRO",
+    "cuit": "20295946815",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "Castillosebastian@hotmail.Com",
+    "limiteCredito": 300000.0
+  },
+  {
+    "nombre": "ConsumidorFinal AV",
+    "cuit": "20222222223",
+    "vendedor": "Adrian Arango",
+    "ciudad": "0",
+    "email": "0",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "GASTRO GROUP SA",
+    "cuit": "30714639427",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "pato@osumi.com.ar",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "LOBSO SRL",
+    "cuit": "30716676427",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "hola@lobsomarket.com.ar",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "MARCACION E IDENTIFICACION SA",
+    "cuit": "30692844927",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Pilar",
+    "email": "fettuccinemario@hotmail.com",
+    "limiteCredito": 1500000.0
+  },
+  {
+    "nombre": "PIEGARI SA",
+    "cuit": "30663448567",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "macuna@piegari.com.ar",
+    "limiteCredito": 400000.0
+  },
+  {
+    "nombre": "VMLR SRL",
+    "cuit": "30716485559",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "colucciolautaro@gmail.com // coluccio.m10@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "ALEJANDRO GABRIEL COXE",
+    "cuit": "20200637373",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "San Martin",
+    "email": "regalos@perdrielweb.com.ar",
+    "limiteCredito": 250000.0
+  },
+  {
+    "nombre": "ALVAVE SAS",
+    "cuit": "30716688573",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "Mendoza",
+    "email": "mfernandez@artelbrands.com.ar",
+    "limiteCredito": 250000.0
+  },
+  {
+    "nombre": "ARTESE ANDRES DAVID",
+    "cuit": "20292478551",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "San Justo",
+    "email": "andresdavidartese@gmail.com",
+    "limiteCredito": 400000.0
+  },
+  {
+    "nombre": "Abdenur Cristian Maximiliano",
+    "cuit": "20436862297",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "eldesvio.sla gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "CREPS S.G. S.A.",
+    "cuit": "30711881847",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Tigre",
+    "email": "compras2@vivanco.com.ar",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "EDN SAS EN FORMACION",
+    "cuit": "30718364457",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Jujuy",
+    "email": "rmaza@artelbrands.com.ar",
+    "limiteCredito": 400000.0
+  },
+  {
+    "nombre": "GRAÑA SERGIO",
+    "cuit": "20120826604",
+    "vendedor": "Adrian Arango",
+    "ciudad": "olivos",
+    "email": "Contacto@herenciawinebar.com",
+    "limiteCredito": 100000.0
+  },
+  {
+    "nombre": "MERCEDES 3939 SRL",
+    "cuit": "30715696602",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "alicia.proveedores@gmail.com",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "Melo Fabian Ignacio",
+    "cuit": "20927898145",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Wilde",
+    "email": "fabianmelo@live.com.ar",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "NEVART SA",
+    "cuit": "30714435007",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "sarkis.proveedores@hotmail.com",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "ORTEGA ADRIAN LEONARDO",
+    "cuit": "20265889701",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Ingeniero Pablo Nogues",
+    "email": "adrian@comercialbrand.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "TAMTRUM SRL",
+    "cuit": "30717106543",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "holboxbebidas@gmail.com",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "VSL DISTRIBUCIONES SRL",
+    "cuit": "30718279735",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "San Luis",
+    "email": "mfernandez@artelbrands.com.ar",
+    "limiteCredito": 3000000.0
+  },
+  {
+    "nombre": "BOX 22 SA",
+    "cuit": "30708626305",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Martinez",
+    "email": "giuliana@derivaresto.com.ar",
+    "limiteCredito": 250000.0
+  },
+  {
+    "nombre": "Berardinelli Alejandro",
+    "cuit": "20317029188",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "GRAL.RODRIGUEZ (OESTE)",
+    "email": "leonardojf76@hotmail.com",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "FERNANDEZ NEGRON EDUARDO ADRIAN",
+    "cuit": "20169232084",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "Bariloche",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "JBJ SAS",
+    "cuit": "30717982254",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "Mendoza",
+    "email": "administración@bigwine.com.ar",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "JOLUGIA S.R.L.",
+    "cuit": "30680780257",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "CAPITAL FEDERAL",
+    "email": "consultas@puerto-cristal.com.ar",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "LIGIER S.A.",
+    "cuit": "30686525607",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "CAPITAL FEDERAL",
+    "email": "edith@ligier.com.ar",
+    "limiteCredito": 1000.0
+  },
+  {
+    "nombre": "MIL480 BEBIDAS SRL",
+    "cuit": "30717309975",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ramos Mejia",
+    "email": "gastonfabre2@gmail.com",
+    "limiteCredito": 700000.0
+  },
+  {
+    "nombre": "ROGELIO SERV. JURIDICOS Y GASTRONOMICOS SAS",
+    "cuit": "30717045390",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "Godoy Cruz",
+    "email": "marbravo6@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "T S R TIME SHARING RESORTS SA",
+    "cuit": "30609539069",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "SAN MARTIN DE LOS ANDES",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "TIENDA LA COLORADA SRL",
+    "cuit": "30717072614",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Escobar",
+    "email": "alejandro_de_oro@yahoo.com.ar",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "ALMACEN MUCHO GUSTO SRL",
+    "cuit": "30716929120",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "msalazar@almacen1249.com.ar",
+    "limiteCredito": 1500000.0
+  },
+  {
+    "nombre": "Bingo Fuel Wines Sociedad Anonima",
+    "cuit": "30715454234",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "Agrelo",
+    "email": "matias.rota@losvalientes.com.ar",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "CONSULTORA INTEGRAL EMPRESARIA SA",
+    "cuit": "30651767772",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "presas@hotmail.com",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "DU VIN COLECCION",
+    "cuit": "30717779211",
+    "vendedor": "Adrian Arango",
+    "ciudad": "olivos",
+    "email": "Info@duvin.com.ar",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "FIVIC SRL",
+    "cuit": "30709201278",
+    "vendedor": "Adrian Arango",
+    "ciudad": "BUENOS AIRES",
+    "email": "edgardo.vieira@mariadellujan.com.ar",
+    "limiteCredito": 250000.0
+  },
+  {
+    "nombre": "LIBONATI MARIANO JOSE",
+    "cuit": "20252952188",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "marianolibonati@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "Marclas S. A. S.",
+    "cuit": "30717280039",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "General Pico",
+    "email": "sebastian@marchisioclaus.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "PEPITO BODEGON SRL",
+    "cuit": "30717824918",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "Pepito.restaurantparrilla@gmail.com",
+    "limiteCredito": 5000.0
+  },
+  {
+    "nombre": "Ricci Martin Javier",
+    "cuit": "23419173959",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Martinez",
+    "email": "ambarselecto0@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "Rodriguez Claudia Mabel",
+    "cuit": "23186333934",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "pperticone@artelbrands.com.ar",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "TUR LYFE SA",
+    "cuit": "30658150673",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "mmuniz@intersurrecoleta.com.ar",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "VITIS SRL",
+    "cuit": "30710731507",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "San Juan",
+    "email": "vitisjavier@vitisvinos.ar",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "ZORREGUIETA MARTIN",
+    "cuit": "20229932749",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "Bariloche",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 3000000.0
+  },
+  {
+    "nombre": "ALVAREZ LEONARDO RAUL",
+    "cuit": "20368279723",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Escobar",
+    "email": "leoroots92max@gmail.com",
+    "limiteCredito": 1000.0
+  },
+  {
+    "nombre": "BRUM BERTOLO JULIO CESAR",
+    "cuit": "20228424944",
+    "vendedor": "Adrian Arango",
+    "ciudad": "gba norte (zarate)",
+    "email": "jbrum@hotmail.com",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "Bartolotti, Gustavo David",
+    "cuit": "20246953172",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "Ushuaia",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "Bondeno S. A. S.",
+    "cuit": "30717984087",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "Ushuaia",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "COMPIANO ANGELINETTA MARIA SOL",
+    "cuit": "27415875423",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Pilar",
+    "email": "hcompiano@almacendevinoos.com.ar",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "Ch44 Bowling S.A",
+    "cuit": "30715537601",
+    "vendedor": "Adrian Arango",
+    "ciudad": "La Lonja (Pilar)",
+    "email": "Administracion@brasov.com.ar",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "Davicino Martin",
+    "cuit": "20246917702",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "Md@luchiapuig.com",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "FERNANDEZ GLADYS BEATRIZ",
+    "cuit": "27137926690",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Villa Martelli",
+    "email": "cava402@outlook.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "FVW SRL",
+    "cuit": "30710213735",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Grand Bourg",
+    "email": "fedefitte@gmail.com",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "LAMPERT SILVIO GABRIEL",
+    "cuit": "20264908583",
+    "vendedor": "Adrian Arango",
+    "ciudad": "carapachay",
+    "email": "sillampert.sl@gmail.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "MLCD SRL",
+    "cuit": "30714192163",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "alicia.proveedores@gmail.com",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "NCB SA",
+    "cuit": "30717140628",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "ncbebidasdistribuidora@gmail.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "NEKAY SA",
+    "cuit": "30709348686",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Moreno",
+    "email": "Vaccarojcv1950@gmail.com",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "NOBLE JOSE ERASMO",
+    "cuit": "23239741339",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Adrogue",
+    "email": "josenoblec@hotmail.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "Pan Con Tomate Srl",
+    "cuit": "30716133431",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "San Salvador De Jujuy",
+    "email": "balvarezdelrivero@gmail.com",
+    "limiteCredito": 400000.0
+  },
+  {
+    "nombre": "SAEZ LUCIANO NAHUEL",
+    "cuit": "20348420713",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "lucianonahuelsaez@gmail.com",
+    "limiteCredito": 250000.0
+  },
+  {
+    "nombre": "TuranoDiego Abel",
+    "cuit": "20277718120",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Beccar",
+    "email": "carlos.moroni@givingbox.com.ar",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "VINOS DEL SUR SRL",
+    "cuit": "30709839957",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Valentin Alsina",
+    "email": "administracion@enotecaprivada.com.ar",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "Bebidas Del Sur S.A.",
+    "cuit": "30712497110",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Moron",
+    "email": "info@bdsdestileria.com.ar",
+    "limiteCredito": 700000.0
+  },
+  {
+    "nombre": "CARRO DANIELA",
+    "cuit": "27369809119",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "SAN MARTIN DE LOS ANDES",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "CENTRAL DE COMERCIO SRL",
+    "cuit": "30711469946",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Tigre",
+    "email": "vinoteca@centraldevinos.com",
+    "limiteCredito": 1500000.0
+  },
+  {
+    "nombre": "FEDERACION ARGENTINA DE TRABAJADORES CERVECEROS Y AFINES",
+    "cuit": "30531017362",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "cav.denasusargentina@gmail.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "GAMBALE GERARDO GERMAN",
+    "cuit": "20251543195",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "0",
+    "limiteCredito": 700000.0
+  },
+  {
+    "nombre": "GRAN VALLE DE YARETAS S. A. S.",
+    "cuit": "30717497127",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "Lujan de cuyo",
+    "email": "vpaventas@gmail.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "JEMMA S.R.L.",
+    "cuit": "30715538322",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Tigre",
+    "email": "latianiata@gmail.com",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "JUMAJO SRL",
+    "cuit": "30711910464",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "lacasadelosvinostombetta@gmail.com",
+    "limiteCredito": 150000.0
+  },
+  {
+    "nombre": "LIBERTAD 431 SRL",
+    "cuit": "30584627006",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "santiago700@gmail.com",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "MONTERO LAURA NOEMI",
+    "cuit": "27202708442",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Florida",
+    "email": "floridavinos@hotmail.com",
+    "limiteCredito": 250000.0
+  },
+  {
+    "nombre": "PASTORAK PARRA TOMAS AUGUSTO",
+    "cuit": "20404402405",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Villa Rosa",
+    "email": "pastorakparra.t@usal.edu.ar",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "RAC S.R.L",
+    "cuit": "30709224901",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Cafayate",
+    "email": "rmaza@artelbrands.com.ar",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "REYNOSO SILVIA CARINA",
+    "cuit": "23217569494",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "La Plata",
+    "email": "almadelosandes@ymail.com",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "THE BAR SRL",
+    "cuit": "33715576789",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "San Juan",
+    "email": "adm@american-bar.com.ar",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "TIENDAS DEL NORTE SRL",
+    "cuit": "33715943269",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Jujuy",
+    "email": "sebastianbesin@gmail.com",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "VACCA SERGIO MARIO",
+    "cuit": "20229621646",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "Bariloche",
+    "email": "ADMINISTRACION@PATAGONIAVINOS.COM.AR",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "WANG GONGFEI",
+    "cuit": "20954482716",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Pilar",
+    "email": "weilucas1688@gmail.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "ADOBATTO MAXIMILIANO",
+    "cuit": "20240342155",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "aml_informatica@yahoo.com.ar",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "ALBERDI S.A.",
+    "cuit": "30578411174",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Jujuy",
+    "email": "vgcastex@artelbrands.com.ar",
+    "limiteCredito": 6000000.0
+  },
+  {
+    "nombre": "AQUILINO JUAN CARLOS",
+    "cuit": "20293182419",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Valentin Alsina",
+    "email": "brebajes_vinoteca@hotmail.com",
+    "limiteCredito": 200000.0
+  },
+  {
+    "nombre": "Alpes Energy Sa",
+    "cuit": "30715958992",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "buenos aires",
+    "email": "proveedores@alpesenergy.com, gonzalo.salas@alpesenergy.com, administracion@alpesenergy.com",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "BEEF CURCUMA S.A.",
+    "cuit": "33718759469",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Pilar",
+    "email": "tierraadentropilar@gmail.com",
+    "limiteCredito": 700000.0
+  },
+  {
+    "nombre": "Battistoni Marco",
+    "cuit": "20469904521",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Lujan",
+    "email": "alvarezrunabebidas@gmail.com",
+    "limiteCredito": 700000.0
+  },
+  {
+    "nombre": "CATENA NICOLAS ARIEL",
+    "cuit": "20365295116",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "info@thedog.com.ar",
+    "limiteCredito": 250000.0
+  },
+  {
+    "nombre": "CONTI GABRIEL SEBASTIAN",
+    "cuit": "20258249144",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Villa Rosa",
+    "email": "fernando_arcovio@yahoo.com.ar",
+    "limiteCredito": 300000.0
+  },
+  {
+    "nombre": "Casa Pueblo S. R. L.",
+    "cuit": "33718825259",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "rmaza@artelbrands.com.ar",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "Consultrade Sa",
+    "cuit": "30678533463",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "BUENOS AIRES",
+    "email": "emoncusi@hotel-emperador.com.ar",
+    "limiteCredito": 150000.0
+  },
+  {
+    "nombre": "Convenience Retailing  S. A.",
+    "cuit": "30717429865",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Tandil",
+    "email": "fernquev@gmail.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "ESTACION DE SERVICIO INDEPENDENCIA",
+    "cuit": "30709437611",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "SALTA",
+    "email": "shell@esindependencia.com.ar",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "Elindar S. R. L.",
+    "cuit": "30709362875",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Lanus",
+    "email": "eltemplodelvino@elindar.com.ar",
+    "limiteCredito": 1000.0
+  },
+  {
+    "nombre": "FATUROS CONSTANTINO",
+    "cuit": "20259838798",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "vinotecalefkada@hotmail.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "FERMI FACUNDO MARIANO",
+    "cuit": "20244452842",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Beccar",
+    "email": "fermi-facundo@hotmail.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "FESTA CARINA PAOLA",
+    "cuit": "27222309420",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Martinez",
+    "email": "ladislao.bebidas@gmail.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "Farallon S. A. S.",
+    "cuit": "30718157729",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "faabdenur@gmail.com",
+    "limiteCredito": 20000.0
+  },
+  {
+    "nombre": "Fraticelli Roberto Juan",
+    "cuit": "20111225851",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "buenos aires",
+    "email": "elgatopardovinoteca@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "GASTRONOMIC SKILLS S. A. S",
+    "cuit": "30718137205",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "Mendoza",
+    "email": "gastronomiaskills@gmail.com",
+    "limiteCredito": 700000.0
+  },
+  {
+    "nombre": "GONZALEZ SONIA GRACIELA",
+    "cuit": "27215440759",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "La Plata",
+    "email": "",
+    "limiteCredito": 300000.0
+  },
+  {
+    "nombre": "GUILLERMO CRUZ",
+    "cuit": "20132327093",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "avalan@artelbrands.com.ar",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "HEREDIA JOSE DANIEL GUSTAVO",
+    "cuit": "20300283609",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "gustavoheredia@chewine.com",
+    "limiteCredito": 250000.0
+  },
+  {
+    "nombre": "Hansen, Elisa Maria",
+    "cuit": "27282502920",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Lozano",
+    "email": "adm.flordelpago@gmail.comC",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "INNELLA WALTER GASTON",
+    "cuit": "20270504788",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "walter.innella@gmail.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "Intelma S.A.",
+    "cuit": "33715525459",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "mendoza",
+    "email": "administracion@frutanoble.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "JOSE ALBERTO CHAGRA SRL",
+    "cuit": "30642313637",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "valechagra@hotmail.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "LA CALDERA GASTRONOMICA SRL",
+    "cuit": "30718092627",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "facturaslacaldera@gmail.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "LISSA NAZARENA",
+    "cuit": "23368579084",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "naza233223@gmail.com",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "LUNA RODRIGO EZEQUIEL",
+    "cuit": "20356573359",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Olivos",
+    "email": "rayuela-bebidas@hotmail.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "La Caldera Mitre S.R.L.",
+    "cuit": "30719057264",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Avellaneda",
+    "email": "lacalderamitre@gmail.com",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "Lange, Adrian",
+    "cuit": "20228242021",
+    "vendedor": "Alejandro Valan",
+    "ciudad": "La Lucila",
+    "email": "sacosta@artelbrands.com.ar",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "MOBILIA NICOLAS EZEQUIEL",
+    "cuit": "20381510914",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "sensacionesvinos@hotmail.com",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "Macaya Manuel",
+    "cuit": "23319632689",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Trenque Lauquen",
+    "email": "macayamanuel@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "NATALIA SARAVIA",
+    "cuit": "27291746778",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "SALTA",
+    "email": "",
+    "limiteCredito": 5000.0
+  },
+  {
+    "nombre": "NORTHMARKET SA",
+    "cuit": "30714829617",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Benavidez",
+    "email": "feraraujolefosse@hotmail.com",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "Norte Emprendimientos Sas",
+    "cuit": "30716352702",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "San Salvador De Jujuy",
+    "email": "rmaza@artelbrands.com.ar",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "OBARRIO GABRIEL",
+    "cuit": "20309470916",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Berazategui",
+    "email": "gabriel.obarrio@icloud.com",
+    "limiteCredito": 700000.0
+  },
+  {
+    "nombre": "PLAVNICK PABLO FABIAN",
+    "cuit": "20232056844",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "pablop@unvinoahora.com.ar",
+    "limiteCredito": 250000.0
+  },
+  {
+    "nombre": "RIAL LEANDRO DIEGO",
+    "cuit": "20312899699",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "rialleandro@hotmail.com",
+    "limiteCredito": 250000.0
+  },
+  {
+    "nombre": "RIO GONZALO GERMAN",
+    "cuit": "20353455835",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "nataliac.bevilacqua@gmail.com",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "SAUSALITO WINES S.R.L.",
+    "cuit": "30718473965",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "0",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "SILVA SONIA ANDREA",
+    "cuit": "27291632152",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Victoria",
+    "email": "soniaandreasilva@gmail.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "VWT EXPERIENCE SRL",
+    "cuit": "30717444635",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "administracion@estilo-campo.com.ar",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "ALIMENTOS ALELU SRL",
+    "cuit": "30715391895",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "info@fincagonzalez.com.ar",
+    "limiteCredito": 400000.0
+  },
+  {
+    "nombre": "ALMACEN DEMARIA 4677 S.R.L.",
+    "cuit": "33715266879",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "msalazar@almacen1249.com.ar",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "ALVAREZ MATIAS NICOLAS",
+    "cuit": "20230893889",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "rmaza@artelbrands.com.ar",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "BAR QUERANDI SA",
+    "cuit": "33645949639",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "claudia@querandi.com.ar",
+    "limiteCredito": 300000.0
+  },
+  {
+    "nombre": "BARTILOTTA MAXIMILIANO ESTEBAN",
+    "cuit": "20230736643",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "maxibartilotta@gmail.com",
+    "limiteCredito": 300000.0
+  },
+  {
+    "nombre": "BAUCIS ALEJANDRO FELIPE",
+    "cuit": "20248819880",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Bella Vista",
+    "email": "alejandro.baucis@osde.com.ar",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "BEBIDAMENTAAA SRL",
+    "cuit": "30718428986",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "bebidamenteba@gmail.com",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "BONDI MARCELO LEONARDO",
+    "cuit": "20318697931",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "Guaymallen",
+    "email": "dolcevinomza@gmail.com",
+    "limiteCredito": 20000.0
+  },
+  {
+    "nombre": "BURONE MABEL ANDREA",
+    "cuit": "27200024740",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Jose C Paz",
+    "email": "dalialmacendebebidas@gmail.com",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "CIMEIRA SAS",
+    "cuit": "33716243759",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "cavatinta20@gmail.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "CREDIDIO MARIA CELESTE",
+    "cuit": "27330044867",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "vinotecadenorteasur@gmail.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "Chrifsa S.A.S.",
+    "cuit": "30716859904",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "General Roca",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 400000.0
+  },
+  {
+    "nombre": "Cristomax S. A. S.",
+    "cuit": "33718138189",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "gerencia.salta@negronibistrobar.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "DAHNA PINOT S.R.L.",
+    "cuit": "30718724135",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "bebiendoestrellaspalermo@gmail.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "DE DOMINICIS NELIDA CARMEN",
+    "cuit": "27047242644",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Martinez",
+    "email": "oficinastuero@gmail.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "DI NOIA MARCELA ALEJANDRA",
+    "cuit": "27203186490",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Francisco Alvarez",
+    "email": "Marcekarola@hotmail.com",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "DIAZ WALTER NICOLAS",
+    "cuit": "20243975558",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "0",
+    "limiteCredito": 10.0
+  },
+  {
+    "nombre": "DISTRIBUIDORA MAESTRO SRL",
+    "cuit": "30715332880",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "rmaza@artelbrands.com.ar",
+    "limiteCredito": 700000.0
+  },
+  {
+    "nombre": "EL FOGON CRIOLLO SRL",
+    "cuit": "30716994925",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "laestanciacompras@outlook.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "FUENTES JOSE LUIS",
+    "cuit": "20203839422",
+    "vendedor": "Adrian Arango",
+    "ciudad": "General Pacheco",
+    "email": "deliciasdevinos@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "GRANERO AUTENTICO SRL",
+    "cuit": "30716896028",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Rincon de Milberg",
+    "email": "graneromilberg@gmail.com",
+    "limiteCredito": 300000.0
+  },
+  {
+    "nombre": "GROSSO EMILIANO DANIEL",
+    "cuit": "20259664714",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "Grossoemiliano@hotmail.com",
+    "limiteCredito": 700000.0
+  },
+  {
+    "nombre": "HEINE SILVINA SUSANA",
+    "cuit": "27051587508",
+    "vendedor": "Adrian Arango",
+    "ciudad": "San Isidro",
+    "email": "silvinadelmolino@hotmail.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "INTUIZIONE S. A. S.",
+    "cuit": "30718124138",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "Godoy Cruz",
+    "email": "intuizionesas@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "IRSA INVERSIONES Y REPRESENTACIONES S.A",
+    "cuit": "30525322749",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "0",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "JARA JUAN MANUEL",
+    "cuit": "20280932281",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Cipolletti",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "JASMIN PASEO SAN FRANCISCO SA",
+    "cuit": "30717643247",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "rincondelolivo.salta@gmail.com",
+    "limiteCredito": 200000.0
+  },
+  {
+    "nombre": "LA MARCHI S.R.L.",
+    "cuit": "30684174440",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "GODOY CRUZ",
+    "email": "proveedores@grupobroda.com",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "LEPETITVINS SRL",
+    "cuit": "30717280594",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "info@lepetitvins.com",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "LICENSED MERCHANDISING GROUP SRL",
+    "cuit": "30712385797",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Don Torcuato",
+    "email": "administracion@lmgsrl.com",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "MARINELLI SILVANA GRACIELA",
+    "cuit": "27211217966",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Pilar",
+    "email": "rag.gajdemski@gmail.com",
+    "limiteCredito": 350000.0
+  },
+  {
+    "nombre": "MARTIN MARIA ELIANA",
+    "cuit": "27235363408",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "Rodeo de la Cruz",
+    "email": "shipperwine@gmail.com",
+    "limiteCredito": 200.0
+  },
+  {
+    "nombre": "MOM AGENCIA CREATIVA SA",
+    "cuit": "30717513556",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "pablo@agrego.com.ar",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "MORTOLA OSVALDO CARLOS",
+    "cuit": "20125426256",
+    "vendedor": "Adrian Arango",
+    "ciudad": "San Isidro",
+    "email": "vanesa@vinosdelnorte.com.ar",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "Navarrete, Rodrigo Emmanuel",
+    "cuit": "20330525461",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "Las Heras",
+    "email": "navarrete.rodrigoe@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "RAYUELA BEBIDAS",
+    "cuit": "30717591913",
+    "vendedor": "Adrian Arango",
+    "ciudad": "San Isidro",
+    "email": "rayuela-bebidas@hotmail.com",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "SAN DONA S. R. L.",
+    "cuit": "30718405862",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "sandonasrl1@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "SERRES RAUL ALFREDO",
+    "cuit": "20172876030",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "boirecaballito@gmail.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "SI SOLUCIONES INTEGRALES SAS",
+    "cuit": "30716918498",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "santiagocaso@hotmail.com",
+    "limiteCredito": 150000.0
+  },
+  {
+    "nombre": "SOLTIZ S.R.L.",
+    "cuit": "30715260251",
+    "vendedor": "Adrian Arango",
+    "ciudad": "gba oeste (villa madero)",
+    "email": "",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "SU HAOWEN",
+    "cuit": "20932069475",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "suhaowen@hotmal.com",
+    "limiteCredito": 150000.0
+  },
+  {
+    "nombre": "Summit Agro Argentina S A",
+    "cuit": "30707783229",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "BUENOS AI",
+    "email": "melina.fraga@summit-agro.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "TIENDA DE SABORES SAS",
+    "cuit": "30717957098",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "latablitasalta9@gmail.com",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "Varas Toledo, Sebastian",
+    "cuit": "20278462790",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "La Reja",
+    "email": "vpquedarse@gmail.com",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "YARDA 51 S.R.L.",
+    "cuit": "30718974573",
+    "vendedor": "Adrian Arango",
+    "ciudad": "buenos aire",
+    "email": "Alejo.silva@yarda51.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "ANDINA DISTRIBUCIONES SAS",
+    "cuit": "30716700123",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "San Juan",
+    "email": "andina.distribuciones23@gmail.com",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "Alma Tinta S. R. L.",
+    "cuit": "30717292312",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Tolosa",
+    "email": "imfo@dionisioonline.com.ar",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "Alvarez Pablo",
+    "cuit": "20227844184",
+    "vendedor": "Alejandro Valan",
+    "ciudad": "buenos",
+    "email": "lmohammad@artelbrands.com.ar",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "BENDICIONES SA",
+    "cuit": "30716637456",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "helkawinelounge@gmail.com",
+    "limiteCredito": 200000.0
+  },
+  {
+    "nombre": "Black Sushi S. A. S.",
+    "cuit": "30719163064",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "facup_@outlook.com",
+    "limiteCredito": 300000.0
+  },
+  {
+    "nombre": "CAPALBI JOSE EDUARDO",
+    "cuit": "20293354783",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "CAFAYATE",
+    "email": "susanacapalbi@hotmail.com",
+    "limiteCredito": 400000.0
+  },
+  {
+    "nombre": "COLEGIO DE ABOGADOS DE SAN ISIDRO",
+    "cuit": "30541034036",
+    "vendedor": "Adrian Arango",
+    "ciudad": "San Isidro",
+    "email": "compras@casi.com.ar",
+    "limiteCredito": 10000000.0
+  },
+  {
+    "nombre": "Chalier, Stella Maris",
+    "cuit": "27168166163",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "Las Compuertas",
+    "email": "joseluisbarone15@gmail.com",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "DE AVACCO SRL",
+    "cuit": "30718253612",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "amorestaurante73@gmail.com",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "DORINKA SRL",
+    "cuit": "30678138300",
+    "vendedor": "Roberto Pascual",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "Direcciona S.A.",
+    "cuit": "30709935328",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "administracion@direcciona.com",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "EL NUEVO TONEL S.R.L.",
+    "cuit": "30711650446",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Jujuy",
+    "email": "Vinoseltonel@yahoo.com.ar",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "EL PORTEÑO APARTMENTS LLC",
+    "cuit": "30707003061",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "CAPITAL FEDERAL",
+    "email": "ecabellos@faenahotels.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "EXPOSITO DIEGO HERNAN",
+    "cuit": "20250845988",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Tigre",
+    "email": "nordeltaobvio@gmail.com",
+    "limiteCredito": 200000.0
+  },
+  {
+    "nombre": "El Coihual Del Tigre S.R.L.",
+    "cuit": "30718586700",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "Barrio Quintas De Arguello",
+    "email": "",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "Expendedoras Automaticas Italo Argentinasrl",
+    "cuit": "30678269154",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Haedo",
+    "email": "leonardojf76@hotmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "Ezequiel Mallima",
+    "cuit": "39383182",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "Mendoza",
+    "email": "emallima@artelbrands.com.ar",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "FIDEICOMISO DE ADMINISTRACION NEUQUEN SOHO I",
+    "cuit": "30715836331",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "Neuquen",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "GARATE JORGE RUBEN",
+    "cuit": "23319330399",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "info@cunaderoble.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "GIFTMENT SRL",
+    "cuit": "33715954309",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "contacto@giftmen.net",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "JALIL CLAUDIO ALFEDO",
+    "cuit": "20140338762",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "chefclaudiojalil@hotmail.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "Koehle Fabian Adolfo",
+    "cuit": "20248755246",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "catalinassalta@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "LAS TIPAS S. R. L.",
+    "cuit": "30717933296",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Jujuy",
+    "email": "patolaredo123@gmail.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "LEDEZMA RAUL ANTONIO",
+    "cuit": "20116751861",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "vinotecalabanda@hotmail.com",
+    "limiteCredito": 250000.0
+  },
+  {
+    "nombre": "Loma  S. A. S.",
+    "cuit": "30717922790",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "San Miguel De Tucuman",
+    "email": "maviga2008@gmail.com",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "Londero Fabiana Margarita",
+    "cuit": "27224553833",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "falondero@hotmail.com",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "MADERO TOWN S.R.L",
+    "cuit": "30717532410",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "thomasdelvalle@outlook.com",
+    "limiteCredito": 2000000.0
+  },
+  {
+    "nombre": "MAIDER PLUS I.P.A. S. A.",
+    "cuit": "33718542699",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "Maipu",
+    "email": "plusbar16@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "MALAVA GROUP S.A.",
+    "cuit": "30716090953",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "corporativo@malavagroup.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "MARTINEZ GULLOTTA SAS",
+    "cuit": "30718239415",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "Godoy Cruz",
+    "email": "ellocowally@hotmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "MOLINO CERRILOS S.R.L.",
+    "cuit": "30711269033",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Cerrillos",
+    "email": "facturacion@molinocerrillos.com.ar",
+    "limiteCredito": 2000000.0
+  },
+  {
+    "nombre": "MONTIEL CARLOS EDUARDO",
+    "cuit": "20228253031",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "0",
+    "limiteCredito": 200000.0
+  },
+  {
+    "nombre": "MONTOYA FRANCISCO DE LA CRUZ",
+    "cuit": "20409421475",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "FRANMONTOYA1998@GMAIL.COM",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "MUSCHIETTI PAULA MARIA",
+    "cuit": "27291512408",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Tigre",
+    "email": "nordeltaobvio@gmail.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "Moreno Verde Lucas Santiago",
+    "cuit": "20305412822",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ramos Mejia",
+    "email": "parrillamammamiaramos@gmail.com",
+    "limiteCredito": 700000.0
+  },
+  {
+    "nombre": "NOTABLES PORTEÑOS SA",
+    "cuit": "30717713385",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "notablecafegarcia@gmail.com",
+    "limiteCredito": 400000.0
+  },
+  {
+    "nombre": "NOVO MUNDO SRL",
+    "cuit": "30717261050",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "_mundo@hotmail.com",
+    "limiteCredito": 250000.0
+  },
+  {
+    "nombre": "OTERO CARLOS ALBERTO",
+    "cuit": "20173019840",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "echaurivino@gmail.com",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "POSADAS 1089 SA",
+    "cuit": "30715139568",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "macuna@piegari.com.ar",
+    "limiteCredito": 150000.0
+  },
+  {
+    "nombre": "RIVADAVIA 5353 S A",
+    "cuit": "30604898419",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "roberto05@fibertel.com.ar",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "RODRIGUEZ GASTON DARIO",
+    "cuit": "20221322046",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "La Plata",
+    "email": "elviejobodegon22@yahoo.com.ar",
+    "limiteCredito": 400000.0
+  },
+  {
+    "nombre": "ROMERO ANDREA VANESA",
+    "cuit": "27320095447",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "cosecha86argentina@gmail.com",
+    "limiteCredito": 400000.0
+  },
+  {
+    "nombre": "SALAZAR MARIELA JUDITH",
+    "cuit": "27216478938",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "Santa Rosa",
+    "email": "mjs308@hotmail.com",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "SANDEZ VALENTIN",
+    "cuit": "20400018171",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "Mendoza",
+    "email": "administracion@casadevinosmendoza.com.ar",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "SARTORI GONZALO ERNESTO",
+    "cuit": "20224746653",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "Neuquen",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "SBJOTA SRL",
+    "cuit": "30716857162",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "facturacion@elbodeguero.com.ar",
+    "limiteCredito": 400000.0
+  },
+  {
+    "nombre": "Sacred Ground S.A.",
+    "cuit": "30624586766",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Pergamino",
+    "email": "franciscoollua@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "Tokio Gastronomia S.R.L.",
+    "cuit": "30710383533",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "Neuquen",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 400000.0
+  },
+  {
+    "nombre": "Uco Wine & Food  S. A. S.",
+    "cuit": "30717704734",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "Calafate",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "VEGA VERONICA ANDREA",
+    "cuit": "27214718672",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "Santa Rosa",
+    "email": "Vinoseltonel@yahoo.com.ar",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "ZAPATA MARIA ELENA",
+    "cuit": "27322446824",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Escobar",
+    "email": "info@appetitboutique.com.ar",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "ZARATE ROMINA ANALIA",
+    "cuit": "27290717782",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Pilar",
+    "email": "max_rivet@hotmail.com",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "ANA CAUTORINO",
+    "cuit": "23399110564",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "0",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "AV. CORRIENTES 1454 S. R. L",
+    "cuit": "30717604195",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "admin@olymposkybar.com",
+    "limiteCredito": 700000.0
+  },
+  {
+    "nombre": "BAQUIANO MALVINAS SRL",
+    "cuit": "33715706569",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "grosso_luciano@yahoo.com.ar",
+    "limiteCredito": 400000.0
+  },
+  {
+    "nombre": "BAR PORTEÑO SRL",
+    "cuit": "30718748751",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "pperticone@artelbrands.com.ar",
+    "limiteCredito": 3000000.0
+  },
+  {
+    "nombre": "BARRERA OSCAR SERGIO",
+    "cuit": "23161798029",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "Mendoza",
+    "email": "oscarsergiobarrera@live.com",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "BERNHARDT ALFREDO CARLOS",
+    "cuit": "20121142571",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "SAN MARTIN DE LOS ANDES",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 300000.0
+  },
+  {
+    "nombre": "BIANCO LEONARDO JAVIER",
+    "cuit": "20200261438",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ituzaingo",
+    "email": "ljbianco@hotmail.com",
+    "limiteCredito": 400000.0
+  },
+  {
+    "nombre": "BLACK MERINO SAS",
+    "cuit": "30718078586",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "Bariloche",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 300000.0
+  },
+  {
+    "nombre": "Baimler Alejo Ignacio",
+    "cuit": "20301492678",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "caba",
+    "email": "aleigba@hotmail.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "Brook Motors S. A.",
+    "cuit": "30715680226",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Las Talitas",
+    "email": "Eventoswecelebrate@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "CABRERA DIEGO MATIAS",
+    "cuit": "20264176213",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "diegomatiascabrera@gmail.com",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "CAFICI VICTOR DANIEL",
+    "cuit": "20126012641",
+    "vendedor": "Adrian Arango",
+    "ciudad": "La Lucila",
+    "email": "dancafici@gmail.com",
+    "limiteCredito": 400000.0
+  },
+  {
+    "nombre": "CANO ARGENTINO",
+    "cuit": "20925880699",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "laperlita@fibertel.com.ar",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "CANTERO JULIO CESAR",
+    "cuit": "20353652835",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "eltesoro.bebidas@gmail.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "CAPRIA SEBASTIAN CESAR",
+    "cuit": "20270836802",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Jujuy",
+    "email": "0",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "CASA INTELIGENTE SAS",
+    "cuit": "30717054330",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "Mendoza",
+    "email": "museodelvinomza@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "CHILLEMI ARIEL ADRIAN",
+    "cuit": "20236821715",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "0",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "CHINVENGUENCHA SRL",
+    "cuit": "30716969718",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Canning",
+    "email": "0",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "CLUB 20 DE FEBRERO",
+    "cuit": "30539032646",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "",
+    "limiteCredito": 200000.0
+  },
+  {
+    "nombre": "Caballero Maria Victoria",
+    "cuit": "27299639865",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "Ushuaia",
+    "email": "administracion@artelbrands.com.ar",
+    "limiteCredito": 400000.0
+  },
+  {
+    "nombre": "Crowdfarming.Wine S.A.S",
+    "cuit": "30716543699",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "Lujan De Cuyo",
+    "email": "finance@crowdfarming.wine",
+    "limiteCredito": 2000000.0
+  },
+  {
+    "nombre": "DELIVERY HERO E-COMMERCE S. A",
+    "cuit": "30711985766",
+    "vendedor": "Alejandro Valan",
+    "ciudad": "Esteban Echeverria",
+    "email": "catalina.marnetto@pedidosya.com",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "DRI STELLA MARIS",
+    "cuit": "27184828621",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Presidente Derqui",
+    "email": "adrianlfer69@gmail.com",
+    "limiteCredito": 400000.0
+  },
+  {
+    "nombre": "ENCISO AD 3909 SRL",
+    "cuit": "30715652532",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "alicia.proveedores@gmail.com",
+    "limiteCredito": 700000.0
+  },
+  {
+    "nombre": "EZIO DELL AVO E HIJOS SA",
+    "cuit": "30640855572",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "facundodellavo@hotmail.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "Factory Wines S.R.L.",
+    "cuit": "30718957997",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "CABA",
+    "email": "dikedelosolivos@yahoo.com.ar",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "INSUA GONZALO JOSE",
+    "cuit": "20447551552",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Francisco Alvarez",
+    "email": "0",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "LA MASIA SRL",
+    "cuit": "30711341540",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "General Roca",
+    "email": "0",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "LAROCCA ADRIAN ANTONIO",
+    "cuit": "20312478367",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Maschwitz",
+    "email": "vinoslarocca@hotmail.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "LIMA MARIA CUSTODIA",
+    "cuit": "27111363221",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "Mendoza",
+    "email": "0",
+    "limiteCredito": 400000.0
+  },
+  {
+    "nombre": "Lamm Claudia Adriana",
+    "cuit": "27163256539",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Martinez",
+    "email": "machadovinoteca@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "Lh Locane S.R.L.",
+    "cuit": "33710662849",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "Lanus",
+    "email": "locanedamian@hotmail.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "MALCOM OVERSEAS SA",
+    "cuit": "30713386703",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "0",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "MARTIRE JAVIER FERNANDO",
+    "cuit": "20286704620",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Quilmes",
+    "email": "adm3barricas@gmail.com",
+    "limiteCredito": 400000.0
+  },
+  {
+    "nombre": "MARUCHA S.R.L.",
+    "cuit": "30715400428",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "parrillamarucha@yahoo.com.ar",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "MASTELLONE MARILINA",
+    "cuit": "27316393654",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Manzanares",
+    "email": "estacion.1888@hotmail.com",
+    "limiteCredito": 300000.0
+  },
+  {
+    "nombre": "MITRE FUTBOL SRL",
+    "cuit": "30711180490",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Munro",
+    "email": "mitrefutbol@hotmail.com",
+    "limiteCredito": 50.0
+  },
+  {
+    "nombre": "MURACA LEANDRO JAVIER",
+    "cuit": "20280766314",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "madobebidas@gmail.com",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "Marletta, Leandro Guido De La Cruz",
+    "cuit": "20271820683",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "Misetich Armando Hernan",
+    "cuit": "20305090590",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "General San Martin",
+    "email": "",
+    "limiteCredito": 20000.0
+  },
+  {
+    "nombre": "NO USAR!! 55 DE SCORE LAS TANAS",
+    "cuit": "30718007735",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "Bariloche",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 5000.0
+  },
+  {
+    "nombre": "PARRILLA PEÑA SRL",
+    "cuit": "30694370701",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "parrillapea@hotmail.com",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "Polo Matias",
+    "cuit": "20371711075",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "buenos aires",
+    "email": "Matíaspolo23@gmail.com",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "ROLCAR SA",
+    "cuit": "30707211942",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Tucuman",
+    "email": "alejandro.figueroa@rolcarsa.com.ar",
+    "limiteCredito": 2000000.0
+  },
+  {
+    "nombre": "RUGGIERI GAROFALO",
+    "cuit": "20341215499",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "Mendoza",
+    "email": "santewineclubmza@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "Ramisch Maricel Carina",
+    "cuit": "27234687455",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Tigre",
+    "email": "maricelramisch@yahoo.com.ar",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "SALAVERRIA PABLO JAVIER",
+    "cuit": "20313031080",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "El Chalten",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 400000.0
+  },
+  {
+    "nombre": "SUAREZ NUÑEZ PATRICIO",
+    "cuit": "20389455920",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "vinosamywines@gmail.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "Silverschmidt Andres",
+    "cuit": "20210034332",
+    "vendedor": "Adrian Arango",
+    "ciudad": "BUENOS",
+    "email": "andressilber@gmail.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "TAVELLA FEDERICO DI GIROLAMO",
+    "cuit": "30717545628",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "La Plata",
+    "email": "contacto@brutbebidas.com.ar",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "TRATENFU S.A.",
+    "cuit": "30711185905",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Tigre",
+    "email": "sleber@tratenfu.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "VINOTECA EZEQUIEL SRL",
+    "cuit": "30717674959",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Lanus",
+    "email": "ventas@vinotecaezequiel.com.ar",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "VITVIN S. R. L",
+    "cuit": "30718270657",
+    "vendedor": "Alejandro Valan",
+    "ciudad": "Funes",
+    "email": "diego@vitvin.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "ALVAREZ LIONEL PABLO",
+    "cuit": "20316396616",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ramos Mejia",
+    "email": "lionel@envero.com.ar",
+    "limiteCredito": 250000.0
+  },
+  {
+    "nombre": "ARAMAYO MARIA JULIETA",
+    "cuit": "27275127863",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Chicoana",
+    "email": "0",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "ARRAYGADA LAURA CAROLINA",
+    "cuit": "27291936771",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "proveedores@lacavadenaon.com",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "AURRECOCHEA GUSTAVO FERNANDO",
+    "cuit": "20926302982",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "Fernandoaurrecochea@gmail.com",
+    "limiteCredito": 100000.0
+  },
+  {
+    "nombre": "BAQUIANO MALABIA",
+    "cuit": "33718478729",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "0",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "BATISTELLI HECTOR ALFREDO",
+    "cuit": "20130345116",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "Mendoza",
+    "email": "Vinotecaviognier@hotmail.com",
+    "limiteCredito": 200000.0
+  },
+  {
+    "nombre": "BIEN DE VINOS SA",
+    "cuit": "30717438775",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "reinosofacundo@biendevinos.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "BLANCO RUBEN ARIEL",
+    "cuit": "20232533383",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "ruben.blanco@gamanseguros.com",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "BORLANDELLI ALEJANDRO JOAQUIN",
+    "cuit": "20302780499",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "aleborli2@gmail.com",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "BOTARGA S.R.L.",
+    "cuit": "30714415952",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "CAPITAL FEDERAL",
+    "email": "",
+    "limiteCredito": 300000.0
+  },
+  {
+    "nombre": "BREE SA",
+    "cuit": "30718342933",
+    "vendedor": "Adrian Arango",
+    "ciudad": "General Pacheco",
+    "email": "0",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "BRUNCH SAS",
+    "cuit": "30716353679",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "Mendoza",
+    "email": "rrpp@sibaritasacademia.com.ar",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "BRUSATIN FLAVIO ALDO",
+    "cuit": "20168760826",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Lincoln",
+    "email": "lnicolini@strix.com.ar",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "BUENAVIDA EMPRENDIMIENTOS",
+    "cuit": "30710519818",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "CIUDAD",
+    "email": "adm.buenavidae@gmail.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "Baldi Antonella Laura",
+    "cuit": "27395586403",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "CABA",
+    "email": "lacantinarene@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "Baw Co Srl",
+    "cuit": "30718846079",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "BUENOS AIRES",
+    "email": "ventas@buenosaireswines.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "Broda S.A.",
+    "cuit": "30715156497",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "Mendoza Ciudad",
+    "email": "proveedores@grupobroda.com",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "CAFE DEL CONVENTO S. R. L",
+    "cuit": "30718224574",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "0",
+    "limiteCredito": 100.0
+  },
+  {
+    "nombre": "CARNES TIERRA DEL FUEGO SA",
+    "cuit": "30716289482",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "Ushuaia",
+    "email": "0",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "CASA PUJOL SRL",
+    "cuit": "30717483037",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "0",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "CHEN DAQIANG",
+    "cuit": "20955821654",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "6699121@qq.com",
+    "limiteCredito": 3000000.0
+  },
+  {
+    "nombre": "CHIMENO ZOTH FERNANDO MANUEL",
+    "cuit": "20255120507",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "luberosis@hotmail.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "CIAPANNA GABRIEL MATIAS",
+    "cuit": "20329455239",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Martinez",
+    "email": "info@1500.com.ar",
+    "limiteCredito": 200000.0
+  },
+  {
+    "nombre": "CIMPROSA S.R.L",
+    "cuit": "30718047648",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "zeusveiga@hotmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "CISILOTTO RUBEN ARISTIDES",
+    "cuit": "20122872697",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "Mendoza",
+    "email": "supermercadocisilotto@hotmail.com",
+    "limiteCredito": 150000.0
+  },
+  {
+    "nombre": "CORDILLERANOS SRL",
+    "cuit": "30714223131",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "VILLA PEHHUEN",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "CORSI FRANCO JOSE",
+    "cuit": "20322848375",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "Las Grutas",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 700000.0
+  },
+  {
+    "nombre": "COSTERA MARTIN ALBERTO",
+    "cuit": "20341804834",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Moron",
+    "email": "0",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "CRESPIN OLGA IRENE",
+    "cuit": "27065374957",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Billa Vallester",
+    "email": "giacomozzid@yahoo.com.ar",
+    "limiteCredito": 250000.0
+  },
+  {
+    "nombre": "CRU SRL",
+    "cuit": "30716702150",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "vgcastex@artelbrands.com.ar",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "Carpi Lucas Roberto",
+    "cuit": "20323657468",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Atocha",
+    "email": "",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "Chic Palermo",
+    "cuit": "30719074797",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Palermo",
+    "email": "chicfuegos@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "Consorcio Club De Campo La Estancia De Cafayate Wine & Golf",
+    "cuit": "30712424369",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Cafayate",
+    "email": "Jrios@lec.com.ar",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "Copados S.R.L.",
+    "cuit": "30718133498",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "copados@copadosbebidas.com.ar",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "DEL POZO CLAUDIO MARCELO",
+    "cuit": "20178199146",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "cdp@cavasdelpozo.com.ar",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "DON HOTELES ARGENTINA SRL",
+    "cuit": "30714426814",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "Rio Negro",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "Dos Tiempos Patagonia S. R. L.",
+    "cuit": "30718946073",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "Villa La Angostura",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "EEP S.A",
+    "cuit": "30716471264",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Pilar",
+    "email": "admin@rfpilar.com.ar",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "EL IMPARCIAL SA",
+    "cuit": "30521919279",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "0",
+    "limiteCredito": 250000.0
+  },
+  {
+    "nombre": "ESTUDIO ADUANERO REG S. R. L.",
+    "cuit": "30717782468",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Pilar",
+    "email": "ricardo.eg@elganame.com",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "Espeche Cristian Daniel",
+    "cuit": "20326315371",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "rmaza@artelbrands.com.ar",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "Estacion de Bebidas SRL",
+    "cuit": "30715037714",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "santiago@estaciondebebidas.com",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "FERNANDEZ MONICA PATRICIA",
+    "cuit": "23140597694",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Lujan",
+    "email": "fernandezmonicaph@gmail.com",
+    "limiteCredito": 300000.0
+  },
+  {
+    "nombre": "FUNDACION OSDE",
+    "cuit": "30637677043",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "BUENOS AIRES",
+    "email": "",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "Figueroa Hernan Diego",
+    "cuit": "20248465620",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "CAPITAL FEDERAL",
+    "email": "Figueroametal@gmail.com",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "GABRIEL DOMINGUEZ IVAN OSVALDO",
+    "cuit": "20248938006",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "godoy cruz",
+    "email": "laesquinavinos@gmail.com",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "GAUSSET ANGEL IRENE",
+    "cuit": "27925405405",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "gausset@gmail.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "GERONIMO MARIA LUISA",
+    "cuit": "27054153010",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "0",
+    "limiteCredito": 300000.0
+  },
+  {
+    "nombre": "GRAN MERCADO DE BEBIDAS S.R.L",
+    "cuit": "33717083429",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Ituzaingo",
+    "email": "max_rivet@hotmail.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "GRUPO DB SRL",
+    "cuit": "33716473029",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "frodriguez@debarricas.com.ar",
+    "limiteCredito": 1500000.0
+  },
+  {
+    "nombre": "GULISANO GRACIELA MATIA",
+    "cuit": "20124561664",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Temperley",
+    "email": "gracielamgulisano@hotmail.com",
+    "limiteCredito": 400000.0
+  },
+  {
+    "nombre": "Genovese Zerdan Matias Federico",
+    "cuit": "23321650899",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "Guerra Martin",
+    "cuit": "20214800897",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Jardin Lomas Del Palomar",
+    "email": "mguerra.cj@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "IBARRA PABLO GUILLERMO",
+    "cuit": "20324041827",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "Pabloguillermoibarra@gmail.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "IRTEC AUTOMATISMOS SRL",
+    "cuit": "30710805993",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Martinez",
+    "email": "daniel@irtec.com.ar",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "IVETICH MAIA DANISA",
+    "cuit": "27267011171",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Salta",
+    "email": "0",
+    "limiteCredito": 10000.0
+  },
+  {
+    "nombre": "KERBS ERNESTO GERARDO",
+    "cuit": "20144290330",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Don Torcuato",
+    "email": "kerbsernesto@gmail.com",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "KOVASA",
+    "cuit": "30718613996",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Olivos",
+    "email": "siciliatrattoria24@gmail.com",
+    "limiteCredito": 300000.0
+  },
+  {
+    "nombre": "Kotliar Gregorio",
+    "cuit": "20419213374",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "BUENOS",
+    "email": "sincopaswinebar@gmail.com",
+    "limiteCredito": 300000.0
+  },
+  {
+    "nombre": "LA FINCA DEL 13 S.A.S",
+    "cuit": "30716025639",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "Bariloche",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "LA FINCA DEL 4 S. A. S.",
+    "cuit": "30718764730",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "Bariloche",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "LA TRINCHERA WINE AND BEER SAS",
+    "cuit": "30716476177",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "El Calafate",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "LACTEOS BALLESTER SRL",
+    "cuit": "30716913593",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Villa Ballester",
+    "email": "administracion@leblonalmacen.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "LEGARDON HORACIO",
+    "cuit": "23081180229",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "clegardon@gmail.com",
+    "limiteCredito": 300000.0
+  },
+  {
+    "nombre": "LEGARDON SRL",
+    "cuit": "30710833083",
+    "vendedor": "Alejandro Valan",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "Clegardon@legardonsrl.com.ar",
+    "limiteCredito": 200000.0
+  },
+  {
+    "nombre": "LUJAN MARCELO ALEJANDRO",
+    "cuit": "20208435567",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "Comodoro Rivadavia",
+    "email": "administracion@patagoniavinos.com",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "La Porta Juan Pablo",
+    "cuit": "20291684255",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "San Martin De Los Andes",
+    "email": "ADMINISTRACION@PATAGONIAVINOS.COM.AR",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "MADEO FRANCISCO",
+    "cuit": "20103994323",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "madeofrancisco@hotmail.com",
+    "limiteCredito": 150000.0
+  },
+  {
+    "nombre": "MAYBANK BERNARDETTE LOURDES",
+    "cuit": "27310593236",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "Bariloche",
+    "email": "PURASANGREVINOS@GMAIL.COM",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "MIGEFE SRL",
+    "cuit": "30716021854",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "0",
+    "limiteCredito": 200000.0
+  },
+  {
+    "nombre": "MUSTERS S.R.L.",
+    "cuit": "30714247588",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "Comodoro Rivadavia",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "Margheritis Maria Eugenia",
+    "cuit": "27223622491",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Hurlingham",
+    "email": "maru.margheritis@gmail.co",
+    "limiteCredito": 200000.0
+  },
+  {
+    "nombre": "NO USALR!!!! DON ANSELMO SAS",
+    "cuit": "30717492931",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "Bariloche",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "NOBUCO S.A.S",
+    "cuit": "30716598426",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "SAN MARTIN DE LOS ANDES",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "NUEVO GLOBO SRL",
+    "cuit": "30716041553",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "0",
+    "limiteCredito": 100000.0
+  },
+  {
+    "nombre": "Nativos De La Patagonia S.A.",
+    "cuit": "30709602043",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "Calafate",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "Nutranat S.A.",
+    "cuit": "30714818399",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "Godoy Cruz",
+    "email": "rominaleddamodo24@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "OLEIROS S.A.",
+    "cuit": "30708081112",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Guaymallen",
+    "email": "0",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "OSCAR DANIEL SANZ SOCIEDAD CAP. I SECC IV",
+    "cuit": "30673161797",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "martin_sanz_93@hotmail.com",
+    "limiteCredito": 200000.0
+  },
+  {
+    "nombre": "PARANA ON THE FLY S.A.S.",
+    "cuit": "30716312093",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Goya",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "PIRCIO CHRISTIAN RUBEN",
+    "cuit": "20230862800",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "El Palomar",
+    "email": "crpircio@yahoo.com.ar",
+    "limiteCredito": 250000.0
+  },
+  {
+    "nombre": "POSSE ELIANA CELESTE",
+    "cuit": "27343913139",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "eluposse@gmail.com",
+    "limiteCredito": 700000.0
+  },
+  {
+    "nombre": "PRADO SAVALLA LIDIA RAQUEL",
+    "cuit": "27937644499",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "El Palomar",
+    "email": "vinotecaelbaco@hotmail.com",
+    "limiteCredito": 300000.0
+  },
+  {
+    "nombre": "PRESTOR SAS",
+    "cuit": "30715740806",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "aldo.garber@celler.com.ar",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "Palacios Juan Manuel",
+    "cuit": "20272156965",
+    "vendedor": "Adrian Arango",
+    "ciudad": "gba norte (san isidro)",
+    "email": "manuel.palacios@harman.com",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "Poi Pellin Sociedad Anonima",
+    "cuit": "30618147238",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "30 De Agosto",
+    "email": "sharismendy63@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "QUILES FLAVIO GABRIEL",
+    "cuit": "20177449777",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "QUILODRAN LLAMAS RAUL GONZALO",
+    "cuit": "20271751436",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Tigre",
+    "email": "gonquilodran@gmail.com",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "RAGGHIANTI JUAN CRUZ",
+    "cuit": "20420237813",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Martinez",
+    "email": "Juancruzragghianti@gmail.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "RAZETO RAUL JUAN",
+    "cuit": "20120583582",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "San Martin",
+    "email": "vinerialoscolonos@hotmail.com",
+    "limiteCredito": 250000.0
+  },
+  {
+    "nombre": "RIZO ANALIA",
+    "cuit": "27275276222",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "San Juan",
+    "email": "guemesdrinksup@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "RODRIGUEZ GABRIEL DARIO",
+    "cuit": "20180035665",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "General Rodriguez",
+    "email": "albariniobebidas@gmail.com",
+    "limiteCredito": 400000.0
+  },
+  {
+    "nombre": "SALLABERRY VALIENTE HERMANOS SRL",
+    "cuit": "30701945049",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "0",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "SALO SRL",
+    "cuit": "30713774606",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "Rio Negro",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 400000.0
+  },
+  {
+    "nombre": "Serres Gaston",
+    "cuit": "20392121146",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "CABALLITO",
+    "email": "boirecaballito@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "Solaliga Mariela Silvina",
+    "cuit": "27239007975",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "TRANCHINI JUAN CRUZ",
+    "cuit": "20299750176",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "nuevosterrunos@yahoo.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "Tres Pintas Srl",
+    "cuit": "30716171864",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "VINOS BARREL SRL",
+    "cuit": "30716504049",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "eventos@barrelvinos.com.ar",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "WANG ESTEBAN DAVID",
+    "cuit": "20400151955",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Del VIso",
+    "email": "ian19991015@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "YACOMELLI GLADYS B",
+    "cuit": "27174086902",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "0",
+    "limiteCredito": 3000000.0
+  },
+  {
+    "nombre": "YOUNG YEMINA ANDREA",
+    "cuit": "27243606387",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "0",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "no usar Morales Anibal",
+    "cuit": "20315481679",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Villa San Lorenzo",
+    "email": "morales_anibal@hotmail.com",
+    "limiteCredito": 10.0
+  },
+  {
+    "nombre": "AGÜERPAZ S. A. S.",
+    "cuit": "30718488180",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "Miuniverso@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "ALMACEN 1249 S.R.L., almacen 1249",
+    "cuit": "30714715522",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "nmartinez@almacen1249.com.ar",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "Aguilera Maria Noelia",
+    "cuit": "27284413542",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "quintal99almacen@gmail.com",
+    "limiteCredito": 400000.0
+  },
+  {
+    "nombre": "Ar Sabores Rr S. A. S.",
+    "cuit": "30719158753",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "perico",
+    "email": "adm.ricarica@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "BOADA MARIA SUSANA, boada 1",
+    "cuit": "27065534628",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "mariajoseuriona@gmail.com",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "BOADA MARIA SUSANA, boada 2",
+    "cuit": "27065534628",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "ignaciouriona@icloud.com",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "BOTTEGA DEL GUSTO S.R.L",
+    "cuit": "30719036682",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "MORON (ZONA OESTE)",
+    "email": "",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "Bingo Fuel Wines Sociedad Anonima, Bingo Fuel",
+    "cuit": "30715454234",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "Agrelo",
+    "email": "jguillen@universovigil.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "Bustos Cecilia Beatriz",
+    "cuit": "27322120724",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "General San Martin",
+    "email": "ceciliabustos20152015@gmail.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "CABRERA DIEGO MATIAS, José Enrique Rodó 4170 CABA",
+    "cuit": "20264176213",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "CANTERO JULIO CESAR, CANTERO",
+    "cuit": "20353652835",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "eltesoro.bebidas@gmail.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "CARBAJO OSCAR ALBERTO",
+    "cuit": "20224566868",
+    "vendedor": "Adrian Arango",
+    "ciudad": "BUENOS AIRES",
+    "email": "vinoscarbajo@yahoo.com.ar",
+    "limiteCredito": 275000.0
+  },
+  {
+    "nombre": "CASTILLO SEBASTIAN ALEJANDRO, CASTILLO SEBASTIAN",
+    "cuit": "20295946815",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "Castillosebastian@hotmail.Com",
+    "limiteCredito": 300000.0
+  },
+  {
+    "nombre": "CONAMER SA, Conamer Aeroparque",
+    "cuit": "30682584617",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "CIUDAD AUTONOMA  DE BS.AS.",
+    "email": "",
+    "limiteCredito": 10000000000.0
+  },
+  {
+    "nombre": "CONTRERAS ALICIA JUDITH",
+    "cuit": "27280232667",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "Lujan de cuyo",
+    "email": "wineshoppch@gmail.com",
+    "limiteCredito": 0.05
+  },
+  {
+    "nombre": "DAGOTTO ALICIA MARGARITA",
+    "cuit": "27127141245",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "info@labodegadeborbore.com.ar",
+    "limiteCredito": 100000.0
+  },
+  {
+    "nombre": "DISTRIBUIDORA FERRARI SA, ferrari",
+    "cuit": "30712108173",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "El Calafate",
+    "email": "operaciones@distferrari.com.ar",
+    "limiteCredito": 1000000.0
+  },
+  {
+    "nombre": "DOEBLIN HERNAN HORACIO",
+    "cuit": "20205678086",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "lacavaven@gmail.com",
+    "limiteCredito": 200000.0
+  },
+  {
+    "nombre": "Delta Biz S.A.S.",
+    "cuit": "30718906691",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "jorgeporcelo@gmail.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "EESS YPF SANTA ISABEL S.R.L",
+    "cuit": "30615302658",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "tartagal",
+    "email": "rmaza@artelbrands.com.ar",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "ELISABEL SRL, elisabel",
+    "cuit": "30678624361",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "proveedores@restlaslilas.com.ar",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "ESCODIAZ SEEDS S.R.L",
+    "cuit": "33712504809",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Villa Rosa",
+    "email": "herbariumpilar@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "FERNANDEZ Y RIMBAU MARIA EUGENIA",
+    "cuit": "27247304687",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Tigre",
+    "email": "millerandres@gmail.com",
+    "limiteCredito": 0
+  },
+  {
+    "nombre": "FERREIRA PFEIFFER,JUAN CARLOS ANTONIO",
+    "cuit": "20924704722",
+    "vendedor": "Marcelo Fernandez",
+    "ciudad": "Mendoza",
+    "email": "",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "FRAMIÑAN RAMOS CARLOS",
+    "cuit": "20925625443",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "carlosframi@hotmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "GARCIA JUAN CRUZ",
+    "cuit": "23260060309",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "SAN MARTIN DE LOS ANDES",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 400000.0
+  },
+  {
+    "nombre": "GARCIA PITA MARIA SILVA",
+    "cuit": "27214402667",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "El Palomar",
+    "email": "crpircio@yahoo.com.ar",
+    "limiteCredito": 250000.0
+  },
+  {
+    "nombre": "Giacomuzzi Estefania Noelia",
+    "cuit": "27294675189",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Wilde",
+    "email": "vinotecablend@gmail.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "HACHICHO EDUARDO DAVID",
+    "cuit": "20287680555",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "La Plata",
+    "email": "davidhachicho@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "HE JINGWEN",
+    "cuit": "27940826492",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Salta",
+    "email": "0",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "Hubeal Srl",
+    "cuit": "33714759669",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "San Isidro",
+    "email": "sergio@donsilvio.com.ar",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "LACOSTE DELFINA MARIA",
+    "cuit": "27278186429",
+    "vendedor": "Adrian Arango",
+    "ciudad": "BUENOS AIRES",
+    "email": "delfilacoste@gmail.com",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "LAS ACACIAS S.R.L.",
+    "cuit": "30708217197",
+    "vendedor": "Valeria Gutierrez Castex",
+    "ciudad": "Jujuy",
+    "email": "",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "MARKEN DRINKS SA, MARKEN DRINKS",
+    "cuit": "30717706281",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "markendrink@gmail.com",
+    "limiteCredito": 2000000.0
+  },
+  {
+    "nombre": "MERCEDES 3939 SRL, Mecha",
+    "cuit": "30715696602",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "alicia.proveedores@gmail.com",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "Madacilo S R L",
+    "cuit": "30654940955",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Haedo",
+    "email": "ventas@madacilo.com.ar",
+    "limiteCredito": 500000.0
+  },
+  {
+    "nombre": "PAMPANOS SRL",
+    "cuit": "30716422220",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "pampanosrl@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "PRIMERA ESQUINA SRL, comercial",
+    "cuit": "30715127616",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "aborrageiros@artelbrands.com.ar",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "PRIMERA ESQUINA SRL, primera esquina",
+    "cuit": "30715127616",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "Moreliacaballito@gmail.com",
+    "limiteCredito": 900000.0
+  },
+  {
+    "nombre": "RESTOM LEONARDO JOHN",
+    "cuit": "20337535659",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "Salta",
+    "email": "0",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "REY DE COPA SRL",
+    "cuit": "30717752593",
+    "vendedor": "Ezequiel Mallima",
+    "ciudad": "Cipolletti",
+    "email": "administracion@patagoniavinos.com.ar",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "ROMERO PAOLA EDITH",
+    "cuit": "27262365773",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "fermadryn01@gmail.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "RUFFINI RICARDO MARTIN",
+    "cuit": "20253121050",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "martinruffini@hotmail.com",
+    "limiteCredito": 100000.0
+  },
+  {
+    "nombre": "Ramirez Maria Gabriela",
+    "cuit": "23220050254",
+    "vendedor": "Anabel Borrageiros",
+    "ciudad": "buenos",
+    "email": "sbcaballitook@gmail.com",
+    "limiteCredito": 200000.0
+  },
+  {
+    "nombre": "Status Sociedad De Hecho",
+    "cuit": "30710476086",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Villa Bosch",
+    "email": "ferstatus@hotmail.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "Super Gringa",
+    "cuit": "30716494124",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "La Plata Noroeste Calle 50",
+    "email": "tragoalmacendebebidas@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "TRANCHINI JUAN CRUZ, tranchini",
+    "cuit": "20299750176",
+    "vendedor": "Sergio Piatanesi",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "nuevosterrunos@yahoo.com",
+    "limiteCredito": 800000.0
+  },
+  {
+    "nombre": "WYPRA SA, WYPRA SA",
+    "cuit": "30718287495",
+    "vendedor": "Adrian Arango",
+    "ciudad": "Ciudad Autonoma de Buenos Aires",
+    "email": "infowypra@gmail.com",
+    "limiteCredito": 600000.0
+  },
+  {
+    "nombre": "Winenot",
+    "cuit": "33716967919",
+    "vendedor": "Pablo Perticone",
+    "ciudad": "BUENOS",
+    "email": "administracion@winenotvinoteca.com",
+    "limiteCredito": 400000.0
+  }
+]
