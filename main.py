@@ -16,19 +16,26 @@ app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024
 GEMINI_KEY = os.environ.get('GEMINI_API_KEY', '')
 OPENAI_KEY = os.environ.get('OPENAI_API_KEY', '')
 GEMINI_MODEL = "gemini-2.5-flash"
-# Usar disco persistente de Render si existe, sino carpeta local
 DATA_DIR = '/data' if os.path.exists('/data') else os.getcwd()
 ALERTAS_FILE = os.path.join(DATA_DIR, 'alertas_cartera.json')
 DATOS_FILE = os.path.join(DATA_DIR, 'datos_bodega.json')
 print(f"[init] Almacenamiento en: {DATA_DIR}", flush=True)
 WSP_FILE = os.path.join(os.getcwd(), 'whatsapp_index.json')
 
-# Caché de consultas BCRA — evita re-consultar el mismo CUIT en 24hs
-bcra_cache = {}  # {cuit: {data: ..., timestamp: ...}}
-CACHE_TTL = 60 * 60 * 2   # 2 horas — más fresco para detectar cambios de situación
-
-CACHE_TTL_ERROR = 300  # 5 min para errores
+bcra_cache = {}
+CACHE_TTL = 60 * 60 * 2
+CACHE_TTL_ERROR = 300
 BCRA_VACIO = {"results": None, "sin_deudas": None, "error_bcra": None}
+
+# ── Cartera comercial ──
+_cartera_comercial = []
+try:
+    _cc_path = os.path.join(os.getcwd(), 'cartera_comercial.json')
+    with open(_cc_path, encoding='utf-8') as f:
+        _cartera_comercial = json.load(f)
+    print(f"[comercial] {len(_cartera_comercial)} clientes cargados", flush=True)
+except Exception as e:
+    print(f"[comercial] Error cargando cartera: {e}", flush=True)
 
 def cache_get(cuit):
     try:
@@ -59,7 +66,6 @@ def cache_set(cuit, data, error=None):
     except: pass
 
 def consultar_bcra_cached(cuit):
-    """Siempre devuelve (dict, error_str|None). Caché compartido en disco entre workers."""
     print(f"[bcra] {cuit} consultando BCRA...", flush=True)
     cached_data, cached_error = cache_get(cuit)
     if cached_data is not None:
@@ -76,7 +82,6 @@ def consultar_bcra_cached(cuit):
     print(f"[bcra] {cuit} OK desde BCRA", flush=True)
     return data, None
 
-# Estado de verificación en memoria
 verificacion_estado = {
     "corriendo": False,
     "progreso": 0,
@@ -86,8 +91,6 @@ verificacion_estado = {
 }
 
 def gemini_request(payload, timeout=120):
-    """Intenta Gemini primero, si falla usa OpenAI como fallback."""
-    # --- INTENTO 1: Gemini ---
     if GEMINI_KEY:
         url = "https://generativelanguage.googleapis.com/v1beta/models/" + GEMINI_MODEL + ":generateContent?key=" + GEMINI_KEY
         for intento in range(2):
@@ -116,16 +119,13 @@ def gemini_request(payload, timeout=120):
                     time.sleep(10)
         print("[gemini] Fallando a OpenAI...", flush=True)
 
-    # --- INTENTO 2: OpenAI como fallback ---
     if OPENAI_KEY:
         try:
-            # Extraer el texto del prompt desde el payload de Gemini
             partes = payload.get('contents', [{}])[0].get('parts', [])
             prompt_text = ''
             for parte in partes:
                 if 'text' in parte:
                     prompt_text += parte['text']
-            
             headers_oai = {
                 "Content-Type": "application/json",
                 "Authorization": "Bearer " + OPENAI_KEY
@@ -152,7 +152,7 @@ def gemini_request(payload, timeout=120):
             print(f"[openai] Excepcion: {e}", flush=True)
             return None, str(e)
 
-    return None, "No hay APIs de IA disponibles. Configurá GEMINI_API_KEY o OPENAI_API_KEY."
+    return None, "No hay APIs de IA disponibles."
 
 BCRA_WORKER = "https://orange-recipe-3bb1.ezetombacapo.workers.dev"
 BCRA_WORKER_2 = "https://little-feather-5b68.ezequielmallima.workers.dev"
@@ -173,7 +173,7 @@ def consultar_bcra(cuit, reintentos=3):
                     text = r.text.strip()
                     if not text or len(text) < 10:
                         print(f"[bcra] Respuesta vacía via {via} para {cuit} — siguiente", flush=True)
-                        break  # siguiente endpoint
+                        break
                     data = r.json()
                     if data.get('error'):
                         if i < intentos - 1:
@@ -189,13 +189,13 @@ def consultar_bcra(cuit, reintentos=3):
                     return {"results": {"denominacion": "", "periodos": []}, "sin_deudas": True}, None
                 else:
                     print(f"[bcra] HTTP {r.status_code} via {via} para {cuit}", flush=True)
-                    break  # siguiente endpoint
+                    break
             except Exception as e:
                 print(f"[bcra] Error via {via} intento {i+1} para {cuit}: {e}", flush=True)
                 if i < intentos - 1:
                     time.sleep(3)
                     continue
-                break  # siguiente endpoint
+                break
     return None, "sin_respuesta"
 
 def analizar_bodegas_server(cuit, nombre, mensajes):
@@ -207,11 +207,8 @@ def analizar_bodegas_server(cuit, nombre, mensajes):
             "Sos un Analista de Riesgo Crediticio experto en el sector vitinicola argentino.\n"
             "Analiza estos mensajes del grupo de bodegas sobre " + nombre + " (CUIT: " + cuit + ").\n\n"
             "DICCIONARIO DE TERMINOS (OBLIGATORIO USAR):\n"
-            "- LC: Limite de Credito\n"
-            "- MM: Millones de pesos\n"
-            "- s/ CP: Segun condiciones de pago pactadas\n"
-            "- fct: Facturas\n"
-            "- opera con...: Relacion comercial activa\n"
+            "- LC: Limite de Credito\n- MM: Millones de pesos\n- s/ CP: Segun condiciones de pago pactadas\n"
+            "- fct: Facturas\n- opera con...: Relacion comercial activa\n"
             "- contado anticipado: Paga antes de recibir mercaderia (mejor escenario)\n"
             "- pagar con +X dias: Cliente se financia con la bodega (riesgo de flujo)\n"
             "- cheque reemplazado / repuesto: Problema resuelto, NO es negativo\n\n"
@@ -221,7 +218,7 @@ def analizar_bodegas_server(cuit, nombre, mensajes):
             "- Si distintas bodegas dicen cosas contradictorias, marcalo como comportamiento_inconsistente=true.\n"
             "- Cheques rechazados pero reemplazados = NO negativo.\n"
             "- Mensaje sobre OTRO CUIT diferente = NO negativo para este cliente.\n"
-            "- NUNCA digas que no hay antecedentes si el chat tiene mensajes. Usa la informacion disponible.\n\n"
+            "- NUNCA digas que no hay antecedentes si el chat tiene mensajes.\n\n"
             "MENSAJES:\n" + mensajes_texto + "\n\n"
             'Responde SOLO con este JSON sin markdown: {"es_negativo": false, "motivo": "texto descriptivo", "comportamiento_inconsistente": false}'
         )
@@ -243,10 +240,7 @@ def analizar_bodegas_server(cuit, nombre, mensajes):
         return False, ""
 
 def calcular_score_servidor(cuit, bcra_data, en_mora=None):
-    """Calcula el score Vende Seguro en el servidor con los datos disponibles"""
     puntos = 0
-
-    # 1. Situación BCRA actual
     periodos = (bcra_data.get('results') or {}).get('periodos') or []
     max_sit = 1
     nro_entidades = 0
@@ -263,12 +257,10 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
     pts_sit = {1: 400, 2: 200, 3: 50}.get(max_sit, 0)
     puntos += pts_sit
 
-    # 2. Historial 24m — siempre consultar fresco durante verificación
-    pts_hist = 75  # neutral sin datos
+    pts_hist = 75
     try:
         hist_cached = None
         hist_path = os.path.join(DATA_DIR, f'historial_{cuit}.json')
-        # Solo usar caché si tiene menos de 1 hora (datos de esta misma verificación)
         if os.path.exists(hist_path):
             with open(hist_path, 'r') as f:
                 hc = json.load(f)
@@ -295,12 +287,10 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
     except: pass
     puntos += pts_hist
 
-    # 3. Cheques rechazados — usar caché en disco primero
-    pts_cheq = 75  # neutral sin datos
+    pts_cheq = 75
     try:
         cheq_cached = None
         cheq_path = os.path.join(DATA_DIR, f'cheques_{cuit}.json')
-        # Solo usar caché si tiene menos de 1 hora (datos de esta misma verificación)
         if os.path.exists(cheq_path):
             with open(cheq_path, 'r') as f:
                 cc = json.load(f)
@@ -334,30 +324,22 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
     except: pass
     puntos += pts_cheq
 
-    # 4. Mora Piattelli
     if en_mora is None:
         try:
-            moras_file = 'moras.json'
-            if os.path.exists(os.path.join(DATA_DIR, 'moras.json')):
-                moras_file = os.path.join(DATA_DIR, 'moras.json')
-            with open(moras_file, 'r', encoding='utf-8') as mf:
+            moras_path = os.path.join(DATA_DIR, 'moras_piattelli.json')
+            if not os.path.exists(moras_path):
+                moras_path = os.path.join(os.getcwd(), 'moras_piattelli.json')
+            with open(moras_path, 'r', encoding='utf-8') as mf:
                 moras_d = json.load(mf)
             en_mora = cuit.replace('-', '') in moras_d
         except:
             en_mora = False
 
-    pts_mora = 0 if en_mora else 100
-    puntos += pts_mora
+    puntos += 0 if en_mora else 100
+    puntos += 50  # DSO individual neutral
+    puntos += 30  # Red bodegas neutral
 
-    # 5. DSO individual — neutral sin datos
-    puntos += 50
-
-    # 6. Red de bodegas — neutral
-    puntos += 30
-
-    # 7. Concentración deuda
-    if nro_entidades == 0 or bcra_data.get('sin_deudas'):
-        pts_conc = 39
+    if nro_entidades == 0 or bcra_data.get('sin_deudas'): pts_conc = 39
     elif nro_entidades == 1 and monto_total_m < 50: pts_conc = 35
     elif nro_entidades <= 2 and monto_total_m < 100: pts_conc = 28
     elif nro_entidades <= 3 and monto_total_m < 500: pts_conc = 20
@@ -365,7 +347,6 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
     else: pts_conc = 0
     puntos += pts_conc
 
-    # Techos duros
     if en_mora: puntos = min(puntos, 300)
     if max_sit >= 4: puntos = min(puntos, 250)
     elif max_sit == 3: puntos = min(puntos, 400)
@@ -395,7 +376,6 @@ def ejecutar_verificacion(cartera_data):
         'atencion', 'ojo', 'problema', 'judicial', 'cobrar', 'nos debe', 'debia'
     ]
 
-    # Cargar índice de WhatsApp
     wsp_index = {}
     try:
         with open(WSP_FILE, 'r', encoding='utf-8') as f:
@@ -406,7 +386,6 @@ def ejecutar_verificacion(cartera_data):
     nuevas_alertas = []
     cartera_actualizada = []
 
-    # Limpiar caché de disco para forzar consultas frescas al BCRA
     try:
         cache_file = os.path.join(DATA_DIR, 'bcra_cache.json')
         if os.path.exists(cache_file):
@@ -414,133 +393,117 @@ def ejecutar_verificacion(cartera_data):
             print("[verif] Caché BCRA limpiado para verificación fresca", flush=True)
     except: pass
 
-    for i, cliente in enumerate(cartera_data):
-        cuit = cliente.get('cuit', '')
-        nombre = cliente.get('nombre', '')
-        sit_anterior = cliente.get('ultimaSit', 1) or 1
-
-        verificacion_estado["progreso"] = i + 1
-        verificacion_estado["cliente_actual"] = nombre
-        verificacion_estado["mensaje"] = "Verificando " + str(i+1) + "/" + str(len(cartera_data)) + ": " + nombre
-
-        cliente_actualizado = dict(cliente)
-
-        try:
-            # Consultar BCRA principal
-            bcra_data, error = consultar_bcra_cached(cuit)
-            
-            # Calcular score siempre — aunque haya error BCRA da score parcial
-            score_data = None
-            try:
-                score_data = calcular_score_servidor(cuit, bcra_data or {}, en_mora=None)
-                cliente_actualizado['scoreCompleto'] = score_data['score']
-                cliente_actualizado['scoreRango'] = score_data['rango']
-                cliente_actualizado['scoreColor'] = score_data['color']
-                cliente_actualizado['scoreEmoji'] = score_data['emoji']
-                print(f"[verif] {cuit} score={score_data['score']}", flush=True)
-            except Exception as e_score:
-                print(f"[verif] Error score {cuit}: {e_score}", flush=True)
-
-            # Actualizar situación BCRA
-            if bcra_data and bcra_data.get('results') is not None:
-                periodos = (bcra_data.get('results') or {}).get('periodos') or []
-                entidades = periodos[0].get('entidades', []) if periodos else []
-                max_sit = max((e.get('situacion', 1) or 1) for e in entidades) if entidades else 1
-                cliente_actualizado['ultimaSit'] = max_sit
-                cliente_actualizado['ultimaVerif'] = time.strftime('%d/%m/%Y')
-
-                if max_sit > sit_anterior or max_sit >= 3:
-                    alerta = {
-                        "nombre": nombre,
-                        "cuit": cuit,
-                        "sitAnterior": sit_anterior,
-                        "sitActual": max_sit,
-                        "fecha": time.strftime('%d/%m/%Y'),
-                        "tipo": "bcra"
-                    }
-                    if score_data:
-                        alerta["scoreCompleto"] = score_data["score"]
-                        alerta["scoreRango"] = score_data["rango"]
-                        alerta["scoreColor"] = score_data["color"]
-                        alerta["scoreEmoji"] = score_data["emoji"]
-                    nuevas_alertas.append(alerta)
-            else:
-                cliente_actualizado['ultimaVerif'] = time.strftime('%d/%m/%Y')
-        except Exception as e_verif:
-            print(f"[verif] Error {cuit}: {e_verif}", flush=True)
-
-        # Analizar grupo bodegas — solo mensajes de los últimos 6 meses
-        try:
-            threads = wsp_index.get(cuit, [])
-            from datetime import datetime, timedelta
-            hace_6_meses = datetime.now() - timedelta(days=180)
-            # Filtrar threads recientes
-            threads_recientes = []
-            for t in threads:
-                fecha_str = t.get('fecha') or (t.get('mensajes', [{}])[0].get('fecha') if t.get('mensajes') else None)
-                if fecha_str:
-                    try:
-                        fecha_t = datetime.fromisoformat(str(fecha_str)[:10])
-                        if fecha_t >= hace_6_meses:
-                            threads_recientes.append(t)
-                    except:
-                        pass
-            if threads_recientes:
-                todos_mensajes = []
-                tiene_sospecha = False
-                for t in threads_recientes:
-                    for m in t.get('mensajes', []):
-                        texto_msg = m.get('texto', '')
-                        todos_mensajes.append(m.get('autor', '') + ': ' + texto_msg)
-                        if any(p in texto_msg.lower() for p in palabras_riesgo):
-                            tiene_sospecha = True
-                if tiene_sospecha:
-                    ya_existe = any(a['cuit'] == cuit and a['tipo'] == 'bodegas' for a in nuevas_alertas)
-                    if not ya_existe:
-                        es_negativo, motivo = analizar_bodegas_server(cuit, nombre, todos_mensajes[:10])
-                        if es_negativo:
-                            nuevas_alertas.append({
-                                "nombre": nombre,
-                                "cuit": cuit,
-                                "fecha": time.strftime('%d/%m/%Y'),
-                                "tipo": "bodegas",
-                                "mensajes": [motivo]
-                            })
-        except Exception:
-            pass
-
-        cartera_actualizada.append(cliente_actualizado)
-        # Pausa corta entre clientes para no saturar el BCRA
-        if i < len(cartera_data) - 1:
-            time.sleep(2)
-
-    # Guardar resultados
-    ahora = time.strftime('%d/%m/%Y %H:%M')
     try:
-        # Solo usar las alertas nuevas de esta verificación
-        alertas_finales = nuevas_alertas
+        for i, cliente in enumerate(cartera_data):
+            cuit = cliente.get('cuit', '')
+            nombre = cliente.get('nombre', '')
+            sit_anterior = cliente.get('ultimaSit', 1) or 1
 
-        datos_guardar = {
-            "alertas": alertas_finales,
-            "ultima_verif": ahora,
-            "cartera": [{
-                "cuit": c.get('cuit'),
-                "ultimaSit": c.get('ultimaSit'),
-                "ultimaVerif": c.get('ultimaVerif'),
-                "scoreCompleto": c.get('scoreCompleto'),
-                "scoreRango": c.get('scoreRango'),
-                "scoreColor": c.get('scoreColor'),
-                "scoreEmoji": c.get('scoreEmoji')
-            } for c in cartera_actualizada]
-        }
-        with open(ALERTAS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(datos_guardar, f, ensure_ascii=False, indent=2)
+            verificacion_estado["progreso"] = i + 1
+            verificacion_estado["cliente_actual"] = nombre
+            verificacion_estado["mensaje"] = "Verificando " + str(i+1) + "/" + str(len(cartera_data)) + ": " + nombre
+
+            cliente_actualizado = dict(cliente)
+
+            try:
+                bcra_data, error = consultar_bcra_cached(cuit)
+                score_data = None
+                try:
+                    score_data = calcular_score_servidor(cuit, bcra_data or {}, en_mora=None)
+                    cliente_actualizado['scoreCompleto'] = score_data['score']
+                    cliente_actualizado['scoreRango'] = score_data['rango']
+                    cliente_actualizado['scoreColor'] = score_data['color']
+                    cliente_actualizado['scoreEmoji'] = score_data['emoji']
+                    print(f"[verif] {cuit} score={score_data['score']}", flush=True)
+                except Exception as e_score:
+                    print(f"[verif] Error score {cuit}: {e_score}", flush=True)
+
+                if bcra_data and bcra_data.get('results') is not None:
+                    periodos = (bcra_data.get('results') or {}).get('periodos') or []
+                    entidades = periodos[0].get('entidades', []) if periodos else []
+                    max_sit = max((e.get('situacion', 1) or 1) for e in entidades) if entidades else 1
+                    cliente_actualizado['ultimaSit'] = max_sit
+                    cliente_actualizado['ultimaVerif'] = time.strftime('%d/%m/%Y')
+
+                    if max_sit > sit_anterior or max_sit >= 3:
+                        alerta = {
+                            "nombre": nombre, "cuit": cuit,
+                            "sitAnterior": sit_anterior, "sitActual": max_sit,
+                            "fecha": time.strftime('%d/%m/%Y'), "tipo": "bcra"
+                        }
+                        if score_data:
+                            alerta.update({"scoreCompleto": score_data["score"], "scoreRango": score_data["rango"],
+                                           "scoreColor": score_data["color"], "scoreEmoji": score_data["emoji"]})
+                        nuevas_alertas.append(alerta)
+                else:
+                    cliente_actualizado['ultimaVerif'] = time.strftime('%d/%m/%Y')
+            except Exception as e_verif:
+                print(f"[verif] Error {cuit}: {e_verif}", flush=True)
+
+            try:
+                threads = wsp_index.get(cuit, [])
+                from datetime import datetime, timedelta
+                hace_6_meses = datetime.now() - timedelta(days=180)
+                threads_recientes = []
+                for t in threads:
+                    fecha_str = t.get('fecha') or (t.get('mensajes', [{}])[0].get('fecha') if t.get('mensajes') else None)
+                    if fecha_str:
+                        try:
+                            if datetime.fromisoformat(str(fecha_str)[:10]) >= hace_6_meses:
+                                threads_recientes.append(t)
+                        except: pass
+                if threads_recientes:
+                    todos_mensajes = []
+                    tiene_sospecha = False
+                    for t in threads_recientes:
+                        for m in t.get('mensajes', []):
+                            texto_msg = m.get('texto', '')
+                            todos_mensajes.append(m.get('autor', '') + ': ' + texto_msg)
+                            if any(p in texto_msg.lower() for p in palabras_riesgo):
+                                tiene_sospecha = True
+                    if tiene_sospecha:
+                        ya_existe = any(a['cuit'] == cuit and a['tipo'] == 'bodegas' for a in nuevas_alertas)
+                        if not ya_existe:
+                            es_negativo, motivo = analizar_bodegas_server(cuit, nombre, todos_mensajes[:10])
+                            if es_negativo:
+                                nuevas_alertas.append({
+                                    "nombre": nombre, "cuit": cuit,
+                                    "fecha": time.strftime('%d/%m/%Y'),
+                                    "tipo": "bodegas", "mensajes": [motivo]
+                                })
+            except Exception:
+                pass
+
+            cartera_actualizada.append(cliente_actualizado)
+            if i < len(cartera_data) - 1:
+                time.sleep(2)
+
+        ahora = time.strftime('%d/%m/%Y %H:%M')
+        try:
+            datos_guardar = {
+                "alertas": nuevas_alertas,
+                "ultima_verif": ahora,
+                "cartera": [{
+                    "cuit": c.get('cuit'), "ultimaSit": c.get('ultimaSit'),
+                    "ultimaVerif": c.get('ultimaVerif'), "scoreCompleto": c.get('scoreCompleto'),
+                    "scoreRango": c.get('scoreRango'), "scoreColor": c.get('scoreColor'),
+                    "scoreEmoji": c.get('scoreEmoji')
+                } for c in cartera_actualizada]
+            }
+            with open(ALERTAS_FILE, 'w', encoding='utf-8') as f:
+                json.dump(datos_guardar, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"[verif] Error guardando alertas: {e}", flush=True)
+
+        verificacion_estado["mensaje"] = "Verificacion completada. " + str(len(nuevas_alertas)) + " alerta(s) detectada(s)."
+        verificacion_estado["progreso"] = len(cartera_data)
+
     except Exception as e:
-        print(f"[verif] Error guardando alertas: {e}", flush=True)
-
-    verificacion_estado["corriendo"] = False
-    verificacion_estado["mensaje"] = "Verificacion completada. " + str(len(nuevas_alertas)) + " alerta(s) detectada(s)."
-    verificacion_estado["progreso"] = len(cartera_data)
+        print(f"[verif] Error general: {e}", flush=True)
+        verificacion_estado["mensaje"] = f"Error: {str(e)}"
+    finally:
+        verificacion_estado["corriendo"] = False
+        print("[verif] Flag liberado.", flush=True)
 
 # ─── ENDPOINTS ───────────────────────────────────────────
 
@@ -548,13 +511,35 @@ def ejecutar_verificacion(cartera_data):
 def index():
     return send_from_directory('static', 'index.html')
 
+@app.route("/comercial")
+def comercial():
+    return send_from_directory('static', 'comercial.html')
+
+@app.route("/cartera-comercial/<vendedor>")
+def get_cartera_comercial(vendedor):
+    from urllib.parse import unquote
+    v = unquote(vendedor).strip().lower()
+    result = [c for c in _cartera_comercial if c.get('vendedor', '').lower() == v]
+    # Enriquecer con score y situación desde alertas
+    try:
+        if os.path.exists(ALERTAS_FILE):
+            with open(ALERTAS_FILE, 'r', encoding='utf-8') as f:
+                alertas_data = json.load(f)
+            cartera_scores = {c['cuit']: c for c in alertas_data.get('cartera', [])}
+            for cliente in result:
+                if cliente['cuit'] in cartera_scores:
+                    sc = cartera_scores[cliente['cuit']]
+                    cliente['score'] = sc.get('scoreCompleto')
+                    cliente['ultimaSit'] = sc.get('ultimaSit', 1)
+    except: pass
+    return jsonify(result)
+
 @app.route("/whatsapp_index.json")
 def wsp_index_route():
     return send_from_directory(os.getcwd(), 'whatsapp_index.json')
 
 @app.route("/moras.json")
 def moras():
-    # Primero buscar en /data (disco persistente), luego en directorio local
     moras_path = os.path.join(DATA_DIR, 'moras_piattelli.json')
     if os.path.exists(moras_path):
         return send_from_directory(DATA_DIR, 'moras_piattelli.json')
@@ -562,7 +547,6 @@ def moras():
 
 @app.route("/upload-moras", methods=["POST"])
 def upload_moras():
-    """Sube archivo Excel de moras y lo convierte a JSON"""
     try:
         if 'file' not in request.files:
             return jsonify({"error": "Sin archivo"}), 400
@@ -572,12 +556,9 @@ def upload_moras():
         wb = openpyxl.load_workbook(io.BytesIO(file.read()))
         ws = wb.active
         headers = [str(c.value or '').strip().lower() for c in ws[1]]
-        
-        # Detectar columnas
         col_cuit = next((i for i, h in enumerate(headers) if 'cuit' in h), 0)
         col_fecha = next((i for i, h in enumerate(headers) if 'fecha' in h), 1)
         col_saldo = next((i for i, h in enumerate(headers) if 'saldo' in h or 'deuda' in h or 'adeud' in h), 2)
-        
         moras_dict = {}
         for row in ws.iter_rows(min_row=2, values_only=True):
             cuit = str(row[col_cuit] or '').strip().replace('-', '').replace(' ', '')
@@ -586,7 +567,6 @@ def upload_moras():
                 saldo = row[col_saldo]
                 try:
                     saldo_str = str(saldo).replace('$','').replace(' ','')
-                    # Formato argentino: punto=miles, coma=decimal
                     if ',' in saldo_str and '.' in saldo_str:
                         saldo_str = saldo_str.replace('.','').replace(',','.')
                     elif ',' in saldo_str:
@@ -595,17 +575,14 @@ def upload_moras():
                 except:
                     saldo_num = 0
                 if cuit in moras_dict:
-                    # Acumular saldos y tomar fecha más antigua
                     moras_dict[cuit]['saldoAdeudado'] += saldo_num
                     if fecha < moras_dict[cuit]['fechaMora']:
                         moras_dict[cuit]['fechaMora'] = fecha
                 else:
                     moras_dict[cuit] = {"fechaMora": fecha, "saldoAdeudado": saldo_num, "enMora": True}
-        
         moras_path = os.path.join(DATA_DIR, 'moras_piattelli.json')
         with open(moras_path, 'w', encoding='utf-8') as f:
             json.dump(moras_dict, f, ensure_ascii=False, indent=2)
-        
         print(f"[moras] Subidas {len(moras_dict)} moras", flush=True)
         return jsonify({"ok": True, "total": len(moras_dict)})
     except Exception as e:
@@ -668,7 +645,6 @@ def verificar_cartera():
             return jsonify({"error": "Cartera vacia"}), 400
         t = threading.Thread(target=ejecutar_verificacion, args=(cartera_data,), daemon=True)
         t.start()
-        # Solo un worker puede iniciar la verificación
         return jsonify({"ok": True, "mensaje": "Verificacion iniciada en el servidor"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -676,6 +652,14 @@ def verificar_cartera():
 @app.route("/verificar-progreso", methods=["GET"])
 def verificar_progreso():
     return jsonify(verificacion_estado)
+
+@app.route("/verificar-reset", methods=["POST", "GET"])
+def verificar_reset():
+    estaba_corriendo = verificacion_estado["corriendo"]
+    verificacion_estado["corriendo"] = False
+    verificacion_estado["mensaje"] = "Reset manual. Listo para nueva verificacion."
+    print(f"[verif] Reset manual. Estaba corriendo: {estaba_corriendo}", flush=True)
+    return jsonify({"ok": True, "estaba_corriendo": estaba_corriendo})
 
 @app.route("/analizar-bodegas", methods=["POST"])
 def analizar_bodegas():
@@ -694,51 +678,29 @@ def analizar_bodegas():
 @app.route("/afip/<cuit>")
 def get_afip(cuit):
     cuit_fmt = cuit[:2] + '-' + cuit[2:10] + '-' + cuit[10:] if len(cuit) == 11 else cuit
-
-    # Intento 1: deudas activas (tiene denominacion si hay deuda)
     try:
         data, error = consultar_bcra_cached(cuit)
         if data.get('results') and data['results'].get('denominacion'):
             return jsonify({"nombre": data['results']['denominacion']})
-    except Exception:
-        pass
-
-    # Intento 2: historial 24 meses (tiene denominacion aunque no haya deuda activa)
+    except Exception: pass
     try:
-        r = requests.get(
-            "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit,
-            timeout=15, verify=False
-        )
+        r = requests.get("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit, timeout=15, verify=False)
         if r.status_code == 200:
-            data2 = r.json()
-            nombre2 = data2.get('results', {}).get('denominacion', '')
-            if nombre2:
-                return jsonify({"nombre": nombre2})
-    except Exception:
-        pass
-
-    # Intento 3: directo deudas sin cache
+            nombre2 = r.json().get('results', {}).get('denominacion', '')
+            if nombre2: return jsonify({"nombre": nombre2})
+    except Exception: pass
     try:
-        r = requests.get(
-            "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit,
-            timeout=15, verify=False
-        )
+        r = requests.get("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit, timeout=15, verify=False)
         if r.status_code == 200:
-            data3 = r.json()
-            nombre3 = data3.get('results', {}).get('denominacion', '')
-            if nombre3:
-                return jsonify({"nombre": nombre3})
-    except Exception:
-        pass
-
-    # Fallback: CUIT formateado
+            nombre3 = r.json().get('results', {}).get('denominacion', '')
+            if nombre3: return jsonify({"nombre": nombre3})
+    except Exception: pass
     return jsonify({"nombre": cuit_fmt})
 
 @app.route("/deudas/<cuit>")
 def get_deudas(cuit):
     try:
         data, error = consultar_bcra_cached(cuit)
-        # data siempre es un dict consistente, nunca None
         return jsonify(data), 200
     except Exception as e:
         import traceback
@@ -749,13 +711,11 @@ def _cheques_cache_path(cuit):
     return os.path.join(DATA_DIR, f'cheques_{cuit}.json')
 
 def _cheques_cache_get(cuit):
-    """Obtener cheques desde caché en disco"""
     try:
         path = _cheques_cache_path(cuit)
         if os.path.exists(path):
             with open(path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            # TTL 24 horas
             if time.time() - data.get('ts', 0) < 86400:
                 print(f"[cheques] {cuit} desde caché disco", flush=True)
                 return data.get('payload')
@@ -763,7 +723,6 @@ def _cheques_cache_get(cuit):
     return None
 
 def _cheques_cache_set(cuit, payload):
-    """Guardar cheques en caché en disco"""
     try:
         path = _cheques_cache_path(cuit)
         with open(path, 'w', encoding='utf-8') as f:
@@ -792,7 +751,7 @@ def get_cheques(cuit):
                     data = r.json()
                     results = data.get('results', data) if isinstance(data, dict) else data
                     payload = {"results": results, "sin_deudas": None, "error_bcra": None}
-                    _cheques_cache_set(cuit, payload)  # guardar en disco
+                    _cheques_cache_set(cuit, payload)
                     print(f"[cheques] OK via {via} para {cuit}", flush=True)
                     return jsonify(payload), 200
                 if r.status_code in [520, 521, 522, 523, 524]:
@@ -803,17 +762,13 @@ def get_cheques(cuit):
                     time.sleep(2)
                     continue
                 break
-
-    # Todos fallaron — intentar caché en disco
     cached = _cheques_cache_get(cuit)
     if cached:
         print(f"[cheques] {cuit} desde caché (BCRA no disponible)", flush=True)
         return jsonify(cached), 200
-
     if todos_vacios:
         print(f"[cheques] Sin cheques para {cuit}", flush=True)
         return jsonify({"results": {"causales": []}, "sin_deudas": True, "error_bcra": None}), 200
-
     return jsonify({"results": None, "sin_deudas": None, "error_bcra": "sin_respuesta"}), 200
 
 @app.route("/deudas/<cuit>/historial")
@@ -848,7 +803,6 @@ def get_historial(cuit):
                     time.sleep(2)
                     continue
                 break
-    # Fallback caché en disco
     try:
         hist_path = os.path.join(DATA_DIR, f'historial_{cuit}.json')
         if os.path.exists(hist_path):
@@ -862,7 +816,7 @@ def get_historial(cuit):
 
 @app.route("/analizar", methods=["POST"])
 def analizar():
-    if not GEMINI_KEY:
+    if not GEMINI_KEY and not OPENAI_KEY:
         return jsonify({"error": "API key no configurada"}), 500
     try:
         body = request.get_json()
@@ -899,17 +853,16 @@ def procesar_veraz():
             "El array socios_directores debe incluir todos los socios, directores o representantes "
             "legales con su informacion crediticia. Si no hay, dejar array vacio []."
         )
-        # Convertir PDF a imagenes y enviar a OpenAI gpt-4o
         if not OPENAI_KEY:
             return jsonify({"error": "No hay API key de OpenAI configurada"}), 500
         try:
             import base64 as b64mod
-            import fitz  # PyMuPDF
+            import fitz
             pdf_bytes = b64mod.b64decode(pdf_base64)
             doc = fitz.open(stream=pdf_bytes, filetype="pdf")
             imagenes_b64 = []
             for page in doc:
-                mat = fitz.Matrix(2, 2)  # zoom 2x para mejor calidad
+                mat = fitz.Matrix(2, 2)
                 pix = page.get_pixmap(matrix=mat)
                 img_bytes = pix.tobytes("png")
                 imagenes_b64.append(b64mod.b64encode(img_bytes).decode())
@@ -918,36 +871,21 @@ def procesar_veraz():
         except Exception as ex:
             print(f"[procesar-informe] Error convirtiendo PDF: {ex}", flush=True)
             return jsonify({"error": "No se pudo convertir el PDF: " + str(ex)}), 500
-
         content_oai = [{"type": "text", "text": prompt}]
-        for img_b64 in imagenes_b64[:4]:  # max 4 paginas
-            content_oai.append({
-                "type": "image_url",
-                "image_url": {"url": "data:image/png;base64," + img_b64}
-            })
-
-        headers_oai = {
-            "Content-Type": "application/json",
-            "Authorization": "Bearer " + OPENAI_KEY
-        }
-        body_oai = {
-            "model": "gpt-4o",
-            "max_tokens": 1500,
-            "messages": [{"role": "user", "content": content_oai}]
-        }
+        for img_b64 in imagenes_b64[:4]:
+            content_oai.append({"type": "image_url", "image_url": {"url": "data:image/png;base64," + img_b64}})
+        headers_oai = {"Content-Type": "application/json", "Authorization": "Bearer " + OPENAI_KEY}
+        body_oai = {"model": "gpt-4o", "max_tokens": 1500, "messages": [{"role": "user", "content": content_oai}]}
         try:
-            r_oai = requests.post("https://api.openai.com/v1/chat/completions",
-                headers=headers_oai, json=body_oai, timeout=120)
+            r_oai = requests.post("https://api.openai.com/v1/chat/completions", headers=headers_oai, json=body_oai, timeout=120)
             d_oai = r_oai.json()
             print(f"[procesar-informe] OpenAI status {r_oai.status_code}", flush=True)
             if r_oai.status_code == 200:
                 texto = d_oai["choices"][0]["message"]["content"]
             else:
                 msg = d_oai.get("error", {}).get("message", "Error OpenAI")
-                print(f"[procesar-informe] OpenAI error: {msg}", flush=True)
                 return jsonify({"error": "Error OpenAI: " + msg}), 503
         except Exception as ex:
-            print(f"[procesar-informe] Excepcion OpenAI: {ex}", flush=True)
             return jsonify({"error": str(ex)}), 503
         if not texto:
             return jsonify({"error": "No se pudo procesar el PDF."}), 503
@@ -956,15 +894,13 @@ def procesar_veraz():
         match = re_mod.search(r'\{[\s\S]+\}', texto_limpio)
         if match:
             texto_limpio = match.group(0)
-        resultado = json.loads(texto_limpio)
-        return jsonify(resultado)
+        return jsonify(json.loads(texto_limpio))
     except json.JSONDecodeError as e:
-        print(f"[procesar-informe] JSON decode error: {e}", flush=True)
-        return jsonify({"error": "Error al parsear respuesta de Gemini: " + str(e)}), 500
+        return jsonify({"error": "Error al parsear respuesta: " + str(e)}), 500
     except Exception as e:
         import traceback
         print(f"[procesar-informe] Exception: {traceback.format_exc()}", flush=True)
-        return jsonify({"error": str(e), "detalle": traceback.format_exc()}), 500
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/test-gemini")
 def test_gemini():
@@ -978,49 +914,42 @@ def test_gemini():
 
 @app.route("/cache-stats")
 def cache_stats():
-    import time
     ahora = time.time()
-    activos = sum(1 for v in bcra_cache.values() if ahora - v['timestamp'] < CACHE_TTL)
+    activos = sum(1 for v in bcra_cache.values() if ahora - v.get('timestamp', 0) < CACHE_TTL)
     return jsonify({"total": len(bcra_cache), "activos": activos, "ttl_horas": CACHE_TTL/3600})
 
 def _fecha_valida(fecha_str, desde):
-    """Retorna True si la fecha es >= desde"""
     try:
         if not fecha_str: return False
         if '/' in str(fecha_str):
             partes = str(fecha_str).split('/')
+            from datetime import datetime
             if len(partes[2]) == 2:
-                from datetime import datetime
                 f = datetime(2000+int(partes[2]), int(partes[1]), int(partes[0]))
             else:
-                from datetime import datetime
                 f = datetime(int(partes[2]), int(partes[1]), int(partes[0]))
         else:
             from datetime import datetime
             f = datetime.fromisoformat(str(fecha_str)[:10])
         return f >= desde
     except:
-        return True  # si no parsea, mantener
+        return True
 
 @app.route("/health")
 def health():
-    return jsonify({"status": "ok", "gemini": bool(GEMINI_KEY)})
+    return jsonify({"status": "ok", "gemini": bool(GEMINI_KEY), "comercial": len(_cartera_comercial)})
 
 @app.route("/cache/limpiar/<cuit>", methods=["POST", "GET"])
 def limpiar_cache_cuit(cuit):
-    """Limpia el caché BCRA para un CUIT específico"""
     cuit_limpio = cuit.replace("-", "")
-    eliminados = []
-    for key in list(bcra_cache.keys()):
-        if key == cuit_limpio:
-            del bcra_cache[key]
-            eliminados.append(key)
+    eliminados = [key for key in list(bcra_cache.keys()) if key == cuit_limpio]
+    for key in eliminados:
+        del bcra_cache[key]
     print(f"[cache] Limpiado CUIT {cuit_limpio}: {eliminados}", flush=True)
     return jsonify({"ok": True, "cuit": cuit_limpio, "eliminados": len(eliminados)})
 
 @app.route("/cache/limpiar-todo", methods=["POST", "GET"])
 def limpiar_cache_todo():
-    """Limpia todo el caché BCRA"""
     total = len(bcra_cache)
     bcra_cache.clear()
     print(f"[cache] Cache completo limpiado: {total} entradas", flush=True)
@@ -1028,7 +957,6 @@ def limpiar_cache_todo():
 
 @app.route("/dso-ventas/limpiar", methods=["POST"])
 def limpiar_dso_ventas():
-    """Elimina el historial de ventas para re-carga limpia"""
     try:
         dso_file = os.path.join(DATA_DIR, 'dso_ventas_historico.json')
         if os.path.exists(dso_file):
@@ -1041,10 +969,7 @@ def limpiar_dso_ventas():
 def get_dso_saldos():
     try:
         modo = request.args.get('modo', 'actual')
-        if modo == 'historico':
-            f_path = os.path.join(DATA_DIR, 'dso_saldos_historico.json')
-        else:
-            f_path = os.path.join(DATA_DIR, 'dso_saldos_actual.json')
+        f_path = os.path.join(DATA_DIR, 'dso_saldos_historico.json' if modo == 'historico' else 'dso_saldos_actual.json')
         if os.path.exists(f_path):
             with open(f_path, 'r', encoding='utf-8') as f:
                 return jsonify(json.load(f))
@@ -1061,13 +986,9 @@ def save_dso_saldos():
             return jsonify({"error": "Sin saldos"}), 400
         from datetime import datetime, timedelta
         hoy = datetime.now()
-
-        # 1. ACTUAL — reemplaza siempre (para DSO global)
         f_actual = os.path.join(DATA_DIR, 'dso_saldos_actual.json')
         with open(f_actual, 'w', encoding='utf-8') as f:
             json.dump({"saldos": nuevos, "ultima_actualizacion": hoy.strftime('%d/%m/%Y %H:%M')}, f, ensure_ascii=False)
-
-        # 2. HISTORICO — acumula 4 meses (para score individual)
         f_hist = os.path.join(DATA_DIR, 'dso_saldos_historico.json')
         historico = []
         if os.path.exists(f_hist):
@@ -1083,7 +1004,6 @@ def save_dso_saldos():
                 existentes.add(key)
         with open(f_hist, 'w', encoding='utf-8') as f:
             json.dump({"saldos": filtrado, "ultima_actualizacion": hoy.strftime('%d/%m/%Y %H:%M'), "total_registros": len(filtrado)}, f, ensure_ascii=False)
-
         total = sum(s.get('saldo', 0) for s in nuevos)
         print(f"[dso-saldos] Actual: {len(nuevos)} registros ${total:,.0f} | Historico: {len(filtrado)}", flush=True)
         return jsonify({"ok": True, "agregados": len(nuevos), "total": len(filtrado)})
@@ -1096,10 +1016,7 @@ def save_dso_saldos():
 def get_dso_cheques():
     try:
         modo = request.args.get('modo', 'actual')
-        if modo == 'historico':
-            f_path = os.path.join(DATA_DIR, 'dso_cheques_historico.json')
-        else:
-            f_path = os.path.join(DATA_DIR, 'dso_cheques_actual.json')
+        f_path = os.path.join(DATA_DIR, 'dso_cheques_historico.json' if modo == 'historico' else 'dso_cheques_actual.json')
         if os.path.exists(f_path):
             with open(f_path, 'r', encoding='utf-8') as f:
                 return jsonify(json.load(f))
@@ -1116,13 +1033,9 @@ def save_dso_cheques():
             return jsonify({"error": "Sin cheques"}), 400
         from datetime import datetime, timedelta
         hoy = datetime.now()
-
-        # 1. ACTUAL — reemplaza siempre (para DSO global)
         f_actual = os.path.join(DATA_DIR, 'dso_cheques_actual.json')
         with open(f_actual, 'w', encoding='utf-8') as f:
             json.dump({"cheques": nuevos, "ultima_actualizacion": hoy.strftime('%d/%m/%Y %H:%M')}, f, ensure_ascii=False)
-
-        # 2. HISTORICO — acumula 4 meses (para score individual)
         f_hist = os.path.join(DATA_DIR, 'dso_cheques_historico.json')
         historico = []
         if os.path.exists(f_hist):
@@ -1138,7 +1051,6 @@ def save_dso_cheques():
                 existentes.add(key)
         with open(f_hist, 'w', encoding='utf-8') as f:
             json.dump({"cheques": filtrado, "ultima_actualizacion": hoy.strftime('%d/%m/%Y %H:%M'), "total_registros": len(filtrado)}, f, ensure_ascii=False)
-
         total = sum(abs(c.get('total', 0)) for c in nuevos)
         print(f"[dso-cheques] Actual: {len(nuevos)} registros ${total:,.0f} | Historico: {len(filtrado)}", flush=True)
         return jsonify({"ok": True, "agregados": len(nuevos), "total": len(filtrado)})
@@ -1149,7 +1061,6 @@ def save_dso_cheques():
 
 @app.route("/dso-ventas", methods=["GET"])
 def get_dso_ventas():
-    """Devuelve el historial acumulado de ventas DSO"""
     try:
         dso_file = os.path.join(DATA_DIR, 'dso_ventas_historico.json')
         if os.path.exists(dso_file):
@@ -1161,71 +1072,52 @@ def get_dso_ventas():
 
 @app.route("/dso-ventas", methods=["POST"])
 def save_dso_ventas():
-    """Acumula ventas nuevas manteniendo max 4 meses de historial"""
     try:
         body = request.get_json(force=True)
         nuevas_ventas = body.get('ventas', [])
         if not nuevas_ventas:
             return jsonify({"error": "Sin ventas"}), 400
-
         dso_file = os.path.join(DATA_DIR, 'dso_ventas_historico.json')
-
-        # Cargar historial existente
         historico = []
         if os.path.exists(dso_file):
             with open(dso_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                historico = data.get('ventas', [])
-
-        # Determinar corte de 4 meses atrás
+                historico = json.load(f).get('ventas', [])
         from datetime import datetime, timedelta
         hoy = datetime.now()
         hace_4_meses = hoy - timedelta(days=120)
-
-        # Filtrar historial: solo mantener los últimos 4 meses
         historico_filtrado = []
         for v in historico:
             try:
-                # Fecha puede venir como DD/MM/YYYY o YYYY-MM-DD
                 fecha_str = v.get('fecha', '')
                 if '/' in fecha_str:
                     partes = fecha_str.split('/')
                     if len(partes) == 3:
                         fecha = datetime(int(partes[2]), int(partes[1]), int(partes[0]))
-                    else:
-                        continue
+                    else: continue
                 else:
                     fecha = datetime.fromisoformat(fecha_str[:10])
                 if fecha >= hace_4_meses:
                     historico_filtrado.append(v)
-            except Exception:
-                pass
+            except Exception: pass
 
         def normalizar_fecha(f):
-            """Convierte cualquier formato a YYYY-MM-DD"""
             if not f: return f
             s = str(f).strip()
-            if len(s) >= 10 and s[4] == '-': return s[:10]  # ya es YYYY-MM-DD
+            if len(s) >= 10 and s[4] == '-': return s[:10]
             if '/' in s:
                 p = s.split('/')
                 if len(p) == 3:
                     try:
                         a, b, c = int(p[0]), int(p[1]), int(p[2])
                         anio = 2000 + c if c < 100 else c
-                        # Formato M/DD/YY (americano): si b > 12, entonces a=mes, b=dia
                         if b > 12: mes, dia = a, b
-                        # Formato DD/MM/YY: si a > 12, entonces a=dia, b=mes
                         elif a > 12: dia, mes = a, b
-                        # Ambiguo: en Argentina es DD/MM/YY
                         else: dia, mes = a, b
-                        # Validar rango
                         if 1 <= mes <= 12 and 1 <= dia <= 31:
                             return f"{anio}-{mes:02d}-{dia:02d}"
-                    except:
-                        pass
+                    except: pass
             return s
 
-        # Agregar nuevas ventas evitando duplicados exactos
         existentes = set((v.get('cliente',''), v.get('fecha',''), str(v.get('total',''))) for v in historico_filtrado)
         agregadas = 0
         for v in nuevas_ventas:
@@ -1236,15 +1128,9 @@ def save_dso_ventas():
                 existentes.add(key)
                 agregadas += 1
 
-        # Guardar
-        resultado = {
-            "ventas": historico_filtrado,
-            "ultima_actualizacion": hoy.strftime('%d/%m/%Y %H:%M'),
-            "total_registros": len(historico_filtrado)
-        }
+        resultado = {"ventas": historico_filtrado, "ultima_actualizacion": hoy.strftime('%d/%m/%Y %H:%M'), "total_registros": len(historico_filtrado)}
         with open(dso_file, 'w', encoding='utf-8') as f:
             json.dump(resultado, f, ensure_ascii=False, indent=2)
-
         print(f"[dso-ventas] Agregadas {agregadas} ventas nuevas, total: {len(historico_filtrado)}", flush=True)
         return jsonify({"ok": True, "agregadas": agregadas, "total": len(historico_filtrado)})
     except Exception as e:
@@ -1258,11 +1144,8 @@ def test_modelos():
         return jsonify({"error": "Sin API key"}), 500
     resultados = {}
     combos = [
-        ("gemini-1.5-flash-001", "v1beta"),
-        ("gemini-1.5-flash-002", "v1beta"),
-        ("gemini-1.5-pro-001", "v1beta"),
-        ("gemini-2.0-flash-001", "v1beta"),
-        ("gemini-2.5-flash", "v1beta"),
+        ("gemini-1.5-flash-001", "v1beta"), ("gemini-1.5-flash-002", "v1beta"),
+        ("gemini-1.5-pro-001", "v1beta"), ("gemini-2.0-flash-001", "v1beta"), ("gemini-2.5-flash", "v1beta"),
     ]
     for modelo, version in combos:
         key = f"{modelo}/{version}"
@@ -1271,12 +1154,9 @@ def test_modelos():
             r = requests.post(url, headers={"Content-Type": "application/json"},
                 json={"contents": [{"parts": [{"text": "di OK"}]}]}, timeout=10)
             data = r.json()
-            if "candidates" in data:
-                resultados[key] = "OK"
-            elif "error" in data:
-                resultados[key] = data["error"].get("message", "error")[:100]
-            else:
-                resultados[key] = "respuesta inesperada"
+            if "candidates" in data: resultados[key] = "OK"
+            elif "error" in data: resultados[key] = data["error"].get("message", "error")[:100]
+            else: resultados[key] = "respuesta inesperada"
         except Exception as e:
             resultados[key] = str(e)[:100]
     return jsonify(resultados)
