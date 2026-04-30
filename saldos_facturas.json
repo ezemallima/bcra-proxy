@@ -1,0 +1,2828 @@
+[
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "ABDENUR CARLOS ENRIQUE",
+    "nroFactura": "FA-A 00016-00007069",
+    "fechaFactura": "31/01/2026",
+    "fechaPago": "02/03/2026",
+    "totalFactura": 5841635.19,
+    "saldo": 1046635.97
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "Abdenur Cristian Maximiliano",
+    "nroFactura": "FA-A 00016-00007334",
+    "fechaFactura": "25/03/2026",
+    "fechaPago": "24/04/2026",
+    "totalFactura": 4181901.32,
+    "saldo": 4181901.32
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "Abdenur Cristian Maximiliano",
+    "nroFactura": "FA-A 00016-00007041",
+    "fechaFactura": "29/01/2026",
+    "fechaPago": "28/02/2026",
+    "totalFactura": 862659.34,
+    "saldo": 862659.34
+  },
+  {
+    "vendedor": "Anabel Borrageiros",
+    "cliente": "ACUÑA MARTIN",
+    "nroFactura": "FA-A 00016-00007425",
+    "fechaFactura": "07/04/2026",
+    "fechaPago": "07/05/2026",
+    "totalFactura": 485137.26,
+    "saldo": 485137.26
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "AGÜERPAZ S. A. S.",
+    "nroFactura": "FA-A 00016-00007276",
+    "fechaFactura": "13/03/2026",
+    "fechaPago": "12/04/2026",
+    "totalFactura": 302949.8,
+    "saldo": 302949.8
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "Aguilera Maria Noelia",
+    "nroFactura": "FA-A 00011-00001931",
+    "fechaFactura": "18/11/2025",
+    "fechaPago": "18/12/2025",
+    "totalFactura": 496114.75,
+    "saldo": 496114.75
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "ALEJANDRO GABRIEL COXE",
+    "nroFactura": "FA-A 00016-00007422",
+    "fechaFactura": "07/04/2026",
+    "fechaPago": "07/05/2026",
+    "totalFactura": 166385.49,
+    "saldo": 166385.49
+  },
+  {
+    "vendedor": "Anabel Borrageiros",
+    "cliente": "ALIMENTOS ALELU SRL",
+    "nroFactura": "FA-A 00016-00007332",
+    "fechaFactura": "25/03/2026",
+    "fechaPago": "24/04/2026",
+    "totalFactura": 402128.92,
+    "saldo": 402128.92
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "ALMACEN DEMARIA 4677 S.R.L.",
+    "nroFactura": "FA-A 00016-00007505",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "14/05/2026",
+    "totalFactura": 141419.49,
+    "saldo": 141419.49
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "ALMACEN JABUGO S.R.L.",
+    "nroFactura": "FA-A 00016-00007289",
+    "fechaFactura": "17/03/2026",
+    "fechaPago": "16/04/2026",
+    "totalFactura": 600145.1,
+    "saldo": 600145.1
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "ALMACEN MUCHO GUSTO SRL",
+    "nroFactura": "FA-A 00016-00007409",
+    "fechaFactura": "01/04/2026",
+    "fechaPago": "01/05/2026",
+    "totalFactura": 201679.34,
+    "saldo": 201679.34
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "ALVAREZ LEONARDO RAUL",
+    "nroFactura": "FA-A 00016-00007430",
+    "fechaFactura": "07/04/2026",
+    "fechaPago": "07/05/2026",
+    "totalFactura": 148185.15,
+    "saldo": 148185.15
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "ALVAREZ MATIAS NICOLAS",
+    "nroFactura": "FA-A 00010-00005643",
+    "fechaFactura": "10/02/2026",
+    "fechaPago": "12/03/2026",
+    "totalFactura": 942507.52,
+    "saldo": 942507.52
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "Alvear Palace Hotel Sa I",
+    "nroFactura": "FA-A 00016-00007549",
+    "fechaFactura": "20/04/2026",
+    "fechaPago": "20/05/2026",
+    "totalFactura": 411966.93,
+    "saldo": 411966.93
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "Alvear Palace Hotel Sa I",
+    "nroFactura": "FA-A 00016-00007462",
+    "fechaFactura": "13/04/2026",
+    "fechaPago": "13/05/2026",
+    "totalFactura": 368925.61,
+    "saldo": 368925.61
+  },
+  {
+    "vendedor": "Marcelo Fernandez",
+    "cliente": "ANDINA DISTRIBUCIONES SAS",
+    "nroFactura": "FA-A 00016-00007466",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "13/06/2026",
+    "totalFactura": 1382005.3,
+    "saldo": 1382005.3
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "ARTESE ANDRES DAVID",
+    "nroFactura": "FA-A 00016-00007218",
+    "fechaFactura": "03/03/2026",
+    "fechaPago": "02/04/2026",
+    "totalFactura": 583363.71,
+    "saldo": 583363.71
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "AZARI WINES SEL",
+    "nroFactura": "FA-A 00016-00007431",
+    "fechaFactura": "07/04/2026",
+    "fechaPago": "07/05/2026",
+    "totalFactura": 2334807.29,
+    "saldo": 2334807.29
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "AZARI WINES SEL",
+    "nroFactura": "FA-A 00016-00007311",
+    "fechaFactura": "19/03/2026",
+    "fechaPago": "18/04/2026",
+    "totalFactura": 2016240.17,
+    "saldo": 2016240.17
+  },
+  {
+    "vendedor": "Anabel Borrageiros",
+    "cliente": "BAQUIANO MALVINAS SRL",
+    "nroFactura": "FA-A 00016-00007454",
+    "fechaFactura": "10/04/2026",
+    "fechaPago": "10/05/2026",
+    "totalFactura": 545998.53,
+    "saldo": 545998.53
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "BAR PORTEÑO SRL",
+    "nroFactura": "FA-A 00016-00007542",
+    "fechaFactura": "17/04/2026",
+    "fechaPago": "17/05/2026",
+    "totalFactura": 292066.13,
+    "saldo": 292066.13
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "BAR QUERANDI SA",
+    "nroFactura": "FA-A 00016-00007396",
+    "fechaFactura": "31/03/2026",
+    "fechaPago": "30/04/2026",
+    "totalFactura": 695117.39,
+    "saldo": 695117.39
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "BASERGA MATIAS ADRIAN",
+    "nroFactura": "FA-A 00016-00007502",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "14/05/2026",
+    "totalFactura": 629506.94,
+    "saldo": 629506.94
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "BASERGA MATIAS ADRIAN",
+    "nroFactura": "FA-A 00016-00007491",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "14/05/2026",
+    "totalFactura": 662221.45,
+    "saldo": 662221.45
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "BASERGA MATIAS ADRIAN",
+    "nroFactura": "FA-A 00016-00007301",
+    "fechaFactura": "18/03/2026",
+    "fechaPago": "17/04/2026",
+    "totalFactura": 825778.55,
+    "saldo": 825778.55
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "BAUMOL SA",
+    "nroFactura": "FA-A 00016-00007457",
+    "fechaFactura": "10/04/2026",
+    "fechaPago": "10/05/2026",
+    "totalFactura": 347558.7,
+    "saldo": 347558.7
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "BAUMOL SA",
+    "nroFactura": "FA-A 00016-00007414",
+    "fechaFactura": "01/04/2026",
+    "fechaPago": "01/05/2026",
+    "totalFactura": 278046.95,
+    "saldo": 278046.95
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "BAUMOL SA",
+    "nroFactura": "FA-A 00016-00007235",
+    "fechaFactura": "05/03/2026",
+    "fechaPago": "04/04/2026",
+    "totalFactura": 548045.19,
+    "saldo": 548045.19
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "Bebidas Del Sur S.A.",
+    "nroFactura": "NC-A 00016-00001984",
+    "fechaFactura": "01/04/2026",
+    "fechaPago": "01/05/2026",
+    "totalFactura": -443356.77,
+    "saldo": -443356.77
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "Bebidas Del Sur S.A.",
+    "nroFactura": "FA-A 00016-00007405",
+    "fechaFactura": "01/04/2026",
+    "fechaPago": "01/05/2026",
+    "totalFactura": 7389279.52,
+    "saldo": 7389279.52
+  },
+  {
+    "vendedor": "Ezequiel Mallima",
+    "cliente": "BERNHARDT ALFREDO CARLOS",
+    "nroFactura": "FA-A 00016-00007354",
+    "fechaFactura": "26/03/2026",
+    "fechaPago": "25/04/2026",
+    "totalFactura": 337567.0,
+    "saldo": 337567.0
+  },
+  {
+    "vendedor": "Marcelo Fernandez",
+    "cliente": "Bingo Fuel Wines Sociedad Anonima",
+    "nroFactura": "FA-A 00016-00007468",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "14/05/2026",
+    "totalFactura": 1905869.89,
+    "saldo": 1905869.89
+  },
+  {
+    "vendedor": "Marcelo Fernandez",
+    "cliente": "Bingo Fuel Wines Sociedad Anonima",
+    "nroFactura": "FA-A 00016-00007350",
+    "fechaFactura": "26/03/2026",
+    "fechaPago": "25/04/2026",
+    "totalFactura": 392919.06,
+    "saldo": 392919.06
+  },
+  {
+    "vendedor": "Marcelo Fernandez",
+    "cliente": "Bingo Fuel Wines Sociedad Anonima",
+    "nroFactura": "FA-A 00016-00007279",
+    "fechaFactura": "13/03/2026",
+    "fechaPago": "12/04/2026",
+    "totalFactura": 663667.29,
+    "saldo": 663667.29
+  },
+  {
+    "vendedor": "Ezequiel Mallima",
+    "cliente": "BLACK MERINO SAS",
+    "nroFactura": "FA-A 00016-00007217",
+    "fechaFactura": "03/03/2026",
+    "fechaPago": "02/04/2026",
+    "totalFactura": 112522.34,
+    "saldo": 112522.34
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "BOADA MARIA SUSANA",
+    "nroFactura": "FA-A 00016-00007521",
+    "fechaFactura": "15/04/2026",
+    "fechaPago": "15/05/2026",
+    "totalFactura": 292066.13,
+    "saldo": 292066.13
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "BOADA MARIA SUSANA",
+    "nroFactura": "FA-A 00016-00007442",
+    "fechaFactura": "08/04/2026",
+    "fechaPago": "08/05/2026",
+    "totalFactura": 876198.39,
+    "saldo": 876198.39
+  },
+  {
+    "vendedor": "Anabel Borrageiros",
+    "cliente": "Bolsa De Gatos S.A.S.",
+    "nroFactura": "FA-A 00016-00007527",
+    "fechaFactura": "15/04/2026",
+    "fechaPago": "15/05/2026",
+    "totalFactura": 343715.72,
+    "saldo": 343715.72
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "BONETTI GUILLERMO",
+    "nroFactura": "FA-A 00016-00007333",
+    "fechaFactura": "25/03/2026",
+    "fechaPago": "24/04/2026",
+    "totalFactura": 776465.51,
+    "saldo": 309999.76
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "BOX 22 SA",
+    "nroFactura": "FA-A 00016-00007378",
+    "fechaFactura": "31/03/2026",
+    "fechaPago": "30/04/2026",
+    "totalFactura": 139023.48,
+    "saldo": 139023.48
+  },
+  {
+    "vendedor": "Marcelo Fernandez",
+    "cliente": "Broda S.A.",
+    "nroFactura": "FA-A 00016-00007121",
+    "fechaFactura": "11/02/2026",
+    "fechaPago": "13/03/2026",
+    "totalFactura": 2171272.8,
+    "saldo": 2171272.8
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "BURONE MABEL ANDREA",
+    "nroFactura": "FA-A 00016-00007020",
+    "fechaFactura": "29/01/2026",
+    "fechaPago": "28/02/2026",
+    "totalFactura": 105512.72,
+    "saldo": 98998.45
+  },
+  {
+    "vendedor": "Marcelo Fernandez",
+    "cliente": "Bustos Cecilia Beatriz",
+    "nroFactura": "FA-A 00016-00007366",
+    "fechaFactura": "27/03/2026",
+    "fechaPago": "26/04/2026",
+    "totalFactura": 111427.84,
+    "saldo": 111427.84
+  },
+  {
+    "vendedor": "Ezequiel Mallima",
+    "cliente": "Caballero Maria Victoria",
+    "nroFactura": "FA-E 09997-00000440",
+    "fechaFactura": "19/03/2026",
+    "fechaPago": "18/04/2026",
+    "totalFactura": 2350661.43,
+    "saldo": 2350661.43
+  },
+  {
+    "vendedor": "Anabel Borrageiros",
+    "cliente": "CAMPOT RAFAEL GUSTAVO",
+    "nroFactura": "FA-A 00016-00007484",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "14/05/2026",
+    "totalFactura": 1549506.24,
+    "saldo": 1549506.24
+  },
+  {
+    "vendedor": "Anabel Borrageiros",
+    "cliente": "CAMPOT RAFAEL GUSTAVO",
+    "nroFactura": "FA-A 00016-00007483",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "14/05/2026",
+    "totalFactura": 334173.33,
+    "saldo": 334173.33
+  },
+  {
+    "vendedor": "Anabel Borrageiros",
+    "cliente": "CAMPOT RAFAEL GUSTAVO",
+    "nroFactura": "FA-A 00016-00006971",
+    "fechaFactura": "26/01/2026",
+    "fechaPago": "25/02/2026",
+    "totalFactura": 232115.72,
+    "saldo": 232115.72
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "CANO ARGENTINO",
+    "nroFactura": "FA-A 00016-00007481",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "14/05/2026",
+    "totalFactura": 504198.38,
+    "saldo": 504198.38
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "CAPALBI JOSE EDUARDO",
+    "nroFactura": "FA-A 00016-00006967",
+    "fechaFactura": "23/01/2026",
+    "fechaPago": "22/02/2026",
+    "totalFactura": 683345.31,
+    "saldo": 683345.31
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "CARBAJO OSCAR ALBERTO",
+    "nroFactura": "FA-A 00016-00007460",
+    "fechaFactura": "10/04/2026",
+    "fechaPago": "10/05/2026",
+    "totalFactura": 250249.23,
+    "saldo": 250249.23
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "CARDOZO FEDERICO JOSE",
+    "nroFactura": "FA-A 00016-00007413",
+    "fechaFactura": "01/04/2026",
+    "fechaPago": "01/05/2026",
+    "totalFactura": 1671417.65,
+    "saldo": 1671417.65
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "CARDOZO FEDERICO JOSE",
+    "nroFactura": "FA-A 00016-00007399",
+    "fechaFactura": "31/03/2026",
+    "fechaPago": "30/04/2026",
+    "totalFactura": 3658094.63,
+    "saldo": 3658094.63
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "CARDOZO FEDERICO JOSE",
+    "nroFactura": "FA-A 00016-00007253",
+    "fechaFactura": "10/03/2026",
+    "fechaPago": "09/04/2026",
+    "totalFactura": 3756818.38,
+    "saldo": 3756818.38
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "CARDOZO FEDERICO JOSE",
+    "nroFactura": "FA-A 00016-00007195",
+    "fechaFactura": "27/02/2026",
+    "fechaPago": "29/03/2026",
+    "totalFactura": 222276.82,
+    "saldo": 222276.82
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "CARDOZO FEDERICO JOSE",
+    "nroFactura": "FA-A 00016-00007132",
+    "fechaFactura": "13/02/2026",
+    "fechaPago": "15/03/2026",
+    "totalFactura": 3020386.96,
+    "saldo": 3020386.96
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "Carpi Lucas Roberto",
+    "nroFactura": "FA-A 00016-00007382",
+    "fechaFactura": "31/03/2026",
+    "fechaPago": "30/04/2026",
+    "totalFactura": 175239.68,
+    "saldo": 175239.68
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "Carpi Lucas Roberto",
+    "nroFactura": "FA-A 00016-00007142",
+    "fechaFactura": "13/02/2026",
+    "fechaPago": "15/03/2026",
+    "totalFactura": 268732.23,
+    "saldo": 268732.23
+  },
+  {
+    "vendedor": "Ezequiel Mallima",
+    "cliente": "CARRO DANIELA",
+    "nroFactura": "FA-A 00016-00007416",
+    "fechaFactura": "01/04/2026",
+    "fechaPago": "01/05/2026",
+    "totalFactura": 281305.83,
+    "saldo": 281305.83
+  },
+  {
+    "vendedor": "Marcelo Fernandez",
+    "cliente": "CASA INTELIGENTE SAS",
+    "nroFactura": "FA-A 00016-00007349",
+    "fechaFactura": "26/03/2026",
+    "fechaPago": "25/04/2026",
+    "totalFactura": 197037.0,
+    "saldo": 197037.0
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "CASTILLO SEBASTIAN ALEJANDRO",
+    "nroFactura": "FA-A 00016-00007055",
+    "fechaFactura": "30/01/2026",
+    "fechaPago": "01/03/2026",
+    "totalFactura": 731702.43,
+    "saldo": 731702.43
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "CASTILLO SEBASTIAN ALEJANDRO",
+    "nroFactura": "FA-A 00016-00007039",
+    "fechaFactura": "29/01/2026",
+    "fechaPago": "28/02/2026",
+    "totalFactura": 1554331.09,
+    "saldo": 1554331.09
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "CASTILLO SEBASTIAN ALEJANDRO",
+    "nroFactura": "FA-A 00016-00007037",
+    "fechaFactura": "29/01/2026",
+    "fechaPago": "28/02/2026",
+    "totalFactura": 7003316.32,
+    "saldo": 7003316.32
+  },
+  {
+    "vendedor": "Anabel Borrageiros",
+    "cliente": "CATENA NICOLAS ARIEL",
+    "nroFactura": "FA-A 00016-00007476",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "14/05/2026",
+    "totalFactura": 100100.2,
+    "saldo": 100100.2
+  },
+  {
+    "vendedor": "Roberto Pascual",
+    "cliente": "Cencosud S A",
+    "nroFactura": "FCE-A 00031-00000242",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "13/07/2026",
+    "totalFactura": 10377853.45,
+    "saldo": 10377853.45
+  },
+  {
+    "vendedor": "Roberto Pascual",
+    "cliente": "Cencosud S A",
+    "nroFactura": "FA-A 00016-00007297",
+    "fechaFactura": "17/03/2026",
+    "fechaPago": "16/05/2026",
+    "totalFactura": 1300693.18,
+    "saldo": 1300693.18
+  },
+  {
+    "vendedor": "Roberto Pascual",
+    "cliente": "Cencosud S A",
+    "nroFactura": "NC-A 00016-00001854",
+    "fechaFactura": "21/01/2026",
+    "fechaPago": "22/03/2026",
+    "totalFactura": -3993000.0,
+    "saldo": -3993000.0
+  },
+  {
+    "vendedor": "Roberto Pascual",
+    "cliente": "Cencosud S A",
+    "nroFactura": "NC-A 00016-00001830",
+    "fechaFactura": "07/01/2026",
+    "fechaPago": "08/03/2026",
+    "totalFactura": -98751.06,
+    "saldo": -50724.88
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "CENTRAL DE COMERCIO SRL",
+    "nroFactura": "FA-A 00016-00006898",
+    "fechaFactura": "13/01/2026",
+    "fechaPago": "12/02/2026",
+    "totalFactura": 1158119.18,
+    "saldo": 1158119.18
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "Chic Palermo",
+    "nroFactura": "FA-A 00016-00006560",
+    "fechaFactura": "30/11/2025",
+    "fechaPago": "30/12/2025",
+    "totalFactura": 769210.16,
+    "saldo": 619210.16
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "CIMEIRA SAS",
+    "nroFactura": "FA-A 00016-00007380",
+    "fechaFactura": "31/03/2026",
+    "fechaPago": "30/04/2026",
+    "totalFactura": 166385.46,
+    "saldo": 166385.46
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "CLUB 20 DE FEBRERO",
+    "nroFactura": "FA-A 00016-00007473",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "14/05/2026",
+    "totalFactura": 291545.47,
+    "saldo": 291545.47
+  },
+  {
+    "vendedor": "Alejandro Valan",
+    "cliente": "Compañia Argentina De Bebidas S.A.",
+    "nroFactura": "FA-A 00016-00007464",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "13/06/2026",
+    "totalFactura": 5837784.46,
+    "saldo": 5837784.46
+  },
+  {
+    "vendedor": "Alejandro Valan",
+    "cliente": "Compañia Argentina De Bebidas S.A.",
+    "nroFactura": "FA-A 00016-00007391",
+    "fechaFactura": "31/03/2026",
+    "fechaPago": "30/05/2026",
+    "totalFactura": 359611.65,
+    "saldo": 359611.65
+  },
+  {
+    "vendedor": "Alejandro Valan",
+    "cliente": "Compañia Argentina De Bebidas S.A.",
+    "nroFactura": "FA-A 00016-00007362",
+    "fechaFactura": "26/03/2026",
+    "fechaPago": "25/05/2026",
+    "totalFactura": 4372466.05,
+    "saldo": 4372466.05
+  },
+  {
+    "vendedor": "Alejandro Valan",
+    "cliente": "Compañia Argentina De Bebidas S.A.",
+    "nroFactura": "FA-A 00016-00007234",
+    "fechaFactura": "05/03/2026",
+    "fechaPago": "04/05/2026",
+    "totalFactura": 11143528.96,
+    "saldo": 11143528.96
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "COMPIANO ANGELINETTA MARIA SOL",
+    "nroFactura": "FA-A 00016-00006885",
+    "fechaFactura": "09/01/2026",
+    "fechaPago": "08/02/2026",
+    "totalFactura": 269930.57,
+    "saldo": 269930.57
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "Consorcio Club De Campo La Estancia De Cafayate Wine & Golf",
+    "nroFactura": "FA-A 00016-00007203",
+    "fechaFactura": "28/02/2026",
+    "fechaPago": "30/03/2026",
+    "totalFactura": 127682.42,
+    "saldo": 127682.42
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "Consorcio Club De Campo La Estancia De Cafayate Wine & Golf",
+    "nroFactura": "FA-A 00016-00007202",
+    "fechaFactura": "28/02/2026",
+    "fechaPago": "30/03/2026",
+    "totalFactura": 337346.78,
+    "saldo": 337346.78
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "CONSULTORA INTEGRAL EMPRESARIA SA",
+    "nroFactura": "NC-A 00016-00001874",
+    "fechaFactura": "27/01/2026",
+    "fechaPago": "26/02/2026",
+    "totalFactura": -35785.77,
+    "saldo": -35785.77
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "CONSULTORA INTEGRAL EMPRESARIA SA",
+    "nroFactura": "FA-A 00016-00006987",
+    "fechaFactura": "26/01/2026",
+    "fechaPago": "25/02/2026",
+    "totalFactura": 596429.68,
+    "saldo": 35785.78
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "ConsumidorFinal AV",
+    "nroFactura": "FA-B 00016-00000515",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "14/04/2026",
+    "totalFactura": 1656383.08,
+    "saldo": 1656383.08
+  },
+  {
+    "vendedor": "Marcelo Fernandez",
+    "cliente": "CONTRERAS ALICIA JUDITH",
+    "nroFactura": "FA-A 00016-00006867",
+    "fechaFactura": "06/01/2026",
+    "fechaPago": "05/02/2026",
+    "totalFactura": 311272.84,
+    "saldo": 311272.84
+  },
+  {
+    "vendedor": "Anabel Borrageiros",
+    "cliente": "Copados S.R.L.",
+    "nroFactura": "FA-A 00016-00006915",
+    "fechaFactura": "14/01/2026",
+    "fechaPago": "13/02/2026",
+    "totalFactura": 554517.88,
+    "saldo": 554517.88
+  },
+  {
+    "vendedor": "Anabel Borrageiros",
+    "cliente": "CREDIDIO MARIA CELESTE",
+    "nroFactura": "FA-A 00016-00007475",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "14/05/2026",
+    "totalFactura": 302964.54,
+    "saldo": 302964.54
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "CREPS S.G. S.A.",
+    "nroFactura": "FA-A 00016-00007514",
+    "fechaFactura": "15/04/2026",
+    "fechaPago": "15/05/2026",
+    "totalFactura": 292066.13,
+    "saldo": 292066.13
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "CREPS S.G. S.A.",
+    "nroFactura": "FA-A 00016-00007513",
+    "fechaFactura": "15/04/2026",
+    "fechaPago": "15/05/2026",
+    "totalFactura": 226889.28,
+    "saldo": 226889.28
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "CREPS S.G. S.A.",
+    "nroFactura": "FA-A 00016-00007500",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "14/05/2026",
+    "totalFactura": 486066.01,
+    "saldo": 486066.01
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "Cristomax S. A. S.",
+    "nroFactura": "FA-A 00016-00007438",
+    "fechaFactura": "08/04/2026",
+    "fechaPago": "08/05/2026",
+    "totalFactura": 167700.01,
+    "saldo": 167700.01
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "CRU SRL",
+    "nroFactura": "FA-A 00016-00006575",
+    "fechaFactura": "30/11/2025",
+    "fechaPago": "30/12/2025",
+    "totalFactura": 560085.66,
+    "saldo": 160085.66
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "Davicino Martin",
+    "nroFactura": "FA-A 00016-00007509",
+    "fechaFactura": "15/04/2026",
+    "fechaPago": "15/05/2026",
+    "totalFactura": 874711.58,
+    "saldo": 874711.58
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "DE GREGORIO FEDERICO MARTIN (LAVIRON)",
+    "nroFactura": "FA-A 00016-00007443",
+    "fechaFactura": "08/04/2026",
+    "fechaPago": "08/05/2026",
+    "totalFactura": 312971.93,
+    "saldo": 312971.93
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "DE GREGORIO FEDERICO MARTIN (LAVIRON)",
+    "nroFactura": "FA-A 00016-00007379",
+    "fechaFactura": "31/03/2026",
+    "fechaPago": "30/04/2026",
+    "totalFactura": 312971.93,
+    "saldo": 175297.61
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "Delta Biz S.A.S.",
+    "nroFactura": "FA-A 00016-00007534",
+    "fechaFactura": "17/04/2026",
+    "fechaPago": "17/05/2026",
+    "totalFactura": 208065.56,
+    "saldo": 208065.56
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "DI NOIA MARCELA ALEJANDRA",
+    "nroFactura": "FA-A 00016-00007402",
+    "fechaFactura": "01/04/2026",
+    "fechaPago": "01/05/2026",
+    "totalFactura": 504905.51,
+    "saldo": 504905.51
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "DISTRIBUIDORA ENERGY NORTE SRL",
+    "nroFactura": "FA-A 00016-00007368",
+    "fechaFactura": "27/03/2026",
+    "fechaPago": "26/04/2026",
+    "totalFactura": 1646530.37,
+    "saldo": 1646530.37
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "DISTRIBUIDORA ENERGY NORTE SRL",
+    "nroFactura": "FA-A 00016-00007358",
+    "fechaFactura": "26/03/2026",
+    "fechaPago": "25/04/2026",
+    "totalFactura": 9742846.19,
+    "saldo": 9742846.19
+  },
+  {
+    "vendedor": "Ezequiel Mallima",
+    "cliente": "DISTRIBUIDORA FERRARI SA",
+    "nroFactura": "FA-A 00016-00007389",
+    "fechaFactura": "31/03/2026",
+    "fechaPago": "30/05/2026",
+    "totalFactura": 2700536.08,
+    "saldo": 2700536.08
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "DISTRIBUIDORA FIORELLA SA",
+    "nroFactura": "FA-A 00016-00007437",
+    "fechaFactura": "08/04/2026",
+    "fechaPago": "08/05/2026",
+    "totalFactura": 151940.0,
+    "saldo": 151940.0
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "DISTRIBUIDORA ZETA SRL",
+    "nroFactura": "FA-A 00016-00007539",
+    "fechaFactura": "17/04/2026",
+    "fechaPago": "16/06/2026",
+    "totalFactura": 3855065.38,
+    "saldo": 3855065.38
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "DOEBLIN HERNAN HORACIO",
+    "nroFactura": "FA-A 00016-00007087",
+    "fechaFactura": "04/02/2026",
+    "fechaPago": "06/03/2026",
+    "totalFactura": 768010.93,
+    "saldo": 768010.93
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "EESS YPF SANTA ISABEL S.R.L",
+    "nroFactura": "FA-A 00016-00006742",
+    "fechaFactura": "17/12/2025",
+    "fechaPago": "17/01/2026",
+    "totalFactura": 436383.5,
+    "saldo": 436383.5
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "EL FOGON CRIOLLO SRL",
+    "nroFactura": "FA-A 00016-00007346",
+    "fechaFactura": "26/03/2026",
+    "fechaPago": "25/04/2026",
+    "totalFactura": 1272690.98,
+    "saldo": 1272690.97
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "EL MIRASOL DE LA RECOVA SA",
+    "nroFactura": "FA-A 00016-00007524",
+    "fechaFactura": "15/04/2026",
+    "fechaPago": "15/05/2026",
+    "totalFactura": 204510.86,
+    "saldo": 204510.86
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "EL MIRASOL DE LA RECOVA SA",
+    "nroFactura": "FA-A 00016-00007441",
+    "fechaFactura": "08/04/2026",
+    "fechaPago": "08/05/2026",
+    "totalFactura": 139023.48,
+    "saldo": 139023.48
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "EL NUEVO TONEL S.R.L.",
+    "nroFactura": "FA-A 00016-00006886",
+    "fechaFactura": "09/01/2026",
+    "fechaPago": "08/02/2026",
+    "totalFactura": 4982399.85,
+    "saldo": 782399.85
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "Elindar S. R. L.",
+    "nroFactura": "FA-A 00016-00007458",
+    "fechaFactura": "10/04/2026",
+    "fechaPago": "10/05/2026",
+    "totalFactura": 5852248.28,
+    "saldo": 5852248.28
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "ENCISO AD 3909 SRL",
+    "nroFactura": "FA-A 00016-00006899",
+    "fechaFactura": "13/01/2026",
+    "fechaPago": "12/02/2026",
+    "totalFactura": 276694.35,
+    "saldo": 276694.35
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "ESCODIAZ SEEDS S.R.L",
+    "nroFactura": "FA-A 00016-00007290",
+    "fechaFactura": "17/03/2026",
+    "fechaPago": "16/04/2026",
+    "totalFactura": 347558.7,
+    "saldo": 347558.7
+  },
+  {
+    "vendedor": "Anabel Borrageiros",
+    "cliente": "ESPACIOVINO SRL",
+    "nroFactura": "FA-A 00016-00007532",
+    "fechaFactura": "17/04/2026",
+    "fechaPago": "17/05/2026",
+    "totalFactura": 639660.71,
+    "saldo": 639660.71
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "Espeche Cristian Daniel",
+    "nroFactura": "FA-A 00016-00006747",
+    "fechaFactura": "17/12/2025",
+    "fechaPago": "16/01/2026",
+    "totalFactura": 402771.19,
+    "saldo": 402771.19
+  },
+  {
+    "vendedor": "Anabel Borrageiros",
+    "cliente": "Estacion de Bebidas SRL",
+    "nroFactura": "FA-A 00016-00007210",
+    "fechaFactura": "03/03/2026",
+    "fechaPago": "02/04/2026",
+    "totalFactura": 440650.95,
+    "saldo": 440650.95
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "FERNANDEZ JOSE ANTONIO",
+    "nroFactura": "FA-A 00016-00007412",
+    "fechaFactura": "01/04/2026",
+    "fechaPago": "01/05/2026",
+    "totalFactura": 311301.84,
+    "saldo": 311301.84
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "FERNANDEZ JOSE ANTONIO",
+    "nroFactura": "FA-A 00016-00007360",
+    "fechaFactura": "26/03/2026",
+    "fechaPago": "25/04/2026",
+    "totalFactura": 721309.12,
+    "saldo": 721309.12
+  },
+  {
+    "vendedor": "Ezequiel Mallima",
+    "cliente": "FERNANDEZ NEGRON EDUARDO ADRIAN",
+    "nroFactura": "FA-A 00016-00007176",
+    "fechaFactura": "25/02/2026",
+    "fechaPago": "27/03/2026",
+    "totalFactura": 225044.67,
+    "saldo": 225044.67
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "FERNANDEZ Y RIMBAU MARIA EUGENIA",
+    "nroFactura": "FA-A 00016-00007471",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "14/04/2026",
+    "totalFactura": 307925.34,
+    "saldo": 307925.34
+  },
+  {
+    "vendedor": "Marcelo Fernandez",
+    "cliente": "FERREIRA PFEIFFER,JUAN CARLOS ANTONIO",
+    "nroFactura": "00010-A-00005506-00005506",
+    "fechaFactura": "18/08/2025",
+    "fechaPago": "17/09/2025",
+    "totalFactura": 256713.95,
+    "saldo": 256713.95
+  },
+  {
+    "vendedor": "Anabel Borrageiros",
+    "cliente": "FRAMIÑAN RAMOS CARLOS",
+    "nroFactura": "FA-A 00016-00007546",
+    "fechaFactura": "17/04/2026",
+    "fechaPago": "17/05/2026",
+    "totalFactura": 1261238.98,
+    "saldo": 1261238.98
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "FRANCO JUANA",
+    "nroFactura": "FA-A 00016-00007383",
+    "fechaFactura": "31/03/2026",
+    "fechaPago": "30/04/2026",
+    "totalFactura": 2468746.87,
+    "saldo": 2468746.87
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "FUNDACION OSDE",
+    "nroFactura": "FA-B 00016-00000507",
+    "fechaFactura": "20/03/2026",
+    "fechaPago": "19/04/2026",
+    "totalFactura": 753300.08,
+    "saldo": 753300.08
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "FUNDACION OSDE",
+    "nroFactura": "FA-B 00016-00000502",
+    "fechaFactura": "11/03/2026",
+    "fechaPago": "10/04/2026",
+    "totalFactura": 150000.0,
+    "saldo": 150000.0
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "FVW SRL",
+    "nroFactura": "FA-A 00016-00007239",
+    "fechaFactura": "06/03/2026",
+    "fechaPago": "05/04/2026",
+    "totalFactura": 539400.03,
+    "saldo": 539400.03
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "GARATE JORGE RUBEN",
+    "nroFactura": "FA-A 00016-00007461",
+    "fechaFactura": "10/04/2026",
+    "fechaPago": "10/05/2026",
+    "totalFactura": 572533.26,
+    "saldo": 572533.26
+  },
+  {
+    "vendedor": "Ezequiel Mallima",
+    "cliente": "GARCIA JUAN CRUZ",
+    "nroFactura": "FA-A 00016-00006936",
+    "fechaFactura": "16/01/2026",
+    "fechaPago": "15/02/2026",
+    "totalFactura": 5294393.58,
+    "saldo": 5294393.58
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "GARCIA PITA MARIA SILVA",
+    "nroFactura": "FA-A 00016-00007045",
+    "fechaFactura": "29/01/2026",
+    "fechaPago": "28/02/2026",
+    "totalFactura": 366589.06,
+    "saldo": 366589.06
+  },
+  {
+    "vendedor": "Marcelo Fernandez",
+    "cliente": "GASTRONOMIC SKILLS S. A. S",
+    "nroFactura": "FA-A 00016-00007030",
+    "fechaFactura": "29/01/2026",
+    "fechaPago": "28/02/2026",
+    "totalFactura": 197559.63,
+    "saldo": 197559.63
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "Genovese Zerdan Matias Federico",
+    "nroFactura": "FA-B 00016-00000496",
+    "fechaFactura": "19/02/2026",
+    "fechaPago": "19/02/2026",
+    "totalFactura": 948000.06,
+    "saldo": 948000.06
+  },
+  {
+    "vendedor": "Anabel Borrageiros",
+    "cliente": "Giacomuzzi Estefania Noelia",
+    "nroFactura": "FA-A 00016-00007519",
+    "fechaFactura": "15/04/2026",
+    "fechaPago": "15/05/2026",
+    "totalFactura": 454998.57,
+    "saldo": 454998.57
+  },
+  {
+    "vendedor": "Anabel Borrageiros",
+    "cliente": "GIFTMENT SRL",
+    "nroFactura": "FA-A 00016-00007504",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "14/05/2026",
+    "totalFactura": 292059.05,
+    "saldo": 292059.05
+  },
+  {
+    "vendedor": "Anabel Borrageiros",
+    "cliente": "GIMARAL SRL",
+    "nroFactura": "FA-A 00016-00007424",
+    "fechaFactura": "07/04/2026",
+    "fechaPago": "07/05/2026",
+    "totalFactura": 525719.03,
+    "saldo": 525719.03
+  },
+  {
+    "vendedor": "Anabel Borrageiros",
+    "cliente": "GIMARAL SRL",
+    "nroFactura": "FA-A 00016-00007241",
+    "fechaFactura": "09/03/2026",
+    "fechaPago": "08/04/2026",
+    "totalFactura": 350479.35,
+    "saldo": 350479.35
+  },
+  {
+    "vendedor": "Anabel Borrageiros",
+    "cliente": "GIMARAL SRL",
+    "nroFactura": "FA-A 00016-00007168",
+    "fechaFactura": "23/02/2026",
+    "fechaPago": "25/03/2026",
+    "totalFactura": 292066.13,
+    "saldo": 292066.13
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "Gimenez Fernando David",
+    "nroFactura": "FA-A 00016-00007393",
+    "fechaFactura": "31/03/2026",
+    "fechaPago": "30/04/2026",
+    "totalFactura": 3868867.49,
+    "saldo": 3868777.81
+  },
+  {
+    "vendedor": "Anabel Borrageiros",
+    "cliente": "GROSSO EMILIANO DANIEL",
+    "nroFactura": "FA-A 00016-00007482",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "14/05/2026",
+    "totalFactura": 1655234.96,
+    "saldo": 1655234.96
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "H C A Sau",
+    "nroFactura": "FA-A 00016-00007419",
+    "fechaFactura": "07/04/2026",
+    "fechaPago": "07/05/2026",
+    "totalFactura": 228000.01,
+    "saldo": 228000.01
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "H C A Sau",
+    "nroFactura": "FA-A 00016-00007328",
+    "fechaFactura": "25/03/2026",
+    "fechaPago": "24/04/2026",
+    "totalFactura": 228000.01,
+    "saldo": 228000.01
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "HACHICHO EDUARDO DAVID",
+    "nroFactura": "FA-A 00016-00007538",
+    "fechaFactura": "17/04/2026",
+    "fechaPago": "17/05/2026",
+    "totalFactura": 706028.25,
+    "saldo": 706028.25
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "Hansen, Elisa Maria",
+    "nroFactura": "FA-A 00016-00007367",
+    "fechaFactura": "27/03/2026",
+    "fechaPago": "26/04/2026",
+    "totalFactura": 203216.57,
+    "saldo": 203216.57
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "HE JINGWEN",
+    "nroFactura": "00011-A-00001757-00001757",
+    "fechaFactura": "26/06/2025",
+    "fechaPago": "26/07/2025",
+    "totalFactura": 103372.45,
+    "saldo": 103372.45
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "HEINE SILVINA SUSANA",
+    "nroFactura": "FA-A 00016-00007526",
+    "fechaFactura": "15/04/2026",
+    "fechaPago": "15/05/2026",
+    "totalFactura": 352938.86,
+    "saldo": 352938.86
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "HEREDIA JOSE DANIEL GUSTAVO",
+    "nroFactura": "FA-A 00016-00007373",
+    "fechaFactura": "30/03/2026",
+    "fechaPago": "29/04/2026",
+    "totalFactura": 335722.34,
+    "saldo": 335722.34
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "Hubeal Srl",
+    "nroFactura": "FA-A 00016-00007439",
+    "fechaFactura": "08/04/2026",
+    "fechaPago": "08/05/2026",
+    "totalFactura": 1111456.08,
+    "saldo": 1111456.08
+  },
+  {
+    "vendedor": "Roberto Pascual",
+    "cliente": "Inc S. A.",
+    "nroFactura": "FCE-A 00031-00000241",
+    "fechaFactura": "10/04/2026",
+    "fechaPago": "09/06/2026",
+    "totalFactura": 5949009.25,
+    "saldo": 5949009.25
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "INSUA GONZALO JOSE",
+    "nroFactura": "NC-A 00016-00001845",
+    "fechaFactura": "15/01/2026",
+    "fechaPago": "14/02/2026",
+    "totalFactura": -563970.01,
+    "saldo": -47190.01
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "INTERNACIONAL PANAMERICANA SRL",
+    "nroFactura": "FA-A 00016-00007355",
+    "fechaFactura": "26/03/2026",
+    "fechaPago": "25/04/2026",
+    "totalFactura": 233652.9,
+    "saldo": 233652.9
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "INTERNACIONAL PANAMERICANA SRL",
+    "nroFactura": "FA-A 00016-00007309",
+    "fechaFactura": "18/03/2026",
+    "fechaPago": "17/04/2026",
+    "totalFactura": 175239.68,
+    "saldo": 175239.68
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "JEMMA S.R.L.",
+    "nroFactura": "FA-A 00016-00007293",
+    "fechaFactura": "17/03/2026",
+    "fechaPago": "16/04/2026",
+    "totalFactura": 994562.1,
+    "saldo": 994562.1
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "JEMMA S.R.L.",
+    "nroFactura": "FA-A 00016-00007291",
+    "fechaFactura": "17/03/2026",
+    "fechaPago": "16/04/2026",
+    "totalFactura": 170610.27,
+    "saldo": 170610.27
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "JOSE ALBERTO CHAGRA SRL",
+    "nroFactura": "FA-A 00016-00007517",
+    "fechaFactura": "15/04/2026",
+    "fechaPago": "15/05/2026",
+    "totalFactura": 1064696.34,
+    "saldo": 1064696.34
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "JUMAJO SRL",
+    "nroFactura": "FA-A 00016-00006326",
+    "fechaFactura": "03/11/2025",
+    "fechaPago": "03/12/2025",
+    "totalFactura": 1161316.27,
+    "saldo": 861316.27
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "KOVASA",
+    "nroFactura": "00016-A-00006043-00006043",
+    "fechaFactura": "12/09/2025",
+    "fechaPago": "12/10/2025",
+    "totalFactura": 229041.9,
+    "saldo": 229041.9
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "KOVASA",
+    "nroFactura": "00016-A-00005705-00005705",
+    "fechaFactura": "18/07/2025",
+    "fechaPago": "17/08/2025",
+    "totalFactura": 400899.95,
+    "saldo": 400899.95
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "LA BRIGADA SA",
+    "nroFactura": "FA-A 00016-00007511",
+    "fechaFactura": "15/04/2026",
+    "fechaPago": "15/05/2026",
+    "totalFactura": 1060968.5,
+    "saldo": 1060968.5
+  },
+  {
+    "vendedor": "Anabel Borrageiros",
+    "cliente": "LA CALDERA GASTRONOMICA SRL",
+    "nroFactura": "FA-A 00016-00007340",
+    "fechaFactura": "26/03/2026",
+    "fechaPago": "25/04/2026",
+    "totalFactura": 89771.93,
+    "saldo": 89771.93
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "LACOSTE DELFINA MARIA",
+    "nroFactura": "FA-A 00016-00007305",
+    "fechaFactura": "18/03/2026",
+    "fechaPago": "17/04/2026",
+    "totalFactura": 50419.83,
+    "saldo": 50419.83
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "LAS ACACIAS S.R.L.",
+    "nroFactura": "FA-A 00016-00007255",
+    "fechaFactura": "10/03/2026",
+    "fechaPago": "10/03/2026",
+    "totalFactura": 2013974.39,
+    "saldo": 2013974.39
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "LAS LUCIAS SRL",
+    "nroFactura": "FA-A 00016-00007522",
+    "fechaFactura": "15/04/2026",
+    "fechaPago": "15/05/2026",
+    "totalFactura": 3255856.77,
+    "saldo": 3255856.77
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "LAS LUCIAS SRL",
+    "nroFactura": "FA-A 00016-00007444",
+    "fechaFactura": "09/04/2026",
+    "fechaPago": "09/05/2026",
+    "totalFactura": 1340479.54,
+    "saldo": 1340479.54
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "LAS LUCIAS SRL",
+    "nroFactura": "FA-A 00016-00007404",
+    "fechaFactura": "01/04/2026",
+    "fechaPago": "01/05/2026",
+    "totalFactura": 5966618.62,
+    "saldo": 5966618.62
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "LAS LUCIAS SRL",
+    "nroFactura": "FA-A 00011-00001947",
+    "fechaFactura": "28/02/2026",
+    "fechaPago": "30/03/2026",
+    "totalFactura": 1550814.58,
+    "saldo": 1550814.58
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "LAS LUCIAS SRL",
+    "nroFactura": "FA-A 00016-00007126",
+    "fechaFactura": "12/02/2026",
+    "fechaPago": "14/03/2026",
+    "totalFactura": 1733356.43,
+    "saldo": 901636.45
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "LAZARTE Y LEZA SA",
+    "nroFactura": "FA-A 00016-00007213",
+    "fechaFactura": "03/03/2026",
+    "fechaPago": "02/04/2026",
+    "totalFactura": 515204.64,
+    "saldo": 515204.64
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "LIBERTAD 431 SRL",
+    "nroFactura": "FA-A 00016-00007465",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "14/05/2026",
+    "totalFactura": 879272.74,
+    "saldo": 879272.74
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "LISSA NAZARENA",
+    "nroFactura": "FA-A 00016-00007304",
+    "fechaFactura": "18/03/2026",
+    "fechaPago": "17/04/2026",
+    "totalFactura": 875913.8,
+    "saldo": 875913.8
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "LISSA NAZARENA",
+    "nroFactura": "FA-A 00016-00007303",
+    "fechaFactura": "18/03/2026",
+    "fechaPago": "17/04/2026",
+    "totalFactura": 274265.5,
+    "saldo": 274265.5
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "LLANOS MIRTA YOLANDA",
+    "nroFactura": "FA-A 00016-00007411",
+    "fechaFactura": "01/04/2026",
+    "fechaPago": "01/05/2026",
+    "totalFactura": 2428154.18,
+    "saldo": 2428154.18
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "LLANOS MIRTA YOLANDA",
+    "nroFactura": "FA-A 00016-00007064",
+    "fechaFactura": "31/01/2026",
+    "fechaPago": "02/03/2026",
+    "totalFactura": 8083975.49,
+    "saldo": 82362.06
+  },
+  {
+    "vendedor": "Marcelo Fernandez",
+    "cliente": "LONGONE CARLOS DANIEL",
+    "nroFactura": "FA-A 00016-00007480",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "14/05/2026",
+    "totalFactura": 100554.63,
+    "saldo": 100554.63
+  },
+  {
+    "vendedor": "Marcelo Fernandez",
+    "cliente": "LONGONE CARLOS DANIEL",
+    "nroFactura": "FA-A 00016-00007282",
+    "fechaFactura": "13/03/2026",
+    "fechaPago": "12/04/2026",
+    "totalFactura": 823000.57,
+    "saldo": 823000.57
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "LUNA RODRIGO EZEQUIEL",
+    "nroFactura": "FA-A 00016-00007496",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "14/05/2026",
+    "totalFactura": 356508.04,
+    "saldo": 356508.04
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "LUNA RODRIGO EZEQUIEL",
+    "nroFactura": "FA-A 00016-00007492",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "14/05/2026",
+    "totalFactura": 50419.83,
+    "saldo": 50419.83
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "Madacilo S R L",
+    "nroFactura": "FA-A 00016-00006710",
+    "fechaFactura": "15/12/2025",
+    "fechaPago": "14/01/2026",
+    "totalFactura": 524858.22,
+    "saldo": 524858.22
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "MARCACION E IDENTIFICACION SA",
+    "nroFactura": "FA-A 00016-00007455",
+    "fechaFactura": "10/04/2026",
+    "fechaPago": "10/05/2026",
+    "totalFactura": 584132.26,
+    "saldo": 584132.26
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "MARCACION E IDENTIFICACION SA",
+    "nroFactura": "FA-A 00016-00007436",
+    "fechaFactura": "07/04/2026",
+    "fechaPago": "07/05/2026",
+    "totalFactura": 567223.18,
+    "saldo": 567223.18
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "MARCACION E IDENTIFICACION SA",
+    "nroFactura": "FA-A 00016-00007426",
+    "fechaFactura": "07/04/2026",
+    "fechaPago": "07/05/2026",
+    "totalFactura": 530023.22,
+    "saldo": 530023.22
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "MARINELLI SILVANA GRACIELA",
+    "nroFactura": "FA-A 00016-00007516",
+    "fechaFactura": "15/04/2026",
+    "fechaPago": "15/05/2026",
+    "totalFactura": 140683.62,
+    "saldo": 140683.62
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "MARINELLI SILVANA GRACIELA",
+    "nroFactura": "FA-A 00016-00007515",
+    "fechaFactura": "15/04/2026",
+    "fechaPago": "15/05/2026",
+    "totalFactura": 100099.79,
+    "saldo": 100099.79
+  },
+  {
+    "vendedor": "Anabel Borrageiros",
+    "cliente": "MARKEN DRINKS SA",
+    "nroFactura": "FA-A 00016-00007510",
+    "fechaFactura": "15/04/2026",
+    "fechaPago": "15/05/2026",
+    "totalFactura": 1015146.89,
+    "saldo": 1015146.89
+  },
+  {
+    "vendedor": "Marcelo Fernandez",
+    "cliente": "MARTIN MARIA ELIANA",
+    "nroFactura": "FA-A 00016-00007541",
+    "fechaFactura": "17/04/2026",
+    "fechaPago": "17/05/2026",
+    "totalFactura": 346423.01,
+    "saldo": 346423.01
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "MARTIRE JAVIER FERNANDO",
+    "nroFactura": "FA-A 00016-00007260",
+    "fechaFactura": "11/03/2026",
+    "fechaPago": "10/04/2026",
+    "totalFactura": 736934.68,
+    "saldo": 736934.68
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "MARUCHA S.R.L.",
+    "nroFactura": "FA-A 00010-00005645",
+    "fechaFactura": "10/02/2026",
+    "fechaPago": "12/03/2026",
+    "totalFactura": 116826.45,
+    "saldo": 116826.45
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "MASTELLONE MARILINA",
+    "nroFactura": "FA-A 00016-00007381",
+    "fechaFactura": "31/03/2026",
+    "fechaPago": "30/04/2026",
+    "totalFactura": 233652.89,
+    "saldo": 233652.89
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "MATINA DITIES S.R.L",
+    "nroFactura": "FA-A 00016-00007544",
+    "fechaFactura": "17/04/2026",
+    "fechaPago": "17/05/2026",
+    "totalFactura": 1364995.28,
+    "saldo": 1364995.28
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "MERCEDES 3939 SRL",
+    "nroFactura": "FA-A 00016-00006914",
+    "fechaFactura": "14/01/2026",
+    "fechaPago": "13/02/2026",
+    "totalFactura": 489748.79,
+    "saldo": 489748.79
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "MIL480 BEBIDAS SRL",
+    "nroFactura": "FA-A 00016-00007537",
+    "fechaFactura": "17/04/2026",
+    "fechaPago": "17/05/2026",
+    "totalFactura": 141904.02,
+    "saldo": 141904.02
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "MIL480 BEBIDAS SRL",
+    "nroFactura": "FA-A 00016-00007536",
+    "fechaFactura": "17/04/2026",
+    "fechaPago": "17/05/2026",
+    "totalFactura": 350348.88,
+    "saldo": 350348.88
+  },
+  {
+    "vendedor": "Marcelo Fernandez",
+    "cliente": "Misetich Armando Hernan",
+    "nroFactura": "00010-A-00005296-00005296",
+    "fechaFactura": "03/06/2025",
+    "fechaPago": "03/07/2025",
+    "totalFactura": 183449.1,
+    "saldo": 123449.1
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "MITRE FUTBOL SRL",
+    "nroFactura": "FA-A 00016-00007525",
+    "fechaFactura": "15/04/2026",
+    "fechaPago": "15/05/2026",
+    "totalFactura": 252099.19,
+    "saldo": 252099.19
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "MLCD SRL",
+    "nroFactura": "FA-A 00016-00007183",
+    "fechaFactura": "26/02/2026",
+    "fechaPago": "28/03/2026",
+    "totalFactura": 323424.83,
+    "saldo": 323424.83
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "MLCD SRL",
+    "nroFactura": "FA-A 00016-00007110",
+    "fechaFactura": "11/02/2026",
+    "fechaPago": "13/03/2026",
+    "totalFactura": 110677.67,
+    "saldo": 110677.67
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "MMC SRL",
+    "nroFactura": "FA-A 00016-00007387",
+    "fechaFactura": "31/03/2026",
+    "fechaPago": "30/04/2026",
+    "totalFactura": 227212.37,
+    "saldo": 227212.37
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "MMC SRL",
+    "nroFactura": "FA-A 00016-00007385",
+    "fechaFactura": "31/03/2026",
+    "fechaPago": "30/04/2026",
+    "totalFactura": 75737.45,
+    "saldo": 75737.45
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "MMC SRL",
+    "nroFactura": "FA-A 00016-00007384",
+    "fechaFactura": "31/03/2026",
+    "fechaPago": "30/04/2026",
+    "totalFactura": 231198.52,
+    "saldo": 231198.52
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "MMC SRL",
+    "nroFactura": "FA-A 00011-00001945",
+    "fechaFactura": "10/02/2026",
+    "fechaPago": "12/03/2026",
+    "totalFactura": 787644.34,
+    "saldo": 323222.92
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "MOBILIA NICOLAS EZEQUIEL",
+    "nroFactura": "FA-A 00016-00007319",
+    "fechaFactura": "20/03/2026",
+    "fechaPago": "19/04/2026",
+    "totalFactura": 509191.58,
+    "saldo": 509191.58
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "MONTERO LAURA NOEMI",
+    "nroFactura": "FA-A 00016-00007472",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "14/05/2026",
+    "totalFactura": 272999.15,
+    "saldo": 272999.15
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "MONTERO LAURA NOEMI",
+    "nroFactura": "FA-A 00016-00007453",
+    "fechaFactura": "10/04/2026",
+    "fechaPago": "10/05/2026",
+    "totalFactura": 336952.07,
+    "saldo": 336952.07
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "MONTERO LAURA NOEMI",
+    "nroFactura": "FA-A 00016-00007447",
+    "fechaFactura": "10/04/2026",
+    "fechaPago": "10/05/2026",
+    "totalFactura": 149446.28,
+    "saldo": 149446.28
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "MONTIEL CARLOS EDUARDO",
+    "nroFactura": "00010-A-00001048-00001052",
+    "fechaFactura": "09/12/2025",
+    "fechaPago": "09/12/2025",
+    "totalFactura": -745580.65,
+    "saldo": -745580.65
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "Morales Anibal",
+    "nroFactura": "FA-A 00016-00007449",
+    "fechaFactura": "10/04/2026",
+    "fechaPago": "10/05/2026",
+    "totalFactura": 409466.38,
+    "saldo": 409466.38
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "NCB SA",
+    "nroFactura": "FA-A 00016-00007330",
+    "fechaFactura": "25/03/2026",
+    "fechaPago": "24/04/2026",
+    "totalFactura": 554618.22,
+    "saldo": 554618.22
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "NEKAY SA",
+    "nroFactura": "FA-A 00016-00007363",
+    "fechaFactura": "26/03/2026",
+    "fechaPago": "25/04/2026",
+    "totalFactura": 7824376.56,
+    "saldo": 7824376.56
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "NEKAY SA",
+    "nroFactura": "FA-A 00016-00007322",
+    "fechaFactura": "20/03/2026",
+    "fechaPago": "19/04/2026",
+    "totalFactura": 12100882.2,
+    "saldo": 194424.97
+  },
+  {
+    "vendedor": "Anabel Borrageiros",
+    "cliente": "NEVART SA",
+    "nroFactura": "FA-A 00016-00007264",
+    "fechaFactura": "11/03/2026",
+    "fechaPago": "10/04/2026",
+    "totalFactura": 584132.25,
+    "saldo": 584132.25
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "NORTHMARKET SA",
+    "nroFactura": "FA-A 00016-00007315",
+    "fechaFactura": "19/03/2026",
+    "fechaPago": "18/04/2026",
+    "totalFactura": 802105.79,
+    "saldo": 802105.79
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "OBARRIO GABRIEL",
+    "nroFactura": "FA-A 00016-00007477",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "14/05/2026",
+    "totalFactura": 951708.61,
+    "saldo": 951708.61
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "ORTEGA ADRIAN LEONARDO",
+    "nroFactura": "FA-A 00016-00007166",
+    "fechaFactura": "20/02/2026",
+    "fechaPago": "22/03/2026",
+    "totalFactura": 229963.63,
+    "saldo": 229963.63
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "ORTEGA ADRIAN LEONARDO",
+    "nroFactura": "FA-A 00016-00007078",
+    "fechaFactura": "04/02/2026",
+    "fechaPago": "06/03/2026",
+    "totalFactura": 284173.91,
+    "saldo": 284173.91
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "Ortega Sebastian Ramon Horacio",
+    "nroFactura": "FA-A 00016-00007371",
+    "fechaFactura": "27/03/2026",
+    "fechaPago": "26/05/2026",
+    "totalFactura": 36303009.7,
+    "saldo": 36303009.7
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "Ortega Sebastian Ramon Horacio",
+    "nroFactura": "FA-A 00016-00007370",
+    "fechaFactura": "27/03/2026",
+    "fechaPago": "26/05/2026",
+    "totalFactura": 7956655.78,
+    "saldo": 2319691.06
+  },
+  {
+    "vendedor": "Anabel Borrageiros",
+    "cliente": "PABLO GABRIEL CAPPUCCIO Y LUIS DARIO ARCIDIACONO",
+    "nroFactura": "FA-A 00016-00007467",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "14/05/2026",
+    "totalFactura": 1079092.3,
+    "saldo": 1079092.3
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "PAMPANOS SRL",
+    "nroFactura": "FA-A 00016-00007452",
+    "fechaFactura": "10/04/2026",
+    "fechaPago": "10/05/2026",
+    "totalFactura": 258084.97,
+    "saldo": 258084.97
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "PANESSIDI S.R.L.",
+    "nroFactura": "FA-A 00016-00007540",
+    "fechaFactura": "17/04/2026",
+    "fechaPago": "16/06/2026",
+    "totalFactura": 15023909.64,
+    "saldo": 15023909.64
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "PANESSIDI S.R.L.",
+    "nroFactura": "FA-A 00016-00007533",
+    "fechaFactura": "17/04/2026",
+    "fechaPago": "16/06/2026",
+    "totalFactura": 328374.22,
+    "saldo": 328374.22
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "PANESSIDI S.R.L.",
+    "nroFactura": "FA-A 00016-00007531",
+    "fechaFactura": "17/04/2026",
+    "fechaPago": "16/06/2026",
+    "totalFactura": 6549042.16,
+    "saldo": 6549042.16
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "PANESSIDI S.R.L.",
+    "nroFactura": "FA-A 00016-00007530",
+    "fechaFactura": "17/04/2026",
+    "fechaPago": "16/06/2026",
+    "totalFactura": 6952752.34,
+    "saldo": 6952752.34
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "PANESSIDI S.R.L.",
+    "nroFactura": "NC-A 00016-00002007",
+    "fechaFactura": "15/04/2026",
+    "fechaPago": "14/06/2026",
+    "totalFactura": -385224.6,
+    "saldo": -385224.6
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "PANESSIDI S.R.L.",
+    "nroFactura": "FA-A 00016-00007487",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "13/06/2026",
+    "totalFactura": 9245799.78,
+    "saldo": 9245799.78
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "PANESSIDI S.R.L.",
+    "nroFactura": "FA-A 00016-00007486",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "13/06/2026",
+    "totalFactura": 17104356.12,
+    "saldo": 17104356.12
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "PANESSIDI S.R.L.",
+    "nroFactura": "FA-A 00016-00007485",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "13/06/2026",
+    "totalFactura": 11912406.81,
+    "saldo": 11912406.81
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "PANESSIDI S.R.L.",
+    "nroFactura": "FA-A 00016-00007432",
+    "fechaFactura": "07/04/2026",
+    "fechaPago": "06/06/2026",
+    "totalFactura": 31826407.74,
+    "saldo": 31826407.74
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "PANESSIDI S.R.L.",
+    "nroFactura": "FA-A 00016-00007401",
+    "fechaFactura": "31/03/2026",
+    "fechaPago": "30/05/2026",
+    "totalFactura": 18955630.33,
+    "saldo": 18955630.33
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "PANESSIDI S.R.L.",
+    "nroFactura": "FA-A 00016-00007400",
+    "fechaFactura": "31/03/2026",
+    "fechaPago": "30/05/2026",
+    "totalFactura": 10015939.75,
+    "saldo": 10015939.75
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "PANESSIDI S.R.L.",
+    "nroFactura": "FA-A 00016-00007372",
+    "fechaFactura": "27/03/2026",
+    "fechaPago": "26/05/2026",
+    "totalFactura": 1489998.39,
+    "saldo": 1489998.39
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "PANESSIDI S.R.L.",
+    "nroFactura": "FA-A 00016-00007369",
+    "fechaFactura": "27/03/2026",
+    "fechaPago": "26/05/2026",
+    "totalFactura": 14332413.5,
+    "saldo": 14332413.5
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "PANESSIDI S.R.L.",
+    "nroFactura": "FA-A 00016-00007323",
+    "fechaFactura": "20/03/2026",
+    "fechaPago": "19/05/2026",
+    "totalFactura": 13868382.74,
+    "saldo": 13868382.74
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "PANESSIDI S.R.L.",
+    "nroFactura": "FA-A 00016-00007231",
+    "fechaFactura": "05/03/2026",
+    "fechaPago": "04/05/2026",
+    "totalFactura": 170123.29,
+    "saldo": 170123.29
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "PANESSIDI S.R.L.",
+    "nroFactura": "FA-A 00016-00007230",
+    "fechaFactura": "05/03/2026",
+    "fechaPago": "04/05/2026",
+    "totalFactura": 15567059.61,
+    "saldo": 15567059.61
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "PANESSIDI S.R.L.",
+    "nroFactura": "FA-A 00016-00007228",
+    "fechaFactura": "05/03/2026",
+    "fechaPago": "04/05/2026",
+    "totalFactura": 340246.56,
+    "saldo": 340246.56
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "PANESSIDI S.R.L.",
+    "nroFactura": "FA-A 00016-00007172",
+    "fechaFactura": "24/02/2026",
+    "fechaPago": "25/04/2026",
+    "totalFactura": 26773139.0,
+    "saldo": 26773139.0
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "PANESSIDI S.R.L.",
+    "nroFactura": "FA-A 00016-00007154",
+    "fechaFactura": "19/02/2026",
+    "fechaPago": "20/04/2026",
+    "totalFactura": 1572380.76,
+    "saldo": 1572380.76
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "PANESSIDI S.R.L.",
+    "nroFactura": "FA-A 00016-00007153",
+    "fechaFactura": "19/02/2026",
+    "fechaPago": "20/04/2026",
+    "totalFactura": 12327944.36,
+    "saldo": 12327944.36
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "PANESSIDI S.R.L.",
+    "nroFactura": "FA-A 00016-00007152",
+    "fechaFactura": "19/02/2026",
+    "fechaPago": "20/04/2026",
+    "totalFactura": 28221248.51,
+    "saldo": 28221248.51
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "PANESSIDI S.R.L.",
+    "nroFactura": "FA-A 00016-00007144",
+    "fechaFactura": "18/02/2026",
+    "fechaPago": "19/04/2026",
+    "totalFactura": 756953.52,
+    "saldo": 756953.52
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "PANESSIDI S.R.L.",
+    "nroFactura": "FA-A 00016-00007119",
+    "fechaFactura": "11/02/2026",
+    "fechaPago": "12/04/2026",
+    "totalFactura": 5778426.79,
+    "saldo": 5778426.79
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "PANESSIDI S.R.L.",
+    "nroFactura": "FA-A 00016-00007118",
+    "fechaFactura": "11/02/2026",
+    "fechaPago": "12/04/2026",
+    "totalFactura": 4237470.6,
+    "saldo": 4237470.6
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "PANESSIDI S.R.L.",
+    "nroFactura": "FA-A 00016-00007117",
+    "fechaFactura": "11/02/2026",
+    "fechaPago": "12/04/2026",
+    "totalFactura": 29585691.69,
+    "saldo": 29585691.69
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "PANESSIDI S.R.L.",
+    "nroFactura": "FA-A 00016-00007116",
+    "fechaFactura": "11/02/2026",
+    "fechaPago": "12/04/2026",
+    "totalFactura": 9893800.55,
+    "saldo": 9893800.55
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "PANESSIDI S.R.L.",
+    "nroFactura": "FA-A 00016-00007109",
+    "fechaFactura": "11/02/2026",
+    "fechaPago": "12/04/2026",
+    "totalFactura": 340246.56,
+    "saldo": 340246.56
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "PANESSIDI S.R.L.",
+    "nroFactura": "FA-A 00010-00005661",
+    "fechaFactura": "10/02/2026",
+    "fechaPago": "11/04/2026",
+    "totalFactura": 23943159.35,
+    "saldo": 23943159.35
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "PANESSIDI S.R.L.",
+    "nroFactura": "FA-A 00010-00005648",
+    "fechaFactura": "10/02/2026",
+    "fechaPago": "11/04/2026",
+    "totalFactura": 22934854.75,
+    "saldo": 22934854.75
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "PANESSIDI S.R.L.",
+    "nroFactura": "FA-A 00016-00007071",
+    "fechaFactura": "03/02/2026",
+    "fechaPago": "04/04/2026",
+    "totalFactura": 11780.44,
+    "saldo": 11780.44
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "PANESSIDI S.R.L.",
+    "nroFactura": "FA-A 00016-00007010",
+    "fechaFactura": "29/01/2026",
+    "fechaPago": "30/03/2026",
+    "totalFactura": 34812759.36,
+    "saldo": 885910.03
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "PASTORAK PARRA TOMAS AUGUSTO",
+    "nroFactura": "FA-A 00016-00007265",
+    "fechaFactura": "11/03/2026",
+    "fechaPago": "10/04/2026",
+    "totalFactura": 103299.19,
+    "saldo": 103299.19
+  },
+  {
+    "vendedor": "Ezequiel Mallima",
+    "cliente": "PATAGONIA VINOS SRL",
+    "nroFactura": "NC-A 00016-00001993",
+    "fechaFactura": "07/04/2026",
+    "fechaPago": "07/05/2026",
+    "totalFactura": -1530529.61,
+    "saldo": -526195.02
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "PEÑA CATALINA",
+    "nroFactura": "FA-A 00016-00007232",
+    "fechaFactura": "05/03/2026",
+    "fechaPago": "04/04/2026",
+    "totalFactura": 1214072.67,
+    "saldo": 1214072.67
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "PEÑA CATALINA",
+    "nroFactura": "FA-A 00016-00007223",
+    "fechaFactura": "04/03/2026",
+    "fechaPago": "03/04/2026",
+    "totalFactura": 1214072.67,
+    "saldo": 1214072.67
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "PEÑA CATALINA",
+    "nroFactura": "FA-A 00016-00007190",
+    "fechaFactura": "27/02/2026",
+    "fechaPago": "29/03/2026",
+    "totalFactura": 2428145.33,
+    "saldo": 2428145.33
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "PEÑA CATALINA",
+    "nroFactura": "FA-A 00016-00007123",
+    "fechaFactura": "11/02/2026",
+    "fechaPago": "13/03/2026",
+    "totalFactura": 571527.18,
+    "saldo": 571527.18
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "PEÑA CATALINA",
+    "nroFactura": "FA-A 00016-00006919",
+    "fechaFactura": "14/01/2026",
+    "fechaPago": "13/02/2026",
+    "totalFactura": 1943191.92,
+    "saldo": 1943191.92
+  },
+  {
+    "vendedor": "Anabel Borrageiros",
+    "cliente": "Polo Matias",
+    "nroFactura": "FA-A 00016-00007497",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "14/05/2026",
+    "totalFactura": 1667457.14,
+    "saldo": 1667457.14
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "PORTAL DE LOS ANDES SRL",
+    "nroFactura": "FA-A 00016-00007488",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "14/05/2026",
+    "totalFactura": 1266720.1,
+    "saldo": 1266720.1
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "POSADAS 1089 SA",
+    "nroFactura": "FA-A 00016-00007398",
+    "fechaFactura": "31/03/2026",
+    "fechaPago": "30/04/2026",
+    "totalFactura": 233652.9,
+    "saldo": 233652.9
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "POSADAS 1089 SA",
+    "nroFactura": "FA-A 00016-00007159",
+    "fechaFactura": "20/02/2026",
+    "fechaPago": "22/03/2026",
+    "totalFactura": 134657.9,
+    "saldo": 134657.9
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "POSADAS 1089 SA",
+    "nroFactura": "FA-A 00010-00005638",
+    "fechaFactura": "10/02/2026",
+    "fechaPago": "12/03/2026",
+    "totalFactura": 233652.9,
+    "saldo": 233652.9
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "PRADO SAVALLA LIDIA RAQUEL",
+    "nroFactura": "FA-A 00010-00005658",
+    "fechaFactura": "10/02/2026",
+    "fechaPago": "12/03/2026",
+    "totalFactura": 714916.45,
+    "saldo": 714916.45
+  },
+  {
+    "vendedor": "Anabel Borrageiros",
+    "cliente": "PRIMERA ESQUINA SRL",
+    "nroFactura": "FA-A 00016-00007341",
+    "fechaFactura": "26/03/2026",
+    "fechaPago": "25/04/2026",
+    "totalFactura": 251484.35,
+    "saldo": 140190.96
+  },
+  {
+    "vendedor": "Anabel Borrageiros",
+    "cliente": "PROYECTO VALLE SRL",
+    "nroFactura": "FA-A 00016-00007420",
+    "fechaFactura": "07/04/2026",
+    "fechaPago": "07/05/2026",
+    "totalFactura": 233652.9,
+    "saldo": 233652.9
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "QUINTERO HUGO NORMANDO",
+    "nroFactura": "FA-A 00016-00007548",
+    "fechaFactura": "17/04/2026",
+    "fechaPago": "17/05/2026",
+    "totalFactura": 273167.51,
+    "saldo": 273167.51
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "QUINTERO HUGO NORMANDO",
+    "nroFactura": "FA-A 00016-00007300",
+    "fechaFactura": "17/03/2026",
+    "fechaPago": "16/04/2026",
+    "totalFactura": 1750788.05,
+    "saldo": 1750788.05
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "RAYUELA BEBIDAS",
+    "nroFactura": "FA-A 00016-00007450",
+    "fechaFactura": "10/04/2026",
+    "fechaPago": "10/05/2026",
+    "totalFactura": 315154.86,
+    "saldo": 315154.86
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "RAYUELA BEBIDAS",
+    "nroFactura": "FA-A 00016-00007448",
+    "fechaFactura": "10/04/2026",
+    "fechaPago": "10/05/2026",
+    "totalFactura": 151259.49,
+    "saldo": 151259.49
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "RAYUELA BEBIDAS",
+    "nroFactura": "FA-A 00016-00007327",
+    "fechaFactura": "25/03/2026",
+    "fechaPago": "24/04/2026",
+    "totalFactura": 299752.08,
+    "saldo": 299752.08
+  },
+  {
+    "vendedor": "Roberto Pascual",
+    "cliente": "RESTOM LEONARDO JOHN",
+    "nroFactura": "00011-A-00000139-00000139",
+    "fechaFactura": "29/01/2025",
+    "fechaPago": "28/02/2025",
+    "totalFactura": -22374.95,
+    "saldo": -22374.95
+  },
+  {
+    "vendedor": "Ezequiel Mallima",
+    "cliente": "REY DE COPA SRL",
+    "nroFactura": "FA-A 00016-00007321",
+    "fechaFactura": "20/03/2026",
+    "fechaPago": "19/04/2026",
+    "totalFactura": 4457851.96,
+    "saldo": 4457851.96
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "RIAL LEANDRO DIEGO",
+    "nroFactura": "00016-A-00006154-00006154",
+    "fechaFactura": "07/10/2025",
+    "fechaPago": "06/11/2025",
+    "totalFactura": 372790.3,
+    "saldo": 100000.15
+  },
+  {
+    "vendedor": "Marcelo Fernandez",
+    "cliente": "ROGELIO SERV. JURIDICOS Y GASTRONOMICOS SAS",
+    "nroFactura": "FA-A 00016-00007348",
+    "fechaFactura": "26/03/2026",
+    "fechaPago": "25/04/2026",
+    "totalFactura": 347558.7,
+    "saldo": 347558.7
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "ROMERO ANDREA VANESA",
+    "nroFactura": "FA-A 00016-00006397",
+    "fechaFactura": "18/11/2025",
+    "fechaPago": "18/12/2025",
+    "totalFactura": 5755238.79,
+    "saldo": 5755238.79
+  },
+  {
+    "vendedor": "Marcelo Fernandez",
+    "cliente": "ROMERO NOGUERA GUILLERMO ANDRES",
+    "nroFactura": "FA-A 00016-00007324",
+    "fechaFactura": "20/03/2026",
+    "fechaPago": "19/04/2026",
+    "totalFactura": 3556405.32,
+    "saldo": 1990405.32
+  },
+  {
+    "vendedor": "Anabel Borrageiros",
+    "cliente": "ROMERO PAOLA EDITH",
+    "nroFactura": "00016-A-00005539-00005539",
+    "fechaFactura": "24/06/2025",
+    "fechaPago": "24/07/2025",
+    "totalFactura": 459030.2,
+    "saldo": 459030.2
+  },
+  {
+    "vendedor": "Marcelo Fernandez",
+    "cliente": "Rovlan S.A.",
+    "nroFactura": "FA-A 00016-00007535",
+    "fechaFactura": "17/04/2026",
+    "fechaPago": "16/06/2026",
+    "totalFactura": 3614733.53,
+    "saldo": 3614733.53
+  },
+  {
+    "vendedor": "Marcelo Fernandez",
+    "cliente": "Rovlan S.A.",
+    "nroFactura": "FA-A 00016-00007423",
+    "fechaFactura": "07/04/2026",
+    "fechaPago": "06/06/2026",
+    "totalFactura": 1675937.01,
+    "saldo": 1675937.01
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "RUFFINI RICARDO MARTIN",
+    "nroFactura": "FA-A 00016-00007545",
+    "fechaFactura": "17/04/2026",
+    "fechaPago": "17/05/2026",
+    "totalFactura": 257165.11,
+    "saldo": 257165.11
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "RUSTICO VINOS SRL",
+    "nroFactura": "FA-A 00016-00007469",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "14/05/2026",
+    "totalFactura": 514651.21,
+    "saldo": 514651.21
+  },
+  {
+    "vendedor": "Ezequiel Mallima",
+    "cliente": "SALAVERRIA PABLO JAVIER",
+    "nroFactura": "FA-A 00016-00007184",
+    "fechaFactura": "26/02/2026",
+    "fechaPago": "28/03/2026",
+    "totalFactura": 2544245.24,
+    "saldo": 2544245.24
+  },
+  {
+    "vendedor": "Marcelo Fernandez",
+    "cliente": "SALAZAR MARIELA JUDITH",
+    "nroFactura": "FA-A 00016-00007278",
+    "fechaFactura": "13/03/2026",
+    "fechaPago": "12/04/2026",
+    "totalFactura": 353160.25,
+    "saldo": 353160.25
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "SAN DONA S. R. L.",
+    "nroFactura": "FA-A 00016-00007433",
+    "fechaFactura": "07/04/2026",
+    "fechaPago": "07/05/2026",
+    "totalFactura": 44885.97,
+    "saldo": 44885.97
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "SAN JUAN S.R.L",
+    "nroFactura": "FA-A 00016-00007498",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "14/05/2026",
+    "totalFactura": 5311184.65,
+    "saldo": 5311184.65
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "SAN JUAN S.R.L",
+    "nroFactura": "FA-A 00016-00007495",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "14/05/2026",
+    "totalFactura": 4229570.8,
+    "saldo": 4229570.8
+  },
+  {
+    "vendedor": "Marcelo Fernandez",
+    "cliente": "SANDEZ VALENTIN",
+    "nroFactura": "FA-A 00016-00007479",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "14/05/2026",
+    "totalFactura": 1017783.94,
+    "saldo": 1017783.94
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "Sanfelice Sergio Dario",
+    "nroFactura": "FA-A 00016-00007392",
+    "fechaFactura": "31/03/2026",
+    "fechaPago": "30/04/2026",
+    "totalFactura": 1394538.94,
+    "saldo": 1394538.94
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "SCALLY TOMAS KEVIN",
+    "nroFactura": "FA-A 00016-00007490",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "14/05/2026",
+    "totalFactura": 646607.34,
+    "saldo": 646607.34
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "SCALLY TOMAS KEVIN",
+    "nroFactura": "FA-A 00016-00007365",
+    "fechaFactura": "27/03/2026",
+    "fechaPago": "26/04/2026",
+    "totalFactura": 1214077.18,
+    "saldo": 1214077.18
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "SCALLY TOMAS KEVIN",
+    "nroFactura": "FA-A 00016-00007326",
+    "fechaFactura": "23/03/2026",
+    "fechaPago": "22/04/2026",
+    "totalFactura": 607038.59,
+    "saldo": 330561.65
+  },
+  {
+    "vendedor": "Anabel Borrageiros",
+    "cliente": "Serres Gaston",
+    "nroFactura": "FA-A 00010-00005647",
+    "fechaFactura": "10/02/2026",
+    "fechaPago": "12/03/2026",
+    "totalFactura": 329727.32,
+    "saldo": 329727.32
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "SGRINIERO FRANCISCO JAVIER",
+    "nroFactura": "FA-A 00016-00007356",
+    "fechaFactura": "26/03/2026",
+    "fechaPago": "25/04/2026",
+    "totalFactura": 490363.71,
+    "saldo": 490363.71
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "SILVA SONIA ANDREA",
+    "nroFactura": "FA-A 00016-00006997",
+    "fechaFactura": "26/01/2026",
+    "fechaPago": "25/02/2026",
+    "totalFactura": 311558.38,
+    "saldo": 311558.38
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "SILVA SONIA ANDREA",
+    "nroFactura": "FA-A 00016-00006996",
+    "fechaFactura": "26/01/2026",
+    "fechaPago": "25/02/2026",
+    "totalFactura": 103914.03,
+    "saldo": 103914.03
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "Silverschmidt Andres",
+    "nroFactura": "FA-A 00016-00007503",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "14/05/2026",
+    "totalFactura": 1078738.38,
+    "saldo": 1078738.38
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "Status Sociedad De Hecho",
+    "nroFactura": "FA-A 00016-00007547",
+    "fechaFactura": "17/04/2026",
+    "fechaPago": "17/05/2026",
+    "totalFactura": 2836949.25,
+    "saldo": 2836949.25
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "SU HAOWEN",
+    "nroFactura": "NC-A 00016-00001997",
+    "fechaFactura": "08/04/2026",
+    "fechaPago": "08/05/2026",
+    "totalFactura": -19967.96,
+    "saldo": -19967.96
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "SU HAOWEN",
+    "nroFactura": "FA-A 00016-00007107",
+    "fechaFactura": "11/02/2026",
+    "fechaPago": "13/03/2026",
+    "totalFactura": 332770.97,
+    "saldo": 19967.97
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "TANAG SA",
+    "nroFactura": "FA-A 00016-00007512",
+    "fechaFactura": "15/04/2026",
+    "fechaPago": "15/05/2026",
+    "totalFactura": 151259.51,
+    "saldo": 151259.51
+  },
+  {
+    "vendedor": "Pablo Perticone",
+    "cliente": "TAVELLA FEDERICO DI GIROLAMO",
+    "nroFactura": "FA-A 00016-00007331",
+    "fechaFactura": "25/03/2026",
+    "fechaPago": "24/04/2026",
+    "totalFactura": 647956.33,
+    "saldo": 647956.33
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "TIENDA LA COLORADA SRL",
+    "nroFactura": "FA-A 00016-00007499",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "14/05/2026",
+    "totalFactura": 200199.3,
+    "saldo": 200199.3
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "TIENDA LA COLORADA SRL",
+    "nroFactura": "FA-A 00016-00007434",
+    "fechaFactura": "07/04/2026",
+    "fechaPago": "07/05/2026",
+    "totalFactura": 55461.83,
+    "saldo": 55461.83
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "TIENDA LA COLORADA SRL",
+    "nroFactura": "FA-A 00016-00006994",
+    "fechaFactura": "26/01/2026",
+    "fechaPago": "25/02/2026",
+    "totalFactura": 263781.85,
+    "saldo": 263781.85
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "TIENDAS DEL NORTE SRL",
+    "nroFactura": "FA-A 00016-00007489",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "14/05/2026",
+    "totalFactura": 1814444.94,
+    "saldo": 1814444.94
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "TIENDAS DEL NORTE SRL",
+    "nroFactura": "FA-A 00016-00007386",
+    "fechaFactura": "31/03/2026",
+    "fechaPago": "30/04/2026",
+    "totalFactura": 58991.22,
+    "saldo": 58991.22
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "TIENDAS DEL NORTE SRL",
+    "nroFactura": "FA-A 00016-00007325",
+    "fechaFactura": "20/03/2026",
+    "fechaPago": "19/04/2026",
+    "totalFactura": 1688542.51,
+    "saldo": 1688542.51
+  },
+  {
+    "vendedor": "Alejandro Valan",
+    "cliente": "Tu Bebida S.A.",
+    "nroFactura": "NC-A 00016-00002010",
+    "fechaFactura": "16/04/2026",
+    "fechaPago": "16/05/2026",
+    "totalFactura": -3352461.37,
+    "saldo": -3352461.37
+  },
+  {
+    "vendedor": "Alejandro Valan",
+    "cliente": "Tu Bebida S.A.",
+    "nroFactura": "NC-A 00016-00002009",
+    "fechaFactura": "16/04/2026",
+    "fechaPago": "16/05/2026",
+    "totalFactura": -335246.17,
+    "saldo": -335246.17
+  },
+  {
+    "vendedor": "Alejandro Valan",
+    "cliente": "Tu Bebida S.A.",
+    "nroFactura": "FA-A 00016-00007528",
+    "fechaFactura": "16/04/2026",
+    "fechaPago": "16/05/2026",
+    "totalFactura": 335246.17,
+    "saldo": 335246.17
+  },
+  {
+    "vendedor": "Alejandro Valan",
+    "cliente": "Tu Bebida S.A.",
+    "nroFactura": "FA-A 00016-00007446",
+    "fechaFactura": "10/04/2026",
+    "fechaPago": "10/05/2026",
+    "totalFactura": 33524613.7,
+    "saldo": 33524613.7
+  },
+  {
+    "vendedor": "Ezequiel Mallima",
+    "cliente": "VACCA SERGIO MARIO",
+    "nroFactura": "FA-A 00016-00007337",
+    "fechaFactura": "25/03/2026",
+    "fechaPago": "24/04/2026",
+    "totalFactura": 168783.5,
+    "saldo": 168783.5
+  },
+  {
+    "vendedor": "Ezequiel Mallima",
+    "cliente": "VACCA SERGIO MARIO",
+    "nroFactura": "FA-A 00016-00007074",
+    "fechaFactura": "04/02/2026",
+    "fechaPago": "06/03/2026",
+    "totalFactura": 530945.93,
+    "saldo": 530945.93
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "VIDELA ALEJANDRO MARTIN",
+    "nroFactura": "FA-A 00016-00007094",
+    "fechaFactura": "04/02/2026",
+    "fechaPago": "04/02/2026",
+    "totalFactura": 2299567.87,
+    "saldo": 2299567.87
+  },
+  {
+    "vendedor": "Anabel Borrageiros",
+    "cliente": "Vinacho S.R.L.",
+    "nroFactura": "FA-A 00016-00007529",
+    "fechaFactura": "16/04/2026",
+    "fechaPago": "16/05/2026",
+    "totalFactura": 2086479.55,
+    "saldo": 2086479.55
+  },
+  {
+    "vendedor": "Anabel Borrageiros",
+    "cliente": "Vinacho S.R.L.",
+    "nroFactura": "FA-A 00016-00007388",
+    "fechaFactura": "31/03/2026",
+    "fechaPago": "30/04/2026",
+    "totalFactura": 2069058.06,
+    "saldo": 2069058.06
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "VINOTECAS ROMA WINE SRL",
+    "nroFactura": "FA-A 00016-00007493",
+    "fechaFactura": "14/04/2026",
+    "fechaPago": "14/05/2026",
+    "totalFactura": 2046307.58,
+    "saldo": 2046307.58
+  },
+  {
+    "vendedor": "Sergio Piatanesi",
+    "cliente": "VINOTECAS ROMA WINE SRL",
+    "nroFactura": "00010-A-00001048-00001053",
+    "fechaFactura": "19/01/2026",
+    "fechaPago": "19/01/2026",
+    "totalFactura": -332700.4,
+    "saldo": -332700.4
+  },
+  {
+    "vendedor": "Valeria Gutierrez Castex",
+    "cliente": "WALTER DARUICH",
+    "nroFactura": "FA-A 00016-00007200",
+    "fechaFactura": "27/02/2026",
+    "fechaPago": "29/03/2026",
+    "totalFactura": 722431.06,
+    "saldo": 322430.25
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "WANG GONGFEI",
+    "nroFactura": "FA-A 00016-00007343",
+    "fechaFactura": "26/03/2026",
+    "fechaPago": "25/04/2026",
+    "totalFactura": 215760.02,
+    "saldo": 215760.02
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "WANG GONGFEI",
+    "nroFactura": "FA-A 00016-00007342",
+    "fechaFactura": "26/03/2026",
+    "fechaPago": "25/04/2026",
+    "totalFactura": 375381.88,
+    "saldo": 375381.88
+  },
+  {
+    "vendedor": "Adrian Arango",
+    "cliente": "WINEFLASH S.R.L.",
+    "nroFactura": "FA-A 00016-00007543",
+    "fechaFactura": "17/04/2026",
+    "fechaPago": "17/05/2026",
+    "totalFactura": 2655082.3,
+    "saldo": 2655082.3
+  }
+]
