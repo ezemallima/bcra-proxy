@@ -7,334 +7,137 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0f0f0f;
-    --surface: #1a1a1a;
-    --surface2: #242424;
-    --border: #2e2e2e;
-    --text: #f0f0f0;
-    --text2: #888;
-    --text3: #555;
-    --accent: #c8a96e;
-    --accent2: #e8c98e;
-    --green: #4ade80;
-    --yellow: #fbbf24;
-    --orange: #fb923c;
-    --red: #f87171;
-    --darkred: #7f1d1d;
-    --radius: 14px;
-    --tab-h: 64px;
+    --bg: #0f0f0f; --surface: #1a1a1a; --surface2: #242424; --border: #2e2e2e;
+    --text: #f0f0f0; --text2: #888; --text3: #555;
+    --accent: #c8a96e; --accent2: #e8c98e;
+    --green: #4ade80; --yellow: #fbbf24; --orange: #fb923c; --red: #f87171;
+    --radius: 14px; --tab-h: 64px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
 
-  /* ── LOGIN ── */
-  #login-screen {
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 32px 24px;
-    background: radial-gradient(ellipse at 50% 0%, #1e160a 0%, #0f0f0f 60%);
-  }
-  .login-logo {
-    width: 64px; height: 64px;
-    background: linear-gradient(135deg, #c8a96e, #8b6c3a);
-    border-radius: 18px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 28px;
-    margin-bottom: 24px;
-    box-shadow: 0 8px 32px rgba(200,169,110,0.2);
-  }
+  /* LOGIN */
+  #login-screen { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px 24px; background: radial-gradient(ellipse at 50% 0%, #1e160a 0%, #0f0f0f 60%); }
+  .login-logo { width: 64px; height: 64px; background: linear-gradient(135deg, #c8a96e, #8b6c3a); border-radius: 18px; display: flex; align-items: center; justify-content: center; font-size: 28px; margin-bottom: 24px; box-shadow: 0 8px 32px rgba(200,169,110,0.2); }
   .login-title { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 4px; }
   .login-sub { font-size: 13px; color: var(--text2); margin-bottom: 40px; }
   .login-form { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 14px; }
   .field-label { font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; }
-  .field-input {
-    width: 100%;
-    background: var(--surface);
-    border: 1.5px solid var(--border);
-    border-radius: 10px;
-    padding: 14px 16px;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 15px;
-    color: var(--text);
-    outline: none;
-    transition: border-color 0.2s;
-  }
+  .field-input { width: 100%; background: var(--surface); border: 1.5px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: 'DM Sans', sans-serif; font-size: 15px; color: var(--text); outline: none; transition: border-color 0.2s; }
   .field-input:focus { border-color: var(--accent); }
   .field-input::placeholder { color: var(--text3); }
-  .btn-login {
-    width: 100%;
-    background: linear-gradient(135deg, #c8a96e, #a07840);
-    border: none;
-    border-radius: 10px;
-    padding: 16px;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 15px;
-    font-weight: 600;
-    color: #1a1000;
-    cursor: pointer;
-    margin-top: 8px;
-    transition: opacity 0.2s, transform 0.1s;
-  }
+  .btn-login { width: 100%; background: linear-gradient(135deg, #c8a96e, #a07840); border: none; border-radius: 10px; padding: 16px; font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 600; color: #1a1000; cursor: pointer; margin-top: 8px; transition: opacity 0.2s, transform 0.1s; }
   .btn-login:active { transform: scale(0.98); opacity: 0.9; }
-  .login-error {
-    background: rgba(248,113,113,0.1);
-    border: 1px solid rgba(248,113,113,0.3);
-    border-radius: 8px;
-    padding: 12px 14px;
-    font-size: 13px;
-    color: var(--red);
-    text-align: center;
-    display: none;
-  }
+  .login-error { background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.3); border-radius: 8px; padding: 12px 14px; font-size: 13px; color: var(--red); text-align: center; display: none; }
 
-  /* ── APP SHELL ── */
+  /* APP */
   #app { display: none; flex-direction: column; min-height: 100vh; }
-
-  /* Header */
-  .app-header {
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    padding: 14px 16px 12px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    position: sticky; top: 0; z-index: 100;
-  }
+  .app-header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 16px 12px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
   .header-name { font-size: 15px; font-weight: 600; }
   .header-sub { font-size: 11px; color: var(--accent); font-weight: 500; }
-  .btn-logout {
-    background: none; border: 1px solid var(--border);
-    border-radius: 8px; padding: 6px 12px;
-    font-size: 12px; color: var(--text2); cursor: pointer;
-    font-family: 'DM Sans', sans-serif;
-  }
-
-  /* Content */
+  .btn-logout { background: none; border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 12px; color: var(--text2); cursor: pointer; font-family: 'DM Sans', sans-serif; }
   .tab-content { flex: 1; overflow-y: auto; padding-bottom: calc(var(--tab-h) + 16px); }
   .tab-pane { display: none; padding: 16px; }
   .tab-pane.active { display: block; }
-
-  /* Bottom Tabs */
-  .bottom-tabs {
-    position: fixed; bottom: 0; left: 0; right: 0;
-    height: var(--tab-h);
-    background: var(--surface);
-    border-top: 1px solid var(--border);
-    display: flex;
-    z-index: 100;
-  }
-  .tab-btn {
-    flex: 1; display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    gap: 4px; border: none; background: none;
-    color: var(--text3); cursor: pointer;
-    font-family: 'DM Sans', sans-serif;
-    transition: color 0.2s;
-    -webkit-tap-highlight-color: transparent;
-  }
+  .bottom-tabs { position: fixed; bottom: 0; left: 0; right: 0; height: var(--tab-h); background: var(--surface); border-top: 1px solid var(--border); display: flex; z-index: 100; }
+  .tab-btn { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border: none; background: none; color: var(--text3); cursor: pointer; font-family: 'DM Sans', sans-serif; transition: color 0.2s; }
   .tab-btn.active { color: var(--accent); }
   .tab-icon { font-size: 22px; line-height: 1; }
   .tab-label { font-size: 10px; font-weight: 500; letter-spacing: 0.3px; }
 
-  /* ── PESTAÑA 1: CONSULTA ── */
-  .search-box {
-    background: var(--surface);
-    border: 1.5px solid var(--border);
-    border-radius: var(--radius);
-    padding: 14px 16px;
-    display: flex; gap: 10px; align-items: center;
-    margin-bottom: 16px;
-  }
-  .search-input {
-    flex: 1; background: none; border: none; outline: none;
-    font-family: 'DM Mono', monospace;
-    font-size: 16px; color: var(--text);
-    letter-spacing: 1px;
-  }
+  /* CONSULTA */
+  .search-box { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 14px 16px; display: flex; gap: 10px; align-items: center; margin-bottom: 16px; }
+  .search-input { flex: 1; background: none; border: none; outline: none; font-family: 'DM Mono', monospace; font-size: 16px; color: var(--text); letter-spacing: 1px; }
   .search-input::placeholder { color: var(--text3); font-family: 'DM Sans', sans-serif; font-size: 14px; letter-spacing: 0; }
-  .btn-search {
-    background: var(--accent); border: none; border-radius: 8px;
-    padding: 8px 16px; font-size: 13px; font-weight: 600;
-    color: #1a1000; cursor: pointer; font-family: 'DM Sans', sans-serif;
-  }
-
-  /* Card */
-  .card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 16px;
-    margin-bottom: 12px;
-  }
+  .btn-search { background: var(--accent); border: none; border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 600; color: #1a1000; cursor: pointer; font-family: 'DM Sans', sans-serif; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
   .card-title { font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 12px; }
-
-  /* Score badge grande */
-  .score-hero {
-    display: flex; align-items: center; gap: 16px; margin-bottom: 4px;
-  }
-  .score-num {
-    font-size: 52px; font-weight: 700; letter-spacing: -2px; line-height: 1;
-    font-family: 'DM Mono', monospace;
-  }
-  .score-info { flex: 1; }
+  .score-hero { display: flex; align-items: center; gap: 16px; margin-bottom: 4px; }
+  .score-num { font-size: 52px; font-weight: 700; letter-spacing: -2px; line-height: 1; font-family: 'DM Mono', monospace; }
   .score-rango { font-size: 18px; font-weight: 600; }
   .score-bar-wrap { margin-top: 10px; background: var(--bg); border-radius: 4px; height: 6px; overflow: hidden; }
   .score-bar { height: 100%; border-radius: 4px; transition: width 0.6s ease; }
-
-  /* Situación chips */
   .sit-grid { display: flex; flex-wrap: wrap; gap: 8px; }
-  .sit-chip {
-    background: var(--surface2);
-    border-radius: 8px;
-    padding: 8px 12px;
-    font-size: 12px;
-    display: flex; flex-direction: column; gap: 2px;
-    flex: 1; min-width: 120px;
-  }
+  .sit-chip { background: var(--surface2); border-radius: 8px; padding: 8px 12px; font-size: 12px; display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 120px; }
   .sit-chip-label { color: var(--text2); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
   .sit-chip-val { font-weight: 600; font-size: 14px; }
-
-  /* Situación color */
-  .sit-1 { color: var(--green); }
-  .sit-2 { color: var(--yellow); }
-  .sit-3 { color: var(--orange); }
-  .sit-4, .sit-5, .sit-6 { color: var(--red); }
-
-  /* Crédito sugerido */
-  .credito-box {
-    background: linear-gradient(135deg, #1a1600, #141400);
-    border: 1px solid #3a3000;
-    border-radius: var(--radius);
-    padding: 16px;
-    margin-bottom: 12px;
-  }
+  .sit-1 { color: var(--green); } .sit-2 { color: var(--yellow); } .sit-3 { color: var(--orange); } .sit-4,.sit-5,.sit-6 { color: var(--red); }
+  .credito-box { background: linear-gradient(135deg, #1a1600, #141400); border: 1px solid #3a3000; border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
   .credito-label { font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; margin-bottom: 6px; }
   .credito-monto { font-size: 28px; font-weight: 700; font-family: 'DM Mono', monospace; color: var(--accent2); }
   .credito-nota { font-size: 12px; color: var(--text2); margin-top: 6px; }
-
-  /* IA análisis */
   .ia-texto { font-size: 13px; line-height: 1.6; color: var(--text); white-space: pre-wrap; }
   .ia-loading { display: flex; align-items: center; gap: 10px; color: var(--text2); font-size: 13px; }
   .spinner { width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
-
-  /* ── PESTAÑA 2: CARTERA ── */
-  .cartera-header {
-    display: flex; align-items: center; justify-content: space-between;
-    margin-bottom: 14px;
-  }
-  .cartera-count { font-size: 12px; color: var(--text2); }
-  .filter-row { display: flex; gap: 8px; margin-bottom: 14px; overflow-x: auto; padding-bottom: 4px; }
-  .filter-chip {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 20px; padding: 6px 14px; font-size: 12px; font-weight: 500;
-    color: var(--text2); cursor: pointer; white-space: nowrap;
-    font-family: 'DM Sans', sans-serif; transition: all 0.15s;
-  }
-  .filter-chip.active { background: var(--accent); color: #1a1000; border-color: var(--accent); }
-
-  .cliente-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 14px;
-    margin-bottom: 10px;
-    cursor: pointer;
-    transition: border-color 0.15s;
-    -webkit-tap-highlight-color: transparent;
-  }
-  .cliente-card:active { border-color: var(--accent); }
-  .cliente-card.alerta { border-left: 3px solid var(--red); }
-  .cliente-row1 { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
-  .cliente-nombre { font-size: 14px; font-weight: 600; line-height: 1.3; flex: 1; }
-  .score-badge {
-    font-size: 13px; font-weight: 700; font-family: 'DM Mono', monospace;
-    padding: 3px 8px; border-radius: 6px;
-    background: var(--surface2);
-  }
-  .cliente-row2 { display: flex; gap: 8px; align-items: center; }
-  .cliente-ciudad { font-size: 11px; color: var(--text2); }
-  .alerta-badge {
-    font-size: 10px; font-weight: 600; background: rgba(248,113,113,0.15);
-    color: var(--red); border-radius: 4px; padding: 2px 6px;
-  }
-  .sit-badge {
-    font-size: 10px; font-weight: 600; border-radius: 4px; padding: 2px 6px;
-  }
-
-  /* ── PESTAÑA 3: OPORTUNIDADES ── */
-  .oport-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-left: 3px solid var(--green);
-    border-radius: var(--radius);
-    padding: 14px;
-    margin-bottom: 10px;
-    cursor: pointer;
-  }
-  .oport-score { font-size: 22px; font-weight: 700; font-family: 'DM Mono', monospace; color: var(--green); }
-  .oport-nombre { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
-  .oport-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
-  .oport-tag {
-    font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 4px;
-    background: rgba(74,222,128,0.1); color: var(--green);
-  }
-
-  /* Empty state */
-  .empty { text-align: center; padding: 48px 24px; color: var(--text3); }
-  .empty-icon { font-size: 40px; margin-bottom: 12px; }
-  .empty-text { font-size: 14px; }
-
-  /* Section title */
-  .section-title { font-size: 18px; font-weight: 700; margin-bottom: 4px; letter-spacing: -0.3px; }
-  .section-sub { font-size: 13px; color: var(--text2); margin-bottom: 16px; }
-
-  /* Loading overlay */
-  #loading-overlay {
-    position: fixed; inset: 0; background: rgba(15,15,15,0.85);
-    display: none; align-items: center; justify-content: center;
-    z-index: 999; flex-direction: column; gap: 16px;
-  }
-  .loading-text { font-size: 14px; color: var(--text2); }
-
-  /* Detail modal */
-  #detail-modal {
-    position: fixed; inset: 0; background: var(--bg);
-    display: none; flex-direction: column;
-    z-index: 200; overflow-y: auto;
-  }
-  .modal-header {
-    background: var(--surface); border-bottom: 1px solid var(--border);
-    padding: 14px 16px; display: flex; align-items: center; gap: 12px;
-    position: sticky; top: 0; z-index: 10;
-  }
-  .btn-back {
-    background: none; border: none; color: var(--accent);
-    font-size: 20px; cursor: pointer; padding: 0;
-  }
-  .modal-title { font-size: 15px; font-weight: 600; flex: 1; }
-  .modal-body { padding: 16px; }
-
-  /* Cheque item */
-  .cheque-item {
-    background: var(--surface2); border-radius: 8px;
-    padding: 10px 12px; margin-bottom: 8px;
-    display: flex; align-items: center; justify-content: space-between;
-  }
+  .cheque-item { background: var(--surface2); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; }
   .cheque-monto { font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 600; }
   .cheque-estado { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 4px; }
   .estado-impago { background: rgba(248,113,113,0.15); color: var(--red); }
   .estado-pagado { background: rgba(74,222,128,0.1); color: var(--green); }
-
-  .divider { height: 1px; background: var(--border); margin: 16px 0; }
-
+  .divider { height: 1px; background: var(--border); margin: 12px 0; }
   .row-data { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); }
   .row-data:last-child { border-bottom: none; }
   .row-key { font-size: 12px; color: var(--text2); }
   .row-val { font-size: 13px; font-weight: 500; text-align: right; }
+
+  /* CARTERA */
+  .filter-row { display: flex; gap: 8px; margin-bottom: 14px; overflow-x: auto; padding-bottom: 4px; }
+  .filter-chip { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 6px 14px; font-size: 12px; font-weight: 500; color: var(--text2); cursor: pointer; white-space: nowrap; font-family: 'DM Sans', sans-serif; transition: all 0.15s; }
+  .filter-chip.active { background: var(--accent); color: #1a1000; border-color: var(--accent); }
+  .cliente-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-bottom: 10px; cursor: pointer; transition: border-color 0.15s; }
+  .cliente-card:active { border-color: var(--accent); }
+  .cliente-card.alerta { border-left: 3px solid var(--red); }
+  .cliente-row1 { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+  .cliente-nombre { font-size: 14px; font-weight: 600; line-height: 1.3; flex: 1; }
+  .score-badge { font-size: 13px; font-weight: 700; font-family: 'DM Mono', monospace; padding: 3px 8px; border-radius: 6px; background: var(--surface2); }
+  .cliente-row2 { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .cliente-ciudad { font-size: 11px; color: var(--text2); }
+  .alerta-badge { font-size: 10px; font-weight: 600; background: rgba(248,113,113,0.15); color: var(--red); border-radius: 4px; padding: 2px 6px; }
+  .sit-badge { font-size: 10px; font-weight: 600; border-radius: 4px; padding: 2px 6px; }
+  .saldo-badge { font-size: 10px; font-weight: 600; background: rgba(200,169,110,0.12); color: var(--accent); border-radius: 4px; padding: 2px 6px; }
+
+  /* OPORTUNIDADES */
+  .oport-card { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--green); border-radius: var(--radius); padding: 14px; margin-bottom: 10px; cursor: pointer; }
+  .oport-score { font-size: 22px; font-weight: 700; font-family: 'DM Mono', monospace; color: var(--green); }
+  .oport-nombre { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+  .oport-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .oport-tag { font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 4px; background: rgba(74,222,128,0.1); color: var(--green); }
+
+  /* MODAL CLIENTE */
+  #detail-modal { position: fixed; inset: 0; background: var(--bg); display: none; flex-direction: column; z-index: 200; overflow-y: auto; }
+  .modal-header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 16px; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 10; }
+  .btn-back { background: none; border: none; color: var(--accent); font-size: 20px; cursor: pointer; padding: 0; line-height: 1; }
+  .modal-title { font-size: 14px; font-weight: 600; flex: 1; line-height: 1.3; }
+  .modal-body { padding: 16px; }
+  .modal-tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+  .modal-tab { flex: 1; padding: 10px 8px; text-align: center; font-size: 12px; font-weight: 600; color: var(--text2); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.15s; }
+  .modal-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* FACTURAS */
+  .total-box { background: linear-gradient(135deg, #1a1600, #141400); border: 1px solid #3a3000; border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
+  .total-label { font-size: 12px; color: var(--accent); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .total-monto { font-family: 'DM Mono', monospace; font-size: 22px; font-weight: 700; color: var(--accent2); }
+  .factura-item { background: var(--surface2); border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; border-left: 3px solid var(--border); }
+  .factura-item.vencida { border-left-color: var(--red); }
+  .factura-item.proxima { border-left-color: var(--yellow); }
+  .factura-item.vigente { border-left-color: var(--green); }
+  .factura-row1 { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
+  .factura-nro { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text2); }
+  .factura-saldo { font-family: 'DM Mono', monospace; font-size: 16px; font-weight: 700; color: var(--accent2); }
+  .factura-fechas { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
+  .factura-fecha { font-size: 11px; color: var(--text2); }
+  .tag-vencida { background: rgba(248,113,113,0.15); color: var(--red); font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; display: inline-block; margin-top: 4px; }
+  .tag-proxima { background: rgba(251,191,36,0.15); color: var(--yellow); font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; display: inline-block; margin-top: 4px; }
+  .tag-vigente { background: rgba(74,222,128,0.1); color: var(--green); font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; display: inline-block; margin-top: 4px; }
+
+  .empty { text-align: center; padding: 48px 24px; color: var(--text3); }
+  .empty-icon { font-size: 40px; margin-bottom: 12px; }
+  .empty-text { font-size: 14px; line-height: 1.6; }
+  .section-title { font-size: 18px; font-weight: 700; margin-bottom: 4px; letter-spacing: -0.3px; }
+  .section-sub { font-size: 13px; color: var(--text2); margin-bottom: 16px; }
+  #loading-overlay { position: fixed; inset: 0; background: rgba(15,15,15,0.85); display: none; align-items: center; justify-content: center; z-index: 999; flex-direction: column; gap: 16px; }
+  .loading-text { font-size: 14px; color: var(--text2); }
 </style>
 </head>
 <body>
@@ -345,19 +148,13 @@
   <div class="login-title">Vende Seguro</div>
   <div class="login-sub">Módulo Comercial — Piattelli</div>
   <div class="login-form">
-    <div>
-      <div class="field-label">Nombre completo</div>
-      <input class="field-input" id="inp-nombre" type="text" placeholder="Ej: Alejandro Valan" autocomplete="name">
-    </div>
-    <div>
-      <div class="field-label">CUIT del comercial</div>
-      <input class="field-input" id="inp-cuit" type="tel" placeholder="Ej: 20123456789" inputmode="numeric">
-    </div>
-    <div>
-      <div class="field-label">PIN de acceso</div>
-      <input class="field-input" id="inp-pin" type="password" placeholder="••••••••" autocomplete="off">
-    </div>
-    <div class="login-error" id="login-error">Datos incorrectos. Verificá tu nombre, CUIT y PIN.</div>
+    <div><div class="field-label">Nombre completo</div>
+      <input class="field-input" id="inp-nombre" type="text" placeholder="Ej: Alejandro Valan" autocomplete="name"></div>
+    <div><div class="field-label">CUIT del comercial</div>
+      <input class="field-input" id="inp-cuit" type="tel" placeholder="Ej: 20123456789" inputmode="numeric"></div>
+    <div><div class="field-label">PIN de acceso</div>
+      <input class="field-input" id="inp-pin" type="password" placeholder="••••••••" autocomplete="off"></div>
+    <div class="login-error" id="login-error">Datos incorrectos.</div>
     <button class="btn-login" onclick="doLogin()">Ingresar →</button>
   </div>
 </div>
@@ -371,9 +168,7 @@
     </div>
     <button class="btn-logout" onclick="doLogout()">Salir</button>
   </div>
-
   <div class="tab-content">
-    <!-- TAB 1: CONSULTA -->
     <div class="tab-pane active" id="tab-consulta">
       <div class="section-title">Consulta CUIT</div>
       <div class="section-sub">Situación BCRA, score y análisis de riesgo</div>
@@ -383,49 +178,42 @@
       </div>
       <div id="consulta-resultado"></div>
     </div>
-
-    <!-- TAB 2: CARTERA -->
     <div class="tab-pane" id="tab-cartera">
       <div class="section-title">Mi Cartera</div>
-      <div class="section-sub" id="cartera-subtitle">Clientes activos y alertas</div>
+      <div class="section-sub" id="cartera-subtitle">Clientes activos</div>
       <div class="filter-row">
         <button class="filter-chip active" onclick="filtrarCartera('todos',this)">Todos</button>
         <button class="filter-chip" onclick="filtrarCartera('alertas',this)">⚠ Alertas</button>
+        <button class="filter-chip" onclick="filtrarCartera('saldo',this)">💰 Con saldo</button>
         <button class="filter-chip" onclick="filtrarCartera('riesgo',this)">🔴 Riesgo</button>
         <button class="filter-chip" onclick="filtrarCartera('buenos',this)">🟢 Buenos</button>
       </div>
       <div id="cartera-lista"></div>
     </div>
-
-    <!-- TAB 3: OPORTUNIDADES -->
     <div class="tab-pane" id="tab-oport">
       <div class="section-title">Oportunidades</div>
       <div class="section-sub">Clientes con potencial de venta</div>
       <div id="oport-lista"></div>
     </div>
   </div>
-
   <div class="bottom-tabs">
     <button class="tab-btn active" onclick="switchTab('consulta',this)">
-      <span class="tab-icon">🔍</span>
-      <span class="tab-label">Consulta</span>
+      <span class="tab-icon">🔍</span><span class="tab-label">Consulta</span>
     </button>
     <button class="tab-btn" onclick="switchTab('cartera',this)">
-      <span class="tab-icon">📋</span>
-      <span class="tab-label">Cartera</span>
+      <span class="tab-icon">📋</span><span class="tab-label">Cartera</span>
     </button>
     <button class="tab-btn" onclick="switchTab('oport',this)">
-      <span class="tab-icon">⚡</span>
-      <span class="tab-label">Oportunidades</span>
+      <span class="tab-icon">⚡</span><span class="tab-label">Oportunidades</span>
     </button>
   </div>
 </div>
 
-<!-- Detail Modal -->
+<!-- MODAL CLIENTE -->
 <div id="detail-modal">
   <div class="modal-header">
     <button class="btn-back" onclick="closeModal()">←</button>
-    <div class="modal-title" id="modal-title">Detalle</div>
+    <div class="modal-title" id="modal-title">Cliente</div>
   </div>
   <div class="modal-body" id="modal-body"></div>
 </div>
@@ -433,15 +221,13 @@
 <!-- Loading -->
 <div id="loading-overlay">
   <div class="spinner" style="width:36px;height:36px;border-width:3px"></div>
-  <div class="loading-text" id="loading-text">Consultando...</div>
+  <div class="loading-text" id="loading-text">Cargando...</div>
 </div>
 
 <script>
 const API = 'https://bcra-proxy-xykm.onrender.com';
-const PIN_COMERCIAL = 'PIATTELLI2025'; // PIN hardcodeado — cambiar según acuerdo
+const PIN_COMERCIAL = 'PIATTELLI2025';
 
-// Vendedores registrados — nombre en Odoo → CUIT del vendedor
-// COMPLETAR con los CUITs reales de cada vendedor
 const VENDEDORES = {
   'Adrian Arango':            '20208913604',
   'Alejandro Valan':          '20207619923',
@@ -455,9 +241,9 @@ const VENDEDORES = {
 };
 
 let SESSION = null;
-let CARTERA_LOCAL = []; // clientes del vendedor logueado
+let CARTERA_LOCAL = [];
 let ALERTAS = [];
-let filtroActual = 'todos';
+let SALDOS_MAP = {};
 
 // ── LOGIN ──
 function doLogin() {
@@ -465,89 +251,83 @@ function doLogin() {
   const cuit   = document.getElementById('inp-cuit').value.trim().replace(/\D/g,'');
   const pin    = document.getElementById('inp-pin').value.trim();
   const err    = document.getElementById('login-error');
-
   err.style.display = 'none';
-
-  if (!nombre || !cuit || !pin) {
-    err.textContent = 'Completá todos los campos.';
-    err.style.display = 'block';
-    return;
-  }
-
-  if (pin !== PIN_COMERCIAL) {
-    err.textContent = 'PIN incorrecto.';
-    err.style.display = 'block';
-    return;
-  }
-
-  // Buscar vendedor por nombre (case-insensitive, tolerante a acentos)
-  const normalizar = s => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-  const nombreNorm = normalizar(nombre);
-  const vendedorKey = Object.keys(VENDEDORES).find(k => normalizar(k) === nombreNorm);
-
-  if (!vendedorKey) {
-    err.textContent = 'Nombre no encontrado en el sistema.';
-    err.style.display = 'block';
-    return;
-  }
-
-  // Validar CUIT solo si está cargado (no es placeholder)
-  const cuitEsperado = VENDEDORES[vendedorKey];
-  if (!cuitEsperado.includes('X') && cuit !== cuitEsperado) {
-    err.textContent = 'CUIT no coincide con el nombre ingresado.';
-    err.style.display = 'block';
-    return;
-  }
-
-  SESSION = { nombre: vendedorKey, cuit };
+  if (!nombre || !cuit || !pin) { err.textContent = 'Completá todos los campos.'; err.style.display = 'block'; return; }
+  if (pin !== PIN_COMERCIAL) { err.textContent = 'PIN incorrecto.'; err.style.display = 'block'; return; }
+  const norm = s => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const key = Object.keys(VENDEDORES).find(k => norm(k) === norm(nombre));
+  if (!key) { err.textContent = 'Nombre no encontrado en el sistema.'; err.style.display = 'block'; return; }
+  const cuitEsp = VENDEDORES[key];
+  if (!cuitEsp.includes('X') && cuit !== cuitEsp) { err.textContent = 'CUIT no coincide.'; err.style.display = 'block'; return; }
+  SESSION = { nombre: key, cuit };
   iniciarApp();
 }
 
 function doLogout() {
-  SESSION = null;
-  CARTERA_LOCAL = [];
+  SESSION = null; CARTERA_LOCAL = []; SALDOS_MAP = {};
   document.getElementById('app').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('inp-pin').value = '';
   document.getElementById('consulta-resultado').innerHTML = '';
 }
 
-// ── INICIAR APP ──
+// ── INICIAR ──
 async function iniciarApp() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
   document.getElementById('header-name').textContent = SESSION.nombre;
-
   showLoading('Cargando cartera...');
-
   try {
-    // Cargar cartera y alertas en paralelo
-    const [carteraResp, alertasResp] = await Promise.all([
+    const [cr, ar] = await Promise.all([
       fetch(API + '/cartera-comercial/' + encodeURIComponent(SESSION.nombre)).catch(() => null),
       fetch(API + '/alertas').catch(() => null)
     ]);
-
-    if (carteraResp && carteraResp.ok) {
-      CARTERA_LOCAL = await carteraResp.json();
-    }
-
-    if (alertasResp && alertasResp.ok) {
-      const alertasData = await alertasResp.json();
-      ALERTAS = alertasData.alertas || [];
-    }
-  } catch(e) {
-    console.error(e);
-  }
-
+    if (cr && cr.ok) CARTERA_LOCAL = await cr.json();
+    if (ar && ar.ok) { const ad = await ar.json(); ALERTAS = ad.alertas || []; }
+  } catch(e) {}
   hideLoading();
-
   const n = CARTERA_LOCAL.length;
   document.getElementById('header-cartera').textContent = n + ' cliente' + (n!==1?'s':'');
   document.getElementById('cartera-subtitle').textContent = n + ' clientes activos';
-
   renderCartera('todos');
   renderOportunidades();
+  cargarSaldosCartera();
 }
+
+// ── SALDOS ──
+function normNombre(s) {
+  return String(s||'').trim().toUpperCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^A-Z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+}
+
+async function cargarSaldosCartera() {
+  const nombres = [...new Set(CARTERA_LOCAL.map(c => c.nombre))];
+  for (let i = 0; i < nombres.length; i += 8) {
+    const lote = nombres.slice(i, i+8);
+    await Promise.all(lote.map(async nombre => {
+      try {
+        const r = await fetch(API + '/saldos-cliente/' + encodeURIComponent(nombre));
+        if (r.ok) {
+          const data = await r.json();
+          if (data.facturas && data.facturas.length > 0) {
+            SALDOS_MAP[normNombre(nombre)] = data;
+          }
+        }
+      } catch(e) {}
+    }));
+  }
+  // Re-render con saldos cargados
+  const filtroActivo = document.querySelector('.filter-chip.active');
+  const filtro = filtroActivo ? (filtroActivo.textContent.includes('saldo') ? 'saldo' :
+    filtroActivo.textContent.includes('Alertas') ? 'alertas' :
+    filtroActivo.textContent.includes('Riesgo') ? 'riesgo' :
+    filtroActivo.textContent.includes('Buenos') ? 'buenos' : 'todos') : 'todos';
+  renderCartera(filtro);
+  renderOportunidades();
+}
+
+function getSaldos(nombre) { return SALDOS_MAP[normNombre(nombre)] || null; }
 
 // ── TABS ──
 function switchTab(tab, btn) {
@@ -559,7 +339,6 @@ function switchTab(tab, btn) {
 
 // ── CARTERA ──
 function filtrarCartera(filtro, btn) {
-  filtroActual = filtro;
   document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
   btn.classList.add('active');
   renderCartera(filtro);
@@ -568,32 +347,32 @@ function filtrarCartera(filtro, btn) {
 function renderCartera(filtro) {
   const alertaCuits = new Set(ALERTAS.map(a => a.cuit));
   let lista = CARTERA_LOCAL;
-
   if (filtro === 'alertas') lista = lista.filter(c => alertaCuits.has(c.cuit));
-  else if (filtro === 'riesgo') lista = lista.filter(c => (c.ultimaSit || 1) >= 3);
-  else if (filtro === 'buenos') lista = lista.filter(c => (c.score || 0) >= 700);
+  else if (filtro === 'riesgo') lista = lista.filter(c => (c.ultimaSit||1) >= 3);
+  else if (filtro === 'buenos') lista = lista.filter(c => (c.score||0) >= 700);
+  else if (filtro === 'saldo') lista = lista.filter(c => getSaldos(c.nombre));
 
   const el = document.getElementById('cartera-lista');
   if (!lista.length) {
     el.innerHTML = '<div class="empty"><div class="empty-icon">📭</div><div class="empty-text">Sin clientes en este filtro</div></div>';
     return;
   }
-
   el.innerHTML = lista.map(c => {
     const sit = c.ultimaSit || 1;
     const score = c.score || null;
     const tieneAlerta = alertaCuits.has(c.cuit);
+    const saldosData = getSaldos(c.nombre);
     const scoreColor = scoreToColor(score);
-    return `
-    <div class="cliente-card${tieneAlerta?' alerta':''}" onclick="abrirCliente('${c.cuit}','${escHtml(c.nombre)}')">
+    return `<div class="cliente-card${tieneAlerta?' alerta':''}" onclick="abrirModalCliente('${esc(c.cuit)}','${esc(c.nombre)}')">
       <div class="cliente-row1">
-        <div class="cliente-nombre">${escHtml(c.nombre)}</div>
+        <div class="cliente-nombre">${esc(c.nombre)}</div>
         ${score ? `<div class="score-badge" style="color:${scoreColor}">${score}</div>` : ''}
       </div>
       <div class="cliente-row2">
-        <span class="cliente-ciudad">${escHtml(c.ciudad||'')}</span>
+        <span class="cliente-ciudad">${esc(c.ciudad||'')}</span>
         <span class="sit-badge sit-${sit}" style="background:${sitBg(sit)}">Sit ${sit}</span>
         ${tieneAlerta ? '<span class="alerta-badge">⚠ Alerta</span>' : ''}
+        ${saldosData ? `<span class="saldo-badge">💰 $${fmtM(saldosData.total_saldo)}</span>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -602,359 +381,294 @@ function renderCartera(filtro) {
 // ── OPORTUNIDADES ──
 function renderOportunidades() {
   const alertaCuits = new Set(ALERTAS.map(a => a.cuit));
-  // Score > 600 y sin alertas y sit = 1
-  const opps = CARTERA_LOCAL.filter(c =>
-    (c.score || 0) >= 600 &&
-    !alertaCuits.has(c.cuit) &&
-    (c.ultimaSit || 1) === 1
-  ).sort((a,b) => (b.score||0) - (a.score||0));
-
+  const opps = CARTERA_LOCAL.filter(c => (c.score||0) >= 600 && !alertaCuits.has(c.cuit) && (c.ultimaSit||1) === 1)
+    .sort((a,b) => (b.score||0)-(a.score||0));
   const el = document.getElementById('oport-lista');
   if (!opps.length) {
     el.innerHTML = '<div class="empty"><div class="empty-icon">⚡</div><div class="empty-text">Calculando oportunidades...<br>Corré la verificación de cartera primero.</div></div>';
     return;
   }
-
   el.innerHTML = opps.map(c => {
     const score = c.score || 0;
-    const tags = [];
-    if (score >= 700) tags.push('Score Excelente');
-    else if (score >= 600) tags.push('Score Bueno');
-    if ((c.ultimaSit||1) === 1) tags.push('Sit. Normal');
-
-    return `
-    <div class="oport-card" onclick="abrirCliente('${c.cuit}','${escHtml(c.nombre)}')">
+    const tags = [score>=700?'Score Excelente':'Score Bueno', 'Sit. Normal'];
+    if (!getSaldos(c.nombre)) tags.push('Sin saldo pendiente');
+    return `<div class="oport-card" onclick="abrirModalCliente('${c.cuit}','${esc(c.nombre)}')">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        <div class="oport-nombre">${escHtml(c.nombre)}</div>
+        <div class="oport-nombre">${esc(c.nombre)}</div>
         <div class="oport-score">${score}</div>
       </div>
-      <div style="font-size:11px;color:var(--text2)">${escHtml(c.ciudad||'')}</div>
+      <div style="font-size:11px;color:var(--text2)">${esc(c.ciudad||'')}</div>
       <div class="oport-tags">${tags.map(t=>`<span class="oport-tag">${t}</span>`).join('')}</div>
     </div>`;
   }).join('');
 }
 
-// ── CONSULTA CUIT (Tab 1) ──
+// ── MODAL CLIENTE ──
+async function abrirModalCliente(cuit, nombre) {
+  document.getElementById('modal-title').textContent = nombre;
+  document.getElementById('modal-body').innerHTML = `
+    <div class="modal-tabs">
+      <div class="modal-tab active" onclick="switchModalTab('facturas',this)">💰 Cuenta corriente</div>
+      <div class="modal-tab" onclick="switchModalTab('bcra',this)">🏦 BCRA</div>
+    </div>
+    <div id="mtab-facturas"><div class="ia-loading"><div class="spinner"></div><span>Cargando facturas...</span></div></div>
+    <div id="mtab-bcra" style="display:none"><div class="ia-loading"><div class="spinner"></div><span>Consultando BCRA...</span></div></div>`;
+  document.getElementById('detail-modal').style.display = 'flex';
+  document.getElementById('detail-modal').style.flexDirection = 'column';
+
+  const [sr, br, chr] = await Promise.all([
+    fetch(API + '/saldos-cliente/' + encodeURIComponent(nombre)).catch(() => null),
+    fetch(API + '/deudas/' + cuit).catch(() => null),
+    fetch(API + '/deudas/' + cuit + '/cheques').catch(() => null)
+  ]);
+
+  // Facturas
+  const factEl = document.getElementById('mtab-facturas');
+  if (sr && sr.ok) {
+    const sd = await sr.json();
+    if (sd.facturas && sd.facturas.length > 0) SALDOS_MAP[normNombre(nombre)] = sd;
+    factEl.innerHTML = renderFacturas(sd);
+  } else {
+    factEl.innerHTML = '<div class="empty"><div class="empty-icon">✅</div><div class="empty-text">Sin facturas pendientes</div></div>';
+  }
+
+  // BCRA
+  const bcraEl = document.getElementById('mtab-bcra');
+  const bcraData = (br && br.ok) ? await br.json() : null;
+  const chData   = (chr && chr.ok) ? await chr.json() : null;
+  bcraEl.innerHTML = renderBcraModal(bcraData, chData);
+}
+
+function switchModalTab(tab, btn) {
+  document.querySelectorAll('.modal-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('mtab-facturas').style.display = tab==='facturas' ? 'block' : 'none';
+  document.getElementById('mtab-bcra').style.display = tab==='bcra' ? 'block' : 'none';
+}
+
+function renderFacturas(data) {
+  const facturas = data.facturas || [];
+  if (!facturas.length) return '<div class="empty"><div class="empty-icon">✅</div><div class="empty-text">Sin facturas pendientes</div></div>';
+
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const sorted = [...facturas].sort((a,b) => parseFecha(a.fechaPago)-parseFecha(b.fechaPago));
+
+  let html = `<div class="total-box">
+    <div class="total-label">Saldo total pendiente</div>
+    <div class="total-monto">$${fmtFull(data.total_saldo)}</div>
+  </div>`;
+
+  sorted.forEach(f => {
+    const venc = parseFecha(f.fechaPago);
+    const dias = Math.round((venc - hoy) / 86400000);
+    let clase = 'vigente', tag = `<span class="tag-vigente">Vigente</span>`;
+    if (dias < 0) { clase = 'vencida'; tag = `<span class="tag-vencida">Vencida hace ${Math.abs(dias)}d</span>`; }
+    else if (dias <= 7) { clase = 'proxima'; tag = `<span class="tag-proxima">Vence en ${dias}d</span>`; }
+
+    const diferencia = f.totalFactura !== f.saldo;
+    html += `<div class="factura-item ${clase}">
+      <div class="factura-row1">
+        <div>
+          <div class="factura-nro">${esc(f.nroFactura)}</div>
+          ${tag}
+        </div>
+        <div class="factura-saldo">$${fmtFull(f.saldo)}</div>
+      </div>
+      <div class="factura-fechas">
+        <span class="factura-fecha">📅 Emitida: ${f.fechaFactura}</span>
+        <span class="factura-fecha">⏰ Vence: ${f.fechaPago}</span>
+      </div>
+      ${diferencia ? `<div style="font-size:11px;color:var(--text3);margin-top:4px">Total fac: $${fmtFull(f.totalFactura)}</div>` : ''}
+    </div>`;
+  });
+  return html;
+}
+
+function renderBcraModal(bcraData, chData) {
+  if (!bcraData || bcraData.error_bcra) return '<div class="card"><div style="color:var(--text2);font-size:13px">⚠ No se pudo obtener información del BCRA.</div></div>';
+  const results = bcraData.results || {};
+  const periodos = results.periodos || [];
+  let maxSit=1, entidades=[], montoTotal=0;
+  if (periodos.length) {
+    entidades = periodos[0].entidades||[];
+    if (entidades.length) { maxSit=Math.max(...entidades.map(e=>e.situacion||1)); montoTotal=entidades.reduce((s,e)=>s+(e.monto||0),0); }
+  }
+  const scoreEst = estimarScore(maxSit, bcraData.sin_deudas, chData);
+  const cc = scoreToColor(scoreEst);
+  const causales = chData?.results?.causales||[];
+  let dchq=[]; causales.forEach(ca=>ca.entidades?.forEach(en=>dchq.push(...(en.detalle||[]))));
+  const activos=dchq.filter(d=>!d.fechaPago||d.estadoMulta==='IMPAGA');
+
+  let html = `<div class="card"><div class="card-title">Score estimado</div>
+    <div class="score-hero"><div class="score-num" style="color:${cc}">${scoreEst}</div>
+    <div><div class="score-rango" style="color:${cc}">${scoreToRango(scoreEst)}</div>
+    <div style="font-size:11px;color:var(--text2);margin-top:2px">Sin historial Piattelli</div></div></div>
+    <div class="score-bar-wrap"><div class="score-bar" style="width:${scoreEst/10}%;background:${cc}"></div></div>
+  </div>
+  <div class="credito-box"><div class="credito-label">💡 Crédito sugerido</div>
+    <div class="credito-monto">${calcularCredito(scoreEst)}</div>
+  </div>`;
+
+  if (bcraData.sin_deudas || !entidades.length) {
+    html += `<div class="card"><div class="card-title">Situación BCRA</div>
+    <div class="sit-grid"><div class="sit-chip"><span class="sit-chip-label">Situación</span><span class="sit-chip-val sit-1">1 — Normal</span></div>
+    <div class="sit-chip"><span class="sit-chip-label">Deuda</span><span class="sit-chip-val">Sin deudas</span></div></div></div>`;
+  } else {
+    html += `<div class="card"><div class="card-title">Situación BCRA — ${periodos[0]?.periodo||''}</div>
+    <div class="sit-grid">
+      <div class="sit-chip"><span class="sit-chip-label">Peor sit.</span><span class="sit-chip-val sit-${maxSit}">Sit ${maxSit}</span></div>
+      <div class="sit-chip"><span class="sit-chip-label">Entidades</span><span class="sit-chip-val">${entidades.length}</span></div>
+      <div class="sit-chip"><span class="sit-chip-label">Monto</span><span class="sit-chip-val">$${fmtM(montoTotal*1000)}</span></div>
+    </div>
+    ${entidades.map(e=>`<div class="divider" style="margin:8px 0"></div>
+    <div class="row-data"><span class="row-key">${esc(e.entidad||'')}</span><span class="row-val sit-${e.situacion||1}">Sit ${e.situacion||1} — $${fmtM((e.monto||0)*1000)}</span></div>`).join('')}
+    </div>`;
+  }
+
+  html += `<div class="card"><div class="card-title">Cheques rechazados</div>`;
+  if (!dchq.length) { html += `<div style="color:var(--green);font-size:13px">✓ Sin cheques rechazados</div>`; }
+  else {
+    html += `<div style="font-size:12px;color:var(--text2);margin-bottom:10px">${dchq.length} total · ${activos.length} impagos</div>`;
+    dchq.slice(0,5).forEach(d => {
+      const imp = !d.fechaPago||d.estadoMulta==='IMPAGA';
+      html += `<div class="cheque-item"><div><div class="cheque-monto">$${fmtM(d.monto||0)}</div>
+      <div style="font-size:10px;color:var(--text2)">${d.nroCheque||''} · ${d.fechaRechazo||''}</div></div>
+      <span class="cheque-estado ${imp?'estado-impago':'estado-pagado'}">${imp?'IMPAGO':'PAGADO'}</span></div>`;
+    });
+    if (dchq.length>5) html += `<div style="font-size:11px;color:var(--text2);text-align:center;margin-top:8px">+${dchq.length-5} más</div>`;
+  }
+  html += '</div>';
+  return html;
+}
+
+// ── CONSULTA CUIT ──
 async function consultarCuit() {
   const cuit = document.getElementById('cuit-input').value.trim().replace(/\D/g,'');
   if (cuit.length < 10) { alert('CUIT inválido'); return; }
-
   showLoading('Consultando BCRA...');
   document.getElementById('consulta-resultado').innerHTML = '';
-
   try {
-    const [deudasResp, chequesResp] = await Promise.all([
-      fetch(API + '/deudas/' + cuit),
-      fetch(API + '/deudas/' + cuit + '/cheques')
-    ]);
-
-    const deudasData = await deudasResp.json();
-    const chequesData = await chequesResp.json();
-
+    const [dr, chr] = await Promise.all([fetch(API+'/deudas/'+cuit), fetch(API+'/deudas/'+cuit+'/cheques')]);
+    const dd = await dr.json(), cd = await chr.json();
     hideLoading();
-    renderConsulta(cuit, deudasData, chequesData);
-
-    // Lanzar análisis IA async
-    lanzarAnalisisIA(cuit, deudasData, chequesData);
-
+    renderConsulta(cuit, dd, cd);
+    lanzarAnalisisIA(cuit, dd, cd);
   } catch(e) {
     hideLoading();
-    document.getElementById('consulta-resultado').innerHTML =
-      '<div class="card"><div style="color:var(--red)">Error consultando BCRA. Intentá de nuevo.</div></div>';
+    document.getElementById('consulta-resultado').innerHTML = '<div class="card"><div style="color:var(--red)">Error consultando BCRA. Intentá de nuevo.</div></div>';
   }
 }
 
-function renderConsulta(cuit, deudasData, chequesData) {
-  const results = deudasData.results || {};
-  const periodos = results.periodos || [];
-  const sinDeudas = deudasData.sin_deudas;
-  const errorBcra = deudasData.error_bcra;
-
-  let maxSit = 1;
-  let entidades = [];
-  let montoTotal = 0;
-
-  if (periodos.length > 0) {
-    entidades = periodos[0].entidades || [];
-    if (entidades.length) {
-      maxSit = Math.max(...entidades.map(e => e.situacion || 1));
-      montoTotal = entidades.reduce((s,e) => s + (e.monto||0), 0);
-    }
+function renderConsulta(cuit, dd, cd) {
+  const results=dd.results||{}, periodos=results.periodos||[];
+  let maxSit=1, entidades=[], montoTotal=0;
+  if (periodos.length) {
+    entidades=periodos[0].entidades||[];
+    if (entidades.length) { maxSit=Math.max(...entidades.map(e=>e.situacion||1)); montoTotal=entidades.reduce((s,e)=>s+(e.monto||0),0); }
   }
+  const scoreEst=estimarScore(maxSit,dd.sin_deudas,cd), cc=scoreToColor(scoreEst);
+  const causales=cd.results?.causales||[]; let dchq=[];
+  causales.forEach(ca=>ca.entidades?.forEach(en=>dchq.push(...(en.detalle||[]))));
+  const activos=dchq.filter(d=>!d.fechaPago||d.estadoMulta==='IMPAGA');
 
-  // Score rápido estimado
-  const scoreEst = estimarScore(maxSit, sinDeudas, chequesData);
-  const colorScore = scoreToColor(scoreEst);
-  const rangoScore = scoreToRango(scoreEst);
-  const creditoSug = calcularCredito(scoreEst);
-
-  // Cheques
-  const causales = (chequesData.results?.causales) || [];
-  let detallesCheques = [];
-  causales.forEach(ca => ca.entidades?.forEach(en => detallesCheques.push(...(en.detalle||[]))));
-  const chqActivos = detallesCheques.filter(d => !d.fechaPago || d.estadoMulta==='IMPAGA');
-
-  const denominacion = results.denominacion || 'Sin nombre registrado';
-
-  let html = '';
-
-  // Nombre + CUIT
-  html += `
-  <div class="card">
-    <div style="font-size:16px;font-weight:700;margin-bottom:4px">${escHtml(denominacion)}</div>
+  let html = `<div class="card">
+    <div style="font-size:16px;font-weight:700;margin-bottom:4px">${esc(results.denominacion||'Sin nombre registrado')}</div>
     <div style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text2)">${cuit}</div>
   </div>`;
 
-  // Score estimado
-  if (!errorBcra) {
-    html += `
-    <div class="card">
-      <div class="card-title">Score Vende Seguro</div>
-      <div class="score-hero">
-        <div class="score-num" style="color:${colorScore}">${scoreEst}</div>
-        <div class="score-info">
-          <div class="score-rango" style="color:${colorScore}">${rangoScore}</div>
-          <div style="font-size:11px;color:var(--text2);margin-top:2px">Estimado sin historial Piattelli</div>
-        </div>
-      </div>
-      <div class="score-bar-wrap">
-        <div class="score-bar" style="width:${scoreEst/10}%;background:${colorScore}"></div>
-      </div>
-    </div>
+  if (!dd.error_bcra) {
+    html += `<div class="card"><div class="card-title">Score Vende Seguro</div>
+    <div class="score-hero"><div class="score-num" style="color:${cc}">${scoreEst}</div>
+    <div><div class="score-rango" style="color:${cc}">${scoreToRango(scoreEst)}</div>
+    <div style="font-size:11px;color:var(--text2);margin-top:2px">Estimado sin historial Piattelli</div></div></div>
+    <div class="score-bar-wrap"><div class="score-bar" style="width:${scoreEst/10}%;background:${cc}"></div></div></div>
+    <div class="credito-box"><div class="credito-label">💡 Crédito sugerido</div>
+    <div class="credito-monto">${calcularCredito(scoreEst)}</div>
+    <div class="credito-nota">Basado en score y situación BCRA</div></div>`;
+  }
 
-    <div class="credito-box">
-      <div class="credito-label">💡 Crédito sugerido</div>
-      <div class="credito-monto">${creditoSug}</div>
-      <div class="credito-nota">Basado en score y situación BCRA</div>
+  if (dd.error_bcra) {
+    html += `<div class="card"><div style="color:var(--text2);font-size:13px">⚠ No se pudo obtener información del BCRA.</div></div>`;
+  } else if (dd.sin_deudas||!entidades.length) {
+    html += `<div class="card"><div class="card-title">Situación BCRA</div><div class="sit-grid">
+    <div class="sit-chip"><span class="sit-chip-label">Situación</span><span class="sit-chip-val sit-1">1 — Normal</span></div>
+    <div class="sit-chip"><span class="sit-chip-label">Deuda sistema</span><span class="sit-chip-val">Sin deudas</span></div></div></div>`;
+  } else {
+    html += `<div class="card"><div class="card-title">Situación BCRA — ${periodos[0]?.periodo||''}</div><div class="sit-grid">
+    <div class="sit-chip"><span class="sit-chip-label">Peor situación</span><span class="sit-chip-val sit-${maxSit}">Sit ${maxSit}</span></div>
+    <div class="sit-chip"><span class="sit-chip-label">Entidades</span><span class="sit-chip-val">${entidades.length}</span></div>
+    <div class="sit-chip"><span class="sit-chip-label">Monto total</span><span class="sit-chip-val">$${fmtM(montoTotal*1000)}</span></div></div>
+    ${entidades.map(e=>`<div class="divider"></div><div class="row-data"><span class="row-key">${esc(e.entidad||'')}</span><span class="row-val sit-${e.situacion||1}">Sit ${e.situacion||1} — $${fmtM((e.monto||0)*1000)}</span></div>`).join('')}
     </div>`;
   }
 
-  // Situación BCRA
-  if (errorBcra) {
-    html += `<div class="card"><div style="color:var(--text2);font-size:13px">⚠ No se pudo obtener información del BCRA en este momento.</div></div>`;
-  } else if (sinDeudas || entidades.length === 0) {
-    html += `
-    <div class="card">
-      <div class="card-title">Situación BCRA</div>
-      <div class="sit-grid">
-        <div class="sit-chip"><span class="sit-chip-label">Situación</span><span class="sit-chip-val sit-1">1 — Normal</span></div>
-        <div class="sit-chip"><span class="sit-chip-label">Deuda sistema</span><span class="sit-chip-val">Sin deudas</span></div>
-      </div>
-    </div>`;
-  } else {
-    html += `
-    <div class="card">
-      <div class="card-title">Situación BCRA — ${periodos[0]?.periodo || ''}</div>
-      <div class="sit-grid">
-        <div class="sit-chip"><span class="sit-chip-label">Peor situación</span><span class="sit-chip-val sit-${maxSit}">Sit ${maxSit}</span></div>
-        <div class="sit-chip"><span class="sit-chip-label">Entidades</span><span class="sit-chip-val">${entidades.length}</span></div>
-        <div class="sit-chip"><span class="sit-chip-label">Monto total</span><span class="sit-chip-val">$${formatMonto(montoTotal*1000)}</span></div>
-      </div>
-      ${entidades.map(e => `
-      <div class="divider" style="margin:10px 0"></div>
-      <div class="row-data"><span class="row-key">${escHtml(e.entidad||'')}</span><span class="row-val sit-${e.situacion||1}">Sit ${e.situacion||1} — $${formatMonto((e.monto||0)*1000)}</span></div>
-      `).join('')}
-    </div>`;
-  }
-
-  // Cheques
-  html += `
-  <div class="card">
-    <div class="card-title">Cheques rechazados</div>`;
-  if (!detallesCheques.length) {
-    html += `<div style="color:var(--green);font-size:13px">✓ Sin cheques rechazados</div>`;
-  } else {
-    html += `<div style="font-size:12px;color:var(--text2);margin-bottom:10px">${detallesCheques.length} total · ${chqActivos.length} impagos</div>`;
-    detallesCheques.slice(0,5).forEach(d => {
-      const impago = !d.fechaPago || d.estadoMulta==='IMPAGA';
-      html += `
-      <div class="cheque-item">
-        <div>
-          <div class="cheque-monto">$${formatMonto(d.monto||0)}</div>
-          <div style="font-size:10px;color:var(--text2)">${d.nroCheque||''} · ${d.fechaRechazo||''}</div>
-        </div>
-        <span class="cheque-estado ${impago?'estado-impago':'estado-pagado'}">${impago?'IMPAGO':'PAGADO'}</span>
-      </div>`;
-    });
-    if (detallesCheques.length > 5) html += `<div style="font-size:11px;color:var(--text2);text-align:center;margin-top:8px">+${detallesCheques.length-5} más</div>`;
+  html += `<div class="card"><div class="card-title">Cheques rechazados</div>`;
+  if (!dchq.length) { html += `<div style="color:var(--green);font-size:13px">✓ Sin cheques rechazados</div>`; }
+  else {
+    html += `<div style="font-size:12px;color:var(--text2);margin-bottom:10px">${dchq.length} total · ${activos.length} impagos</div>`;
+    dchq.slice(0,5).forEach(d=>{const imp=!d.fechaPago||d.estadoMulta==='IMPAGA';
+      html+=`<div class="cheque-item"><div><div class="cheque-monto">$${fmtM(d.monto||0)}</div>
+      <div style="font-size:10px;color:var(--text2)">${d.nroCheque||''} · ${d.fechaRechazo||''}</div></div>
+      <span class="cheque-estado ${imp?'estado-impago':'estado-pagado'}">${imp?'IMPAGO':'PAGADO'}</span></div>`;});
+    if (dchq.length>5) html+=`<div style="font-size:11px;color:var(--text2);text-align:center;margin-top:8px">+${dchq.length-5} más</div>`;
   }
   html += '</div>';
-
-  // Placeholder análisis IA
-  html += `
-  <div class="card" id="ia-card">
-    <div class="card-title">Análisis IA</div>
-    <div class="ia-loading" id="ia-loading">
-      <div class="spinner"></div>
-      <span>Generando análisis...</span>
-    </div>
-    <div class="ia-texto" id="ia-texto" style="display:none"></div>
-  </div>`;
-
+  html += `<div class="card"><div class="card-title">Análisis IA</div>
+    <div class="ia-loading" id="ia-loading"><div class="spinner"></div><span>Generando análisis...</span></div>
+    <div class="ia-texto" id="ia-texto" style="display:none"></div></div>`;
   document.getElementById('consulta-resultado').innerHTML = html;
 }
 
-async function lanzarAnalisisIA(cuit, deudasData, chequesData) {
-  // Construir el prompt
-  const results = deudasData.results || {};
-  const periodos = results.periodos || [];
-  let maxSit = 1, montoTotal = 0, entidades = [];
-  if (periodos.length) {
-    entidades = periodos[0].entidades || [];
-    if (entidades.length) {
-      maxSit = Math.max(...entidades.map(e => e.situacion||1));
-      montoTotal = entidades.reduce((s,e) => s+(e.monto||0),0);
-    }
-  }
-  const causales = chequesData.results?.causales || [];
-  let chqTotal = 0;
-  causales.forEach(ca => ca.entidades?.forEach(en => { chqTotal += (en.detalle||[]).length; }));
-
-  const scoreEst = estimarScore(maxSit, deudasData.sin_deudas, chequesData);
-  const credito = calcularCredito(scoreEst);
-
-  const prompt = `Sos analista de riesgo crediticio para Bodega Piattelli, Mendoza. 
-Datos del cliente CUIT ${cuit}:
-- Situación BCRA: ${maxSit} (${sitNombre(maxSit)})
-- Deuda sistema financiero: $${formatMonto(montoTotal*1000)}
-- Entidades informantes: ${entidades.length}
-- Cheques rechazados: ${chqTotal}
-- Score Vende Seguro estimado: ${scoreEst} (${scoreToRango(scoreEst)})
-- Crédito sugerido: ${credito}
-
-Redactá un análisis de riesgo breve (3-4 oraciones) en español informal, orientado a un vendedor de vinos. Incluí: resumen del perfil crediticio, recomendación de operar o no, y el límite de crédito sugerido con justificación. Sin listas, sin markdown, solo texto directo.`;
-
+async function lanzarAnalisisIA(cuit, dd, cd) {
+  const results=dd.results||{}, periodos=results.periodos||[];
+  let maxSit=1, montoTotal=0, entidades=[];
+  if (periodos.length){entidades=periodos[0].entidades||[];if(entidades.length){maxSit=Math.max(...entidades.map(e=>e.situacion||1));montoTotal=entidades.reduce((s,e)=>s+(e.monto||0),0);}}
+  const causales=cd.results?.causales||[];let chqTotal=0;causales.forEach(ca=>ca.entidades?.forEach(en=>{chqTotal+=(en.detalle||[]).length;}));
+  const scoreEst=estimarScore(maxSit,dd.sin_deudas,cd);
+  const prompt=`Sos analista de riesgo crediticio para Bodega Piattelli, Mendoza.\nDatos del cliente CUIT ${cuit}:\n- Situación BCRA: ${maxSit}\n- Deuda sistema financiero: $${fmtM(montoTotal*1000)}\n- Entidades: ${entidades.length}\n- Cheques rechazados: ${chqTotal}\n- Score estimado: ${scoreEst} (${scoreToRango(scoreEst)})\n- Crédito sugerido: ${calcularCredito(scoreEst)}\n\nRedactá un análisis de riesgo breve (3-4 oraciones) en español informal, orientado a un vendedor de vinos. Sin listas, sin markdown, solo texto directo.`;
   try {
-    const resp = await fetch(API + '/analizar', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({prompt})
-    });
-    const data = await resp.json();
-    const iaEl = document.getElementById('ia-texto');
-    const loadEl = document.getElementById('ia-loading');
-    if (iaEl && loadEl) {
-      loadEl.style.display = 'none';
-      iaEl.style.display = 'block';
-      if (data.texto) {
-        iaEl.textContent = data.texto;
-      } else {
-        iaEl.textContent = 'No se pudo generar el análisis en este momento.';
-        iaEl.style.color = 'var(--text2)';
-      }
-    }
-  } catch(e) {
-    const loadEl = document.getElementById('ia-loading');
-    if (loadEl) loadEl.innerHTML = '<span style="color:var(--text2);font-size:12px">Error generando análisis</span>';
-  }
+    const resp=await fetch(API+'/analizar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt})});
+    const data=await resp.json();
+    const iaEl=document.getElementById('ia-texto'),loadEl=document.getElementById('ia-loading');
+    if(iaEl&&loadEl){loadEl.style.display='none';iaEl.style.display='block';iaEl.textContent=data.texto||'No se pudo generar el análisis.';if(!data.texto)iaEl.style.color='var(--text2)';}
+  } catch(e){const l=document.getElementById('ia-loading');if(l)l.innerHTML='<span style="color:var(--text2);font-size:12px">Error generando análisis</span>';}
 }
 
-// ── ABRIR CLIENTE desde cartera/oportunidades ──
-function abrirCliente(cuit, nombre) {
-  document.getElementById('cuit-input').value = cuit;
-  // Ir a tab consulta
-  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-consulta').classList.add('active');
-  document.querySelector('.tab-btn').classList.add('active');
-  consultarCuit();
+function closeModal() { document.getElementById('detail-modal').style.display='none'; }
+function showLoading(txt){document.getElementById('loading-text').textContent=txt||'Cargando...';document.getElementById('loading-overlay').style.display='flex';}
+function hideLoading(){document.getElementById('loading-overlay').style.display='none';}
+
+function parseFecha(s) {
+  if (!s) return new Date(9999,0,1);
+  if (s.includes('/')) { const [d,m,y]=s.split('/'); return new Date(parseInt(y),parseInt(m)-1,parseInt(d)); }
+  return new Date(s);
 }
-
-// ── MODAL ──
-function closeModal() {
-  document.getElementById('detail-modal').style.display = 'none';
+function estimarScore(maxSit,sinDeudas,chData) {
+  let pts=0;
+  if(sinDeudas||maxSit===1)pts+=400;else if(maxSit===2)pts+=200;else if(maxSit===3)pts+=50;
+  pts+=75;
+  const causales=chData?.results?.causales||[];let detalles=[];
+  causales.forEach(ca=>ca.entidades?.forEach(en=>detalles.push(...(en.detalle||[]))));
+  const activos=detalles.filter(d=>!d.fechaPago||d.estadoMulta==='IMPAGA');
+  if(!detalles.length)pts+=150;else if(!activos.length)pts+=75;
+  pts+=50;pts+=50;pts+=30;pts+=39;
+  if(maxSit>=4)pts=Math.min(pts,250);else if(maxSit===3)pts=Math.min(pts,400);
+  return Math.max(1,Math.min(999,Math.round(pts)));
 }
-
-// ── HELPERS ──
-function showLoading(txt) {
-  document.getElementById('loading-text').textContent = txt || 'Cargando...';
-  document.getElementById('loading-overlay').style.display = 'flex';
+function calcularCredito(s){
+  if(s>=800)return '$5.000.000+';if(s>=700)return '$2.000.000 – $5.000.000';
+  if(s>=500)return '$500.000 – $2.000.000';if(s>=300)return '$100.000 – $500.000';
+  if(s>=200)return 'Hasta $100.000 (contado previo)';return 'No recomendado';
 }
-function hideLoading() {
-  document.getElementById('loading-overlay').style.display = 'none';
-}
+function scoreToColor(s){if(!s)return'var(--text2)';if(s>=700)return'var(--green)';if(s>=400)return'var(--yellow)';if(s>=200)return'var(--orange)';return'var(--red)';}
+function scoreToRango(s){if(!s)return'—';if(s>=700)return'Excelente';if(s>=400)return'Bueno';if(s>=200)return'Revisar';if(s>=100)return'Alto riesgo';return'Rechazar';}
+function sitBg(s){const b={1:'rgba(74,222,128,0.1)',2:'rgba(251,191,36,0.1)',3:'rgba(251,146,60,0.1)',4:'rgba(248,113,113,0.1)',5:'rgba(248,113,113,0.1)',6:'rgba(248,113,113,0.1)'};return b[s]||b[1];}
+function fmtM(n){if(!n)return'0';if(n>=1e9)return(n/1e9).toFixed(1)+'B';if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1e3)return(n/1e3).toFixed(0)+'K';return Math.round(n).toLocaleString('es-AR');}
+function fmtFull(n){if(!n)return'0';return Math.round(n).toLocaleString('es-AR');}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 
-function estimarScore(maxSit, sinDeudas, chequesData) {
-  let pts = 0;
-  // Situación BCRA (simplificado)
-  if (sinDeudas || maxSit === 1) pts += 400;
-  else if (maxSit === 2) pts += 200;
-  else if (maxSit === 3) pts += 50;
-  else pts += 0;
-
-  pts += 75; // historial neutro
-  
-  // Cheques
-  const causales = chequesData.results?.causales || [];
-  let detalles = [];
-  causales.forEach(ca => ca.entidades?.forEach(en => detalles.push(...(en.detalle||[]))));
-  const activos = detalles.filter(d => !d.fechaPago || d.estadoMulta==='IMPAGA');
-  if (!detalles.length) pts += 150;
-  else if (!activos.length) pts += 75;
-  else pts += 0;
-
-  pts += 50; // DSO neutro
-  pts += 50; // historial Piattelli neutro (comercial no tiene datos completos)
-  pts += 30; // bodegas neutro
-  pts += 39; // concentración neutro
-
-  // Techos
-  if (maxSit >= 4) pts = Math.min(pts, 250);
-  else if (maxSit === 3) pts = Math.min(pts, 400);
-
-  return Math.max(1, Math.min(999, Math.round(pts)));
-}
-
-function calcularCredito(score) {
-  if (score >= 800) return '$5.000.000+';
-  if (score >= 700) return '$2.000.000 – $5.000.000';
-  if (score >= 500) return '$500.000 – $2.000.000';
-  if (score >= 300) return '$100.000 – $500.000';
-  if (score >= 200) return 'Hasta $100.000 (contado previo)';
-  return 'No recomendado';
-}
-
-function scoreToColor(s) {
-  if (!s) return 'var(--text2)';
-  if (s >= 700) return 'var(--green)';
-  if (s >= 400) return 'var(--yellow)';
-  if (s >= 200) return 'var(--orange)';
-  return 'var(--red)';
-}
-
-function scoreToRango(s) {
-  if (!s) return '—';
-  if (s >= 700) return 'Excelente';
-  if (s >= 400) return 'Bueno';
-  if (s >= 200) return 'Revisar';
-  if (s >= 100) return 'Alto riesgo';
-  return 'Rechazar';
-}
-
-function sitNombre(s) {
-  return ['','Normal','Riesgo bajo','Riesgo medio','Riesgo alto','Irrecuperable','Irrecuperable técnico'][s] || 'Desconocido';
-}
-
-function sitBg(s) {
-  const bgs = {1:'rgba(74,222,128,0.1)',2:'rgba(251,191,36,0.1)',3:'rgba(251,146,60,0.1)',4:'rgba(248,113,113,0.1)',5:'rgba(248,113,113,0.1)',6:'rgba(248,113,113,0.1)'};
-  return bgs[s] || bgs[1];
-}
-
-function formatMonto(n) {
-  if (!n) return '0';
-  if (n >= 1e9) return (n/1e9).toFixed(1) + 'B';
-  if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
-  if (n >= 1e3) return (n/1e3).toFixed(0) + 'K';
-  return n.toFixed(0);
-}
-
-function escHtml(s) {
-  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-// Enter en input de consulta
-document.getElementById('cuit-input').addEventListener('keypress', e => { if(e.key==='Enter') consultarCuit(); });
-document.getElementById('inp-pin').addEventListener('keypress', e => { if(e.key==='Enter') doLogin(); });
+document.getElementById('cuit-input').addEventListener('keypress',e=>{if(e.key==='Enter')consultarCuit();});
+document.getElementById('inp-pin').addEventListener('keypress',e=>{if(e.key==='Enter')doLogin();});
 </script>
 </body>
 </html>
