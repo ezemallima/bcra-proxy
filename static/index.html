@@ -1535,6 +1535,7 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
   periodosHist.slice(0, 24).forEach(function(p) {
     if (p.entidades && p.entidades.length > 0) nPeriodosH++;
   });
+  console.log('[score] cuit:', cuit, 'historialBCRA:', historialBCRA ? 'ok('+periodosHist.length+'p)' : 'null', 'nPeriodosH:', nPeriodosH);
 
   // 3. SITUACIÓN BCRA ACTUAL (Max 400)
   var entidades = [];
