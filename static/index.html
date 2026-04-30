@@ -1531,11 +1531,21 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
   } else if (bcraData && bcraData.results && bcraData.results.periodos) {
     periodosHist = bcraData.results.periodos;
   }
+  // Contar solo períodos con monto > 0 (los "-" son meses sin movimiento real)
   var nPeriodosH = 0;
   periodosHist.slice(0, 24).forEach(function(p) {
-    if (p.entidades && p.entidades.length > 0) nPeriodosH++;
+    var tieneDeuda = (p.entidades||[]).some(function(e){ return (e.monto||0) > 0; });
+    if (tieneDeuda) nPeriodosH++;
   });
-  console.log('[score] cuit:', cuit, 'historialBCRA:', historialBCRA ? 'ok('+periodosHist.length+'p)' : 'null', 'nPeriodosH:', nPeriodosH);
+  // Ventana reciente: períodos activos en los últimos 6 meses
+  var nPeriodosRecientes = 0;
+  periodosHist.slice(0, 6).forEach(function(p) {
+    var tieneDeuda = (p.entidades||[]).some(function(e){ return (e.monto||0) > 0; });
+    if (tieneDeuda) nPeriodosRecientes++;
+  });
+  // Usar el menor entre total y reciente*2 para no inflar historial largo
+  nPeriodosH = Math.min(nPeriodosH, nPeriodosRecientes * 4);
+  console.log('[score] cuit:', cuit, 'nPeriodosH:', nPeriodosH, 'recientes:', nPeriodosRecientes);
 
   // 3. SITUACIÓN BCRA ACTUAL (Max 400)
   var entidades = [];
