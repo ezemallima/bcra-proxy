@@ -193,6 +193,11 @@
     <div class="tab-pane" id="tab-oport">
       <div class="section-title">Oportunidades</div>
       <div class="section-sub">Clientes con potencial de venta</div>
+      <div style="margin-bottom:12px;">
+        <input type="text" id="buscar-oport" placeholder="🔍 Buscar cliente..."
+          style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:14px;background:var(--surface);color:var(--text);outline:none;"
+          oninput="buscarEnOport(this.value)">
+      </div>
       <div id="oport-lista"></div>
     </div>
   </div>
@@ -351,6 +356,8 @@ function renderCartera(filtro) {
   else if (filtro === 'riesgo') lista = lista.filter(c => (c.ultimaSit||1) >= 3);
   else if (filtro === 'buenos') lista = lista.filter(c => (c.score||0) >= 700);
   else if (filtro === 'saldo') lista = lista.filter(c => getSaldos(c.nombre));
+  // Aplicar búsqueda si hay texto
+  if (_carteraFiltrada) lista = lista.filter(c => matchBusqueda(c.nombre, _carteraFiltrada));
 
   const el = document.getElementById('cartera-lista');
   if (!lista.length) {
@@ -472,7 +479,17 @@ async function renderOportunidades() {
     return;
   }
 
-  el.innerHTML = opps.map(function(c) {
+  // Aplicar búsqueda si hay texto
+  const oppsFiltradas = (_oportFiltrada && _oportFiltrada.length > 0)
+    ? opps.filter(c => matchBusqueda(c.nombre, _oportFiltrada))
+    : opps;
+
+  if (!oppsFiltradas.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">🔍</div><div class="empty-text">Sin resultados para "' + _oportFiltrada + '"</div></div>';
+    return;
+  }
+
+  el.innerHTML = oppsFiltradas.map(function(c) {
     const score = c.score || 0;
     const tags = [];
     if (score >= 700) tags.push('Score Excelente');
@@ -946,6 +963,34 @@ function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').
 
 document.getElementById('cuit-input').addEventListener('keypress',e=>{if(e.key==='Enter')consultarCuit();});
 document.getElementById('inp-pin').addEventListener('keypress',e=>{if(e.key==='Enter')doLogin();});
+
+// ── BUSCADORES ──
+var _carteraFiltrada = null;
+var _oportFiltrada = null;
+
+function buscarEnCartera(q) {
+  _carteraFiltrada = q.trim().toLowerCase();
+  const filtroBtn = document.querySelector('.filter-chip.active');
+  const filtro = filtroBtn ? (
+    filtroBtn.textContent.includes('Alertas') ? 'alertas' :
+    filtroBtn.textContent.includes('saldo') ? 'saldo' : 'todos'
+  ) : 'todos';
+  renderCartera(filtro);
+}
+
+function buscarEnOport(q) {
+  _oportFiltrada = q.trim().toLowerCase();
+  renderOportunidades();
+}
+
+// Normalizar para búsqueda fuzzy
+function matchBusqueda(nombre, query) {
+  if (!query) return true;
+  const n = nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const q = query.normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  // Match parcial por cualquier palabra
+  return q.split(' ').every(p => p.length < 2 || n.includes(p));
+}
 </script>
 </body>
 </html>
