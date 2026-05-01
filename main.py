@@ -550,8 +550,27 @@ def ejecutar_verificacion(cartera_data):
                 pass
 
             cartera_actualizada.append(cliente_actualizado)
+
+            # Guardado parcial cada 50 clientes
+            if (i + 1) % 50 == 0:
+                try:
+                    parcial = {
+                        "alertas": nuevas_alertas,
+                        "ultima_verif": time.strftime('%d/%m/%Y %H:%M') + ' (parcial)',
+                        "cartera": [{
+                            "cuit": c.get('cuit'), "ultimaSit": c.get('ultimaSit'),
+                            "ultimaVerif": c.get('ultimaVerif'), "scoreCompleto": c.get('scoreCompleto'),
+                            "scoreRango": c.get('scoreRango'), "scoreColor": c.get('scoreColor'),
+                            "scoreEmoji": c.get('scoreEmoji')
+                        } for c in cartera_actualizada]
+                    }
+                    with open(ALERTAS_FILE, 'w', encoding='utf-8') as f:
+                        json.dump(parcial, f, ensure_ascii=False)
+                    print(f"[verif] Guardado parcial en cliente {i+1}", flush=True)
+                except: pass
+
             if i < len(cartera_data) - 1:
-                time.sleep(2)
+                time.sleep(1)
 
         ahora = time.strftime('%d/%m/%Y %H:%M')
         try:
@@ -585,6 +604,10 @@ def ejecutar_verificacion(cartera_data):
 @app.route("/")
 def index():
     return send_from_directory('static', 'index.html')
+
+@app.route("/ping")
+def ping():
+    return jsonify({"ok": True, "ts": time.time()})
 
 @app.route("/comercial")
 def comercial():
@@ -835,7 +858,7 @@ def get_cheques(cuit):
             except Exception as e:
                 print(f"[cheques] Error via {via} intento {intento+1} para {cuit}: {e}", flush=True)
                 if intento < 1:
-                    time.sleep(2)
+                    time.sleep(1)
                     continue
                 break
     cached = _cheques_cache_get(cuit)
@@ -876,7 +899,7 @@ def get_historial(cuit):
             except Exception as e:
                 print(f"[historial] Error via {via} intento {intento+1} para {cuit}: {e}", flush=True)
                 if intento < 1:
-                    time.sleep(2)
+                    time.sleep(1)
                     continue
                 break
     try:
