@@ -467,6 +467,15 @@ def ejecutar_verificacion(cartera_data):
             os.remove(cache_file)
             print("[verif] Caché BCRA limpiado para verificación fresca", flush=True)
     except: pass
+    # Limpiar caché de historial y cheques (pueden tener datos vacíos de consultas fallidas)
+    try:
+        import glob
+        for f in glob.glob(os.path.join(DATA_DIR, 'historial_*.json')):
+            os.remove(f)
+        for f in glob.glob(os.path.join(DATA_DIR, 'cheques_*.json')):
+            os.remove(f)
+        print("[verif] Caché historial y cheques limpiado", flush=True)
+    except: pass
 
     try:
         for i, cliente in enumerate(cartera_data):
@@ -727,6 +736,35 @@ def get_alertas():
 def save_alertas():
     try:
         data = request.get_json(force=True)
+        # Si viene cartera con scores, mergear con la existente
+        if data.get('cartera') and os.path.exists(ALERTAS_FILE):
+            try:
+                with open(ALERTAS_FILE, 'r', encoding='utf-8') as f:
+                    existing = json.load(f)
+                # Actualizar scores en la cartera existente
+                score_map = {c['cuit']: c for c in data['cartera'] if c.get('scoreCompleto')}
+                for c in existing.get('cartera', []):
+                    if c.get('cuit') in score_map:
+                        sc = score_map[c['cuit']]
+                        c['scoreCompleto'] = sc.get('scoreCompleto')
+                        c['scoreRango'] = sc.get('scoreRango')
+                        c['scoreColor'] = sc.get('scoreColor')
+                        c['scoreEmoji'] = sc.get('scoreEmoji')
+                # Actualizar scores en alertas existentes
+                for a in existing.get('alertas', []):
+                    if a.get('cuit') in score_map:
+                        sc = score_map[a['cuit']]
+                        a['scoreCompleto'] = sc.get('scoreCompleto')
+                        a['scoreRango'] = sc.get('scoreRango')
+                        a['scoreColor'] = sc.get('scoreColor')
+                        a['scoreEmoji'] = sc.get('scoreEmoji')
+                # Reemplazar alertas si vienen nuevas
+                if data.get('alertas') is not None:
+                    existing['alertas'] = data['alertas']
+                with open(ALERTAS_FILE, 'w', encoding='utf-8') as f:
+                    json.dump(existing, f, ensure_ascii=False, indent=2)
+                return jsonify({"ok": True})
+            except: pass
         with open(ALERTAS_FILE, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         return jsonify({"ok": True})
