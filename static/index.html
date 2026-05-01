@@ -1875,33 +1875,63 @@ function renderVendeScore(scoreObj) {
 
 // Normalizar nombre para comparación — ignora puntuación, tildes, mayúsculas
 async function actualizarScoresAlertas() {
-  if (!alertas.length) { alert('No hay alertas activas'); return; }
+  if (!cartera.length) { alert('No hay clientes en la cartera'); return; }
   var btn = event.target;
-  btn.disabled = true; btn.textContent = 'Actualizando...';
+  btn.disabled = true;
+  var total = cartera.length;
   var actualizadas = 0;
-  for (var i = 0; i < alertas.length; i++) {
-    var a = alertas[i];
+
+  // Mapeo cuit -> alerta para actualizar también las alertas
+  var alertaMap = {};
+  alertas.forEach(function(a, i) { alertaMap[a.cuit] = i; });
+
+  for (var i = 0; i < cartera.length; i++) {
+    var c = cartera[i];
+    var cuit = c.cuit.replace(/-/g,'');
+    btn.textContent = 'Actualizando ' + (i+1) + '/' + total + '...';
     try {
-      var r = await fetch('/deudas/' + a.cuit.replace(/-/g,''), {signal: AbortSignal.timeout(15000)});
+      var r = await fetch('/deudas/' + cuit, {signal: AbortSignal.timeout(15000)});
       var bcraData = await r.json();
-      var mora = buscarEnMoras(a.cuit);
-      var wsp = buscarEnWSP(a.cuit) || [];
-      var scoreObj = calcularVendeScore(a.cuit, bcraData, mora, wsp);
-      alertas[i].scoreCompleto = scoreObj.score;
-      alertas[i].scoreRango = scoreObj.rango;
-      alertas[i].scoreColor = scoreObj.color;
-      alertas[i].scoreEmoji = scoreObj.emoji;
+      var mora = buscarEnMoras(cuit);
+      var wsp = buscarEnWSP(cuit) || [];
+      var scoreObj = calcularVendeScore(cuit, bcraData, mora, wsp);
+      // Actualizar cartera local
+      cartera[i].scoreCompleto = scoreObj.score;
+      cartera[i].scoreRango = scoreObj.rango;
+      cartera[i].scoreColor = scoreObj.color;
+      cartera[i].scoreEmoji = scoreObj.emoji;
+      // Actualizar alerta si existe
+      if (alertaMap[cuit] !== undefined) {
+        var ai = alertaMap[cuit];
+        alertas[ai].scoreCompleto = scoreObj.score;
+        alertas[ai].scoreRango = scoreObj.rango;
+        alertas[ai].scoreColor = scoreObj.color;
+        alertas[ai].scoreEmoji = scoreObj.emoji;
+      }
       actualizadas++;
-      btn.textContent = 'Actualizando ' + actualizadas + '/' + alertas.length + '...';
     } catch(e) {}
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => setTimeout(r, 800));
   }
-  // Guardar
+
+  // Guardar todo
+  localStorage.setItem('piat_cartera', JSON.stringify(cartera));
   localStorage.setItem('piat_alertas', JSON.stringify(alertas));
-  await fetch('/alertas', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({alertas: alertas})});
+  try {
+    await fetch('/alertas', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({alertas: alertas, cartera: cartera.map(function(c){
+        return {cuit: c.cuit, ultimaSit: c.ultimaSit, ultimaVerif: c.ultimaVerif,
+                scoreCompleto: c.scoreCompleto, scoreRango: c.scoreRango,
+                scoreColor: c.scoreColor, scoreEmoji: c.scoreEmoji};
+      })})
+    });
+  } catch(e) {}
+
   renderAlertas();
-  btn.disabled = false; btn.textContent = '↻ Actualizar scores';
-  alert('✅ ' + actualizadas + ' alertas actualizadas');
+  btn.disabled = false;
+  btn.textContent = '↻ Actualizar scores';
+  alert('✅ ' + actualizadas + ' de ' + total + ' clientes actualizados');
 }
 
 async function subirMoras(input) {
