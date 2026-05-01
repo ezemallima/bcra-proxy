@@ -481,7 +481,7 @@ async function renderOportunidades() {
     if (!c.tieneSaldo) tags.push('Sin deuda pendiente');
     if (c.tieneSaldo) tags.push('Saldo: $' + fmtM(getSaldos(c.nombre).total_saldo));
 
-    return `<div class="oport-card" style="border-left-color:${c.color}" onclick="abrirModalCliente('${c.cuit}','${esc(c.nombre)}')">
+    return `<div class="oport-card" onclick="abrirModalCliente('${c.cuit}','${esc(c.nombre)}')">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
         <div class="oport-nombre">${esc(c.nombre)}</div>
         <div class="oport-score" style="color:${scoreToColor(score)}">${score}</div>
@@ -506,10 +506,11 @@ async function abrirModalCliente(cuit, nombre) {
   document.getElementById('detail-modal').style.display = 'flex';
   document.getElementById('detail-modal').style.flexDirection = 'column';
 
-  const [sr, br, chr] = await Promise.all([
+  const [sr, br, chr, hr] = await Promise.all([
     fetch(API + '/saldos-cliente/' + encodeURIComponent(nombre)).catch(() => null),
     fetch(API + '/deudas/' + cuit).catch(() => null),
-    fetch(API + '/deudas/' + cuit + '/cheques').catch(() => null)
+    fetch(API + '/deudas/' + cuit + '/cheques').catch(() => null),
+    fetch(API + '/deudas/' + cuit + '/historial').catch(() => null)
   ]);
 
   // Facturas
@@ -526,7 +527,8 @@ async function abrirModalCliente(cuit, nombre) {
   const bcraEl = document.getElementById('mtab-bcra');
   const bcraData = (br && br.ok) ? await br.json() : null;
   const chData   = (chr && chr.ok) ? await chr.json() : null;
-  bcraEl.innerHTML = renderBcraModal(bcraData, chData);
+  const histData = (hr && hr.ok)   ? await hr.json()  : null;
+  bcraEl.innerHTML = renderBcraModal(bcraData, chData, histData);
 }
 
 function switchModalTab(tab, btn) {
@@ -574,7 +576,7 @@ function renderFacturas(data) {
   return html;
 }
 
-function renderBcraModal(bcraData, chData) {
+function renderBcraModal(bcraData, chData, histData) {
   if (!bcraData || bcraData.error_bcra) return '<div class="card"><div style="color:var(--text2);font-size:13px">⚠ No se pudo obtener información del BCRA.</div></div>';
   const results = bcraData.results || {};
   const periodos = results.periodos || [];
@@ -583,7 +585,7 @@ function renderBcraModal(bcraData, chData) {
     entidades = periodos[0].entidades||[];
     if (entidades.length) { maxSit=Math.max(...entidades.map(e=>e.situacion||1)); montoTotal=entidades.reduce((s,e)=>s+(e.monto||0),0); }
   }
-  const scoreEst = calcularScoreCompletoSync(maxSit, bcraData.sin_deudas, periodos, chData, null);
+  const scoreEst = calcularScoreCompletoSync(maxSit, bcraData.sin_deudas, periodos, chData, histData||null);
   const cc = scoreToColor(scoreEst);
   const causales = chData?.results?.causales||[];
   let dchq=[]; causales.forEach(ca=>ca.entidades?.forEach(en=>dchq.push(...(en.detalle||[]))));
