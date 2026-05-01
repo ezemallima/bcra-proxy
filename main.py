@@ -1237,6 +1237,77 @@ def test_modelos():
             resultados[key] = str(e)[:100]
     return jsonify(resultados)
 
+
+# ── Saldos / Facturas por cliente ──
+_saldos_facturas = []
+try:
+    _sf_path = os.path.join(os.getcwd(), 'saldos_facturas.json')
+    with open(_sf_path, encoding='utf-8') as f:
+        _saldos_facturas = json.load(f)
+    print(f"[saldos] {len(_saldos_facturas)} facturas cargadas", flush=True)
+except Exception as e:
+    print(f"[saldos] Error cargando facturas: {e}", flush=True)
+
+def _norm_nombre(s):
+    import unicodedata, re
+    s = str(s or '').strip().upper()
+    s = unicodedata.normalize('NFD', s)
+    s = ''.join(c for c in s if unicodedata.category(c) != 'Mn')
+    s = re.sub(r'[^A-Z0-9 ]', ' ', s)
+    return re.sub(r'\s+', ' ', s).strip()
+
+@app.route("/saldos-cliente/<cliente>")
+def get_saldos_cliente(cliente):
+    from urllib.parse import unquote
+    cn = _norm_nombre(unquote(cliente))
+    result = [f for f in _saldos_facturas if _norm_nombre(f.get('cliente', '')) == cn]
+    total_saldo = sum(f.get('saldo', 0) for f in result)
+    return jsonify({"facturas": result, "total_saldo": total_saldo, "cantidad": len(result)})
+
+@app.route("/upload-saldos-facturas", methods=["POST"])
+def upload_saldos_facturas():
+    """Recibe Excel de saldos con formato: Vendedor, cliente, Nro factura, Fecha factura, Fecha pago, Total, Saldo"""
+    global _saldos_facturas
+    try:
+        if 'file' not in request.files:
+            return jsonify({"error": "Sin archivo"}), 400
+        file = request.files['file']
+        import io, openpyxl
+        wb = openpyxl.load_workbook(io.BytesIO(file.read()))
+        ws = wb.active
+        saldos = []
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if not row or not row[1]: continue
+            vendedor, cliente, nro_fac, fecha_fac, fecha_pago, total, saldo = (list(row) + [None]*7)[:7]
+            def fmt_fecha(d):
+                if not d: return ''
+                if hasattr(d, 'strftime'): return d.strftime('%d/%m/%Y')
+                return str(d)[:10]
+            try: total_f = float(total or 0)
+            except: total_f = 0
+            try: saldo_f = float(saldo or 0)
+            except: saldo_f = 0
+            if saldo_f <= 0: continue  # solo facturas con saldo pendiente
+            saldos.append({
+                'vendedor': str(vendedor or '').strip(),
+                'cliente': str(cliente).strip(),
+                'nroFactura': str(nro_fac or '').strip(),
+                'fechaFactura': fmt_fecha(fecha_fac),
+                'fechaPago': fmt_fecha(fecha_pago),
+                'totalFactura': total_f,
+                'saldo': saldo_f
+            })
+        sf_path = os.path.join(os.getcwd(), 'saldos_facturas.json')
+        with open(sf_path, 'w', encoding='utf-8') as f:
+            json.dump(saldos, f, ensure_ascii=False, indent=2)
+        _saldos_facturas = saldos
+        print(f"[saldos] Actualizadas {len(saldos)} facturas", flush=True)
+        return jsonify({"ok": True, "total": len(saldos)})
+    except Exception as e:
+        import traceback
+        print(f"[saldos] Error: {traceback.format_exc()}", flush=True)
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port, threaded=True)
