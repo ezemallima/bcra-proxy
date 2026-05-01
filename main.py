@@ -279,86 +279,121 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
     else:              pts_sit = 0
     puntos += pts_sit
 
-    # 2. Historial 24m
+    # 2. Historial 24m — reintenta hasta obtener respuesta válida
     pts_hist = 75
+    hist_cached = None
+    hist_path = os.path.join(DATA_DIR, f'historial_{cuit}.json')
+    # Intentar caché en disco primero (menos de 24hs)
     try:
-        hist_cached = None
-        hist_path = os.path.join(DATA_DIR, f'historial_{cuit}.json')
         if os.path.exists(hist_path):
             with open(hist_path, 'r') as f:
                 hc = json.load(f)
             if time.time() - hc.get('ts', 0) < 86400:
                 hist_cached = hc.get('payload')
-        if not hist_cached:
-            for url_h in [BCRA_WORKER + "/deudas/" + cuit + "/historial",
-                          BCRA_WORKER_2 + "/deudas/" + cuit + "/historial"]:
-                try:
-                    r_h = requests.get(url_h, timeout=12)
-                    if r_h.status_code == 200 and len(r_h.text.strip()) > 10:
-                        hist_cached = r_h.json()
-                        try:
-                            with open(hist_path, 'w') as f:
-                                json.dump({'payload': hist_cached, 'ts': time.time()}, f)
-                        except: pass
-                        break
-                except: continue
-        if hist_cached:
-            periodos_h = (hist_cached.get('results') or {}).get('periodos') or []
-            meses_malos = sum(1 for p in periodos_h[:24]
-                if max(((e.get('situacion') or 1) for e in p.get('entidades', [])), default=1) > 1)
-            if meses_malos > 0:
-                pts_hist = 75 if meses_malos <= 2 else 0
-            else:
-                if   n_periodos_h >= 12: pts_hist = 150
-                elif n_periodos_h >= 3:  pts_hist = 90
-                elif n_periodos_h >= 1:  pts_hist = 40
-                else:                    pts_hist = 60
-        elif sin_deudas_real:
-            pts_hist = 60
     except: pass
+    # Si no hay caché, consultar con reintentos hasta obtener respuesta
+    if not hist_cached:
+        urls_hist = [
+            BCRA_WORKER + "/deudas/" + cuit + "/historial",
+            BCRA_WORKER_2 + "/deudas/" + cuit + "/historial",
+            "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit,
+        ]
+        for intento_global in range(6):  # hasta 6 intentos rotando endpoints
+            url_h = urls_hist[intento_global % len(urls_hist)]
+            try:
+                r_h = requests.get(url_h, timeout=15, verify=False)
+                if r_h.status_code == 200 and len(r_h.text.strip()) > 10:
+                    hist_cached = r_h.json()
+                    try:
+                        with open(hist_path, 'w') as f:
+                            json.dump({'payload': hist_cached, 'ts': time.time()}, f)
+                    except: pass
+                    print(f"[score] {cuit} historial OK intento {intento_global+1}", flush=True)
+                    break
+                else:
+                    print(f"[score] {cuit} historial vacio intento {intento_global+1}, reintentando...", flush=True)
+                    time.sleep(3)
+            except Exception as e:
+                print(f"[score] {cuit} historial error intento {intento_global+1}: {e}", flush=True)
+                time.sleep(3)
+    # Calcular pts_hist
+    if hist_cached:
+        periodos_h = (hist_cached.get('results') or {}).get('periodos') or []
+        meses_malos = sum(1 for p in periodos_h[:24]
+            if max(((e.get('situacion') or 1) for e in p.get('entidades', [])), default=1) > 1)
+        if meses_malos > 0:
+            pts_hist = 75 if meses_malos <= 2 else 0
+        else:
+            if   n_periodos_h >= 12: pts_hist = 150
+            elif n_periodos_h >= 3:  pts_hist = 90
+            elif n_periodos_h >= 1:  pts_hist = 40
+            else:                    pts_hist = 60
+    elif sin_deudas_real:
+        pts_hist = 60
+    else:
+        print(f"[score] {cuit} historial NO disponible tras reintentos — pts_hist=75 neutral", flush=True)
     puntos += pts_hist
 
-    # 3. Cheques rechazados
+    # 3. Cheques rechazados — reintenta hasta obtener respuesta válida
     pts_cheq = 75
+    cheq_cached = None
+    cheq_path = os.path.join(DATA_DIR, f'cheques_{cuit}.json')
+    # Intentar caché en disco primero
     try:
-        cheq_cached = None
-        cheq_path = os.path.join(DATA_DIR, f'cheques_{cuit}.json')
         if os.path.exists(cheq_path):
             with open(cheq_path, 'r') as f:
                 cc = json.load(f)
             if time.time() - cc.get('ts', 0) < 86400:
                 cheq_cached = cc.get('payload')
-        if not cheq_cached:
-            for url_c in [BCRA_WORKER + "/deudas/" + cuit + "/cheques",
-                          BCRA_WORKER_2 + "/deudas/" + cuit + "/cheques"]:
-                try:
-                    r_c = requests.get(url_c, timeout=12)
-                    if r_c.status_code == 200 and len(r_c.text.strip()) > 10:
-                        cheq_cached = r_c.json()
-                        try:
-                            with open(cheq_path, 'w') as f:
-                                json.dump({'payload': cheq_cached, 'ts': time.time()}, f)
-                        except: pass
-                        break
-                except: continue
-        if cheq_cached:
-            if cheq_cached.get('sin_deudas'):
-                pts_cheq = 150 if n_periodos_h > 6 else (70 if n_periodos_h >= 1 else 40)
-            else:
-                res_c = (cheq_cached.get('results') or {}) if isinstance(cheq_cached, dict) else {}
-                causales = res_c.get('causales') or [] if isinstance(res_c, dict) else []
-                detalles = []
-                for causal in causales:
-                    for ent in causal.get('entidades', []):
-                        detalles.extend(ent.get('detalle', []))
-                total_ch = len(detalles)
-                activos_ch = sum(1 for d in detalles
-                    if not d.get('fechaPago') or d.get('estadoMulta') == 'IMPAGA')
-                if total_ch == 0:
-                    pts_cheq = 150 if n_periodos_h > 6 else (70 if n_periodos_h >= 1 else 40)
-                elif activos_ch == 0: pts_cheq = 75
-                else:                 pts_cheq = 0
     except: pass
+    # Si no hay caché, consultar con reintentos
+    if not cheq_cached:
+        urls_cheq = [
+            BCRA_WORKER + "/deudas/" + cuit + "/cheques",
+            BCRA_WORKER_2 + "/deudas/" + cuit + "/cheques",
+            "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/" + cuit,
+        ]
+        for intento_global in range(6):
+            url_c = urls_cheq[intento_global % len(urls_cheq)]
+            try:
+                r_c = requests.get(url_c, timeout=15, verify=False)
+                if r_c.status_code == 200 and len(r_c.text.strip()) > 10:
+                    cheq_cached = r_c.json()
+                    try:
+                        with open(cheq_path, 'w') as f:
+                            json.dump({'payload': cheq_cached, 'ts': time.time()}, f)
+                    except: pass
+                    print(f"[score] {cuit} cheques OK intento {intento_global+1}", flush=True)
+                    break
+                elif r_c.status_code == 404:
+                    cheq_cached = {"results": {"causales": []}, "sin_deudas": True}
+                    break
+                else:
+                    print(f"[score] {cuit} cheques vacio intento {intento_global+1}, reintentando...", flush=True)
+                    time.sleep(3)
+            except Exception as e:
+                print(f"[score] {cuit} cheques error intento {intento_global+1}: {e}", flush=True)
+                time.sleep(3)
+    # Calcular pts_cheq
+    if cheq_cached:
+        if cheq_cached.get('sin_deudas'):
+            pts_cheq = 150 if n_periodos_h > 6 else (70 if n_periodos_h >= 1 else 40)
+        else:
+            res_c = (cheq_cached.get('results') or {}) if isinstance(cheq_cached, dict) else {}
+            causales = res_c.get('causales') or [] if isinstance(res_c, dict) else []
+            detalles = []
+            for causal in causales:
+                for ent in causal.get('entidades', []):
+                    detalles.extend(ent.get('detalle', []))
+            total_ch = len(detalles)
+            activos_ch = sum(1 for d in detalles
+                if not d.get('fechaPago') or d.get('estadoMulta') == 'IMPAGA')
+            if total_ch == 0:
+                pts_cheq = 150 if n_periodos_h > 6 else (70 if n_periodos_h >= 1 else 40)
+            elif activos_ch == 0: pts_cheq = 75
+            else:                 pts_cheq = 0
+    else:
+        print(f"[score] {cuit} cheques NO disponibles tras reintentos — pts_cheq=75 neutral", flush=True)
     puntos += pts_cheq
 
     # 4. Mora Piattelli
