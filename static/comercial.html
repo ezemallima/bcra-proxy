@@ -683,6 +683,7 @@ function renderConsulta(cuit, dd, cd, hd) {
   }
   // Score completo igual que app principal
   const scoreEst=calcularScoreCompletoSync(maxSit,dd.sin_deudas,periodos,cd,hd), cc=scoreToColor(scoreEst);
+  window._ultimoScoreComercial = scoreEst; // guardar para análisis IA
   const causales=cd.results?.causales||[]; let dchq=[];
   causales.forEach(ca=>ca.entidades?.forEach(en=>dchq.push(...(en.detalle||[]))));
   const activos=dchq.filter(d=>!d.fechaPago||d.estadoMulta==='IMPAGA');
@@ -740,8 +741,9 @@ async function lanzarAnalisisIA(cuit, dd, cd) {
   let maxSit=1, montoTotal=0, entidades=[];
   if (periodos.length){entidades=periodos[0].entidades||[];if(entidades.length){maxSit=Math.max(...entidades.map(e=>e.situacion||1));montoTotal=entidades.reduce((s,e)=>s+(e.monto||0),0);}}
   const causales=cd.results?.causales||[];let chqTotal=0;causales.forEach(ca=>ca.entidades?.forEach(en=>{chqTotal+=(en.detalle||[]).length;}));
-  const scoreEst=estimarScore(maxSit,dd.sin_deudas,cd);
-  const prompt=`Sos analista de riesgo crediticio para Bodega Piattelli, Mendoza.\nDatos del cliente CUIT ${cuit}:\n- Situación BCRA: ${maxSit}\n- Deuda sistema financiero: $${fmtM(montoTotal*1000)}\n- Entidades: ${entidades.length}\n- Cheques rechazados: ${chqTotal}\n- Score estimado: ${scoreEst} (${scoreToRango(scoreEst)})\n- Crédito sugerido: ${calcularCredito(scoreEst)}\n\nRedactá un análisis de riesgo breve (3-4 oraciones) en español informal, orientado a un vendedor de vinos. Sin listas, sin markdown, solo texto directo.`;
+  const scoreActual = window._ultimoScoreComercial || estimarScore(maxSit,dd.sin_deudas,cd);
+  const creditoSug = calcularCredito(scoreActual);
+  const prompt=`Sos analista de riesgo crediticio para Bodega Piattelli, Mendoza.\nDatos del cliente CUIT ${cuit}:\n- Situación BCRA: ${maxSit} (${maxSit===1?'Normal':maxSit===2?'Seguimiento':'Crítico'})\n- Deuda sistema financiero: $${fmtM(montoTotal*1000)}\n- Entidades: ${entidades.length}\n- Cheques rechazados: ${chqTotal}\n- Score Vende Seguro: ${scoreActual}/999 (${scoreToRango(scoreActual)})\n- Crédito sugerido: ${creditoSug}\n\nRedactá un análisis de riesgo breve (3-4 oraciones) en español informal orientado a un vendedor de vinos. El crédito sugerido es EXACTAMENTE ${creditoSug} — no sugerás un monto diferente. Sin listas, sin markdown, solo texto directo.`;
   try {
     const resp=await fetch(API+'/analizar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt})});
     const data=await resp.json();
@@ -766,9 +768,12 @@ function calcularScoreCompletoSync(maxSit, sinDeudas, periodos, chData, histData
   const nroEnt = entidades.length;
   const montoM = entidades.reduce((s,e) => s+(e.monto||0), 0) / 1000;
 
-  // Periodos activos
+  // Periodos activos — usar historial 24m si está disponible (más preciso)
+  const periodosParaNPH = histData?.results?.periodos?.length > 0
+    ? histData.results.periodos
+    : periodos;
   let nPH = 0, nPR = 0;
-  periodos.slice(0,24).forEach((p,i) => {
+  periodosParaNPH.slice(0,24).forEach((p,i) => {
     if ((p.entidades||[]).some(e => (e.monto||0) > 0)) {
       nPH++; if (i < 6) nPR++;
     }
@@ -950,9 +955,13 @@ async function calcularScoreCompleto(cuit) {
   } catch(e) { return null; }
 }
 function calcularCredito(s){
-  if(s>=800)return '$5.000.000+';if(s>=700)return '$2.000.000 – $5.000.000';
-  if(s>=500)return '$500.000 – $2.000.000';if(s>=300)return '$100.000 – $500.000';
-  if(s>=200)return 'Hasta $100.000 (contado previo)';return 'No recomendado';
+  if(s>=900)return '$800.000 – $2.000.000';
+  if(s>=700)return '$500.000 – $800.000';
+  if(s>=500)return '$200.000 – $500.000';
+  if(s>=400)return '$100.000 – $200.000';
+  if(s>=300)return 'Hasta $100.000 (contado previo)';
+  if(s>=200)return 'Solo contado anticipado';
+  return 'No recomendado';
 }
 function scoreToColor(s){if(!s)return'var(--text2)';if(s>=700)return'var(--green)';if(s>=400)return'var(--yellow)';if(s>=200)return'var(--orange)';return'var(--red)';}
 function scoreToRango(s){if(!s)return'—';if(s>=700)return'Excelente';if(s>=400)return'Bueno';if(s>=200)return'Revisar';if(s>=100)return'Alto riesgo';return'Rechazar';}
