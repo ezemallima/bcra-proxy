@@ -3122,6 +3122,8 @@ async function verificarTodos(forzar) {
   // Polling cada 5 segundos para actualizar progreso
   var interval = setInterval(async function() {
     try {
+      // Ping para mantener Render despierto
+      fetch('/ping').catch(()=>{});
       var r2 = await fetch('/verificar-progreso');
       var estado = await r2.json();
       
