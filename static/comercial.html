@@ -583,7 +583,7 @@ function renderBcraModal(bcraData, chData) {
     entidades = periodos[0].entidades||[];
     if (entidades.length) { maxSit=Math.max(...entidades.map(e=>e.situacion||1)); montoTotal=entidades.reduce((s,e)=>s+(e.monto||0),0); }
   }
-  const scoreEst = estimarScore(maxSit, bcraData.sin_deudas, chData);
+  const scoreEst = calcularScoreCompletoSync(maxSit, bcraData.sin_deudas, periodos, chData, null);
   const cc = scoreToColor(scoreEst);
   const causales = chData?.results?.causales||[];
   let dchq=[]; causales.forEach(ca=>ca.entidades?.forEach(en=>dchq.push(...(en.detalle||[]))));
@@ -638,10 +638,16 @@ async function consultarCuit() {
   showLoading('Consultando BCRA...');
   document.getElementById('consulta-resultado').innerHTML = '';
   try {
-    const [dr, chr] = await Promise.all([fetch(API+'/deudas/'+cuit), fetch(API+'/deudas/'+cuit+'/cheques')]);
-    const dd = await dr.json(), cd = await chr.json();
+    const [dr, chr, hr] = await Promise.all([
+      fetch(API+'/deudas/'+cuit),
+      fetch(API+'/deudas/'+cuit+'/cheques'),
+      fetch(API+'/deudas/'+cuit+'/historial')
+    ]);
+    const dd = await dr.json();
+    const cd = await chr.json();
+    const hd = hr.ok ? await hr.json() : null;
     hideLoading();
-    renderConsulta(cuit, dd, cd);
+    renderConsulta(cuit, dd, cd, hd);
     lanzarAnalisisIA(cuit, dd, cd);
   } catch(e) {
     hideLoading();
@@ -649,14 +655,15 @@ async function consultarCuit() {
   }
 }
 
-function renderConsulta(cuit, dd, cd) {
+function renderConsulta(cuit, dd, cd, hd) {
   const results=dd.results||{}, periodos=results.periodos||[];
   let maxSit=1, entidades=[], montoTotal=0;
   if (periodos.length) {
     entidades=periodos[0].entidades||[];
     if (entidades.length) { maxSit=Math.max(...entidades.map(e=>e.situacion||1)); montoTotal=entidades.reduce((s,e)=>s+(e.monto||0),0); }
   }
-  const scoreEst=estimarScore(maxSit,dd.sin_deudas,cd), cc=scoreToColor(scoreEst);
+  // Score completo igual que app principal
+  const scoreEst=calcularScoreCompletoSync(maxSit,dd.sin_deudas,periodos,cd,hd), cc=scoreToColor(scoreEst);
   const causales=cd.results?.causales||[]; let dchq=[];
   causales.forEach(ca=>ca.entidades?.forEach(en=>dchq.push(...(en.detalle||[]))));
   const activos=dchq.filter(d=>!d.fechaPago||d.estadoMulta==='IMPAGA');
@@ -733,7 +740,80 @@ function parseFecha(s) {
   if (s.includes('/')) { const [d,m,y]=s.split('/'); return new Date(parseInt(y),parseInt(m)-1,parseInt(d)); }
   return new Date(s);
 }
+// Score completo sincrónico (con datos ya cargados)
+function calcularScoreCompletoSync(maxSit, sinDeudas, periodos, chData, histData) {
+  let pts = 0;
+  const entidades = periodos.length ? (periodos[0].entidades||[]) : [];
+  const nroEnt = entidades.length;
+  const montoM = entidades.reduce((s,e) => s+(e.monto||0), 0) / 1000;
+
+  // Periodos activos
+  let nPH = 0, nPR = 0;
+  periodos.slice(0,24).forEach((p,i) => {
+    if ((p.entidades||[]).some(e => (e.monto||0) > 0)) {
+      nPH++; if (i < 6) nPR++;
+    }
+  });
+  nPH = Math.min(nPH, nPR * 4);
+
+  // 1. Situacion ponderada
+  let pSit;
+  if      (maxSit===1 && nPH>=12) pSit=400;
+  else if (maxSit===1 && nPH>=6)  pSit=300;
+  else if (maxSit===1 && nPH>=2)  pSit=200;
+  else if (maxSit===1)            pSit=150;
+  else if (maxSit===2)            pSit=200;
+  else if (maxSit===3)            pSit=50;
+  else                            pSit=0;
+  pts += pSit;
+
+  // 2. Historial 24m
+  let pHist = 75;
+  if (histData) {
+    const pH = (histData.results||{}).periodos||[];
+    const malos = pH.slice(0,24).filter(p =>
+      Math.max(...(p.entidades||[]).map(e=>e.situacion||1),1) > 1
+    ).length;
+    if (malos > 0) pHist = malos<=2 ? 75 : 0;
+    else pHist = nPH>=12 ? 150 : nPH>=3 ? 90 : nPH>=1 ? 40 : 60;
+  } else if (sinDeudas) { pHist = 60; }
+  pts += pHist;
+
+  // 3. Cheques
+  let pCheq = 75;
+  if (chData) {
+    const causales = chData.results?.causales||[];
+    let det=[]; causales.forEach(ca=>ca.entidades?.forEach(en=>det.push(...(en.detalle||[]))));
+    const act = det.filter(d=>!d.fechaPago||d.estadoMulta==='IMPAGA');
+    if (chData.sin_deudas||!det.length) pCheq = nPH>6?150:nPH>=1?70:40;
+    else if (!act.length) pCheq=75;
+    else pCheq=0;
+  }
+  pts += pCheq;
+
+  pts += 50; // mora neutral (comercial no tiene acceso)
+  pts += 50; // DSO neutral
+  pts += 30; // bodegas neutral
+
+  // Concentracion
+  let pConc;
+  if (!nroEnt||sinDeudas)               pConc=39;
+  else if (nroEnt===1&&montoM<50)       pConc=35;
+  else if (nroEnt<=2&&montoM<100)       pConc=28;
+  else if (nroEnt<=3&&montoM<500)       pConc=20;
+  else if (nroEnt<=5&&montoM<2000)      pConc=10;
+  else                                  pConc=0;
+  pts += pConc;
+
+  if (maxSit>=4) pts=Math.min(pts,250);
+  else if (maxSit===3) pts=Math.min(pts,400);
+
+  return Math.max(1,Math.min(999,Math.round(pts)));
+}
+
 function estimarScore(maxSit,sinDeudas,chData) {
+  // Cálculo local simplificado — solo se usa como fallback
+  // El score real viene del servidor via calcularScoreCompleto()
   let pts=0;
   if(sinDeudas||maxSit===1)pts+=400;else if(maxSit===2)pts+=200;else if(maxSit===3)pts+=50;
   pts+=75;
@@ -744,6 +824,111 @@ function estimarScore(maxSit,sinDeudas,chData) {
   pts+=50;pts+=50;pts+=30;pts+=39;
   if(maxSit>=4)pts=Math.min(pts,250);else if(maxSit===3)pts=Math.min(pts,400);
   return Math.max(1,Math.min(999,Math.round(pts)));
+}
+
+// Score completo via servidor — igual que la app principal
+async function calcularScoreCompleto(cuit) {
+  try {
+    const [deudasR, histR, chequesR] = await Promise.all([
+      fetch(API + '/deudas/' + cuit).catch(() => null),
+      fetch(API + '/deudas/' + cuit + '/historial').catch(() => null),
+      fetch(API + '/deudas/' + cuit + '/cheques').catch(() => null)
+    ]);
+    const bcraData  = deudasR  && deudasR.ok  ? await deudasR.json()   : null;
+    const histData  = histR    && histR.ok    ? await histR.json()      : null;
+    const chData    = chequesR && chequesR.ok ? await chequesR.json()   : null;
+    if (!bcraData) return null;
+
+    const results  = bcraData.results || {};
+    const periodos = results.periodos || [];
+    const sinDeudas = bcraData.sin_deudas;
+    let maxSit = 1, entidades = [], montoTotal = 0, nroEnt = 0;
+    if (periodos.length) {
+      entidades = periodos[0].entidades || [];
+      nroEnt = entidades.length;
+      if (entidades.length) {
+        maxSit = Math.max(...entidades.map(e => e.situacion||1));
+        montoTotal = entidades.reduce((s,e) => s+(e.monto||0), 0) / 1000;
+      }
+    } else if (sinDeudas) { maxSit = 1; }
+
+    // Periodos activos (con monto > 0)
+    let nPH = 0, nPR = 0;
+    periodos.slice(0,24).forEach((p,i) => {
+      if ((p.entidades||[]).some(e => (e.monto||0) > 0)) {
+        nPH++;
+        if (i < 6) nPR++;
+      }
+    });
+    nPH = Math.min(nPH, nPR * 4);
+
+    // 1. Situacion BCRA ponderada
+    let pSit;
+    if      (maxSit === 1 && nPH >= 12) pSit = 400;
+    else if (maxSit === 1 && nPH >= 6)  pSit = 300;
+    else if (maxSit === 1 && nPH >= 2)  pSit = 200;
+    else if (maxSit === 1)              pSit = 150;
+    else if (maxSit === 2)              pSit = 200;
+    else if (maxSit === 3)              pSit = 50;
+    else                                pSit = 0;
+
+    // 2. Historial 24m
+    let pHist = 75;
+    if (histData) {
+      const pH = (histData.results||{}).periodos || [];
+      const malosMeses = pH.slice(0,24).filter(p =>
+        Math.max(...(p.entidades||[]).map(e => e.situacion||1), 1) > 1
+      ).length;
+      if (malosMeses > 0) {
+        pHist = malosMeses <= 2 ? 75 : 0;
+      } else {
+        pHist = nPH >= 12 ? 150 : nPH >= 3 ? 90 : nPH >= 1 ? 40 : 60;
+      }
+    } else if (sinDeudas) { pHist = 60; }
+
+    // 3. Cheques
+    let pCheq = 75;
+    if (chData) {
+      const causales = chData.results?.causales || [];
+      let detalles = [];
+      causales.forEach(ca => ca.entidades?.forEach(en => detalles.push(...(en.detalle||[]))));
+      const activos = detalles.filter(d => !d.fechaPago || d.estadoMulta === 'IMPAGA');
+      if (chData.sin_deudas || !detalles.length) {
+        pCheq = nPH > 6 ? 150 : nPH >= 1 ? 70 : 40;
+      } else if (!activos.length) { pCheq = 75; }
+      else { pCheq = 0; }
+    }
+
+    // 4. Mora (no disponible en comercial = neutral)
+    const pMora = 50;
+
+    // 5. DSO neutral
+    const pDSO = 50;
+
+    // 6. Red bodegas neutral
+    const pBodegas = 30;
+
+    // 7. Concentracion
+    let pConc;
+    if (!nroEnt || sinDeudas)                    pConc = 39;
+    else if (nroEnt === 1 && montoTotal < 50)    pConc = 35;
+    else if (nroEnt <= 2 && montoTotal < 100)    pConc = 28;
+    else if (nroEnt <= 3 && montoTotal < 500)    pConc = 20;
+    else if (nroEnt <= 5 && montoTotal < 2000)   pConc = 10;
+    else                                          pConc = 0;
+
+    let pts = pSit + pHist + pCheq + pMora + pDSO + pBodegas + pConc;
+    if (maxSit >= 4) pts = Math.min(pts, 250);
+    else if (maxSit === 3) pts = Math.min(pts, 400);
+
+    const score = Math.max(1, Math.min(999, Math.round(pts)));
+    return {
+      score,
+      rango: scoreToRango(score),
+      color: scoreToColor(score),
+      emoji: score>=700?'🟢':score>=400?'🟡':score>=200?'🟠':'🔴'
+    };
+  } catch(e) { return null; }
 }
 function calcularCredito(s){
   if(s>=800)return '$5.000.000+';if(s>=700)return '$2.000.000 – $5.000.000';
