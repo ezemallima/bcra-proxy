@@ -240,23 +240,46 @@ def analizar_bodegas_server(cuit, nombre, mensajes):
         return False, ""
 
 def calcular_score_servidor(cuit, bcra_data, en_mora=None):
+    """Score completo con historial 24m, cheques y mora — igual al frontend."""
     puntos = 0
+    sin_deudas_real = bcra_data.get('sin_deudas', False)
     periodos = (bcra_data.get('results') or {}).get('periodos') or []
     max_sit = 1
     nro_entidades = 0
     monto_total_m = 0
+
     if periodos:
         entidades = periodos[0].get('entidades', [])
         nro_entidades = len(entidades)
         if entidades:
             max_sit = max((e.get('situacion', 1) or 1) for e in entidades)
             monto_total_m = sum(e.get('monto', 0) or 0 for e in entidades) / 1000
-    elif bcra_data.get('sin_deudas'):
+    elif sin_deudas_real:
         max_sit = 1
 
-    pts_sit = {1: 400, 2: 200, 3: 50}.get(max_sit, 0)
+    # Periodos activos (con monto > 0) igual que el frontend
+    n_periodos_h = 0
+    n_periodos_recientes = 0
+    for idx_p, p in enumerate(periodos[:24]):
+        tiene_deuda = any((e.get('monto') or 0) > 0 for e in p.get('entidades', []))
+        if tiene_deuda:
+            n_periodos_h += 1
+            if idx_p < 6:
+                n_periodos_recientes += 1
+    n_periodos_h = min(n_periodos_h, n_periodos_recientes * 4)
+
+    # 1. Situacion BCRA ponderada
+    if max_sit == 1:
+        if   n_periodos_h >= 12: pts_sit = 400
+        elif n_periodos_h >= 6:  pts_sit = 300
+        elif n_periodos_h >= 2:  pts_sit = 200
+        else:                    pts_sit = 150
+    elif max_sit == 2: pts_sit = 200
+    elif max_sit == 3: pts_sit = 50
+    else:              pts_sit = 0
     puntos += pts_sit
 
+    # 2. Historial 24m
     pts_hist = 75
     try:
         hist_cached = None
@@ -264,29 +287,38 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
         if os.path.exists(hist_path):
             with open(hist_path, 'r') as f:
                 hc = json.load(f)
-            if time.time() - hc.get('ts', 0) < 3600:
+            if time.time() - hc.get('ts', 0) < 86400:
                 hist_cached = hc.get('payload')
         if not hist_cached:
             for url_h in [BCRA_WORKER + "/deudas/" + cuit + "/historial",
                           BCRA_WORKER_2 + "/deudas/" + cuit + "/historial"]:
                 try:
-                    r_h = requests.get(url_h, timeout=10)
+                    r_h = requests.get(url_h, timeout=12)
                     if r_h.status_code == 200 and len(r_h.text.strip()) > 10:
                         hist_cached = r_h.json()
-                        with open(hist_path, 'w') as f:
-                            json.dump({'payload': hist_cached, 'ts': time.time()}, f)
+                        try:
+                            with open(hist_path, 'w') as f:
+                                json.dump({'payload': hist_cached, 'ts': time.time()}, f)
+                        except: pass
                         break
                 except: continue
         if hist_cached:
             periodos_h = (hist_cached.get('results') or {}).get('periodos') or []
-            meses_irreg = sum(1 for p in periodos_h
-                if any((e.get('situacion') or 1) > 1 for e in p.get('entidades', [])))
-            if meses_irreg == 0: pts_hist = 150
-            elif meses_irreg <= 2: pts_hist = 75
-            else: pts_hist = 0
+            meses_malos = sum(1 for p in periodos_h[:24]
+                if max(((e.get('situacion') or 1) for e in p.get('entidades', [])), default=1) > 1)
+            if meses_malos > 0:
+                pts_hist = 75 if meses_malos <= 2 else 0
+            else:
+                if   n_periodos_h >= 12: pts_hist = 150
+                elif n_periodos_h >= 3:  pts_hist = 90
+                elif n_periodos_h >= 1:  pts_hist = 40
+                else:                    pts_hist = 60
+        elif sin_deudas_real:
+            pts_hist = 60
     except: pass
     puntos += pts_hist
 
+    # 3. Cheques rechazados
     pts_cheq = 75
     try:
         cheq_cached = None
@@ -294,36 +326,42 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
         if os.path.exists(cheq_path):
             with open(cheq_path, 'r') as f:
                 cc = json.load(f)
-            if time.time() - cc.get('ts', 0) < 3600:
+            if time.time() - cc.get('ts', 0) < 86400:
                 cheq_cached = cc.get('payload')
         if not cheq_cached:
             for url_c in [BCRA_WORKER + "/deudas/" + cuit + "/cheques",
                           BCRA_WORKER_2 + "/deudas/" + cuit + "/cheques"]:
                 try:
-                    r_c = requests.get(url_c, timeout=10)
+                    r_c = requests.get(url_c, timeout=12)
                     if r_c.status_code == 200 and len(r_c.text.strip()) > 10:
                         cheq_cached = r_c.json()
-                        with open(cheq_path, 'w') as f:
-                            json.dump({'payload': cheq_cached, 'ts': time.time()}, f)
+                        try:
+                            with open(cheq_path, 'w') as f:
+                                json.dump({'payload': cheq_cached, 'ts': time.time()}, f)
+                        except: pass
                         break
                 except: continue
         if cheq_cached:
-            res_c = (cheq_cached.get('results') or {}) if isinstance(cheq_cached, dict) else {}
-            if cheq_cached.get('sin_deudas'): pts_cheq = 150
+            if cheq_cached.get('sin_deudas'):
+                pts_cheq = 150 if n_periodos_h > 6 else (70 if n_periodos_h >= 1 else 40)
             else:
+                res_c = (cheq_cached.get('results') or {}) if isinstance(cheq_cached, dict) else {}
                 causales = res_c.get('causales') or [] if isinstance(res_c, dict) else []
                 detalles = []
                 for causal in causales:
                     for ent in causal.get('entidades', []):
                         detalles.extend(ent.get('detalle', []))
                 total_ch = len(detalles)
-                activos_ch = sum(1 for d in detalles if not d.get('fechaPago') or d.get('estadoMulta') == 'IMPAGA')
-                if total_ch == 0: pts_cheq = 150
+                activos_ch = sum(1 for d in detalles
+                    if not d.get('fechaPago') or d.get('estadoMulta') == 'IMPAGA')
+                if total_ch == 0:
+                    pts_cheq = 150 if n_periodos_h > 6 else (70 if n_periodos_h >= 1 else 40)
                 elif activos_ch == 0: pts_cheq = 75
-                else: pts_cheq = 0
+                else:                 pts_cheq = 0
     except: pass
     puntos += pts_cheq
 
+    # 4. Mora Piattelli
     if en_mora is None:
         try:
             moras_path = os.path.join(DATA_DIR, 'moras_piattelli.json')
@@ -336,27 +374,29 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
             en_mora = False
 
     puntos += 0 if en_mora else 100
-    puntos += 50  # DSO individual neutral
+    puntos += 0 if en_mora else 50  # DSO: 0 si mora, 50 neutral
     puntos += 30  # Red bodegas neutral
 
-    if nro_entidades == 0 or bcra_data.get('sin_deudas'): pts_conc = 39
-    elif nro_entidades == 1 and monto_total_m < 50: pts_conc = 35
-    elif nro_entidades <= 2 and monto_total_m < 100: pts_conc = 28
-    elif nro_entidades <= 3 and monto_total_m < 500: pts_conc = 20
+    # 5. Concentracion deuda
+    if nro_entidades == 0 or sin_deudas_real: pts_conc = 39
+    elif nro_entidades == 1 and monto_total_m < 50:   pts_conc = 35
+    elif nro_entidades <= 2 and monto_total_m < 100:  pts_conc = 28
+    elif nro_entidades <= 3 and monto_total_m < 500:  pts_conc = 20
     elif nro_entidades <= 5 and monto_total_m < 2000: pts_conc = 10
     else: pts_conc = 0
     puntos += pts_conc
 
-    if en_mora: puntos = min(puntos, 300)
-    if max_sit >= 4: puntos = min(puntos, 250)
+    # Techos duros
+    if en_mora:        puntos = min(puntos, 300)
+    if max_sit >= 4:   puntos = min(puntos, 250)
     elif max_sit == 3: puntos = min(puntos, 400)
 
     score = max(1, min(999, round(puntos)))
     if score >= 700: rango, color, emoji = 'Excelente', '#16a34a', '🟢'
-    elif score >= 400: rango, color, emoji = 'Bueno', '#ca8a04', '🟡'
-    elif score >= 200: rango, color, emoji = 'Revisar', '#ea580c', '🟠'
+    elif score >= 400: rango, color, emoji = 'Bueno',    '#ca8a04', '🟡'
+    elif score >= 200: rango, color, emoji = 'Revisar',  '#ea580c', '🟠'
     elif score >= 100: rango, color, emoji = 'Alto riesgo', '#dc2626', '🔴'
-    else: rango, color, emoji = 'Rechazar', '#7f1d1d', '⛔'
+    else:              rango, color, emoji = 'Rechazar', '#7f1d1d', '⛔'
 
     return {"score": score, "rango": rango, "color": color, "emoji": emoji}
 
