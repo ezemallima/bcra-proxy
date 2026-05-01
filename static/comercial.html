@@ -378,26 +378,116 @@ function renderCartera(filtro) {
   }).join('');
 }
 
-// ── OPORTUNIDADES ──
-function renderOportunidades() {
-  const alertaCuits = new Set(ALERTAS.map(a => a.cuit));
-  const opps = CARTERA_LOCAL.filter(c => (c.score||0) >= 600 && !alertaCuits.has(c.cuit) && (c.ultimaSit||1) === 1)
-    .sort((a,b) => (b.score||0)-(a.score||0));
+// ── OPORTUNIDADES INTELIGENTES ──
+// Calcula días desde última compra por cliente (del historial de ventas del servidor)
+async function cargarUltimasCompras() {
+  if (window.ULTIMAS_COMPRAS) return; // ya cargado
+  window.ULTIMAS_COMPRAS = {};
+  try {
+    const r = await fetch(API + '/dso-ventas');
+    if (!r.ok) return;
+    const data = await r.json();
+    const ventas = data.ventas || [];
+    // Para cada cliente, guardar la fecha más reciente
+    ventas.forEach(function(v) {
+      if (!v.cliente || !v.fecha) return;
+      const cn = normNombre(v.cliente);
+      const fecha = new Date(v.fecha);
+      if (isNaN(fecha)) return;
+      if (!window.ULTIMAS_COMPRAS[cn] || fecha > window.ULTIMAS_COMPRAS[cn]) {
+        window.ULTIMAS_COMPRAS[cn] = fecha;
+      }
+    });
+    console.log('[oport] Últimas compras cargadas para', Object.keys(window.ULTIMAS_COMPRAS).length, 'clientes');
+  } catch(e) { console.warn('[oport] Error cargando ventas:', e); }
+}
+
+function diasDesdeUltimaCompra(nombre) {
+  if (!window.ULTIMAS_COMPRAS) return null;
+  const cn = normNombre(nombre);
+  const fecha = window.ULTIMAS_COMPRAS[cn];
+  if (!fecha) return null; // nunca compró (en el historial disponible)
+  const hoy = new Date();
+  hoy.setHours(0,0,0,0);
+  return Math.floor((hoy - fecha) / 86400000);
+}
+
+async function renderOportunidades() {
   const el = document.getElementById('oport-lista');
-  if (!opps.length) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">⚡</div><div class="empty-text">Calculando oportunidades...<br>Corré la verificación de cartera primero.</div></div>';
+  el.innerHTML = '<div class="empty"><div class="spinner" style="margin:0 auto 12px"></div><div class="empty-text">Analizando oportunidades...</div></div>';
+
+  await cargarUltimasCompras();
+
+  const alertaCuits = new Set(ALERTAS.map(a => a.cuit));
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+
+  // Filtro base: score ≥ 700, sin alertas, sit normal
+  const candidatos = CARTERA_LOCAL.filter(c =>
+    (c.score||0) >= 700 &&
+    !alertaCuits.has(c.cuit) &&
+    (c.ultimaSit||1) === 1
+  );
+
+  if (!candidatos.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">⚡</div><div class="empty-text">Corré la verificación de cartera primero para calcular scores.</div></div>';
     return;
   }
-  el.innerHTML = opps.map(c => {
+
+  // Enriquecer con días desde última compra
+  const opps = candidatos.map(function(c) {
+    const dias = diasDesdeUltimaCompra(c.nombre);
+    const saldosData = getSaldos(c.nombre);
+    const tieneSaldo = saldosData && saldosData.total_saldo > 0;
+
+    // Prioridad de oportunidad:
+    // 1. Score alto + sin compra hace 30+ días + sin saldo = contactar ya
+    // 2. Score alto + sin compra hace 15+ días = seguimiento
+    // 3. Score alto + compra reciente = mantener relación
+    let prioridad, motivo, color;
+    if (dias === null) {
+      prioridad = 2; motivo = 'Sin historial de compras — cliente potencial'; color = 'var(--accent)';
+    } else if (dias >= 45) {
+      prioridad = 1; motivo = 'Sin compras hace ' + dias + ' días — contactar urgente'; color = 'var(--red)';
+    } else if (dias >= 30) {
+      prioridad = 1; motivo = 'Sin compras hace ' + dias + ' días — momento de visitar'; color = 'var(--orange)';
+    } else if (dias >= 15) {
+      prioridad = 2; motivo = 'Última compra hace ' + dias + ' días'; color = 'var(--yellow)';
+    } else {
+      prioridad = 3; motivo = 'Compra reciente — hace ' + dias + ' días'; color = 'var(--green)';
+    }
+
+    return Object.assign({}, c, {dias, prioridad, motivo, color, tieneSaldo});
+  })
+  // Ordenar: primero los que no compran hace más tiempo y tienen mejor score
+  .sort(function(a, b) {
+    if (a.prioridad !== b.prioridad) return a.prioridad - b.prioridad;
+    const dA = a.dias === null ? 999 : a.dias;
+    const dB = b.dias === null ? 999 : b.dias;
+    if (dA !== dB) return dB - dA;
+    return (b.score||0) - (a.score||0);
+  });
+
+  if (!opps.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">⚡</div><div class="empty-text">Sin oportunidades detectadas.</div></div>';
+    return;
+  }
+
+  el.innerHTML = opps.map(function(c) {
     const score = c.score || 0;
-    const tags = [score>=700?'Score Excelente':'Score Bueno', 'Sit. Normal'];
-    if (!getSaldos(c.nombre)) tags.push('Sin saldo pendiente');
-    return `<div class="oport-card" onclick="abrirModalCliente('${c.cuit}','${esc(c.nombre)}')">
+    const tags = [];
+    if (score >= 700) tags.push('Score Excelente');
+    else tags.push('Score Bueno');
+    if (c.dias === null || c.dias >= 30) tags.push('🔥 Contactar');
+    if (!c.tieneSaldo) tags.push('Sin deuda pendiente');
+    if (c.tieneSaldo) tags.push('Saldo: $' + fmtM(getSaldos(c.nombre).total_saldo));
+
+    return `<div class="oport-card" style="border-left-color:${c.color}" onclick="abrirModalCliente('${c.cuit}','${esc(c.nombre)}')">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
         <div class="oport-nombre">${esc(c.nombre)}</div>
-        <div class="oport-score">${score}</div>
+        <div class="oport-score" style="color:${scoreToColor(score)}">${score}</div>
       </div>
-      <div style="font-size:11px;color:var(--text2)">${esc(c.ciudad||'')}</div>
+      <div style="font-size:12px;color:${c.color};font-weight:600;margin-top:4px;">${c.motivo}</div>
+      <div style="font-size:11px;color:var(--text2);margin-top:2px">${esc(c.ciudad||'')}</div>
       <div class="oport-tags">${tags.map(t=>`<span class="oport-tag">${t}</span>`).join('')}</div>
     </div>`;
   }).join('');
