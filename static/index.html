@@ -3171,8 +3171,8 @@ function renderAlertas() {
       var emojiA = ptsA>=700?'🟢':ptsA>=400?'🟡':ptsA>=200?'🟠':'🔴';
       if (a.scoreCompleto) {
         html += '<div style="font-size:12px;margin-top:4px;">Score Vende Seguro: <span style="font-weight:700;color:'+a.scoreColor+';">'+a.scoreEmoji+' '+a.scoreCompleto+'</span> <span style="color:#aaa;font-size:10px;">'+a.scoreRango+'</span></div>';
-      } else {
-        html += '<div style="font-size:12px;margin-top:4px;">Score parcial: <span style="font-weight:700;color:'+colorA+';">'+emojiA+' '+ptsA+'</span> <span style="color:#aaa;font-size:10px;">(consultá el CUIT para score completo)</span></div>';
+      } else if (ptsA > 0) {
+        html += '<div style="font-size:12px;margin-top:4px;color:#aaa;">Score: pendiente de verificación</div>';
       }
       if (a.tipo === 'bcra') {
         html += '<div style="font-size:13px;margin-top:8px;color:#991b1b;font-weight:500;">';
@@ -3238,13 +3238,27 @@ function renderAlertas() {
     html += '<div class="client-meta">CUIT: ' + c.cuit + verificadoTxt + '</div>';
     html += '</div>';
     html += '<div class="client-right" style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">';
-    // Score rápido basado en datos disponibles
-    var bcraDataC = {results: {periodos:[]}, sin_deudas: c.ultimaSit === 1};
-    if (c.ultimaSit) bcraDataC = {results: {periodos: [{entidades: [{situacion: c.ultimaSit, entidad: 'BCRA', monto:0}]}]}};
-    var scoreC = calcularVendeScore(c.cuit, bcraDataC, mora, buscarEnWSP(c.cuit)||[]);
-    var scoreColor = scoreC.color;
-    html += '<div style="font-size:13px;font-weight:700;color:'+scoreColor+';">'+scoreC.score+'</div>';
-    html += '<div style="font-size:10px;color:'+scoreColor+';">'+scoreC.emoji+' '+scoreC.rango+'</div>';
+    // Priorizar scoreCompleto del servidor si existe
+    var scoreColor, scoreNum, scoreEmoji, scoreRango;
+    var alertaC = alertas.find(function(a){ return a.cuit === c.cuit; });
+    if (alertaC && alertaC.scoreCompleto) {
+      scoreNum = alertaC.scoreCompleto;
+      scoreColor = alertaC.scoreColor;
+      scoreEmoji = alertaC.scoreEmoji;
+      scoreRango = alertaC.scoreRango;
+    } else if (c.scoreCompleto) {
+      scoreNum = c.scoreCompleto;
+      scoreColor = c.scoreColor;
+      scoreEmoji = c.scoreEmoji;
+      scoreRango = c.scoreRango;
+    } else {
+      var bcraDataC = {results: {periodos:[]}, sin_deudas: c.ultimaSit === 1};
+      if (c.ultimaSit) bcraDataC = {results: {periodos: [{entidades: [{situacion: c.ultimaSit, entidad: 'BCRA', monto:0}]}]}};
+      var scoreC = calcularVendeScore(c.cuit, bcraDataC, mora, buscarEnWSP(c.cuit)||[]);
+      scoreNum = scoreC.score; scoreColor = scoreC.color; scoreEmoji = scoreC.emoji; scoreRango = scoreC.rango;
+    }
+    html += '<div style="font-size:13px;font-weight:700;color:'+scoreColor+';">'+scoreNum+'</div>';
+    html += '<div style="font-size:10px;color:'+scoreColor+';">'+scoreEmoji+' '+scoreRango+'</div>';
     if (mora) html += '<span class="badge badge-mora">Mora</span>';
     if (buscarEnWSP(c.cuit)) html += '<span class="badge badge-wsp">En bodegas</span>';
     html += c.ultimaSit ? getBadge(c.ultimaSit) : '<span style="font-size:11px;color:#aaa;">Pendiente</span>';
