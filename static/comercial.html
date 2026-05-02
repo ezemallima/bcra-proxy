@@ -290,7 +290,23 @@ async function iniciarApp() {
       fetch(API + '/alertas').catch(() => null)
     ]);
     if (cr && cr.ok) CARTERA_LOCAL = await cr.json();
-    if (ar && ar.ok) { const ad = await ar.json(); ALERTAS = ad.alertas || []; }
+    if (ar && ar.ok) {
+      const ad = await ar.json();
+      ALERTAS = ad.alertas || [];
+      // Aplicar scores de alertas_cartera.json — misma fuente que app principal
+      const scoreMap = {};
+      (ad.cartera || []).forEach(c => { if(c.cuit && c.scoreCompleto) scoreMap[c.cuit] = c; });
+      CARTERA_LOCAL.forEach((c, i) => {
+        if (scoreMap[c.cuit]) {
+          CARTERA_LOCAL[i].score      = scoreMap[c.cuit].scoreCompleto;
+          CARTERA_LOCAL[i].scoreRango = scoreMap[c.cuit].scoreRango;
+          CARTERA_LOCAL[i].scoreColor = scoreMap[c.cuit].scoreColor;
+          CARTERA_LOCAL[i].scoreEmoji = scoreMap[c.cuit].scoreEmoji;
+          CARTERA_LOCAL[i].ultimaSit  = scoreMap[c.cuit].ultimaSit || c.ultimaSit || 1;
+        }
+      });
+      console.log('[init] Scores:', CARTERA_LOCAL.filter(c=>c.score).length + '/' + CARTERA_LOCAL.length);
+    }
   } catch(e) {}
   hideLoading();
   const n = CARTERA_LOCAL.length;
