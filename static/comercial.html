@@ -324,6 +324,122 @@ async function iniciarApp() {
   calcularYGuardarScoresCartera();
 }
 
+
+// ─── TABS ─────────────────────────────────────────────
+function switchTab(tab,btn){
+  document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+tab).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ─── BUSCADORES ───────────────────────────────────────
+function matchBusqueda(nombre, q) {
+  if (!q) return true;
+  const norm = s => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ');
+  const n = norm(nombre), qn = norm(q);
+  return qn.split(' ').filter(p=>p.length>0).every(p => n.includes(p));
+}
+
+function buscarEnCartera(q){
+  _buscarCartera=q.trim().toLowerCase();
+  const btn=document.querySelector('.filter-chip.active');
+  const filtro=btn?.textContent?.includes('Alertas')?'alertas':btn?.textContent?.includes('saldo')?'saldo':'todos';
+  renderCartera(filtro);
+}
+
+function buscarEnOport(q){
+  _buscarOport=q.trim().toLowerCase();
+  renderOportunidades();
+}
+
+// ─── CARTERA ──────────────────────────────────────────
+function filtrarCartera(filtro,btn){
+  document.querySelectorAll('.filter-chip').forEach(c=>c.classList.remove('active'));
+  btn.classList.add('active');
+  _buscarCartera=document.getElementById('buscar-cartera')?.value?.trim()?.toLowerCase()||'';
+  renderCartera(filtro);
+}
+
+function renderCartera(filtro){
+  const alertaCuits=new Set(ALERTAS.map(a=>a.cuit));
+  let lista=CARTERA_LOCAL;
+  if(filtro==='alertas') lista=lista.filter(c=>alertaCuits.has(c.cuit));
+  else if(filtro==='saldo') lista=lista.filter(c=>getSaldos(c.nombre));
+  if(_buscarCartera) lista=lista.filter(c=>matchBusqueda(c.nombre,_buscarCartera));
+
+  const el=document.getElementById('cartera-lista');
+  if(!lista.length){
+    el.innerHTML='<div class="empty"><div class="empty-icon">📭</div><div class="empty-text">Sin clientes en este filtro</div></div>';
+    return;
+  }
+  el.innerHTML=lista.map(c=>{
+    const sit=c.ultimaSit||1, score=c.score||null;
+    const tieneAlerta=alertaCuits.has(c.cuit), saldosData=getSaldos(c.nombre);
+    const sc=scoreToColor(score);
+    return `<div class="cliente-card${tieneAlerta?' alerta':''}" onclick="abrirModalCliente('${esc(c.cuit)}','${esc(c.nombre)}')">
+      <div class="cli-row1">
+        <div class="cli-nombre">${esc(c.nombre)}</div>
+        ${score?`<div class="score-badge" style="color:${sc}">${score}</div>`:''}
+      </div>
+      <div class="cli-row2">
+        <span class="cli-ciudad">${esc(c.ciudad||'')}</span>
+        <span class="sit-badge sit-${sit}" style="background:${sitBg(sit)}">${sit===1?'✓ Normal':'Sit '+sit}</span>
+        ${tieneAlerta?'<span class="alerta-badge">⚠ Alerta</span>':''}
+        ${saldosData?`<span class="saldo-badge">💰 $${fmtM(saldosData.total_saldo)}</span>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ─── OPORTUNIDADES ────────────────────────────────────
+async function renderOportunidades() {
+  const el=document.getElementById('oport-lista');
+  el.innerHTML='<div class="empty"><div class="spinner" style="margin:0 auto 12px"></div><div class="empty-text">Analizando oportunidades...</div></div>';
+  await cargarUltimasCompras();
+  const alertaCuits=new Set(ALERTAS.map(a=>a.cuit));
+  const candidatos=CARTERA_LOCAL
+    .filter(c=>(c.score||0)>=700 && !alertaCuits.has(c.cuit) && (c.ultimaSit||1)===1)
+    .map(c=>{
+      const dias=diasDesdeUltimaCompra(c.nombre);
+      const saldosData=getSaldos(c.nombre);
+      let motivo,tagClass;
+      if(dias===null)      {motivo='Sin historial de compras';tagClass='medio';}
+      else if(dias>=45)    {motivo=`Sin compras hace ${dias} días — contactar urgente`;tagClass='urgente';}
+      else if(dias>=30)    {motivo=`Sin compras hace ${dias} días — visitar`;tagClass='urgente';}
+      else if(dias>=15)    {motivo=`Última compra hace ${dias} días`;tagClass='medio';}
+      else                 {motivo=`Compra reciente — hace ${dias} días`;tagClass='';}
+      return {...c, dias, motivo, tagClass, tieneSaldo:!!(saldosData&&saldosData.total_saldo>0)};
+    })
+    .sort((a,b)=>(b.score||0)-(a.score||0));
+
+  if(!candidatos.length){
+    el.innerHTML='<div class="empty"><div class="empty-icon">⚡</div><div class="empty-text">Corré la verificación de cartera primero para calcular score</div></div>';
+    return;
+  }
+  let lista=_buscarOport?candidatos.filter(c=>matchBusqueda(c.nombre,_buscarOport)):candidatos;
+  if(!lista.length){
+    el.innerHTML=`<div class="empty"><div class="empty-icon">🔍</div><div class="empty-text">Sin resultados para "${esc(_buscarOport)}"</div></div>`;
+    return;
+  }
+  el.innerHTML=lista.map(c=>{
+    const score=c.score||0;
+    const tags=[`Score ${score>=800?'Excelente':'Bueno'} (${score})`];
+    if(c.dias===null||c.dias>=30) tags.push('🔥 Contactar');
+    if(!c.tieneSaldo) tags.push('Sin deuda pendiente');
+    if(c.tieneSaldo) tags.push('💰 Saldo pdte.');
+    return `<div class="oport-card" onclick="abrirModalCliente('${c.cuit}','${esc(c.nombre)}')">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div class="oport-nombre">${esc(c.nombre)}</div>
+        <div class="oport-score">${score}</div>
+      </div>
+      <div style="font-size:11px;color:var(--texto2);margin-top:2px">${esc(c.ciudad||'')}</div>
+      <div style="font-size:12px;font-weight:600;margin-top:4px;color:${c.tagClass==='urgente'?'var(--rojo)':c.tagClass==='medio'?'var(--amarillo)':'var(--verde)'}">${c.motivo}</div>
+      <div class="oport-tags">${tags.map(t=>`<span class="oport-tag ${t.includes('🔥')?'urgente':''}">${t}</span>`).join('')}</div>
+    </div>`;
+  }).join('');
+}
+
 // ─── RECARGAR CARTERA CON SCORES DEL SERVIDOR ───────
 async function calcularYGuardarScoresCartera() {
   const sinScore = CARTERA_LOCAL.filter(c => !c.score).length;
