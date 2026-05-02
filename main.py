@@ -234,8 +234,11 @@ def analizar_bodegas_server(cuit, nombre, mensajes):
         return False, ""
 
 def calcular_score_servidor(cuit, bcra_data, en_mora=None):
-    """Score completo con historial 24m, cheques y mora — igual al frontend."""
+    """Score completo con historial 24m, cheques y mora.
+    Mejoras Gemini: memoria de historial, hard caps sit4/5, puntos ganados con datos reales.
+    """
     puntos = 0
+    cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
     sin_deudas_real = bcra_data.get('sin_deudas', False)
     periodos = (bcra_data.get('results') or {}).get('periodos') or []
     max_sit = 1
@@ -251,20 +254,17 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
     elif sin_deudas_real:
         max_sit = 1
 
-    # Periodos activos — usar historial 24m si está disponible (igual que frontend)
-    # El historial se carga más abajo, pero necesitamos n_ph ahora
-    # Solución: cargar historial primero para n_ph correcto
-    hist_para_nph = None
+    # ── N_PERIODOS_H: usar historial guardado (sin límite de TTL) ──────────
+    hist_path = os.path.join(DATA_DIR, f'historial_{cuit_limpio}.json')
+    hist_cached = None
     try:
-        hist_path_nph = os.path.join(DATA_DIR, f'historial_{cuit}.json')
-        if os.path.exists(hist_path_nph):
-            with open(hist_path_nph, 'r') as f:
-                hc_nph = json.load(f)
-            if time.time() - hc_nph.get('ts', 0) < 86400:
-                hist_para_nph = hc_nph.get('payload')
+        if os.path.exists(hist_path):
+            with open(hist_path, 'r') as f:
+                hc = json.load(f)
+            hist_cached = hc.get('payload')  # sin límite de TTL — memoria del historial
     except: pass
 
-    periodos_para_nph = (hist_para_nph.get('results') or {}).get('periodos') or [] if hist_para_nph else periodos
+    periodos_para_nph = (hist_cached.get('results') or {}).get('periodos') or [] if hist_cached else periodos
 
     n_periodos_h = 0
     n_periodos_recientes = 0
@@ -276,7 +276,7 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
                 n_periodos_recientes += 1
     n_periodos_h = min(n_periodos_h, n_periodos_recientes * 4)
 
-    # 1. Situacion BCRA ponderada
+    # ── 1. SITUACIÓN BCRA ponderada ────────────────────────────────────────
     if max_sit == 1:
         if   n_periodos_h >= 12: pts_sit = 400
         elif n_periodos_h >= 6:  pts_sit = 300
@@ -287,46 +287,39 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
     else:              pts_sit = 0
     puntos += pts_sit
 
-    # 2. Historial 24m — reintenta hasta obtener respuesta válida
-    pts_hist = 75
-    hist_cached = None
-    hist_path = os.path.join(DATA_DIR, f'historial_{cuit}.json')
-    # Intentar caché en disco primero (menos de 24hs)
+    # ── 2. HISTORIAL 24M — intentar fresco, sino usar caché guardado ───────
+    pts_hist = 0  # 0 hasta tener datos reales
+    hist_fresco = None
     try:
-        if os.path.exists(hist_path):
-            with open(hist_path, 'r') as f:
-                hc = json.load(f)
-            if time.time() - hc.get('ts', 0) < 86400:
-                hist_cached = hc.get('payload')
+        if hist_cached and time.time() - json.load(open(hist_path)).get('ts', 0) < 86400:
+            hist_fresco = hist_cached
     except: pass
-    # Si no hay caché, consultar con reintentos hasta obtener respuesta
-    if not hist_cached:
-        urls_hist = [
-            BCRA_WORKERS[0] + "/deudas/" + cuit + "/historial",
-            BCRA_WORKERS[1] + "/deudas/" + cuit + "/historial",
-            "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit,
-        ]
-        for intento_global in range(6):  # hasta 6 intentos rotando endpoints
+
+    if not hist_fresco:
+        urls_hist = [w + "/deudas/" + cuit_limpio + "/historial" for w in BCRA_WORKERS] +                     ["https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit_limpio]
+        for intento_global in range(6):
             url_h = urls_hist[intento_global % len(urls_hist)]
             try:
                 r_h = requests.get(url_h, timeout=25, verify=False)
                 if r_h.status_code == 200 and len(r_h.text.strip()) > 10:
-                    hist_cached = r_h.json()
+                    hist_fresco = r_h.json()
                     try:
                         with open(hist_path, 'w') as f:
-                            json.dump({'payload': hist_cached, 'ts': time.time()}, f)
+                            json.dump({'payload': hist_fresco, 'ts': time.time()}, f)
                     except: pass
-                    print(f"[score] {cuit} historial OK intento {intento_global+1}", flush=True)
+                    print(f"[score] {cuit_limpio} historial OK intento {intento_global+1}", flush=True)
                     break
-                else:
-                    print(f"[score] {cuit} historial vacio intento {intento_global+1}, reintentando...", flush=True)
-                    time.sleep(3)
-            except Exception as e:
-                print(f"[score] {cuit} historial error intento {intento_global+1}: {e}", flush=True)
                 time.sleep(3)
-    # Calcular pts_hist
-    if hist_cached:
-        periodos_h = (hist_cached.get('results') or {}).get('periodos') or []
+            except Exception as e:
+                print(f"[score] {cuit_limpio} historial error intento {intento_global+1}: {e}", flush=True)
+                time.sleep(3)
+        # Si sigue sin datos frescos, usar caché guardado aunque sea viejo
+        if not hist_fresco and hist_cached:
+            hist_fresco = hist_cached
+            print(f"[score] {cuit_limpio} historial usando caché guardado (memoria)", flush=True)
+
+    if hist_fresco:
+        periodos_h = (hist_fresco.get('results') or {}).get('periodos') or []
         meses_malos = sum(1 for p in periodos_h[:24]
             if max(((e.get('situacion') or 1) for e in p.get('entidades', [])), default=1) > 1)
         if meses_malos > 0:
@@ -339,51 +332,57 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
     elif sin_deudas_real:
         pts_hist = 60
     else:
-        print(f"[score] {cuit} historial NO disponible tras reintentos — pts_hist=75 neutral", flush=True)
+        pts_hist = 0  # sin datos = 0, no neutral
+        print(f"[score] {cuit_limpio} historial sin datos — pts_hist=0", flush=True)
     puntos += pts_hist
 
-    # 3. Cheques rechazados — reintenta hasta obtener respuesta válida
-    pts_cheq = 75
+    # ── 3. CHEQUES — intentar fresco, sino usar caché guardado ─────────────
+    pts_cheq = 0  # 0 hasta tener datos reales
+    cheq_path = os.path.join(DATA_DIR, f'cheques_{cuit_limpio}.json')
     cheq_cached = None
-    cheq_path = os.path.join(DATA_DIR, f'cheques_{cuit}.json')
-    # Intentar caché en disco primero
     try:
         if os.path.exists(cheq_path):
             with open(cheq_path, 'r') as f:
                 cc = json.load(f)
-            if time.time() - cc.get('ts', 0) < 86400:
-                cheq_cached = cc.get('payload')
+            cheq_cached = cc.get('payload')  # sin límite de TTL
     except: pass
-    # Si no hay caché, consultar con reintentos
-    if not cheq_cached:
-        urls_cheq = [w + "/deudas/" + cuit + "/cheques" for w in BCRA_WORKERS] +                     ["https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/" + cuit]
+
+    cheq_fresco = None
+    try:
+        if cheq_cached and time.time() - json.load(open(cheq_path)).get('ts', 0) < 86400:
+            cheq_fresco = cheq_cached
+    except: pass
+
+    if not cheq_fresco:
+        urls_cheq = [w + "/deudas/" + cuit_limpio + "/cheques" for w in BCRA_WORKERS] +                     ["https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/" + cuit_limpio]
         for intento_global in range(6):
             url_c = urls_cheq[intento_global % len(urls_cheq)]
             try:
                 r_c = requests.get(url_c, timeout=25, verify=False)
                 if r_c.status_code == 200 and len(r_c.text.strip()) > 10:
-                    cheq_cached = r_c.json()
+                    cheq_fresco = r_c.json()
                     try:
                         with open(cheq_path, 'w') as f:
-                            json.dump({'payload': cheq_cached, 'ts': time.time()}, f)
+                            json.dump({'payload': cheq_fresco, 'ts': time.time()}, f)
                     except: pass
-                    print(f"[score] {cuit} cheques OK intento {intento_global+1}", flush=True)
+                    print(f"[score] {cuit_limpio} cheques OK intento {intento_global+1}", flush=True)
                     break
                 elif r_c.status_code == 404:
-                    cheq_cached = {"results": {"causales": []}, "sin_deudas": True}
+                    cheq_fresco = {"results": {"causales": []}, "sin_deudas": True}
                     break
-                else:
-                    print(f"[score] {cuit} cheques vacio intento {intento_global+1}, reintentando...", flush=True)
-                    time.sleep(3)
-            except Exception as e:
-                print(f"[score] {cuit} cheques error intento {intento_global+1}: {e}", flush=True)
                 time.sleep(3)
-    # Calcular pts_cheq
-    if cheq_cached:
-        if cheq_cached.get('sin_deudas'):
+            except Exception as e:
+                print(f"[score] {cuit_limpio} cheques error intento {intento_global+1}: {e}", flush=True)
+                time.sleep(3)
+        if not cheq_fresco and cheq_cached:
+            cheq_fresco = cheq_cached
+            print(f"[score] {cuit_limpio} cheques usando caché guardado (memoria)", flush=True)
+
+    if cheq_fresco:
+        if cheq_fresco.get('sin_deudas'):
             pts_cheq = 150 if n_periodos_h > 6 else (70 if n_periodos_h >= 1 else 40)
         else:
-            res_c = (cheq_cached.get('results') or {}) if isinstance(cheq_cached, dict) else {}
+            res_c = (cheq_fresco.get('results') or {}) if isinstance(cheq_fresco, dict) else {}
             causales = res_c.get('causales') or [] if isinstance(res_c, dict) else []
             detalles = []
             for causal in causales:
@@ -397,10 +396,11 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
             elif activos_ch == 0: pts_cheq = 75
             else:                 pts_cheq = 0
     else:
-        print(f"[score] {cuit} cheques NO disponibles tras reintentos — pts_cheq=75 neutral", flush=True)
+        pts_cheq = 0  # sin datos = 0, no neutral
+        print(f"[score] {cuit_limpio} cheques sin datos — pts_cheq=0", flush=True)
     puntos += pts_cheq
 
-    # 4. Mora Piattelli
+    # ── 4. MORA PIATTELLI — normalización de CUIT ──────────────────────────
     if en_mora is None:
         try:
             moras_path = os.path.join(DATA_DIR, 'moras_piattelli.json')
@@ -408,15 +408,17 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
                 moras_path = os.path.join(os.getcwd(), 'moras_piattelli.json')
             with open(moras_path, 'r', encoding='utf-8') as mf:
                 moras_d = json.load(mf)
-            en_mora = cuit.replace('-', '') in moras_d
+            # Normalizar ambos lados antes de comparar
+            moras_norm = {str(k).replace('-','').replace(' ','').strip() for k in moras_d.keys()}
+            en_mora = cuit_limpio in moras_norm
         except:
             en_mora = False
 
-    puntos += 0 if en_mora else 100
-    puntos += 0 if en_mora else 50  # DSO: 0 si mora, 50 neutral
-    puntos += 30  # Red bodegas neutral
+    puntos += 0 if en_mora else 100   # Historial Piattelli
+    puntos += 0 if en_mora else 25    # DSO: 25 si sin datos (no 50 neutral inflado)
+    puntos += 15                       # Red bodegas: 15 si sin datos (no 30 neutral inflado)
 
-    # 5. Concentracion deuda
+    # ── 5. CONCENTRACIÓN DEUDA ─────────────────────────────────────────────
     if nro_entidades == 0 or sin_deudas_real: pts_conc = 39
     elif nro_entidades == 1 and monto_total_m < 50:   pts_conc = 35
     elif nro_entidades <= 2 and monto_total_m < 100:  pts_conc = 28
@@ -425,9 +427,10 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
     else: pts_conc = 0
     puntos += pts_conc
 
-    # Techos duros
+    # ── TECHOS DUROS — se aplican al final ─────────────────────────────────
     if en_mora:        puntos = min(puntos, 300)
-    if max_sit >= 4:   puntos = min(puntos, 250)
+    if max_sit >= 5:   puntos = min(puntos, 1)    # sit5/6 = irrecuperable
+    elif max_sit >= 4: puntos = min(puntos, 100)  # sit4 = máx 100 (más estricto)
     elif max_sit == 3: puntos = min(puntos, 400)
 
     score = max(1, min(999, round(puntos)))
