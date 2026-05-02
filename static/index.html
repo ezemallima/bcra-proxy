@@ -3019,8 +3019,12 @@ function filtrarListaCartera(q) {
 
 function filtrarListaAlertas(q) {
   var query = q.trim().toLowerCase();
-  // Filtrar en estado de cartera BCRA
-  var items = document.querySelectorAll('#cartera-bcra-lista .client-row');
+  var listaEl = document.getElementById('cartera-bcra-lista');
+  var items = listaEl.querySelectorAll('.client-row');
+  if (items.length === 0) {
+    // renderAlertas aún no corrió, esperar
+    return;
+  }
   items.forEach(function(item) {
     var texto = item.textContent.toLowerCase();
     item.style.display = (!query || texto.includes(query)) ? '' : 'none';
