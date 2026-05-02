@@ -287,11 +287,13 @@ function doLogin() {
   if (!key){err.textContent='Nombre no encontrado.';err.style.display='block';return;}
   if (cuit !== VENDEDORES[key]){err.textContent='CUIT no coincide.';err.style.display='block';return;}
   SESSION = {nombre:key, cuit};
+  localStorage.setItem('vendeSeguro_session', JSON.stringify(SESSION));
   iniciarApp();
 }
 
 function doLogout() {
   SESSION=null; CARTERA_LOCAL=[]; SALDOS_MAP={};
+  localStorage.removeItem('vendeSeguro_session');
   document.getElementById('app').style.display='none';
   document.getElementById('login-screen').style.display='flex';
   document.getElementById('inp-pin').value='';
@@ -950,6 +952,19 @@ function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').
 
 document.getElementById('cuit-input').addEventListener('keypress',e=>{if(e.key==='Enter')consultarCuit();});
 document.getElementById('inp-pin').addEventListener('keypress',e=>{if(e.key==='Enter')doLogin();});
+
+// Auto-login si hay sesión guardada
+(function() {
+  try {
+    const saved = localStorage.getItem('vendeSeguro_session');
+    if (saved) {
+      SESSION = JSON.parse(saved);
+      if (SESSION && SESSION.nombre && SESSION.cuit) {
+        iniciarApp();
+      }
+    }
+  } catch(e) { localStorage.removeItem('vendeSeguro_session'); }
+})();
 </script>
 </body>
 </html>
