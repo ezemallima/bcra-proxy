@@ -567,6 +567,11 @@
         <button class="primary" onclick="agregarCliente()">Agregar</button>
       </div>
     </div>
+    <div style="margin-bottom:10px;">
+      <input type="text" id="buscar-cartera-admin" placeholder="🔍 Buscar por nombre o CUIT..." 
+        style="width:100%;padding:9px 12px;border:1px solid var(--azul-borde);border-radius:8px;font-size:14px;background:#fff;color:var(--texto);outline:none;"
+        oninput="filtrarListaCartera(this.value)" translate="no">
+    </div>
     <div id="lista-clientes"><div class="empty-state">No hay clientes en seguimiento.</div></div>
   </div>
 
@@ -678,6 +683,11 @@
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
         <div class="card-title" style="margin-bottom:0;">Estado actual de la cartera</div>
         <div style="font-size:12px;color:#888;" id="ultima-verificacion"></div>
+      </div>
+      <div style="margin-bottom:10px;">
+        <input type="text" id="buscar-alertas-admin" placeholder="🔍 Buscar por nombre o CUIT..."
+          style="width:100%;padding:9px 12px;border:1px solid var(--azul-borde);border-radius:8px;font-size:14px;background:#fff;color:var(--texto);outline:none;"
+          oninput="filtrarListaAlertas(this.value)" translate="no">
       </div>
       <div id="cartera-bcra-lista"><div class="empty-state">No hay clientes en la cartera.<br>Agregá clientes en la pestaña Cartera.</div></div>
     </div>
@@ -2996,6 +3006,25 @@ function verClienteHistorial(cuit) {
   document.querySelectorAll('.tab')[0].click();
   document.getElementById('cuit-input').value = cuit;
   consultarCliente();
+}
+
+function filtrarListaCartera(q) {
+  var query = q.trim().toLowerCase();
+  var items = document.querySelectorAll('#lista-clientes .client-row');
+  items.forEach(function(item) {
+    var texto = item.textContent.toLowerCase();
+    item.style.display = (!query || texto.includes(query)) ? '' : 'none';
+  });
+}
+
+function filtrarListaAlertas(q) {
+  var query = q.trim().toLowerCase();
+  // Filtrar en estado de cartera BCRA
+  var items = document.querySelectorAll('#cartera-bcra-lista .client-row');
+  items.forEach(function(item) {
+    var texto = item.textContent.toLowerCase();
+    item.style.display = (!query || texto.includes(query)) ? '' : 'none';
+  });
 }
 
 function limpiarHistorial() {
