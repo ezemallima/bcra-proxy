@@ -6,6 +6,7 @@ import os
 import json
 import time
 import threading
+import gc
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -154,48 +155,41 @@ def gemini_request(payload, timeout=250):
 
     return None, "No hay APIs de IA disponibles."
 
-BCRA_WORKER = "https://orange-recipe-3bb1.ezetombacapo.workers.dev"
+BCRA_WORKER   = "https://orange-recipe-3bb1.ezetombacapo.workers.dev"
 BCRA_WORKER_2 = "https://little-feather-5b68.ezequielmallima.workers.dev"
+BCRA_WORKER_3 = "https://square-pine-e6b4.ezequielmallima.workers.dev"
+BCRA_WORKER_4 = "https://fancy-feather-7ead.ezequielmallima.workers.dev"
+BCRA_WORKER_5 = "https://summer-wood-9639.ezequielmallima.workers.dev"
+BCRA_WORKERS  = [BCRA_WORKER, BCRA_WORKER_2, BCRA_WORKER_3, BCRA_WORKER_4, BCRA_WORKER_5]
 
 def consultar_bcra(cuit, reintentos=3):
-    endpoints = [
-        (BCRA_WORKER + "/deudas/" + cuit, "Worker1"),
-        (BCRA_WORKER_2 + "/deudas/" + cuit, "Worker2"),
-        ("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit, "directo")
-    ]
+    # Rotar entre los 5 workers + BCRA directo
+    endpoints = [(w + "/deudas/" + cuit, f"Worker{i+1}") for i, w in enumerate(BCRA_WORKERS)]
+    endpoints.append(("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit, "directo"))
     for ep_url, via in endpoints:
-        intentos = reintentos if "Worker" in via else 2
-        for i in range(intentos):
-            try:
-                print(f"[bcra] {cuit} consultando via {via}...", flush=True)
-                r = requests.get(ep_url, timeout=25, verify=False)
-                if r.status_code == 200:
-                    text = r.text.strip()
-                    if not text or len(text) < 10:
-                        print(f"[bcra] Respuesta vacía via {via} para {cuit} — siguiente", flush=True)
-                        break
-                    data = r.json()
-                    if data.get('error'):
-                        if i < intentos - 1:
-                            time.sleep(3)
-                            continue
-                        break
-                    results = data.get('results') or {}
-                    periodos = results.get('periodos') or []
-                    data['sin_deudas'] = len(periodos) == 0
-                    print(f"[bcra] {cuit} OK via {via}", flush=True)
-                    return data, None
-                elif r.status_code == 404:
-                    return {"results": {"denominacion": "", "periodos": []}, "sin_deudas": True}, None
-                else:
-                    print(f"[bcra] HTTP {r.status_code} via {via} para {cuit}", flush=True)
-                    break
-            except Exception as e:
-                print(f"[bcra] Error via {via} intento {i+1} para {cuit}: {e}", flush=True)
-                if i < intentos - 1:
-                    time.sleep(3)
+        try:
+            print(f"[bcra] {cuit} consultando via {via}...", flush=True)
+            r = requests.get(ep_url, timeout=25, verify=False)
+            if r.status_code == 200:
+                text = r.text.strip()
+                if not text or len(text) < 10:
+                    print(f"[bcra] Vacío via {via} para {cuit}", flush=True)
                     continue
-                break
+                data = r.json()
+                if data.get('error'):
+                    continue
+                results = data.get('results') or {}
+                periodos = results.get('periodos') or []
+                data['sin_deudas'] = len(periodos) == 0
+                print(f"[bcra] {cuit} OK via {via}", flush=True)
+                return data, None
+            elif r.status_code == 404:
+                return {"results": {"denominacion": "", "periodos": []}, "sin_deudas": True}, None
+            else:
+                print(f"[bcra] HTTP {r.status_code} via {via} para {cuit}", flush=True)
+        except Exception as e:
+            print(f"[bcra] Error via {via} para {cuit}: {e}", flush=True)
+            continue
     return None, "sin_respuesta"
 
 def analizar_bodegas_server(cuit, nombre, mensajes):
@@ -257,10 +251,24 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
     elif sin_deudas_real:
         max_sit = 1
 
-    # Periodos activos (con monto > 0) igual que el frontend
+    # Periodos activos — usar historial 24m si está disponible (igual que frontend)
+    # El historial se carga más abajo, pero necesitamos n_ph ahora
+    # Solución: cargar historial primero para n_ph correcto
+    hist_para_nph = None
+    try:
+        hist_path_nph = os.path.join(DATA_DIR, f'historial_{cuit}.json')
+        if os.path.exists(hist_path_nph):
+            with open(hist_path_nph, 'r') as f:
+                hc_nph = json.load(f)
+            if time.time() - hc_nph.get('ts', 0) < 86400:
+                hist_para_nph = hc_nph.get('payload')
+    except: pass
+
+    periodos_para_nph = (hist_para_nph.get('results') or {}).get('periodos') or [] if hist_para_nph else periodos
+
     n_periodos_h = 0
     n_periodos_recientes = 0
-    for idx_p, p in enumerate(periodos[:24]):
+    for idx_p, p in enumerate(periodos_para_nph[:24]):
         tiene_deuda = any((e.get('monto') or 0) > 0 for e in p.get('entidades', []))
         if tiene_deuda:
             n_periodos_h += 1
@@ -294,8 +302,8 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
     # Si no hay caché, consultar con reintentos hasta obtener respuesta
     if not hist_cached:
         urls_hist = [
-            BCRA_WORKER + "/deudas/" + cuit + "/historial",
-            BCRA_WORKER_2 + "/deudas/" + cuit + "/historial",
+            BCRA_WORKERS[0] + "/deudas/" + cuit + "/historial",
+            BCRA_WORKERS[1] + "/deudas/" + cuit + "/historial",
             "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit,
         ]
         for intento_global in range(6):  # hasta 6 intentos rotando endpoints
@@ -348,11 +356,7 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
     except: pass
     # Si no hay caché, consultar con reintentos
     if not cheq_cached:
-        urls_cheq = [
-            BCRA_WORKER + "/deudas/" + cuit + "/cheques",
-            BCRA_WORKER_2 + "/deudas/" + cuit + "/cheques",
-            "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/" + cuit,
-        ]
+        urls_cheq = [w + "/deudas/" + cuit + "/cheques" for w in BCRA_WORKERS] +                     ["https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/" + cuit]
         for intento_global in range(6):
             url_c = urls_cheq[intento_global % len(urls_cheq)]
             try:
@@ -559,6 +563,7 @@ def ejecutar_verificacion(cartera_data):
                 pass
 
             cartera_actualizada.append(cliente_actualizado)
+            gc.collect()  # liberar memoria después de cada cliente
 
             # Guardado parcial cada 50 clientes
             if (i + 1) % 50 == 0:
@@ -895,11 +900,7 @@ def _cheques_cache_set(cuit, payload):
 
 @app.route("/deudas/<cuit>/cheques")
 def get_cheques(cuit):
-    urls = [
-        BCRA_WORKER + "/deudas/" + cuit + "/cheques",
-        BCRA_WORKER_2 + "/deudas/" + cuit + "/cheques",
-        "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/" + cuit
-    ]
+    urls = [w + "/deudas/" + cuit + "/cheques" for w in BCRA_WORKERS] +            ["https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/" + cuit]
     todos_vacios = True
     for url_idx, url in enumerate(urls):
         via = "Worker1" if url_idx == 0 else "Worker2" if url_idx == 1 else "directo"
@@ -937,11 +938,7 @@ def get_cheques(cuit):
 
 @app.route("/deudas/<cuit>/historial")
 def get_historial(cuit):
-    urls = [
-        BCRA_WORKER + "/deudas/" + cuit + "/historial",
-        BCRA_WORKER_2 + "/deudas/" + cuit + "/historial",
-        "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit
-    ]
+    urls = [w + "/deudas/" + cuit + "/historial" for w in BCRA_WORKERS] +            ["https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit]
     for url_idx, url in enumerate(urls):
         via = "Worker1" if url_idx == 0 else "Worker2" if url_idx == 1 else "directo"
         for intento in range(2):
@@ -1399,3 +1396,6 @@ def upload_saldos_facturas():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port, threaded=True)
+
+# Para Gunicorn (Render): 1 worker + 4 threads = eficiente en 512MB RAM
+# Comando: gunicorn main:app --workers 1 --threads 4 --timeout 120 --keep-alive 5
