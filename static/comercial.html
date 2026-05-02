@@ -415,7 +415,7 @@ function renderCartera(filtro) {
     const tieneAlerta = alertaCuits.has(c.cuit);
     const saldosData = getSaldos(c.nombre);
     const scoreColor = scoreToColor(score);
-    return `<div class="cliente-card${tieneAlerta?' alerta':''}" onclick="abrirModalCliente('${esc(c.cuit)}','${esc(c.nombre)}')">
+    return `<div class="cliente-card${tieneAlerta?' alerta':''}" data-cuit="${esc(c.cuit)}" data-nombre="${esc(c.nombre)}" onclick="abrirModalCliente(this.dataset.cuit, this.dataset.nombre)">
       <div class="cliente-row1">
         <div class="cliente-nombre">${esc(c.nombre)}</div>
         ${score ? `<div class="score-badge" style="color:${scoreColor}">${score}</div>` : ''}
@@ -543,7 +543,7 @@ async function renderOportunidades() {
     if (!c.tieneSaldo) tags.push('Sin deuda pendiente');
     if (c.tieneSaldo) tags.push('Saldo: $' + fmtM(getSaldos(c.nombre).total_saldo));
 
-    return `<div class="oport-card" onclick="abrirModalCliente('${c.cuit}','${esc(c.nombre)}')">
+    return `<div class="oport-card" data-cuit="${c.cuit}" data-nombre="${esc(c.nombre)}" onclick="abrirModalCliente(this.dataset.cuit, this.dataset.nombre)">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
         <div class="oport-nombre">${esc(c.nombre)}</div>
         <div class="oport-score" style="color:${scoreToColor(score)}">${score}</div>
