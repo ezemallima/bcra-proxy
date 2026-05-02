@@ -7,142 +7,167 @@
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
 :root {
-  --azul-oscuro:#0f2d52; --azul-medio:#1a56a0; --azul-claro:#2563eb;
-  --azul-suave:#eff6ff; --azul-borde:#bfdbfe; --blanco:#ffffff; --fondo:#f0f5ff;
-  --texto:#0f172a; --texto-suave:#64748b;
-  --verde:#166534; --verde-bg:#dcfce7;
-  --amarillo:#ca8a04; --naranja:#ea580c;
-  --rojo:#991b1b; --rojo-bg:#fee2e2;
-  --r:12px;
+  --azul: #003366;
+  --azul-medio: #1a56a0;
+  --azul-claro: #2563eb;
+  --azul-suave: #eff6ff;
+  --azul-borde: #bfdbfe;
+  --bg: #f0f5ff;
+  --surface: #ffffff;
+  --texto: #0f172a;
+  --texto2: #64748b;
+  --verde: #16a34a;
+  --verde-bg: #dcfce7;
+  --amarillo: #ca8a04;
+  --naranja: #ea580c;
+  --rojo: #dc2626;
+  --rojo-bg: #fee2e2;
+  --radius: 12px;
+  --tab-h: 62px;
 }
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-body{font-family:'DM Sans',sans-serif;background:var(--fondo);color:var(--texto);min-height:100vh}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--texto);min-height:100vh;}
 
 /* LOGIN */
-#login-screen{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;background:linear-gradient(135deg,#0f2d52 0%,#1a56a0 60%,#2563eb 100%)}
-.login-logo{width:64px;height:64px;background:rgba(255,255,255,.15);border-radius:18px;display:flex;align-items:center;justify-content:center;font-size:28px;margin-bottom:24px}
-.login-title{font-family:'Syne',sans-serif;font-size:28px;font-weight:800;color:#fff;margin-bottom:4px;letter-spacing:-.5px}
-.login-sub{font-size:13px;color:#93c5fd;margin-bottom:40px;font-style:italic}
-.login-form{width:100%;max-width:360px;display:flex;flex-direction:column;gap:14px}
-.field-label{font-size:11px;font-weight:600;color:#93c5fd;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px}
-.field-input{width:100%;background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.2);border-radius:10px;padding:14px 16px;font-family:'DM Sans',sans-serif;font-size:15px;color:#fff;outline:none;transition:border-color .2s}
-.field-input:focus{border-color:rgba(255,255,255,.6)}
-.field-input::placeholder{color:rgba(255,255,255,.4)}
-.btn-login{width:100%;background:#fff;border:none;border-radius:10px;padding:16px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:700;color:var(--azul-oscuro);cursor:pointer;margin-top:8px}
-.login-error{background:rgba(220,38,38,.2);border:1px solid rgba(220,38,38,.4);border-radius:8px;padding:12px 14px;font-size:13px;color:#fca5a5;text-align:center;display:none}
+#login-screen{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;background:linear-gradient(135deg,#003366 0%,#1a56a0 60%,#2563eb 100%);}
+.login-logo{width:64px;height:64px;background:rgba(255,255,255,0.15);border-radius:18px;display:flex;align-items:center;justify-content:center;font-size:28px;margin-bottom:20px;box-shadow:0 8px 32px rgba(0,0,0,0.2);}
+.login-title{font-family:'Syne',sans-serif;font-size:28px;font-weight:800;color:#fff;margin-bottom:4px;letter-spacing:-0.5px;}
+.login-sub{font-size:13px;color:#93c5fd;margin-bottom:36px;font-style:italic;}
+.login-form{width:100%;max-width:360px;display:flex;flex-direction:column;gap:14px;}
+.f-label{font-size:11px;font-weight:600;color:#93c5fd;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:5px;}
+.f-input{width:100%;background:rgba(255,255,255,0.1);border:1.5px solid rgba(255,255,255,0.2);border-radius:10px;padding:13px 15px;font-family:'DM Sans',sans-serif;font-size:15px;color:#fff;outline:none;transition:border-color .2s;}
+.f-input:focus{border-color:rgba(255,255,255,.6);}
+.f-input::placeholder{color:rgba(255,255,255,.4);}
+.btn-login{width:100%;background:#fff;border:none;border-radius:10px;padding:15px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:700;color:var(--azul);cursor:pointer;margin-top:6px;}
+.login-err{background:rgba(220,38,38,.2);border:1px solid rgba(220,38,38,.4);border-radius:8px;padding:11px 13px;font-size:13px;color:#fca5a5;text-align:center;display:none;}
 
 /* APP */
-#app{display:none;flex-direction:column;min-height:100vh}
-.app-header{background:var(--azul-oscuro);padding:14px 16px 12px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(15,45,82,.25)}
-.header-name{font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:#fff}
-.header-sub{font-size:11px;color:#93c5fd}
-.btn-logout{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:6px 12px;font-size:12px;color:#fff;cursor:pointer;font-family:'DM Sans',sans-serif}
-.tab-content{flex:1;overflow-y:auto;padding-bottom:74px}
-.tab-pane{display:none;padding:16px}
-.tab-pane.active{display:block}
-.bottom-tabs{position:fixed;bottom:0;left:0;right:0;height:62px;background:var(--blanco);border-top:1px solid var(--azul-borde);display:flex;z-index:100;box-shadow:0 -2px 8px rgba(37,99,235,.08)}
-.tab-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border:none;background:none;color:var(--texto-suave);cursor:pointer;font-family:'DM Sans',sans-serif;transition:color .2s}
-.tab-btn.active{color:var(--azul-claro)}
-.tab-icon{font-size:20px;line-height:1}
-.tab-label{font-size:10px;font-weight:600;letter-spacing:.3px}
+#app{display:none;flex-direction:column;min-height:100vh;}
+.app-header{background:var(--azul);padding:13px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(0,51,102,.3);}
+.hdr-name{font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:#fff;}
+.hdr-sub{font-size:11px;color:#93c5fd;}
+.btn-logout{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:6px 12px;font-size:12px;color:#fff;cursor:pointer;font-family:'DM Sans',sans-serif;}
+
+.tab-content{flex:1;overflow-y:auto;padding-bottom:calc(var(--tab-h) + 16px);}
+.tab-pane{display:none;padding:16px;}
+.tab-pane.active{display:block;}
+
+.bottom-tabs{position:fixed;bottom:0;left:0;right:0;height:var(--tab-h);background:var(--surface);border-top:1px solid var(--azul-borde);display:flex;z-index:100;box-shadow:0 -2px 8px rgba(37,99,235,.08);}
+.tab-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:none;background:none;color:var(--texto2);cursor:pointer;font-family:'DM Sans',sans-serif;transition:color .2s;}
+.tab-btn.active{color:var(--azul-claro);}
+.tab-icon{font-size:20px;line-height:1;}
+.tab-label{font-size:10px;font-weight:600;}
 
 /* CARDS */
-.card{background:var(--blanco);border:1px solid var(--azul-borde);border-radius:var(--r);padding:14px;margin-bottom:10px;box-shadow:0 1px 4px rgba(37,99,235,.06)}
-.card-title{font-size:11px;font-weight:600;color:var(--azul-claro);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px}
-.section-title{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;margin-bottom:4px;color:var(--azul-oscuro);letter-spacing:-.5px}
-.section-sub{font-size:13px;color:var(--texto-suave);margin-bottom:14px}
+.card{background:var(--surface);border:1px solid var(--azul-borde);border-radius:var(--radius);padding:14px;margin-bottom:10px;box-shadow:0 1px 4px rgba(37,99,235,.06);}
+.card-title{font-size:11px;font-weight:600;color:var(--azul-claro);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;}
 
 /* BUSCAR */
-.buscar-input{width:100%;padding:10px 14px;border:1.5px solid var(--azul-borde);border-radius:10px;font-size:14px;font-family:'DM Sans',sans-serif;background:var(--blanco);color:var(--texto);outline:none;margin-bottom:12px;box-shadow:0 1px 4px rgba(37,99,235,.06)}
-.buscar-input:focus{border-color:var(--azul-claro)}
+.buscar-input{width:100%;padding:10px 14px;border:1.5px solid var(--azul-borde);border-radius:10px;font-size:14px;font-family:'DM Sans',sans-serif;background:var(--surface);color:var(--texto);outline:none;margin-bottom:12px;box-shadow:0 1px 4px rgba(37,99,235,.06);}
+.buscar-input:focus{border-color:var(--azul-claro);}
 
-/* CONSULTA */
-.search-box{background:var(--blanco);border:1.5px solid var(--azul-borde);border-radius:var(--r);padding:12px 14px;display:flex;gap:10px;align-items:center;margin-bottom:14px;box-shadow:0 1px 4px rgba(37,99,235,.06)}
-.search-input{flex:1;background:none;border:none;outline:none;font-family:'DM Sans',sans-serif;font-size:15px;color:var(--texto)}
-.search-input::placeholder{color:var(--texto-suave)}
-.btn-search{background:var(--azul-claro);border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;color:#fff;cursor:pointer;font-family:'DM Sans',sans-serif}
-.score-hero{display:flex;align-items:center;gap:14px;margin-bottom:4px}
-.score-num{font-size:48px;font-weight:800;letter-spacing:-2px;line-height:1;font-family:'Syne',sans-serif}
-.score-rango{font-size:16px;font-weight:700}
-.score-bar-wrap{margin-top:10px;background:var(--fondo);border-radius:4px;height:6px;overflow:hidden}
-.score-bar{height:100%;border-radius:4px;transition:width .6s ease}
-.sit-grid{display:flex;flex-wrap:wrap;gap:8px}
-.sit-chip{background:var(--azul-suave);border-radius:8px;padding:8px 12px;font-size:12px;display:flex;flex-direction:column;gap:2px;flex:1;min-width:100px}
-.sit-chip-label{color:var(--texto-suave);font-size:10px;text-transform:uppercase;letter-spacing:.5px}
-.sit-chip-val{font-weight:700;font-size:13px}
-.sit-1{color:var(--verde)}.sit-2{color:var(--amarillo)}.sit-3{color:var(--naranja)}.sit-4,.sit-5,.sit-6{color:var(--rojo)}
-.credito-box{background:linear-gradient(135deg,var(--azul-suave),#dbeafe);border:1px solid var(--azul-borde);border-radius:var(--r);padding:14px;margin-bottom:10px}
-.credito-label{font-size:11px;color:var(--azul-claro);text-transform:uppercase;letter-spacing:.8px;font-weight:600;margin-bottom:6px}
-.credito-monto{font-size:24px;font-weight:800;font-family:'Syne',sans-serif;color:var(--azul-oscuro)}
-.credito-nota{font-size:12px;color:var(--texto-suave);margin-top:4px}
-.ia-texto{font-size:13px;line-height:1.6;color:var(--texto)}
-.ia-loading{display:flex;align-items:center;gap:10px;color:var(--texto-suave);font-size:13px}
-.spinner{width:18px;height:18px;border:2px solid var(--azul-borde);border-top-color:var(--azul-claro);border-radius:50%;animation:spin .8s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-.row-data{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--azul-borde)}
-.row-data:last-child{border-bottom:none}
-.row-key{font-size:12px;color:var(--texto-suave)}
-.row-val{font-size:13px;font-weight:600;text-align:right}
-.cheque-item{background:var(--azul-suave);border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between}
-.cheque-monto{font-weight:700;font-size:13px}
-.cheque-estado{font-size:10px;font-weight:600;padding:2px 8px;border-radius:4px}
-.estado-impago{background:var(--rojo-bg);color:var(--rojo)}
-.estado-pagado{background:var(--verde-bg);color:var(--verde)}
+/* FILTROS */
+.filter-row{display:flex;gap:8px;margin-bottom:12px;overflow-x:auto;padding-bottom:4px;}
+.filter-chip{background:var(--surface);border:1px solid var(--azul-borde);border-radius:20px;padding:6px 14px;font-size:12px;font-weight:500;color:var(--texto2);cursor:pointer;white-space:nowrap;font-family:'DM Sans',sans-serif;transition:all .15s;}
+.filter-chip.active{background:var(--azul-claro);color:#fff;border-color:var(--azul-claro);}
 
-/* CARTERA */
-.filter-row{display:flex;gap:8px;margin-bottom:12px;overflow-x:auto;padding-bottom:4px}
-.filter-chip{background:var(--blanco);border:1px solid var(--azul-borde);border-radius:20px;padding:6px 14px;font-size:12px;font-weight:500;color:var(--texto-suave);cursor:pointer;white-space:nowrap;font-family:'DM Sans',sans-serif;transition:all .15s}
-.filter-chip.active{background:var(--azul-claro);color:#fff;border-color:var(--azul-claro)}
-.cliente-card{background:var(--blanco);border:1px solid var(--azul-borde);border-radius:var(--r);padding:12px 14px;margin-bottom:8px;cursor:pointer;transition:box-shadow .15s;box-shadow:0 1px 4px rgba(37,99,235,.06)}
-.cliente-card.alerta{border-left:3px solid var(--rojo)}
-.cliente-row1{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px}
-.cliente-nombre{font-size:14px;font-weight:600;line-height:1.3;flex:1;color:var(--texto)}
-.score-badge{font-size:13px;font-weight:800;padding:3px 8px;border-radius:6px;background:var(--azul-suave);font-family:'Syne',sans-serif}
-.cliente-row2{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-.cliente-ciudad{font-size:11px;color:var(--texto-suave)}
-.alerta-badge{font-size:10px;font-weight:600;background:var(--rojo-bg);color:var(--rojo);border-radius:4px;padding:2px 6px}
-.sit-badge{font-size:10px;font-weight:600;border-radius:4px;padding:2px 6px}
-.saldo-badge{font-size:10px;font-weight:600;background:#dbeafe;color:var(--azul-claro);border-radius:4px;padding:2px 6px}
+/* CLIENTE CARD */
+.cliente-card{background:var(--surface);border:1px solid var(--azul-borde);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;cursor:pointer;box-shadow:0 1px 4px rgba(37,99,235,.06);}
+.cliente-card.alerta{border-left:3px solid var(--rojo);}
+.cli-row1{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px;}
+.cli-nombre{font-size:14px;font-weight:600;flex:1;color:var(--texto);}
+.score-badge{font-size:13px;font-weight:800;padding:3px 8px;border-radius:6px;background:var(--azul-suave);font-family:'Syne',sans-serif;}
+.cli-row2{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+.cli-ciudad{font-size:11px;color:var(--texto2);}
+.sit-badge{font-size:10px;font-weight:600;border-radius:4px;padding:2px 6px;}
+.alerta-badge{font-size:10px;font-weight:600;background:var(--rojo-bg);color:var(--rojo);border-radius:4px;padding:2px 6px;}
+.saldo-badge{font-size:10px;font-weight:600;background:#dbeafe;color:var(--azul-claro);border-radius:4px;padding:2px 6px;}
 
-/* OPORTUNIDADES */
-.oport-card{background:var(--blanco);border:1px solid var(--azul-borde);border-left:3px solid var(--verde);border-radius:var(--r);padding:12px 14px;margin-bottom:8px;cursor:pointer;box-shadow:0 1px 4px rgba(37,99,235,.06)}
-.oport-score{font-size:24px;font-weight:800;font-family:'Syne',sans-serif;color:var(--verde)}
-.oport-nombre{font-size:14px;font-weight:600;margin-bottom:4px;color:var(--texto)}
-.oport-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
-.oport-tag{font-size:10px;font-weight:600;padding:3px 8px;border-radius:4px;background:var(--verde-bg);color:var(--verde)}
-.oport-urgente{background:var(--rojo-bg);color:var(--rojo)}
-.oport-medio{background:#fef9c3;color:#854d0e}
+/* OPORT */
+.oport-card{background:var(--surface);border:1px solid var(--azul-borde);border-left:3px solid var(--verde);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;cursor:pointer;box-shadow:0 1px 4px rgba(37,99,235,.06);}
+.oport-score{font-size:24px;font-weight:800;font-family:'Syne',sans-serif;color:var(--verde);}
+.oport-nombre{font-size:14px;font-weight:600;color:var(--texto);}
+.oport-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
+.oport-tag{font-size:10px;font-weight:600;padding:3px 8px;border-radius:4px;background:var(--verde-bg);color:var(--verde);}
+.oport-tag.urgente{background:var(--rojo-bg);color:var(--rojo);}
+.oport-tag.medio{background:#fef9c3;color:#854d0e;}
+
+/* SCORE DISPLAY */
+.score-hero{display:flex;align-items:center;gap:14px;margin-bottom:6px;}
+.score-num{font-size:48px;font-weight:800;letter-spacing:-2px;line-height:1;font-family:'Syne',sans-serif;}
+.score-rango{font-size:16px;font-weight:700;}
+.score-bar-wrap{background:var(--bg);border-radius:4px;height:6px;overflow:hidden;margin-top:10px;}
+.score-bar{height:100%;border-radius:4px;transition:width .6s ease;}
+.credito-box{background:linear-gradient(135deg,var(--azul-suave),#dbeafe);border:1px solid var(--azul-borde);border-radius:var(--radius);padding:14px;margin-bottom:10px;}
+.credito-label{font-size:11px;color:var(--azul-claro);text-transform:uppercase;letter-spacing:.8px;font-weight:600;margin-bottom:6px;}
+.credito-monto{font-size:22px;font-weight:800;font-family:'Syne',sans-serif;color:var(--azul);}
+
+/* SIT CHIPS */
+.sit-grid{display:flex;flex-wrap:wrap;gap:8px;}
+.sit-chip{background:var(--azul-suave);border-radius:8px;padding:8px 12px;font-size:12px;flex:1;min-width:90px;}
+.sit-chip-label{color:var(--texto2);font-size:10px;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:2px;}
+.sit-chip-val{font-weight:700;font-size:13px;}
+.sit-1{color:var(--verde)}.sit-2{color:var(--amarillo)}.sit-3{color:var(--naranja)}.sit-4,.sit-5,.sit-6{color:var(--rojo);}
+
+/* CHEQUES */
+.cheque-item{background:var(--azul-suave);border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;}
+.cheque-estado{font-size:10px;font-weight:600;padding:2px 8px;border-radius:4px;}
+.impago{background:var(--rojo-bg);color:var(--rojo);}
+.pagado{background:var(--verde-bg);color:var(--verde);}
 
 /* MODAL */
-#detail-modal{position:fixed;inset:0;background:var(--fondo);display:none;flex-direction:column;z-index:200;overflow-y:auto}
-.modal-header{background:var(--azul-oscuro);padding:14px 16px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:10}
-.btn-back{background:none;border:none;color:#fff;font-size:20px;cursor:pointer;padding:0;line-height:1}
-.modal-title{font-size:14px;font-weight:600;flex:1;line-height:1.3;color:#fff}
-.modal-body{padding:16px}
-.modal-tabs{display:flex;border-bottom:2px solid var(--azul-borde);margin-bottom:14px}
-.modal-tab{flex:1;padding:10px 8px;text-align:center;font-size:12px;font-weight:600;color:var(--texto-suave);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s}
-.modal-tab.active{color:var(--azul-claro);border-bottom-color:var(--azul-claro)}
-.total-box{background:linear-gradient(135deg,var(--azul-oscuro),var(--azul-medio));border-radius:10px;padding:14px 16px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center}
-.total-label{font-size:11px;color:#93c5fd;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
-.total-monto{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#fff}
-.factura-item{background:var(--blanco);border-radius:10px;padding:12px 14px;margin-bottom:8px;border:1px solid var(--azul-borde);box-shadow:0 1px 4px rgba(37,99,235,.06)}
-.factura-item.vencida{border-left:3px solid var(--rojo)}
-.factura-item.proxima{border-left:3px solid var(--amarillo)}
-.factura-item.vigente{border-left:3px solid var(--verde)}
-.factura-row1{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px}
-.factura-nro{font-size:11px;color:var(--texto-suave);font-family:monospace}
-.factura-saldo{font-size:16px;font-weight:800;font-family:'Syne',sans-serif;color:var(--azul-oscuro)}
-.factura-fechas{display:flex;gap:12px;flex-wrap:wrap;margin-top:4px}
-.factura-fecha{font-size:11px;color:var(--texto-suave)}
-.tag-vencida{background:var(--rojo-bg);color:var(--rojo);font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;display:inline-block;margin-top:4px}
-.tag-proxima{background:#fef9c3;color:#854d0e;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;display:inline-block;margin-top:4px}
-.tag-vigente{background:var(--verde-bg);color:var(--verde);font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;display:inline-block;margin-top:4px}
-.empty{text-align:center;padding:40px 24px;color:var(--texto-suave)}
-.empty-icon{font-size:36px;margin-bottom:10px}
-.empty-text{font-size:14px;line-height:1.6}
-#loading-overlay{position:fixed;inset:0;background:rgba(240,245,255,.92);display:none;align-items:center;justify-content:center;z-index:999;flex-direction:column;gap:16px}
-.loading-text{font-size:14px;color:var(--texto-suave)}
-.divider{height:1px;background:var(--azul-borde);margin:8px 0}
+#detail-modal{position:fixed;inset:0;background:var(--bg);display:none;flex-direction:column;z-index:200;overflow-y:auto;}
+.modal-header{background:var(--azul);padding:14px 16px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:10;}
+.btn-back{background:none;border:none;color:#fff;font-size:20px;cursor:pointer;padding:0;}
+.modal-title{font-size:14px;font-weight:600;flex:1;color:#fff;line-height:1.3;}
+.modal-body{padding:16px;}
+.modal-tabs{display:flex;border-bottom:2px solid var(--azul-borde);margin-bottom:14px;}
+.modal-tab{flex:1;padding:10px 8px;text-align:center;font-size:12px;font-weight:600;color:var(--texto2);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s;}
+.modal-tab.active{color:var(--azul-claro);border-bottom-color:var(--azul-claro);}
+
+/* FACTURAS */
+.total-box{background:linear-gradient(135deg,var(--azul),var(--azul-medio));border-radius:10px;padding:14px 16px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;}
+.total-label{font-size:11px;color:#93c5fd;font-weight:600;text-transform:uppercase;letter-spacing:.5px;}
+.total-monto{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#fff;}
+.factura-item{background:var(--surface);border-radius:10px;padding:12px 14px;margin-bottom:8px;border:1px solid var(--azul-borde);box-shadow:0 1px 4px rgba(37,99,235,.06);}
+.factura-item.vencida{border-left:3px solid var(--rojo);}
+.factura-item.proxima{border-left:3px solid var(--amarillo);}
+.factura-item.vigente{border-left:3px solid var(--verde);}
+.factura-row1{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;}
+.factura-nro{font-size:11px;color:var(--texto2);font-family:monospace;}
+.factura-saldo{font-size:16px;font-weight:800;font-family:'Syne',sans-serif;color:var(--azul);}
+.factura-fechas{display:flex;gap:12px;flex-wrap:wrap;margin-top:4px;}
+.factura-fecha{font-size:11px;color:var(--texto2);}
+.tag-vencida{background:var(--rojo-bg);color:var(--rojo);font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;display:inline-block;margin-top:4px;}
+.tag-proxima{background:#fef9c3;color:#854d0e;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;display:inline-block;margin-top:4px;}
+.tag-vigente{background:var(--verde-bg);color:var(--verde);font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;display:inline-block;margin-top:4px;}
+
+/* ROW DATA */
+.row-data{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--azul-borde);}
+.row-data:last-child{border-bottom:none;}
+.row-key{font-size:12px;color:var(--texto2);}
+.row-val{font-size:13px;font-weight:600;text-align:right;}
+.divider{height:1px;background:var(--azul-borde);margin:8px 0;}
+
+/* UTILS */
+.ia-loading{display:flex;align-items:center;gap:10px;color:var(--texto2);font-size:13px;}
+.ia-texto{font-size:13px;line-height:1.7;color:var(--texto);}
+.spinner{width:18px;height:18px;border:2px solid var(--azul-borde);border-top-color:var(--azul-claro);border-radius:50%;animation:spin .8s linear infinite;}
+.spinner-lg{width:36px;height:36px;border-width:3px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.empty{text-align:center;padding:40px 24px;color:var(--texto2);}
+.empty-icon{font-size:36px;margin-bottom:10px;}
+.empty-text{font-size:14px;line-height:1.6;}
+.section-title{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;margin-bottom:4px;color:var(--azul);letter-spacing:-.5px;}
+.section-sub{font-size:13px;color:var(--texto2);margin-bottom:14px;}
+#loading-overlay{position:fixed;inset:0;background:rgba(240,245,255,.9);display:none;align-items:center;justify-content:center;z-index:999;flex-direction:column;gap:16px;}
+.loading-text{font-size:14px;color:var(--texto2);}
+
+/* SEARCH BOX */
+.search-box{background:var(--surface);border:1.5px solid var(--azul-borde);border-radius:var(--radius);padding:12px 14px;display:flex;gap:10px;align-items:center;margin-bottom:14px;box-shadow:0 1px 4px rgba(37,99,235,.06);}
+.search-input{flex:1;background:none;border:none;outline:none;font-family:'DM Sans',sans-serif;font-size:15px;color:var(--texto);}
+.search-input::placeholder{color:var(--texto2);}
+.btn-search{background:var(--azul-claro);border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;color:#fff;cursor:pointer;font-family:'DM Sans',sans-serif;}
 </style>
 </head>
 <body>
@@ -153,13 +178,13 @@ body{font-family:'DM Sans',sans-serif;background:var(--fondo);color:var(--texto)
   <div class="login-title">Vende Seguro</div>
   <div class="login-sub">Módulo Comercial — Piattelli</div>
   <div class="login-form">
-    <div><div class="field-label">Nombre completo</div>
-      <input class="field-input" id="inp-nombre" type="text" placeholder="Ej: Alejandro Valan" autocomplete="name"></div>
-    <div><div class="field-label">CUIT del comercial</div>
-      <input class="field-input" id="inp-cuit" type="tel" placeholder="Ej: 20123456789" inputmode="numeric"></div>
-    <div><div class="field-label">PIN de acceso</div>
-      <input class="field-input" id="inp-pin" type="password" placeholder="••••••••"></div>
-    <div class="login-error" id="login-error">Datos incorrectos.</div>
+    <div><div class="f-label">Nombre completo</div>
+      <input class="f-input" id="inp-nombre" type="text" placeholder="Ej: Alejandro Valan" autocomplete="name"></div>
+    <div><div class="f-label">CUIT del comercial</div>
+      <input class="f-input" id="inp-cuit" type="tel" placeholder="Ej: 20123456789" inputmode="numeric"></div>
+    <div><div class="f-label">PIN de acceso</div>
+      <input class="f-input" id="inp-pin" type="password" placeholder="••••••••" autocomplete="off"></div>
+    <div class="login-err" id="login-error">Datos incorrectos.</div>
     <button class="btn-login" onclick="doLogin()">Ingresar →</button>
   </div>
 </div>
@@ -168,8 +193,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--fondo);color:var(--texto)
 <div id="app">
   <div class="app-header">
     <div>
-      <div class="header-name" id="header-name">—</div>
-      <div class="header-sub" id="header-cartera">— clientes</div>
+      <div class="hdr-name" id="header-name">—</div>
+      <div class="hdr-sub" id="header-cartera">— clientes</div>
     </div>
     <button class="btn-logout" onclick="doLogout()">Salir</button>
   </div>
@@ -186,7 +211,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--fondo);color:var(--texto)
     <div class="tab-pane" id="tab-cartera">
       <div class="section-title">Mi Cartera</div>
       <div class="section-sub" id="cartera-subtitle">Clientes activos</div>
-      <input type="text" class="buscar-input" id="buscar-cartera" placeholder="🔍 Buscar cliente..." oninput="buscarEnCartera(this.value)">
+      <input type="text" class="buscar-input" id="buscar-cartera" placeholder="🔍 Buscar cliente..." oninput="buscarEnCartera(this.value)" translate="no">
       <div class="filter-row">
         <button class="filter-chip active" onclick="filtrarCartera('todos',this)">Todos</button>
         <button class="filter-chip" onclick="filtrarCartera('alertas',this)">⚠ Alertas</button>
@@ -196,8 +221,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--fondo);color:var(--texto)
     </div>
     <div class="tab-pane" id="tab-oport">
       <div class="section-title">Oportunidades</div>
-      <div class="section-sub">Score ≥ 700 · sin alertas · ordenado por score</div>
-      <input type="text" class="buscar-input" id="buscar-oport" placeholder="🔍 Buscar cliente..." oninput="buscarEnOport(this.value)">
+      <div class="section-sub">Score ≥ 700 · Ordenado por score</div>
+      <input type="text" class="buscar-input" id="buscar-oport" placeholder="🔍 Buscar cliente..." oninput="buscarEnOport(this.value)" translate="no">
       <div id="oport-lista"></div>
     </div>
   </div>
@@ -223,16 +248,15 @@ body{font-family:'DM Sans',sans-serif;background:var(--fondo);color:var(--texto)
   <div class="modal-body" id="modal-body"></div>
 </div>
 
-<!-- Loading -->
 <div id="loading-overlay">
-  <div class="spinner" style="width:36px;height:36px;border-width:3px"></div>
+  <div class="spinner spinner-lg"></div>
   <div class="loading-text" id="loading-text">Cargando...</div>
 </div>
 
 <script>
 const API = 'https://bcra-proxy-xykm.onrender.com';
 const PIN_COMERCIAL = 'PIATTELLI2025';
-const CREDITO_MAX = 2000000; // Hard cap — nunca sugerir más de $2M
+const CREDITO_MAX = 2000000; // Hard cap absoluto
 
 const VENDEDORES = {
   'Adrian Arango':            '20208913604',
@@ -246,42 +270,42 @@ const VENDEDORES = {
   'Valeria Gutierrez Castex': '27224289966',
 };
 
-let SESSION=null, CARTERA_LOCAL=[], ALERTAS=[], SALDOS_MAP={};
-let _buscarCartera='', _buscarOport='';
+let SESSION = null, CARTERA_LOCAL = [], ALERTAS = [], SALDOS_MAP = {};
+let _buscarCartera = '', _buscarOport = '';
 
-// ── LOGIN ──
+// ─── LOGIN ───────────────────────────────────────────
 function doLogin() {
-  const nombre=document.getElementById('inp-nombre').value.trim();
-  const cuit=document.getElementById('inp-cuit').value.trim().replace(/\D/g,'');
-  const pin=document.getElementById('inp-pin').value.trim();
-  const err=document.getElementById('login-error');
-  err.style.display='none';
-  if(!nombre||!cuit||!pin){err.textContent='Completá todos los campos.';err.style.display='block';return;}
-  if(pin!==PIN_COMERCIAL){err.textContent='PIN incorrecto.';err.style.display='block';return;}
-  const norm=s=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-  const key=Object.keys(VENDEDORES).find(k=>norm(k)===norm(nombre));
-  if(!key){err.textContent='Nombre no encontrado.';err.style.display='block';return;}
-  if(cuit!==VENDEDORES[key]){err.textContent='CUIT no coincide.';err.style.display='block';return;}
-  SESSION={nombre:key,cuit};
+  const nombre = document.getElementById('inp-nombre').value.trim();
+  const cuit   = document.getElementById('inp-cuit').value.trim().replace(/\D/g,'');
+  const pin    = document.getElementById('inp-pin').value.trim();
+  const err    = document.getElementById('login-error');
+  err.style.display = 'none';
+  if (!nombre||!cuit||!pin){err.textContent='Completá todos los campos.';err.style.display='block';return;}
+  if (pin !== PIN_COMERCIAL){err.textContent='PIN incorrecto.';err.style.display='block';return;}
+  const norm = s => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const key = Object.keys(VENDEDORES).find(k => norm(k) === norm(nombre));
+  if (!key){err.textContent='Nombre no encontrado.';err.style.display='block';return;}
+  if (cuit !== VENDEDORES[key]){err.textContent='CUIT no coincide.';err.style.display='block';return;}
+  SESSION = {nombre:key, cuit};
   iniciarApp();
 }
 
 function doLogout() {
-  SESSION=null;CARTERA_LOCAL=[];SALDOS_MAP={};
+  SESSION=null; CARTERA_LOCAL=[]; SALDOS_MAP={};
   document.getElementById('app').style.display='none';
   document.getElementById('login-screen').style.display='flex';
   document.getElementById('inp-pin').value='';
   document.getElementById('consulta-resultado').innerHTML='';
 }
 
-// ── INIT ──
+// ─── INIT ────────────────────────────────────────────
 async function iniciarApp() {
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='flex';
   document.getElementById('header-name').textContent=SESSION.nombre;
   showLoading('Cargando cartera...');
   try {
-    const [cr,ar]=await Promise.all([
+    const [cr,ar] = await Promise.all([
       fetch(API+'/cartera-comercial/'+encodeURIComponent(SESSION.nombre)).catch(()=>null),
       fetch(API+'/alertas').catch(()=>null)
     ]);
@@ -295,156 +319,106 @@ async function iniciarApp() {
   renderCartera('todos');
   renderOportunidades();
   cargarSaldosCartera();
+  calcularYGuardarScoresCartera();
 }
 
-// ── UTILIDADES ──
+// ─── CALCULAR SCORES DE TODA LA CARTERA AL INICIO ────
+async function calcularYGuardarScoresCartera() {
+  // Ver cuántos ya tienen score
+  const sinScore = CARTERA_LOCAL.filter(c => !c.score);
+  if (!sinScore.length) {
+    console.log('[scoring] Todos los clientes ya tienen score.');
+    renderOportunidades();
+    return;
+  }
+  console.log('[scoring] Calculando scores para', sinScore.length, 'clientes...');
+
+  let calculados = 0;
+  const scores = {};
+
+  for (let i = 0; i < CARTERA_LOCAL.length; i++) {
+    const c = CARTERA_LOCAL[i];
+    if (c.score) continue; // ya tiene score, saltar
+
+    try {
+      const [dr, chr, hr] = await Promise.all([
+        fetch(API + '/deudas/' + c.cuit).catch(() => null),
+        fetch(API + '/deudas/' + c.cuit + '/cheques').catch(() => null),
+        fetch(API + '/deudas/' + c.cuit + '/historial').catch(() => null)
+      ]);
+
+      const dd = (dr && dr.ok) ? await dr.json() : null;
+      const cd = (chr && chr.ok) ? await chr.json() : null;
+      const hd = (hr && hr.ok) ? await hr.json() : null;
+
+      if (!dd) continue;
+
+      const periodos = dd.results?.periodos || [];
+      let maxSit = 1, entidades = [];
+      if (periodos.length) {
+        entidades = periodos[0].entidades || [];
+        if (entidades.length) maxSit = Math.max(...entidades.map(e => e.situacion || 1));
+      } else if (dd.sin_deudas) { maxSit = 1; }
+
+      const score = calcularScoreCompleto(maxSit, dd.sin_deudas, periodos, cd, hd);
+      CARTERA_LOCAL[i].score = score;
+      CARTERA_LOCAL[i].ultimaSit = maxSit;
+      CARTERA_LOCAL[i].last_update = new Date().toISOString();
+      scores[c.cuit] = { scoreCompleto: score, ultimaSit: maxSit };
+      calculados++;
+
+      // Cada 20 clientes, actualizar UI y guardar parcial
+      if (calculados % 20 === 0) {
+        renderCartera(document.querySelector('.filter-chip.active')?.textContent?.includes('Alertas') ? 'alertas' :
+          document.querySelector('.filter-chip.active')?.textContent?.includes('saldo') ? 'saldo' : 'todos');
+        renderOportunidades();
+        guardarScoresServidor(scores);
+      }
+
+      // Pausa para no saturar el servidor
+      await new Promise(r => setTimeout(r, 800));
+
+    } catch(e) { continue; }
+  }
+
+  // Guardado final
+  if (Object.keys(scores).length > 0) guardarScoresServidor(scores);
+  renderCartera('todos');
+  renderOportunidades();
+  console.log('[scoring] Completado:', calculados, 'scores calculados.');
+}
+
+async function guardarScoresServidor(scores) {
+  try {
+    const r = await fetch(API + '/alertas');
+    const existing = r.ok ? await r.json() : {alertas:[], cartera:[]};
+    const carteraMap = {};
+    (existing.cartera || []).forEach(c => { carteraMap[c.cuit] = c; });
+    Object.keys(scores).forEach(cuit => {
+      if (!carteraMap[cuit]) carteraMap[cuit] = {cuit};
+      carteraMap[cuit].scoreCompleto = scores[cuit].scoreCompleto;
+      carteraMap[cuit].ultimaSit = scores[cuit].ultimaSit;
+    });
+    await fetch(API + '/alertas', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        alertas: existing.alertas || [],
+        ultima_verif: existing.ultima_verif || '',
+        cartera: Object.values(carteraMap)
+      })
+    });
+    console.log('[scoring] Scores guardados en servidor:', Object.keys(scores).length);
+  } catch(e) { console.warn('[scoring] Error guardando:', e); }
+}
+
+// ─── SALDOS ──────────────────────────────────────────
 function normNombre(s){
   return String(s||'').trim().toUpperCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
     .replace(/[^A-Z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
 }
-function matchFuzzy(nombre, q) {
-  if(!q)return true;
-  const n=nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-  const qn=q.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-  // Match por palabras — cada palabra del query debe aparecer en el nombre
-  return qn.split(' ').filter(p=>p.length>1).every(p=>n.includes(p));
-}
-function getSaldos(nombre){return SALDOS_MAP[normNombre(nombre)]||null;}
-function parseFecha(s){
-  if(!s)return new Date(9999,0,1);
-  if(s.includes('/')){const[d,m,y]=s.split('/');return new Date(parseInt(y),parseInt(m)-1,parseInt(d));}
-  return new Date(s);
-}
-function fmtM(n){if(!n)return'0';if(n>=1e9)return(n/1e9).toFixed(1)+'B';if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1e3)return(n/1e3).toFixed(0)+'K';return Math.round(n).toLocaleString('es-AR');}
-function fmtFull(n){if(!n)return'0';return Math.round(n).toLocaleString('es-AR');}
-function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
-function scoreToColor(s){if(!s)return'var(--texto-suave)';if(s>=700)return'var(--verde)';if(s>=400)return'var(--amarillo)';if(s>=200)return'var(--naranja)';return'var(--rojo)';}
-function scoreToRango(s){if(!s)return'—';if(s>=700)return'Excelente';if(s>=400)return'Bueno';if(s>=200)return'Revisar';if(s>=100)return'Alto riesgo';return'Rechazar';}
-function sitBg(s){return{1:'#dcfce7',2:'#fef9c3',3:'#ffedd5',4:'#fee2e2',5:'#fee2e2',6:'#fee2e2'}[s]||'#dcfce7';}
-function showLoading(txt){document.getElementById('loading-text').textContent=txt||'Cargando...';document.getElementById('loading-overlay').style.display='flex';}
-function hideLoading(){document.getElementById('loading-overlay').style.display='none';}
-function closeModal(){document.getElementById('detail-modal').style.display='none';}
 
-// ── SCORING — LÓGICA IDÉNTICA AL ADMIN ──
-// Basada en calcularVendeScore del index.html (fuente de verdad)
-function calcularScoreAdmin(bcraData, historialBCRA, chequesBCRA) {
-  var puntos = 0;
-
-  // ── 1. SITUACIÓN BCRA (Max 400) — igual que admin ──
-  var entidades = [];
-  var sinDeudasReal = bcraData && bcraData.sin_deudas === true;
-  var periodos = (bcraData && bcraData.results && bcraData.results.periodos) ? bcraData.results.periodos : [];
-  // Tomar entidades del periodo más reciente, sin duplicar por entidad
-  if (periodos.length) {
-    var vistas = {};
-    periodos.slice().sort(function(a,b){return (b.periodo||'').localeCompare(a.periodo||'');})
-      .forEach(function(p){
-        (p.entidades||[]).forEach(function(e){
-          var k=e.entidad||e.codigo;
-          if(!vistas[k]){vistas[k]=true;entidades.push(e);}
-        });
-      });
-  }
-  var maxSit = entidades.length
-    ? entidades.reduce(function(m,e){return Math.max(m,e.situacion||1);},1)
-    : sinDeudasReal ? 1 : null;
-  var pBCRA = maxSit===null?200 : maxSit===1?400 : maxSit===2?200 : maxSit===3?50 : 0;
-  puntos += pBCRA;
-
-  // ── 2. HISTORIAL BCRA 24M (Max 150) — igual que admin ──
-  var pHistorial = 75;
-  var periodosHist = [];
-  if (historialBCRA && historialBCRA.results && historialBCRA.results.periodos) {
-    periodosHist = historialBCRA.results.periodos;
-  } else if (periodos.length) {
-    periodosHist = periodos;
-  }
-  if (periodosHist.length > 0) {
-    var mesesMalos = 0;
-    periodosHist.slice(0,24).forEach(function(p){
-      var sitMax=(p.entidades||[]).reduce(function(m,e){return Math.max(m,e.situacion||1);},1);
-      if(sitMax>1)mesesMalos++;
-    });
-    if(mesesMalos===0)      {pHistorial=150;}
-    else if(mesesMalos<=2)  {pHistorial=75;}
-    else                    {pHistorial=0;}
-  } else if (sinDeudasReal) {
-    pHistorial = 150;
-  }
-  puntos += pHistorial;
-
-  // ── 3. CHEQUES RECHAZADOS (Max 150) — igual que admin ──
-  var pCheques = 75;
-  if (chequesBCRA && chequesBCRA.sin_deudas===true && !chequesBCRA.error_bcra) {
-    pCheques = 150;
-  } else if (chequesBCRA && !chequesBCRA.error_bcra) {
-    var resC = chequesBCRA.results || chequesBCRA;
-    var todosDetalles = [];
-    if (resC && resC.causales) {
-      resC.causales.forEach(function(c){
-        (c.entidades||[]).forEach(function(e){
-          (e.detalle||[]).forEach(function(d){todosDetalles.push(d);});
-        });
-      });
-    } else if (Array.isArray(resC)) {
-      todosDetalles = resC;
-    }
-    var total=todosDetalles.length;
-    var activos=todosDetalles.filter(function(d){return !d.fechaPago||d.estadoMulta==='IMPAGA';}).length;
-    if(total===0)       {pCheques=150;}
-    else if(activos===0){pCheques=75;}
-    else                {pCheques=0;}
-  }
-  puntos += pCheques;
-
-  // ── 4. DSO — neutral (comercial no tiene datos Piattelli) ──
-  puntos += 50;
-
-  // ── 5. HISTORIAL PIATTELLI — neutral ──
-  puntos += 50;
-
-  // ── 6. RED BODEGAS — neutral ──
-  puntos += 30;
-
-  // ── 7. CONCENTRACIÓN DEUDA (Max 39) ──
-  var nroEnt=entidades.length;
-  var montoM=entidades.reduce(function(s,e){return s+(e.monto||0);},0)/1000;
-  var pConc;
-  if(!nroEnt||sinDeudasReal)             pConc=39;
-  else if(nroEnt===1&&montoM<50)         pConc=35;
-  else if(nroEnt<=2&&montoM<100)         pConc=28;
-  else if(nroEnt<=3&&montoM<500)         pConc=20;
-  else if(nroEnt<=5&&montoM<2000)        pConc=10;
-  else                                   pConc=0;
-  puntos += pConc;
-
-  // ── TECHOS DUROS ──
-  if(maxSit>=4)puntos=Math.min(puntos,250);
-  else if(maxSit===3)puntos=Math.min(puntos,400);
-
-  var score=Math.max(1,Math.min(999,Math.round(puntos)));
-  return {score, rango:scoreToRango(score), color:scoreToColor(score),
-          maxSit, entidades, nroEnt, montoM, pBCRA, pHistorial, pCheques};
-}
-
-// Hard cap $2M
-function calcularCredito(s) {
-  var calc;
-  if(s>=900)      calc=2000000;
-  else if(s>=700) calc=800000;
-  else if(s>=500) calc=500000;
-  else if(s>=400) calc=200000;
-  else if(s>=300) calc=100000;
-  else if(s>=200) calc=0; // solo contado
-  else            calc=-1; // no recomendado
-  if(calc<0)return'No recomendado';
-  if(calc===0)return'Solo contado anticipado';
-  var cap=Math.min(calc,CREDITO_MAX);
-  return '$'+cap.toLocaleString('es-AR');
-}
-
-// ── SALDOS ──
 async function cargarSaldosCartera() {
   const nombres=[...new Set(CARTERA_LOCAL.map(c=>c.nombre))];
   for(let i=0;i<nombres.length;i+=8){
@@ -462,7 +436,9 @@ async function cargarSaldosCartera() {
   renderOportunidades();
 }
 
-// ── TABS ──
+function getSaldos(nombre){return SALDOS_MAP[normNombre(nombre)]||null;}
+
+// ─── TABS ─────────────────────────────────────────────
 function switchTab(tab,btn){
   document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
@@ -470,16 +446,29 @@ function switchTab(tab,btn){
   btn.classList.add('active');
 }
 
-// ── BUSCADORES ──
+// ─── BUSCADORES ───────────────────────────────────────
+// Fuzzy match: tolera tildes, mayúsculas, palabras incompletas
+function matchBusqueda(nombre, q) {
+  if (!q) return true;
+  const norm = s => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ');
+  const n = norm(nombre), qn = norm(q);
+  // Cada palabra del query debe aparecer en alguna parte del nombre
+  return qn.split(' ').filter(p=>p.length>0).every(p => n.includes(p));
+}
+
 function buscarEnCartera(q){
   _buscarCartera=q.trim().toLowerCase();
   const btn=document.querySelector('.filter-chip.active');
   const filtro=btn?.textContent?.includes('Alertas')?'alertas':btn?.textContent?.includes('saldo')?'saldo':'todos';
   renderCartera(filtro);
 }
-function buscarEnOport(q){_buscarOport=q.trim().toLowerCase();renderOportunidades();}
 
-// ── CARTERA ──
+function buscarEnOport(q){
+  _buscarOport=q.trim().toLowerCase();
+  renderOportunidades();
+}
+
+// ─── CARTERA ──────────────────────────────────────────
 function filtrarCartera(filtro,btn){
   document.querySelectorAll('.filter-chip').forEach(c=>c.classList.remove('active'));
   btn.classList.add('active');
@@ -490,21 +479,26 @@ function filtrarCartera(filtro,btn){
 function renderCartera(filtro){
   const alertaCuits=new Set(ALERTAS.map(a=>a.cuit));
   let lista=CARTERA_LOCAL;
-  if(filtro==='alertas')lista=lista.filter(c=>alertaCuits.has(c.cuit));
-  else if(filtro==='saldo')lista=lista.filter(c=>getSaldos(c.nombre));
-  if(_buscarCartera)lista=lista.filter(c=>matchFuzzy(c.nombre,_buscarCartera));
+  if(filtro==='alertas') lista=lista.filter(c=>alertaCuits.has(c.cuit));
+  else if(filtro==='saldo') lista=lista.filter(c=>getSaldos(c.nombre));
+  if(_buscarCartera) lista=lista.filter(c=>matchBusqueda(c.nombre,_buscarCartera));
+
   const el=document.getElementById('cartera-lista');
-  if(!lista.length){el.innerHTML='<div class="empty"><div class="empty-icon">📭</div><div class="empty-text">Sin clientes en este filtro</div></div>';return;}
+  if(!lista.length){
+    el.innerHTML='<div class="empty"><div class="empty-icon">📭</div><div class="empty-text">Sin clientes en este filtro</div></div>';
+    return;
+  }
   el.innerHTML=lista.map(c=>{
-    const sit=c.ultimaSit||1,score=c.score||null,tieneAlerta=alertaCuits.has(c.cuit);
-    const saldosData=getSaldos(c.nombre),sc=scoreToColor(score);
+    const sit=c.ultimaSit||1, score=c.score||null;
+    const tieneAlerta=alertaCuits.has(c.cuit), saldosData=getSaldos(c.nombre);
+    const sc=scoreToColor(score);
     return `<div class="cliente-card${tieneAlerta?' alerta':''}" onclick="abrirModalCliente('${esc(c.cuit)}','${esc(c.nombre)}')">
-      <div class="cliente-row1">
-        <div class="cliente-nombre">${esc(c.nombre)}</div>
+      <div class="cli-row1">
+        <div class="cli-nombre">${esc(c.nombre)}</div>
         ${score?`<div class="score-badge" style="color:${sc}">${score}</div>`:''}
       </div>
-      <div class="cliente-row2">
-        <span class="cliente-ciudad">${esc(c.ciudad||'')}</span>
+      <div class="cli-row2">
+        <span class="cli-ciudad">${esc(c.ciudad||'')}</span>
         <span class="sit-badge sit-${sit}" style="background:${sitBg(sit)}">${sit===1?'✓ Normal':'Sit '+sit}</span>
         ${tieneAlerta?'<span class="alerta-badge">⚠ Alerta</span>':''}
         ${saldosData?`<span class="saldo-badge">💰 $${fmtM(saldosData.total_saldo)}</span>`:''}
@@ -513,79 +507,88 @@ function renderCartera(filtro){
   }).join('');
 }
 
-// ── OPORTUNIDADES ──
-async function renderOportunidades(){
+// ─── OPORTUNIDADES ────────────────────────────────────
+async function renderOportunidades() {
   const el=document.getElementById('oport-lista');
   el.innerHTML='<div class="empty"><div class="spinner" style="margin:0 auto 12px"></div><div class="empty-text">Analizando oportunidades...</div></div>';
+
   await cargarUltimasCompras();
+
   const alertaCuits=new Set(ALERTAS.map(a=>a.cuit));
-  // Filtro: score>=700, sin alertas, sit1
-  const candidatos=CARTERA_LOCAL.filter(c=>(c.score||0)>=700&&!alertaCuits.has(c.cuit)&&(c.ultimaSit||1)===1);
+
+  // REGLA: score >= 700, sin alertas, sit normal
+  const candidatos=CARTERA_LOCAL
+    .filter(c=>(c.score||0)>=700 && !alertaCuits.has(c.cuit) && (c.ultimaSit||1)===1)
+    .map(c=>{
+      const dias=diasDesdeUltimaCompra(c.nombre);
+      const saldosData=getSaldos(c.nombre);
+      let motivo, tagClass;
+      if(dias===null)       {motivo='Sin historial de compras';tagClass='medio';}
+      else if(dias>=45)     {motivo=`Sin compras hace ${dias} días — contactar urgente`;tagClass='urgente';}
+      else if(dias>=30)     {motivo=`Sin compras hace ${dias} días — visitar`;tagClass='urgente';}
+      else if(dias>=15)     {motivo=`Última compra hace ${dias} días`;tagClass='medio';}
+      else                  {motivo=`Compra reciente — hace ${dias} días`;tagClass='';}
+      return {...c, dias, motivo, tagClass, tieneSaldo:!!(saldosData&&saldosData.total_saldo>0)};
+    })
+    // Ordenar por score descendente (mayor a menor)
+    .sort((a,b)=>(b.score||0)-(a.score||0));
+
   if(!candidatos.length){
     el.innerHTML='<div class="empty"><div class="empty-icon">⚡</div><div class="empty-text">Corré la verificación de cartera primero para calcular scores.</div></div>';
     return;
   }
-  const opps=candidatos.map(c=>{
-    const dias=diasDesdeUltimaCompra(c.nombre);
-    const tieneSaldo=!!(getSaldos(c.nombre)&&getSaldos(c.nombre).total_saldo>0);
-    let motivo,urgencia;
-    if(dias===null)   {motivo='Sin historial de compras';urgencia=2;}
-    else if(dias>=45) {motivo=`Sin compras hace ${dias} días — contactar urgente`;urgencia=1;}
-    else if(dias>=30) {motivo=`Sin compras hace ${dias} días — visitar`;urgencia=1;}
-    else if(dias>=15) {motivo=`Última compra hace ${dias} días`;urgencia=2;}
-    else              {motivo=`Compra reciente — hace ${dias} días`;urgencia=3;}
-    return {...c,dias,motivo,urgencia,tieneSaldo};
-  })
-  // Ordenar: primero por urgencia, luego por score desc
-  .sort((a,b)=>a.urgencia!==b.urgencia?a.urgencia-b.urgencia:(b.score||0)-(a.score||0));
 
-  let lista=_buscarOport?opps.filter(c=>matchFuzzy(c.nombre,_buscarOport)):opps;
-  if(!lista.length){el.innerHTML=`<div class="empty"><div class="empty-icon">🔍</div><div class="empty-text">Sin resultados para "${esc(_buscarOport)}"</div></div>`;return;}
+  let lista=_buscarOport?candidatos.filter(c=>matchBusqueda(c.nombre,_buscarOport)):candidatos;
+  if(!lista.length){
+    el.innerHTML=`<div class="empty"><div class="empty-icon">🔍</div><div class="empty-text">Sin resultados para "${esc(_buscarOport)}"</div></div>`;
+    return;
+  }
 
   el.innerHTML=lista.map(c=>{
-    const score=c.score||0,credito=calcularCredito(score);
-    const tags=[`Score ${score>=700?'Excelente':'Bueno'}`,credito];
-    if(c.dias===null||c.dias>=30)tags.push('🔥 Contactar');
-    if(!c.tieneSaldo)tags.push('Sin deuda pendiente');
-    const tagClass=c.urgencia===1?'oport-urgente':c.urgencia===2?'oport-medio':'';
-    return `<div class="oport-card" onclick="abrirModalCliente('${esc(c.cuit)}','${esc(c.nombre)}')">
+    const score=c.score||0;
+    const tags=[`Score ${score>=800?'Excelente':'Bueno'} (${score})`];
+    if(c.dias===null||c.dias>=30) tags.push('🔥 Contactar');
+    if(!c.tieneSaldo) tags.push('Sin deuda pendiente');
+    if(c.tieneSaldo) tags.push('💰 Saldo pdte.');
+    return `<div class="oport-card" onclick="abrirModalCliente('${c.cuit}','${esc(c.nombre)}')">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
         <div class="oport-nombre">${esc(c.nombre)}</div>
         <div class="oport-score">${score}</div>
       </div>
-      <div style="font-size:11px;color:var(--texto-suave);margin-top:2px">${esc(c.ciudad||'')}</div>
-      <div style="font-size:12px;font-weight:600;margin-top:4px;color:${c.urgencia===1?'var(--rojo)':c.urgencia===2?'var(--amarillo)':'var(--verde)'}">${c.motivo}</div>
-      <div class="oport-tags">${tags.map(t=>`<span class="oport-tag ${tagClass}">${esc(t)}</span>`).join('')}</div>
+      <div style="font-size:11px;color:var(--texto2);margin-top:2px">${esc(c.ciudad||'')}</div>
+      <div style="font-size:12px;font-weight:600;margin-top:4px;color:${c.tagClass==='urgente'?'var(--rojo)':c.tagClass==='medio'?'var(--amarillo)':'var(--verde)'}">${c.motivo}</div>
+      <div class="oport-tags">${tags.map(t=>`<span class="oport-tag ${t.includes('🔥')?'urgente':''}">${t}</span>`).join('')}</div>
     </div>`;
   }).join('');
 }
 
-// ── ÚLTIMAS COMPRAS DSO ──
+// ─── ÚLTIMAS COMPRAS ──────────────────────────────────
 async function cargarUltimasCompras(){
-  if(window.ULTIMAS_COMPRAS)return;
+  if(window.ULTIMAS_COMPRAS) return;
   window.ULTIMAS_COMPRAS={};
   try{
     const r=await fetch(API+'/dso-ventas');
-    if(!r.ok)return;
+    if(!r.ok) return;
     const data=await r.json();
     (data.ventas||[]).forEach(v=>{
-      if(!v.cliente||!v.fecha)return;
-      const cn=normNombre(v.cliente),fecha=new Date(v.fecha);
+      if(!v.cliente||!v.fecha) return;
+      const cn=normNombre(v.cliente), fecha=new Date(v.fecha);
       if(!isNaN(fecha)&&(!window.ULTIMAS_COMPRAS[cn]||fecha>window.ULTIMAS_COMPRAS[cn]))
         window.ULTIMAS_COMPRAS[cn]=fecha;
     });
   }catch(e){}
 }
+
 function diasDesdeUltimaCompra(nombre){
-  if(!window.ULTIMAS_COMPRAS)return null;
+  if(!window.ULTIMAS_COMPRAS) return null;
   const fecha=window.ULTIMAS_COMPRAS[normNombre(nombre)];
-  if(!fecha)return null;
+  if(!fecha) return null;
   const hoy=new Date();hoy.setHours(0,0,0,0);
   return Math.floor((hoy-fecha)/86400000);
 }
 
-// ── MODAL CLIENTE ──
-async function abrirModalCliente(cuit,nombre){
+// ─── MODAL CLIENTE ────────────────────────────────────
+async function abrirModalCliente(cuit, nombre){
   document.getElementById('modal-title').textContent=nombre;
   document.getElementById('modal-body').innerHTML=`
     <div class="modal-tabs">
@@ -605,13 +608,18 @@ async function abrirModalCliente(cuit,nombre){
   ]);
 
   const factEl=document.getElementById('mtab-facturas');
-  if(sr&&sr.ok){const sd=await sr.json();if(sd.facturas&&sd.facturas.length>0)SALDOS_MAP[normNombre(nombre)]=sd;factEl.innerHTML=renderFacturas(sd);}
-  else factEl.innerHTML='<div class="empty"><div class="empty-icon">✅</div><div class="empty-text">Sin facturas pendientes</div></div>';
+  if(sr&&sr.ok){
+    const sd=await sr.json();
+    if(sd.facturas&&sd.facturas.length>0) SALDOS_MAP[normNombre(nombre)]=sd;
+    factEl.innerHTML=renderFacturas(sd);
+  } else {
+    factEl.innerHTML='<div class="empty"><div class="empty-icon">✅</div><div class="empty-text">Sin facturas pendientes</div></div>';
+  }
 
   const bcraData=(br&&br.ok)?await br.json():null;
   const chData=(chr&&chr.ok)?await chr.json():null;
   const histData=(hr&&hr.ok)?await hr.json():null;
-  document.getElementById('mtab-bcra').innerHTML=renderBcraTab(bcraData,chData,histData);
+  document.getElementById('mtab-bcra').innerHTML=renderBcraModal(bcraData,chData,histData);
 }
 
 function switchModalTab(tab,btn){
@@ -621,55 +629,15 @@ function switchModalTab(tab,btn){
   document.getElementById('mtab-bcra').style.display=tab==='bcra'?'block':'none';
 }
 
-function renderBcraTab(bcraData,chData,histData){
-  if(!bcraData||bcraData.error_bcra)return'<div class="card"><div style="color:var(--texto-suave);font-size:13px">⚠ No se pudo obtener información del BCRA.</div></div>';
-  const res=calcularScoreAdmin(bcraData,histData,chData);
-  const {score,rango,color,maxSit,entidades,nroEnt,montoM}=res;
-  const credito=calcularCredito(score);
-  let html=`<div class="card"><div class="card-title">Score Vende Seguro</div>
-    <div class="score-hero"><div class="score-num" style="color:${color}">${score}</div>
-    <div><div class="score-rango" style="color:${color}">${rango}</div>
-    <div style="font-size:11px;color:var(--texto-suave);margin-top:2px">Sin historial Piattelli</div></div></div>
-    <div class="score-bar-wrap"><div class="score-bar" style="width:${score/10}%;background:${color}"></div></div></div>
-  <div class="credito-box"><div class="credito-label">💡 Crédito sugerido</div>
-    <div class="credito-monto">${credito}</div><div class="credito-nota">Máximo $2.000.000 — Hard cap</div></div>`;
-  if(bcraData.sin_deudas||!entidades.length){
-    html+=`<div class="card"><div class="card-title">Situación BCRA</div><div class="sit-grid">
-    <div class="sit-chip"><span class="sit-chip-label">Situación</span><span class="sit-chip-val sit-1">1 — Normal</span></div>
-    <div class="sit-chip"><span class="sit-chip-label">Deuda</span><span class="sit-chip-val">Sin deudas</span></div></div></div>`;
-  } else {
-    html+=`<div class="card"><div class="card-title">Situación BCRA</div><div class="sit-grid">
-    <div class="sit-chip"><span class="sit-chip-label">Peor sit.</span><span class="sit-chip-val sit-${maxSit}">Sit ${maxSit}</span></div>
-    <div class="sit-chip"><span class="sit-chip-label">Entidades</span><span class="sit-chip-val">${nroEnt}</span></div>
-    <div class="sit-chip"><span class="sit-chip-label">Monto</span><span class="sit-chip-val">$${fmtM(montoM*1000)}</span></div></div>
-    ${entidades.map(e=>`<div class="divider"></div><div class="row-data"><span class="row-key">${esc(e.entidad||'')}</span><span class="row-val sit-${e.situacion||1}">Sit ${e.situacion||1} — $${fmtM((e.monto||0)*1000)}</span></div>`).join('')}</div>`;
-  }
-  // Cheques
-  const causales=(chData?.results?.causales||[]);let dchq=[];
-  causales.forEach(ca=>ca.entidades?.forEach(en=>dchq.push(...(en.detalle||[]))));
-  const activos=dchq.filter(d=>!d.fechaPago||d.estadoMulta==='IMPAGA');
-  html+=`<div class="card"><div class="card-title">Cheques rechazados</div>`;
-  if(!dchq.length)html+=`<div style="color:var(--verde);font-size:13px;font-weight:600">✓ Sin cheques rechazados</div>`;
-  else{
-    html+=`<div style="font-size:12px;color:var(--texto-suave);margin-bottom:8px">${dchq.length} total · ${activos.length} impagos</div>`;
-    dchq.slice(0,5).forEach(d=>{const imp=!d.fechaPago||d.estadoMulta==='IMPAGA';
-      html+=`<div class="cheque-item"><div><div class="cheque-monto">$${fmtM(d.monto||0)}</div>
-      <div style="font-size:10px;color:var(--texto-suave)">${d.nroCheque||''} · ${d.fechaRechazo||''}</div></div>
-      <span class="cheque-estado ${imp?'estado-impago':'estado-pagado'}">${imp?'IMPAGO':'PAGADO'}</span></div>`;});
-    if(dchq.length>5)html+=`<div style="font-size:11px;color:var(--texto-suave);text-align:center;margin-top:6px">+${dchq.length-5} más</div>`;
-  }
-  return html+'</div>';
-}
-
 function renderFacturas(data){
   const facturas=data.facturas||[];
-  if(!facturas.length)return'<div class="empty"><div class="empty-icon">✅</div><div class="empty-text">Sin facturas pendientes</div></div>';
+  if(!facturas.length) return '<div class="empty"><div class="empty-icon">✅</div><div class="empty-text">Sin facturas pendientes</div></div>';
   const hoy=new Date();hoy.setHours(0,0,0,0);
   const sorted=[...facturas].sort((a,b)=>parseFecha(a.fechaPago)-parseFecha(b.fechaPago));
   let html=`<div class="total-box"><div class="total-label">Saldo total pendiente</div><div class="total-monto">$${fmtFull(data.total_saldo)}</div></div>`;
   sorted.forEach(f=>{
     const venc=parseFecha(f.fechaPago),dias=Math.round((venc-hoy)/86400000);
-    let clase='vigente',tag=`<span class="tag-vigente">Vigente</span>`;
+    let clase='vigente',tag='<span class="tag-vigente">Vigente</span>';
     if(dias<0){clase='vencida';tag=`<span class="tag-vencida">Vencida hace ${Math.abs(dias)}d</span>`;}
     else if(dias<=7){clase='proxima';tag=`<span class="tag-proxima">Vence en ${dias}d</span>`;}
     html+=`<div class="factura-item ${clase}">
@@ -681,13 +649,55 @@ function renderFacturas(data){
         <span class="factura-fecha">📅 ${f.fechaFactura}</span>
         <span class="factura-fecha">⏰ Vence: ${f.fechaPago}</span>
       </div>
-      ${f.totalFactura!==f.saldo?`<div style="font-size:11px;color:var(--texto-suave);margin-top:4px">Total fac: $${fmtFull(f.totalFactura)}</div>`:''}
+      ${f.totalFactura!==f.saldo?`<div style="font-size:11px;color:var(--texto2);margin-top:4px">Total fac: $${fmtFull(f.totalFactura)}</div>`:''}
     </div>`;
   });
   return html;
 }
 
-// ── CONSULTA CUIT ──
+function renderBcraModal(bcraData,chData,histData){
+  if(!bcraData||bcraData.error_bcra) return '<div class="card"><div style="color:var(--texto2);font-size:13px">⚠ No se pudo obtener info del BCRA.</div></div>';
+  const results=bcraData.results||{},periodos=results.periodos||[];
+  let maxSit=1,entidades=[],montoTotal=0;
+  if(periodos.length){entidades=periodos[0].entidades||[];if(entidades.length){maxSit=Math.max(...entidades.map(e=>e.situacion||1));montoTotal=entidades.reduce((s,e)=>s+(e.monto||0),0);}}
+  const scoreEst=calcularScoreCompleto(maxSit,bcraData.sin_deudas,periodos,chData,histData);
+  const cc=scoreToColor(scoreEst);
+  const causales=chData?.results?.causales||[];let dchq=[];
+  causales.forEach(ca=>ca.entidades?.forEach(en=>dchq.push(...(en.detalle||[]))));
+  const activos=dchq.filter(d=>!d.fechaPago||d.estadoMulta==='IMPAGA');
+  let html=`<div class="card"><div class="card-title">Score Vende Seguro</div>
+    <div class="score-hero"><div class="score-num" style="color:${cc}">${scoreEst}</div>
+    <div><div class="score-rango" style="color:${cc}">${scoreToRango(scoreEst)}</div>
+    <div style="font-size:11px;color:var(--texto2);margin-top:2px">Sin historial Piattelli</div></div></div>
+    <div class="score-bar-wrap"><div class="score-bar" style="width:${scoreEst/10}%;background:${cc}"></div></div></div>
+  <div class="credito-box"><div class="credito-label">💡 Crédito sugerido</div>
+    <div class="credito-monto">${calcularCredito(scoreEst)}</div></div>`;
+  if(bcraData.sin_deudas||!entidades.length){
+    html+=`<div class="card"><div class="card-title">Situación BCRA</div><div class="sit-grid">
+    <div class="sit-chip"><span class="sit-chip-label">Situación</span><span class="sit-chip-val sit-1">1 — Normal</span></div>
+    <div class="sit-chip"><span class="sit-chip-label">Deuda</span><span class="sit-chip-val">Sin deudas</span></div></div></div>`;
+  } else {
+    html+=`<div class="card"><div class="card-title">Situación BCRA — ${periodos[0]?.periodo||''}</div><div class="sit-grid">
+    <div class="sit-chip"><span class="sit-chip-label">Peor sit.</span><span class="sit-chip-val sit-${maxSit}">Sit ${maxSit}</span></div>
+    <div class="sit-chip"><span class="sit-chip-label">Entidades</span><span class="sit-chip-val">${entidades.length}</span></div>
+    <div class="sit-chip"><span class="sit-chip-label">Monto total</span><span class="sit-chip-val">$${fmtM(montoTotal*1000)}</span></div></div>
+    ${entidades.map(e=>`<div class="divider"></div><div class="row-data"><span class="row-key">${esc(e.entidad||'')}</span><span class="row-val sit-${e.situacion||1}">Sit ${e.situacion||1} — $${fmtM((e.monto||0)*1000)}</span></div>`).join('')}</div>`;
+  }
+  html+=`<div class="card"><div class="card-title">Cheques rechazados</div>`;
+  if(!dchq.length) html+=`<div style="color:var(--verde);font-size:13px;font-weight:600">✓ Sin cheques rechazados</div>`;
+  else {
+    html+=`<div style="font-size:12px;color:var(--texto2);margin-bottom:8px">${dchq.length} total · ${activos.length} impagos</div>`;
+    dchq.slice(0,5).forEach(d=>{const imp=!d.fechaPago||d.estadoMulta==='IMPAGA';
+      html+=`<div class="cheque-item"><div><div style="font-weight:700;font-size:13px">$${fmtM(d.monto||0)}</div>
+      <div style="font-size:10px;color:var(--texto2)">${d.nroCheque||''} · ${d.fechaRechazo||''}</div></div>
+      <span class="cheque-estado ${imp?'impago':'pagado'}">${imp?'IMPAGO':'PAGADO'}</span></div>`;});
+    if(dchq.length>5) html+=`<div style="font-size:11px;color:var(--texto2);text-align:center;margin-top:6px">+${dchq.length-5} más</div>`;
+  }
+  html+='</div>';
+  return html;
+}
+
+// ─── CONSULTA CUIT ────────────────────────────────────
 async function consultarCuit(){
   const cuit=document.getElementById('cuit-input').value.trim().replace(/\D/g,'');
   if(cuit.length<10){alert('CUIT inválido');return;}
@@ -710,56 +720,54 @@ async function consultarCuit(){
 }
 
 function renderConsulta(cuit,dd,cd,hd){
-  const res=calcularScoreAdmin(dd,hd,cd);
-  const {score,rango,color,maxSit,entidades,nroEnt,montoM}=res;
-  window._ultimoScoreComercial=score;
-  const credito=calcularCredito(score);
-  const nombre=(dd.results?.denominacion||'Sin nombre registrado');
+  const results=dd.results||{},periodos=results.periodos||[];
+  let maxSit=1,entidades=[],montoTotal=0;
+  if(periodos.length){entidades=periodos[0].entidades||[];if(entidades.length){maxSit=Math.max(...entidades.map(e=>e.situacion||1));montoTotal=entidades.reduce((s,e)=>s+(e.monto||0),0);}}
+  const scoreEst=calcularScoreCompleto(maxSit,dd.sin_deudas,periodos,cd,hd);
+  window._ultimoScoreComercial=scoreEst;
+  const cc=scoreToColor(scoreEst);
+  const causales=cd.results?.causales||[];let dchq=[];
+  causales.forEach(ca=>ca.entidades?.forEach(en=>dchq.push(...(en.detalle||[]))));
+  const activos=dchq.filter(d=>!d.fechaPago||d.estadoMulta==='IMPAGA');
 
   let html=`<div class="card">
-    <div style="font-size:16px;font-weight:700;margin-bottom:4px;color:var(--azul-oscuro)">${esc(nombre)}</div>
-    <div style="font-size:12px;color:var(--texto-suave);font-family:monospace">${cuit}</div></div>`;
+    <div style="font-size:16px;font-weight:700;color:var(--azul)">${esc(results.denominacion||'Sin nombre registrado')}</div>
+    <div style="font-size:12px;color:var(--texto2);font-family:monospace;margin-top:2px">${cuit}</div></div>`;
 
   if(!dd.error_bcra){
     html+=`<div class="card"><div class="card-title">Score Vende Seguro</div>
-      <div class="score-hero"><div class="score-num" style="color:${color}">${score}</div>
-      <div><div class="score-rango" style="color:${color}">${rango}</div>
-      <div style="font-size:11px;color:var(--texto-suave);margin-top:2px">Sin historial Piattelli</div></div></div>
-      <div class="score-bar-wrap"><div class="score-bar" style="width:${score/10}%;background:${color}"></div></div></div>
+    <div class="score-hero"><div class="score-num" style="color:${cc}">${scoreEst}</div>
+    <div><div class="score-rango" style="color:${cc}">${scoreToRango(scoreEst)}</div>
+    <div style="font-size:11px;color:var(--texto2);margin-top:2px">Sin historial Piattelli</div></div></div>
+    <div class="score-bar-wrap"><div class="score-bar" style="width:${scoreEst/10}%;background:${cc}"></div></div></div>
     <div class="credito-box"><div class="credito-label">💡 Crédito sugerido</div>
-      <div class="credito-monto">${credito}</div>
-      <div class="credito-nota">Basado en score Vende Seguro · Máx. $2.000.000</div></div>`;
+    <div class="credito-monto">${calcularCredito(scoreEst)}</div>
+    <div style="font-size:11px;color:var(--texto2);margin-top:4px">Basado en score y situación BCRA · Máx. $2.000.000</div></div>`;
   }
 
   if(dd.error_bcra){
-    html+=`<div class="card"><div style="color:var(--texto-suave);font-size:13px">⚠ BCRA no disponible en este momento.</div></div>`;
+    html+=`<div class="card"><div style="color:var(--texto2);font-size:13px">⚠ No se pudo obtener información del BCRA.</div></div>`;
   } else if(dd.sin_deudas||!entidades.length){
     html+=`<div class="card"><div class="card-title">Situación BCRA</div><div class="sit-grid">
-      <div class="sit-chip"><span class="sit-chip-label">Situación</span><span class="sit-chip-val sit-1">1 — Normal</span></div>
-      <div class="sit-chip"><span class="sit-chip-label">Deuda sistema</span><span class="sit-chip-val">Sin deudas</span></div></div></div>`;
+    <div class="sit-chip"><span class="sit-chip-label">Situación</span><span class="sit-chip-val sit-1">1 — Normal</span></div>
+    <div class="sit-chip"><span class="sit-chip-label">Deuda sistema</span><span class="sit-chip-val">Sin deudas</span></div></div></div>`;
   } else {
-    html+=`<div class="card"><div class="card-title">Situación BCRA — ${dd.results?.periodos?.[0]?.periodo||''}</div>
-      <div class="sit-grid">
-        <div class="sit-chip"><span class="sit-chip-label">Peor situación</span><span class="sit-chip-val sit-${maxSit}">Sit ${maxSit}</span></div>
-        <div class="sit-chip"><span class="sit-chip-label">Entidades</span><span class="sit-chip-val">${nroEnt}</span></div>
-        <div class="sit-chip"><span class="sit-chip-label">Monto total</span><span class="sit-chip-val">$${fmtM(montoM*1000)}</span></div>
-      </div>
-      ${entidades.map(e=>`<div class="divider"></div><div class="row-data"><span class="row-key">${esc(e.entidad||'')}</span><span class="row-val sit-${e.situacion||1}">Sit ${e.situacion||1} — $${fmtM((e.monto||0)*1000)}</span></div>`).join('')}</div>`;
+    html+=`<div class="card"><div class="card-title">Situación BCRA — ${periodos[0]?.periodo||''}</div><div class="sit-grid">
+    <div class="sit-chip"><span class="sit-chip-label">Peor situación</span><span class="sit-chip-val sit-${maxSit}">Sit ${maxSit}</span></div>
+    <div class="sit-chip"><span class="sit-chip-label">Entidades</span><span class="sit-chip-val">${entidades.length}</span></div>
+    <div class="sit-chip"><span class="sit-chip-label">Monto total</span><span class="sit-chip-val">$${fmtM(montoTotal*1000)}</span></div></div>
+    ${entidades.map(e=>`<div class="divider"></div><div class="row-data"><span class="row-key">${esc(e.entidad||'')}</span><span class="row-val sit-${e.situacion||1}">Sit ${e.situacion||1} — $${fmtM((e.monto||0)*1000)}</span></div>`).join('')}</div>`;
   }
 
-  // Cheques
-  const causales=(cd.results?.causales||[]);let dchq=[];
-  causales.forEach(ca=>ca.entidades?.forEach(en=>dchq.push(...(en.detalle||[]))));
-  const activos=dchq.filter(d=>!d.fechaPago||d.estadoMulta==='IMPAGA');
   html+=`<div class="card"><div class="card-title">Cheques rechazados</div>`;
-  if(!dchq.length)html+=`<div style="color:var(--verde);font-size:13px;font-weight:600">✓ Sin cheques rechazados</div>`;
+  if(!dchq.length) html+=`<div style="color:var(--verde);font-size:13px;font-weight:600">✓ Sin cheques rechazados</div>`;
   else{
-    html+=`<div style="font-size:12px;color:var(--texto-suave);margin-bottom:8px">${dchq.length} total · ${activos.length} impagos</div>`;
+    html+=`<div style="font-size:12px;color:var(--texto2);margin-bottom:8px">${dchq.length} total · ${activos.length} impagos</div>`;
     dchq.slice(0,5).forEach(d=>{const imp=!d.fechaPago||d.estadoMulta==='IMPAGA';
-      html+=`<div class="cheque-item"><div><div class="cheque-monto">$${fmtM(d.monto||0)}</div>
-      <div style="font-size:10px;color:var(--texto-suave)">${d.nroCheque||''} · ${d.fechaRechazo||''}</div></div>
-      <span class="cheque-estado ${imp?'estado-impago':'estado-pagado'}">${imp?'IMPAGO':'PAGADO'}</span></div>`;});
-    if(dchq.length>5)html+=`<div style="font-size:11px;color:var(--texto-suave);text-align:center;margin-top:6px">+${dchq.length-5} más</div>`;
+      html+=`<div class="cheque-item"><div><div style="font-weight:700;font-size:13px">$${fmtM(d.monto||0)}</div>
+      <div style="font-size:10px;color:var(--texto2)">${d.nroCheque||''} · ${d.fechaRechazo||''}</div></div>
+      <span class="cheque-estado ${imp?'impago':'pagado'}">${imp?'IMPAGO':'PAGADO'}</span></div>`;});
+    if(dchq.length>5) html+=`<div style="font-size:11px;color:var(--texto2);text-align:center;margin-top:6px">+${dchq.length-5} más</div>`;
   }
   html+=`</div><div class="card"><div class="card-title">Análisis IA</div>
     <div class="ia-loading" id="ia-loading"><div class="spinner"></div><span>Generando análisis...</span></div>
@@ -768,40 +776,180 @@ function renderConsulta(cuit,dd,cd,hd){
 }
 
 async function lanzarAnalisisIA(cuit,dd,cd,hd){
-  const scoreActual=window._ultimoScoreComercial||700;
-  const credito=calcularCredito(scoreActual);
-  const entidades=(dd.results?.periodos?.[0]?.entidades||[]);
-  const maxSit=entidades.length?Math.max(...entidades.map(e=>e.situacion||1)):1;
-  const montoTotal=entidades.reduce((s,e)=>s+(e.monto||0),0);
-  const causales=(cd.results?.causales||[]);let chqTotal=0;
+  const results=dd.results||{},periodos=results.periodos||[];
+  let maxSit=1,montoTotal=0,entidades=[];
+  if(periodos.length){entidades=periodos[0].entidades||[];if(entidades.length){maxSit=Math.max(...entidades.map(e=>e.situacion||1));montoTotal=entidades.reduce((s,e)=>s+(e.monto||0),0);}}
+  const causales=cd.results?.causales||[];let chqTotal=0;
   causales.forEach(ca=>ca.entidades?.forEach(en=>{chqTotal+=(en.detalle||[]).length;}));
-  const prompt=`Sos analista de riesgo crediticio senior para Bodega Piattelli, Mendoza. Tu función es asesorar a vendedores de vinos.
+  const scoreActual=window._ultimoScoreComercial||400;
+  const creditoSug=calcularCredito(scoreActual);
 
-DATOS DEL CLIENTE (CUIT ${cuit}):
+  // SYSTEM PROMPT — el crédito del sistema es verdad absoluta, hard cap $2.000.000
+  const prompt=`Sos analista de riesgo crediticio senior para Bodega Piattelli Mendoza.
+Datos objetivos del cliente CUIT ${cuit}:
+- Situación BCRA: ${maxSit} (${maxSit===1?'Normal':maxSit===2?'Seguimiento especial':'Crítico'})
+- Deuda total sistema financiero: $${fmtM(montoTotal*1000)}
+- Cantidad de entidades: ${entidades.length}
+- Cheques rechazados BCRA: ${chqTotal}
 - Score Vende Seguro: ${scoreActual}/999 (${scoreToRango(scoreActual)})
-- Situación BCRA: ${maxSit} (${maxSit===1?'Normal':maxSit===2?'Seguimiento especial':maxSit===3?'Con problemas':'Alto riesgo/Irrecuperable'})
-- Deuda sistema financiero: $${fmtM(montoTotal*1000)}
-- Entidades con deuda: ${entidades.length}
-- Cheques rechazados: ${chqTotal}
-- CRÉDITO SUGERIDO POR EL SISTEMA: ${credito}
+- Crédito sugerido por el sistema: ${creditoSug}
 
 INSTRUCCIONES ESTRICTAS:
-1. Redactá un análisis de riesgo breve (3-4 oraciones) en español informal para un vendedor de vinos.
-2. El crédito sugerido es EXACTAMENTE "${credito}" — este es el límite del sistema y no puede superarse bajo ninguna circunstancia. El máximo absoluto es $2.000.000.
-3. Tu análisis debe JUSTIFICAR por qué ese monto es el apropiado, sin sugerir un monto mayor.
-4. Sin listas, sin markdown, solo texto directo y profesional.`;
+1. El crédito sugerido es EXACTAMENTE "${creditoSug}". No sugerís otro monto bajo ninguna circunstancia.
+2. El tope máximo absoluto es $2.000.000. Nunca superarlo.
+3. Justificá ese monto basándote en los datos reales del BCRA.
+4. Redactá 3-4 oraciones en español informal orientado a un vendedor de vinos.
+5. Sin listas, sin markdown, solo texto directo.`;
+
   try{
     const resp=await fetch(API+'/analizar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt})});
     const data=await resp.json();
     const iaEl=document.getElementById('ia-texto'),loadEl=document.getElementById('ia-loading');
     if(iaEl&&loadEl){loadEl.style.display='none';iaEl.style.display='block';iaEl.textContent=data.texto||'No se pudo generar el análisis.';}
-  }catch(e){const l=document.getElementById('ia-loading');if(l)l.innerHTML='<span style="color:var(--texto-suave);font-size:12px">Error generando análisis</span>';}
+  }catch(e){const l=document.getElementById('ia-loading');if(l)l.innerHTML='<span style="color:var(--texto2);font-size:12px">Error generando análisis.</span>';}
 }
+
+function closeModal(){document.getElementById('detail-modal').style.display='none';}
+function showLoading(txt){document.getElementById('loading-text').textContent=txt||'Cargando...';document.getElementById('loading-overlay').style.display='flex';}
+function hideLoading(){document.getElementById('loading-overlay').style.display='none';}
+
+function parseFecha(s){
+  if(!s)return new Date(9999,0,1);
+  if(s.includes('/')){const[d,m,y]=s.split('/');return new Date(parseInt(y),parseInt(m)-1,parseInt(d));}
+  return new Date(s);
+}
+
+// ─── MOTOR DE SCORING — ESPEJO EXACTO DE APP PRINCIPAL ──────────────
+// Lógica extraída de calcularVendeScore() de la app admin.
+// Diferencias esperadas vs admin: DSO=50 neutral, Piattelli=50 neutral, Bodegas=30 neutral
+// Concentración: usa entidades del periodo actual
+function calcularScoreCompleto(maxSit, sinDeudas, periodos, chData, histData) {
+  let puntos = 0;
+
+  // 1. SITUACIÓN BCRA (Max 400)
+  // Idéntico al admin: sit1=400, sit2=200, sit3=50, sit4+=0, null=200
+  const pBCRA = maxSit === null ? 200 : maxSit === 1 ? 400 : maxSit === 2 ? 200 : maxSit === 3 ? 50 : 0;
+  puntos += pBCRA;
+
+  // 2. HISTORIAL 24M (Max 150)
+  // Usa histData si disponible (endpoint /historial), sino los periodos del BCRA actual
+  let pHistorial = 75; // neutral si no hay datos
+  const periodosHist = histData?.results?.periodos?.length > 0
+    ? histData.results.periodos
+    : (periodos.length > 0 ? periodos : []);
+
+  if (periodosHist.length > 0) {
+    let mesesMalos = 0;
+    periodosHist.slice(0, 24).forEach(p => {
+      const sitMax = (p.entidades||[]).reduce((m,e) => Math.max(m, e.situacion||1), 1);
+      if (sitMax > 1) mesesMalos++;
+    });
+    if (mesesMalos === 0)     { pHistorial = 150; }
+    else if (mesesMalos <= 2) { pHistorial = 75; }
+    else                      { pHistorial = 0; }
+  } else if (sinDeudas) {
+    pHistorial = 150;
+  }
+  puntos += pHistorial;
+
+  // 3. CHEQUES RECHAZADOS (Max 150)
+  // sin_deudas:true = confirmado sin cheques = 150. datos reales = calcular activos.
+  let pCheques = 75; // neutral si no hay datos
+  if (chData && chData.sin_deudas === true && !chData.error_bcra) {
+    pCheques = 150;
+  } else if (chData && !chData.error_bcra) {
+    const resC = chData.results || chData;
+    let todosDetalles = [];
+    if (resC && resC.causales) {
+      resC.causales.forEach(c => {
+        (c.entidades||[]).forEach(e => {
+          (e.detalle||[]).forEach(d => todosDetalles.push(d));
+        });
+      });
+    }
+    const total = todosDetalles.length;
+    const activos = todosDetalles.filter(d => !d.fechaPago || d.estadoMulta === 'IMPAGA').length;
+    if (total === 0)        pCheques = 150;
+    else if (activos === 0) pCheques = 75;
+    else                    pCheques = 0;
+  }
+  puntos += pCheques;
+
+  // 4. DSO INDIVIDUAL (Max 100) — neutral en comercial
+  puntos += 50;
+
+  // 5. HISTORIAL PIATTELLI (Max 100) — neutral en comercial
+  puntos += 50;
+
+  // 6. RED DE BODEGAS (Max 60) — neutral en comercial
+  puntos += 30;
+
+  // 7. CONCENTRACIÓN DE DEUDA (Max 39)
+  let pConc = 20; // neutral sin datos
+  if (periodos.length > 0) {
+    const ents = periodos[0].entidades || [];
+    const nroEnt = ents.length;
+    const montoM = ents.reduce((s,e) => s+(e.monto||0), 0) / 1000;
+    if (nroEnt === 0)                      pConc = 39;
+    else if (nroEnt === 1 && montoM < 50)  pConc = 35;
+    else if (nroEnt <= 2 && montoM < 100)  pConc = 28;
+    else if (nroEnt <= 3 && montoM < 500)  pConc = 20;
+    else if (nroEnt <= 5 && montoM < 2000) pConc = 10;
+    else                                   pConc = 0;
+  } else if (sinDeudas) {
+    pConc = 39;
+  }
+  puntos += pConc;
+
+  // TECHOS DUROS (idénticos al admin)
+  if (maxSit >= 4) puntos = Math.min(puntos, 250);
+  else if (maxSit === 3) puntos = Math.min(puntos, 400);
+
+  return Math.max(1, Math.min(999, Math.round(puntos)));
+}
+
+// ─── CRÉDITO SUGERIDO — HARD CAP $2.000.000 ──────────
+function calcularCredito(s) {
+  let monto;
+  if (s >= 900) monto = [800000, 2000000];
+  else if (s >= 700) monto = [500000, 800000];
+  else if (s >= 500) monto = [200000, 500000];
+  else if (s >= 400) monto = [100000, 200000];
+  else if (s >= 300) monto = [0, 100000];
+  else if (s >= 200) monto = null; // contado anticipado
+  else return 'No recomendado';
+
+  if (!monto) return 'Solo contado anticipado';
+
+  // Hard cap: nunca superar CREDITO_MAX
+  const min = monto[0], max = Math.min(monto[1], CREDITO_MAX);
+  if (min >= max) return `Hasta $${fmtFull(max)}`;
+  return `$${fmtFull(min)} – $${fmtFull(max)}`;
+}
+
+// ─── HELPERS ──────────────────────────────────────────
+function scoreToColor(s){
+  if(!s)return'var(--texto2)';
+  if(s>=700)return'var(--verde)';
+  if(s>=400)return'var(--amarillo)';
+  if(s>=200)return'var(--naranja)';
+  return'var(--rojo)';
+}
+function scoreToRango(s){
+  if(!s)return'—';
+  if(s>=800)return'Excelente';
+  if(s>=600)return'Bueno';
+  if(s>=400)return'Revisar';
+  if(s>=200)return'Alto riesgo';
+  return'Rechazar';
+}
+function sitBg(s){return{1:'#dcfce7',2:'#fef9c3',3:'#ffedd5',4:'#fee2e2',5:'#fee2e2',6:'#fee2e2'}[s]||'#dcfce7';}
+function fmtM(n){if(!n)return'0';if(n>=1e9)return(n/1e9).toFixed(1)+'B';if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1e3)return(n/1e3).toFixed(0)+'K';return Math.round(n).toLocaleString('es-AR');}
+function fmtFull(n){if(!n)return'0';return Math.round(n).toLocaleString('es-AR');}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 
 document.getElementById('cuit-input').addEventListener('keypress',e=>{if(e.key==='Enter')consultarCuit();});
 document.getElementById('inp-pin').addEventListener('keypress',e=>{if(e.key==='Enter')doLogin();});
-document.getElementById('inp-nombre').addEventListener('keypress',e=>{if(e.key==='Enter')document.getElementById('inp-cuit').focus();});
-document.getElementById('inp-cuit').addEventListener('keypress',e=>{if(e.key==='Enter')document.getElementById('inp-pin').focus();});
 </script>
 </body>
 </html>
