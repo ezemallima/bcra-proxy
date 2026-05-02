@@ -1,9 +1,13 @@
 services:
   - type: web
     name: bcra-proxy
-    env: python
+    runtime: python
     buildCommand: pip install -r requisitos.txt
-    startCommand: gunicorn main:app --timeout 120 --workers 1 --bind 0.0.0.0:8080
+    startCommand: gunicorn main:app --workers 1 --threads 4 --timeout 120 --keep-alive 5 --max-requests 500 --max-requests-jitter 50
     envVars:
-      - key: GEMINI_API_KEY
-        sync: false
+      - key: PYTHON_VERSION
+        value: 3.11.0
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
