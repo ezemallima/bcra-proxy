@@ -641,6 +641,36 @@ def get_cartera_comercial(vendedor):
     except: pass
     return jsonify(result)
 
+@app.route("/scores-cartera", methods=["GET"])
+def get_scores_cartera():
+    """Devuelve scores de toda la cartera. Si no existen los calcula en background."""
+    try:
+        if os.path.exists(ALERTAS_FILE):
+            with open(ALERTAS_FILE, 'r', encoding='utf-8') as f:
+                alertas_data = json.load(f)
+            cartera = alertas_data.get('cartera', [])
+            con_score = [c for c in cartera if c.get('scoreCompleto')]
+            total = len(_cartera_comercial)
+            if len(con_score) >= total * 0.8:  # 80%+ tienen score
+                return jsonify({
+                    "ok": True,
+                    "scores": {c['cuit']: {
+                        "scoreCompleto": c.get('scoreCompleto'),
+                        "scoreRango": c.get('scoreRango'),
+                        "scoreColor": c.get('scoreColor'),
+                        "scoreEmoji": c.get('scoreEmoji'),
+                        "ultimaSit": c.get('ultimaSit', 1)
+                    } for c in con_score if c.get('cuit')},
+                    "total": len(con_score)
+                })
+        # No hay scores — iniciar cálculo en background
+        if not verificacion_estado.get('corriendo'):
+            t = threading.Thread(target=ejecutar_verificacion, args=(_cartera_comercial,), daemon=True)
+            t.start()
+        return jsonify({"ok": False, "mensaje": "Calculando scores...", "total": 0, "scores": {}})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e), "scores": {}})
+
 @app.route("/whatsapp_index.json")
 def wsp_index_route():
     return send_from_directory(os.getcwd(), 'whatsapp_index.json')
