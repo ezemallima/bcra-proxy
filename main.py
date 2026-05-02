@@ -651,7 +651,7 @@ def get_scores_cartera():
             cartera = alertas_data.get('cartera', [])
             con_score = [c for c in cartera if c.get('scoreCompleto')]
             total = len(_cartera_comercial)
-            if len(con_score) >= total * 0.8:  # 80%+ tienen score
+            if len(con_score) > 0:  # devolver lo que haya
                 return jsonify({
                     "ok": True,
                     "scores": {c['cuit']: {
