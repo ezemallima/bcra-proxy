@@ -90,7 +90,7 @@ verificacion_estado = {
     "mensaje": ""
 }
 
-def gemini_request(payload, timeout=120):
+def gemini_request(payload, timeout=250):
     if GEMINI_KEY:
         url = "https://generativelanguage.googleapis.com/v1beta/models/" + GEMINI_MODEL + ":generateContent?key=" + GEMINI_KEY
         for intento in range(2):
@@ -168,7 +168,7 @@ def consultar_bcra(cuit, reintentos=3):
         for i in range(intentos):
             try:
                 print(f"[bcra] {cuit} consultando via {via}...", flush=True)
-                r = requests.get(ep_url, timeout=15, verify=False)
+                r = requests.get(ep_url, timeout=25, verify=False)
                 if r.status_code == 200:
                     text = r.text.strip()
                     if not text or len(text) < 10:
@@ -301,7 +301,7 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
         for intento_global in range(6):  # hasta 6 intentos rotando endpoints
             url_h = urls_hist[intento_global % len(urls_hist)]
             try:
-                r_h = requests.get(url_h, timeout=15, verify=False)
+                r_h = requests.get(url_h, timeout=25, verify=False)
                 if r_h.status_code == 200 and len(r_h.text.strip()) > 10:
                     hist_cached = r_h.json()
                     try:
@@ -356,7 +356,7 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
         for intento_global in range(6):
             url_c = urls_cheq[intento_global % len(urls_cheq)]
             try:
-                r_c = requests.get(url_c, timeout=15, verify=False)
+                r_c = requests.get(url_c, timeout=25, verify=False)
                 if r_c.status_code == 200 and len(r_c.text.strip()) > 10:
                     cheq_cached = r_c.json()
                     try:
@@ -579,7 +579,7 @@ def ejecutar_verificacion(cartera_data):
                 except: pass
 
             if i < len(cartera_data) - 1:
-                time.sleep(1)
+                time.sleep(0.5)
 
         ahora = time.strftime('%d/%m/%Y %H:%M')
         try:
@@ -851,13 +851,13 @@ def get_afip(cuit):
             return jsonify({"nombre": data['results']['denominacion']})
     except Exception: pass
     try:
-        r = requests.get("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit, timeout=15, verify=False)
+        r = requests.get("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit, timeout=25, verify=False)
         if r.status_code == 200:
             nombre2 = r.json().get('results', {}).get('denominacion', '')
             if nombre2: return jsonify({"nombre": nombre2})
     except Exception: pass
     try:
-        r = requests.get("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit, timeout=15, verify=False)
+        r = requests.get("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit, timeout=25, verify=False)
         if r.status_code == 200:
             nombre3 = r.json().get('results', {}).get('denominacion', '')
             if nombre3: return jsonify({"nombre": nombre3})
@@ -908,7 +908,7 @@ def get_cheques(cuit):
         via = "Worker1" if url_idx == 0 else "Worker2" if url_idx == 1 else "directo"
         for intento in range(2):
             try:
-                r = requests.get(url, timeout=15, verify=False)
+                r = requests.get(url, timeout=25, verify=False)
                 if r.status_code == 200:
                     text = r.text.strip()
                     if not text or len(text) < 10:
@@ -926,7 +926,7 @@ def get_cheques(cuit):
             except Exception as e:
                 print(f"[cheques] Error via {via} intento {intento+1} para {cuit}: {e}", flush=True)
                 if intento < 1:
-                    time.sleep(1)
+                    time.sleep(0.5)
                     continue
                 break
     cached = _cheques_cache_get(cuit)
@@ -949,7 +949,7 @@ def get_historial(cuit):
         via = "Worker1" if url_idx == 0 else "Worker2" if url_idx == 1 else "directo"
         for intento in range(2):
             try:
-                r = requests.get(url, timeout=15, verify=False)
+                r = requests.get(url, timeout=25, verify=False)
                 if r.status_code == 200:
                     text = r.text.strip()
                     if not text or len(text) < 10:
@@ -967,7 +967,7 @@ def get_historial(cuit):
             except Exception as e:
                 print(f"[historial] Error via {via} intento {intento+1} para {cuit}: {e}", flush=True)
                 if intento < 1:
-                    time.sleep(1)
+                    time.sleep(0.5)
                     continue
                 break
     try:
@@ -1044,7 +1044,7 @@ def procesar_veraz():
         headers_oai = {"Content-Type": "application/json", "Authorization": "Bearer " + OPENAI_KEY}
         body_oai = {"model": "gpt-4o", "max_tokens": 1500, "messages": [{"role": "user", "content": content_oai}]}
         try:
-            r_oai = requests.post("https://api.openai.com/v1/chat/completions", headers=headers_oai, json=body_oai, timeout=120)
+            r_oai = requests.post("https://api.openai.com/v1/chat/completions", headers=headers_oai, json=body_oai, timeout=250)
             d_oai = r_oai.json()
             print(f"[procesar-informe] OpenAI status {r_oai.status_code}", flush=True)
             if r_oai.status_code == 200:
@@ -1319,7 +1319,7 @@ def test_modelos():
         url = f"https://generativelanguage.googleapis.com/{version}/models/{modelo}:generateContent?key={GEMINI_KEY}"
         try:
             r = requests.post(url, headers={"Content-Type": "application/json"},
-                json={"contents": [{"parts": [{"text": "di OK"}]}]}, timeout=10)
+                json={"contents": [{"parts": [{"text": "di OK"}]}]}, timeout=25)
             data = r.json()
             if "candidates" in data: resultados[key] = "OK"
             elif "error" in data: resultados[key] = data["error"].get("message", "error")[:100]
