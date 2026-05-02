@@ -651,7 +651,7 @@ def get_scores_cartera():
             cartera = alertas_data.get('cartera', [])
             con_score = [c for c in cartera if c.get('scoreCompleto')]
             total = len(_cartera_comercial)
-            if len(con_score) > 0:  # devolver lo que haya
+            if con_score:  # devolver cualquier score disponible
                 return jsonify({
                     "ok": True,
                     "scores": {c['cuit']: {
@@ -663,11 +663,8 @@ def get_scores_cartera():
                     } for c in con_score if c.get('cuit')},
                     "total": len(con_score)
                 })
-        # No hay scores — iniciar cálculo en background
-        if not verificacion_estado.get('corriendo'):
-            t = threading.Thread(target=ejecutar_verificacion, args=(_cartera_comercial,), daemon=True)
-            t.start()
-        return jsonify({"ok": False, "mensaje": "Calculando scores...", "total": 0, "scores": {}})
+        # No hay scores suficientes todavía
+        return jsonify({"ok": False, "mensaje": "Sin scores disponibles. Corré la verificación desde la app principal.", "total": 0, "scores": {}})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e), "scores": {}})
 
