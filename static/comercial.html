@@ -324,94 +324,53 @@ async function iniciarApp() {
   calcularYGuardarScoresCartera();
 }
 
-// ─── CALCULAR SCORES DE TODA LA CARTERA AL INICIO ────
+// ─── CARGAR SCORES DESDE SERVIDOR ────────────────────
 async function calcularYGuardarScoresCartera() {
-  // Ver cuántos ya tienen score
   const sinScore = CARTERA_LOCAL.filter(c => !c.score);
-  if (!sinScore.length) {
-    console.log('[scoring] Todos los clientes ya tienen score.');
-    renderOportunidades();
-    return;
-  }
-  console.log('[scoring] Calculando scores para', sinScore.length, 'clientes...');
+  if (!sinScore.length) { renderOportunidades(); return; }
 
-  let calculados = 0;
-  const scores = {};
+  console.log('[scoring] Pidiendo scores al servidor...');
 
-  for (let i = 0; i < CARTERA_LOCAL.length; i++) {
-    const c = CARTERA_LOCAL[i];
-    if (c.score) continue; // ya tiene score, saltar
+  // Intentar cargar scores del servidor
+  let intentos = 0;
+  const maxIntentos = 6;
 
+  const cargarScores = async () => {
     try {
-      const [dr, chr, hr] = await Promise.all([
-        fetch(API + '/deudas/' + c.cuit).catch(() => null),
-        fetch(API + '/deudas/' + c.cuit + '/cheques').catch(() => null),
-        fetch(API + '/deudas/' + c.cuit + '/historial').catch(() => null)
-      ]);
+      const r = await fetch(API + '/scores-cartera');
+      const data = await r.json();
 
-      const dd = (dr && dr.ok) ? await dr.json() : null;
-      const cd = (chr && chr.ok) ? await chr.json() : null;
-      const hd = (hr && hr.ok) ? await hr.json() : null;
-
-      if (!dd) continue;
-
-      const periodos = dd.results?.periodos || [];
-      let maxSit = 1, entidades = [];
-      if (periodos.length) {
-        entidades = periodos[0].entidades || [];
-        if (entidades.length) maxSit = Math.max(...entidades.map(e => e.situacion || 1));
-      } else if (dd.sin_deudas) { maxSit = 1; }
-
-      const score = calcularScoreCompleto(maxSit, dd.sin_deudas, periodos, cd, hd);
-      CARTERA_LOCAL[i].score = score;
-      CARTERA_LOCAL[i].ultimaSit = maxSit;
-      CARTERA_LOCAL[i].last_update = new Date().toISOString();
-      scores[c.cuit] = { scoreCompleto: score, ultimaSit: maxSit };
-      calculados++;
-
-      // Cada 20 clientes, actualizar UI y guardar parcial
-      if (calculados % 20 === 0) {
-        renderCartera(document.querySelector('.filter-chip.active')?.textContent?.includes('Alertas') ? 'alertas' :
-          document.querySelector('.filter-chip.active')?.textContent?.includes('saldo') ? 'saldo' : 'todos');
+      if (data.ok && data.scores && Object.keys(data.scores).length > 0) {
+        // Aplicar scores a la cartera local
+        CARTERA_LOCAL.forEach((c, i) => {
+          if (data.scores[c.cuit]) {
+            CARTERA_LOCAL[i].score = data.scores[c.cuit].scoreCompleto;
+            CARTERA_LOCAL[i].ultimaSit = data.scores[c.cuit].ultimaSit || c.ultimaSit || 1;
+          }
+        });
+        const conScore = CARTERA_LOCAL.filter(c => c.score).length;
+        console.log('[scoring] Scores aplicados:', conScore + '/' + CARTERA_LOCAL.length);
+        renderCartera('todos');
         renderOportunidades();
-        guardarScoresServidor(scores);
+        return true;
       }
 
-      // Pausa para no saturar el servidor
-      await new Promise(r => setTimeout(r, 800));
+      // Servidor calculando — reintentar
+      intentos++;
+      if (intentos < maxIntentos) {
+        console.log('[scoring] Servidor calculando, reintento', intentos, 'en 30s...');
+        setTimeout(cargarScores, 30000);
+      } else {
+        console.log('[scoring] No se pudieron cargar scores tras', maxIntentos, 'intentos.');
+      }
+      return false;
+    } catch(e) {
+      console.warn('[scoring] Error:', e);
+      return false;
+    }
+  };
 
-    } catch(e) { continue; }
-  }
-
-  // Guardado final
-  if (Object.keys(scores).length > 0) guardarScoresServidor(scores);
-  renderCartera('todos');
-  renderOportunidades();
-  console.log('[scoring] Completado:', calculados, 'scores calculados.');
-}
-
-async function guardarScoresServidor(scores) {
-  try {
-    const r = await fetch(API + '/alertas');
-    const existing = r.ok ? await r.json() : {alertas:[], cartera:[]};
-    const carteraMap = {};
-    (existing.cartera || []).forEach(c => { carteraMap[c.cuit] = c; });
-    Object.keys(scores).forEach(cuit => {
-      if (!carteraMap[cuit]) carteraMap[cuit] = {cuit};
-      carteraMap[cuit].scoreCompleto = scores[cuit].scoreCompleto;
-      carteraMap[cuit].ultimaSit = scores[cuit].ultimaSit;
-    });
-    await fetch(API + '/alertas', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        alertas: existing.alertas || [],
-        ultima_verif: existing.ultima_verif || '',
-        cartera: Object.values(carteraMap)
-      })
-    });
-    console.log('[scoring] Scores guardados en servidor:', Object.keys(scores).length);
-  } catch(e) { console.warn('[scoring] Error guardando:', e); }
+  cargarScores();
 }
 
 // ─── SALDOS ──────────────────────────────────────────
