@@ -357,6 +357,33 @@ function switchTab(tab, btn) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
   btn.classList.add('active');
+  if (tab === 'cartera' || tab === 'oport') refrescarScores();
+}
+
+async function refrescarScores() {
+  try {
+    const r = await fetch(API + '/alertas');
+    if (!r.ok) return;
+    const ad = await r.json();
+    ALERTAS = ad.alertas || [];
+    const scoreMap = {};
+    (ad.cartera || []).forEach(c => { if(c.cuit && c.scoreCompleto) scoreMap[c.cuit] = c; });
+    let actualizados = 0;
+    CARTERA_LOCAL.forEach((c, i) => {
+      if (scoreMap[c.cuit]) {
+        CARTERA_LOCAL[i].score      = scoreMap[c.cuit].scoreCompleto;
+        CARTERA_LOCAL[i].scoreRango = scoreMap[c.cuit].scoreRango;
+        CARTERA_LOCAL[i].scoreColor = scoreMap[c.cuit].scoreColor;
+        CARTERA_LOCAL[i].scoreEmoji = scoreMap[c.cuit].scoreEmoji;
+        CARTERA_LOCAL[i].ultimaSit  = scoreMap[c.cuit].ultimaSit || c.ultimaSit || 1;
+        actualizados++;
+      }
+    });
+    renderCartera(document.querySelector('.filter-chip.active')?.textContent?.includes('Alertas')?'alertas':
+      document.querySelector('.filter-chip.active')?.textContent?.includes('saldo')?'saldo':'todos');
+    if (document.getElementById('tab-oport').classList.contains('active')) renderOportunidades();
+    console.log('[refresh] Scores actualizados:', actualizados + '/' + CARTERA_LOCAL.length);
+  } catch(e) {}
 }
 
 // ── CARTERA ──
