@@ -590,7 +590,10 @@ async function abrirModalCliente(cuit, nombre) {
   const bcraData = (br && br.ok) ? await br.json() : null;
   const chData   = (chr && chr.ok) ? await chr.json() : null;
   const histData = (hr && hr.ok)   ? await hr.json()  : null;
-  bcraEl.innerHTML = renderBcraModal(bcraData, chData, histData);
+  // SSoT: buscar score del servidor primero
+  const clienteLocal = CARTERA_LOCAL.find(function(c){return c.cuit===cuit;});
+  const scoreServidor = (clienteLocal && clienteLocal.score) ? clienteLocal.score : null;
+  bcraEl.innerHTML = renderBcraModal(bcraData, chData, histData, scoreServidor);
 }
 
 function switchModalTab(tab, btn) {
@@ -638,7 +641,7 @@ function renderFacturas(data) {
   return html;
 }
 
-function renderBcraModal(bcraData, chData, histData) {
+function renderBcraModal(bcraData, chData, histData, scoreServidor) {
   if (!bcraData || bcraData.error_bcra) return '<div class="card"><div style="color:var(--text2);font-size:13px">⚠ No se pudo obtener información del BCRA.</div></div>';
   const results = bcraData.results || {};
   const periodos = results.periodos || [];
@@ -647,7 +650,8 @@ function renderBcraModal(bcraData, chData, histData) {
     entidades = periodos[0].entidades||[];
     if (entidades.length) { maxSit=Math.max(...entidades.map(e=>e.situacion||1)); montoTotal=entidades.reduce((s,e)=>s+(e.monto||0),0); }
   }
-  const scoreEst = calcularScoreCompletoSync(maxSit, bcraData.sin_deudas, periodos, chData, histData||null);
+  // SSoT: usar score del servidor (calculado por App Principal) si existe
+  const scoreEst = scoreServidor || calcularScoreCompletoSync(maxSit, bcraData.sin_deudas, periodos, chData, histData||null);
   const cc = scoreToColor(scoreEst);
   const causales = chData?.results?.causales||[];
   let dchq=[]; causales.forEach(ca=>ca.entidades?.forEach(en=>dchq.push(...(en.detalle||[]))));
