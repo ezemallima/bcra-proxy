@@ -415,8 +415,8 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
             en_mora = False
 
     puntos += 0 if en_mora else 100   # Historial Piattelli
-    puntos += 0 if en_mora else 25    # DSO: 25 si sin datos (no 50 neutral inflado)
-    puntos += 15                       # Red bodegas: 15 si sin datos (no 30 neutral inflado)
+    puntos += 0 if en_mora else 50    # DSO individual neutral
+    puntos += 30  # Red bodegas neutral
 
     # ── 5. CONCENTRACIÓN DEUDA ─────────────────────────────────────────────
     if nro_entidades == 0 or sin_deudas_real: pts_conc = 39
@@ -428,10 +428,11 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
     puntos += pts_conc
 
     # ── TECHOS DUROS — se aplican al final ─────────────────────────────────
-    if en_mora:        puntos = min(puntos, 300)
-    if max_sit >= 5:   puntos = min(puntos, 1)    # sit5/6 = irrecuperable
-    elif max_sit >= 4: puntos = min(puntos, 100)  # sit4 = máx 100 (más estricto)
-    elif max_sit == 3: puntos = min(puntos, 400)
+    # Techos duros — en el orden correcto
+    if en_mora:         puntos = min(puntos, 300)
+    if max_sit >= 5:    puntos = min(puntos, 1)    # sit5/6 irrecuperable
+    elif max_sit >= 4:  puntos = min(puntos, 250)  # sit4 alto riesgo
+    elif max_sit == 3:  puntos = min(puntos, 400)  # sit3 cap
 
     score = max(1, min(999, round(puntos)))
     if score >= 700: rango, color, emoji = 'Excelente', '#16a34a', '🟢'
