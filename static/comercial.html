@@ -723,65 +723,114 @@ async function consultarCuit() {
   }
 }
 
+function veredictoRapido(score, activosCheques, maxSit) {
+  if (maxSit >= 4 || activosCheques > 0)
+    return {texto:'⛔ No recibir cheque', bg:'#fee2e2', color:'var(--rojo)', borde:'var(--rojo)'};
+  if (maxSit === 3 || score < 300)
+    return {texto:'⚠ Riesgo elevado', bg:'#fef9c3', color:'#854d0e', borde:'var(--amarillo)'};
+  if (score >= 600 && activosCheques === 0)
+    return {texto:'✓ Apto para cheque', bg:'var(--verde-bg)', color:'var(--verde)', borde:'var(--verde)'};
+  return {texto:'👁 Revisar con cautela', bg:'#fff7ed', color:'var(--naranja)', borde:'var(--naranja)'};
+}
+
 function renderConsulta(cuit, dd, cd, hd) {
-  const results=dd.results||{}, periodos=results.periodos||[];
+  const results = dd.results||{}, periodos = results.periodos||[];
   let maxSit=1, entidades=[], montoTotal=0;
   if (periodos.length) {
-    entidades=periodos[0].entidades||[];
-    if (entidades.length) { maxSit=Math.max(...entidades.map(e=>e.situacion||1)); montoTotal=entidades.reduce((s,e)=>s+(e.monto||0),0); }
+    entidades = periodos[0].entidades||[];
+    if (entidades.length) {
+      maxSit = Math.max(...entidades.map(e=>e.situacion||1));
+      montoTotal = entidades.reduce((s,e)=>s+(e.monto||0),0);
+    }
   }
-  // Score completo igual que app principal
-  const scoreEst=calcularScoreCompletoSync(maxSit,dd.sin_deudas,periodos,cd,hd), cc=scoreToColor(scoreEst);
-  window._ultimoScoreComercial = scoreEst; // guardar para análisis IA
-  const causales=cd.results?.causales||[]; let dchq=[];
-  causales.forEach(ca=>ca.entidades?.forEach(en=>dchq.push(...(en.detalle||[]))));
-  const activos=dchq.filter(d=>!d.fechaPago||d.estadoMulta==='IMPAGA');
+  const scoreEst = calcularScoreCompletoSync(maxSit, dd.sin_deudas, periodos, cd, hd);
+  window._ultimoScoreComercial = scoreEst;
+  const cc = scoreToColor(scoreEst);
 
-  let html = `<div class="card">
-    <div style="font-size:16px;font-weight:700;margin-bottom:4px">${esc(results.denominacion||'Sin nombre registrado')}</div>
-    <div style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text2)">${cuit}</div>
+  // Cheques
+  const causales = cd.results?.causales||[]; let dchq=[];
+  causales.forEach(ca=>ca.entidades?.forEach(en=>dchq.push(...(en.detalle||[]))));
+  const activos = dchq.filter(d=>!d.fechaPago||d.estadoMulta==='IMPAGA');
+  const montoImpagos = activos.reduce((s,d)=>s+(d.monto||0),0);
+  const verd = veredictoRapido(scoreEst, activos.length, maxSit);
+
+  let html = `<div class="card" style="padding:12px 14px">
+    <div style="font-size:15px;font-weight:700;color:var(--azul)">${esc(results.denominacion||'Sin nombre')}</div>
+    <div style="font-size:11px;color:var(--texto2);font-family:monospace">${cuit}</div>
   </div>`;
 
-  if (!dd.error_bcra) {
-    html += `<div class="card"><div class="card-title">Score Vende Seguro</div>
-    <div class="score-hero"><div class="score-num" style="color:${cc}">${scoreEst}</div>
-    <div><div class="score-rango" style="color:${cc}">${scoreToRango(scoreEst)}</div>
-    <div style="font-size:11px;color:var(--text2);margin-top:2px">Estimado sin historial Piattelli</div></div></div>
-    <div class="score-bar-wrap"><div class="score-bar" style="width:${scoreEst/10}%;background:${cc}"></div></div></div>
-    <div class="credito-box"><div class="credito-label">💡 Crédito sugerido</div>
-    <div class="credito-monto">${calcularCredito(scoreEst)}</div>
-    <div class="credito-nota">Basado en score y situación BCRA</div></div>`;
-  }
+  // ── 1. VEREDICTO RÁPIDO — decisión en 10 segundos ──
+  html += `<div style="background:${verd.bg};border:2px solid ${verd.borde};border-radius:var(--radius);padding:16px;margin-bottom:10px;text-align:center">
+    <div style="font-size:20px;font-weight:800;color:${verd.color};font-family:'Syne',sans-serif">${verd.texto}</div>
+    <div style="display:flex;justify-content:center;gap:20px;margin-top:10px;flex-wrap:wrap">
+      <div style="text-align:center">
+        <div style="font-size:28px;font-weight:800;color:${cc};font-family:'Syne',sans-serif">${scoreEst}</div>
+        <div style="font-size:10px;color:var(--texto2)">Score</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:28px;font-weight:800;color:${activos.length>0?'var(--rojo)':'var(--verde)'};font-family:'Syne',sans-serif">${activos.length}</div>
+        <div style="font-size:10px;color:var(--texto2)">Cheques impagos</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:18px;font-weight:700;color:var(--azul);font-family:'Syne',sans-serif">${calcularCredito(scoreEst)}</div>
+        <div style="font-size:10px;color:var(--texto2)">Crédito sugerido</div>
+      </div>
+    </div>
+  </div>`;
 
+  // ── 2. CHEQUES — prioridad visual ──
+  html += `<div class="card"><div class="card-title">Cheques rechazados BCRA</div>`;
+  if (!dchq.length) {
+    html += `<div style="color:var(--verde);font-size:14px;font-weight:600;padding:8px 0">✓ Sin cheques rechazados</div>`;
+  } else {
+    html += `<div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+      <div style="flex:1;background:${activos.length>0?'var(--rojo-bg)':'var(--verde-bg)'};border-radius:8px;padding:10px;text-align:center;min-width:80px">
+        <div style="font-size:22px;font-weight:800;color:${activos.length>0?'var(--rojo)':'var(--verde)'}">${activos.length}</div>
+        <div style="font-size:10px;color:var(--texto2)">Impagos</div>
+      </div>
+      <div style="flex:1;background:var(--verde-bg);border-radius:8px;padding:10px;text-align:center;min-width:80px">
+        <div style="font-size:22px;font-weight:800;color:var(--verde)">${dchq.length-activos.length}</div>
+        <div style="font-size:10px;color:var(--texto2)">Regularizados</div>
+      </div>
+      ${montoImpagos>0?`<div style="flex:1;background:var(--rojo-bg);border-radius:8px;padding:10px;text-align:center;min-width:80px">
+        <div style="font-size:16px;font-weight:800;color:var(--rojo)">$${fmtM(montoImpagos)}</div>
+        <div style="font-size:10px;color:var(--texto2)">Monto impago</div>
+      </div>`:''}
+    </div>`;
+    dchq.slice(0,8).forEach(d=>{
+      const imp = !d.fechaPago||d.estadoMulta==='IMPAGA';
+      html += `<div class="cheque-item" style="${imp?'border-left:3px solid var(--rojo)':''}">
+        <div>
+          <div style="font-weight:700;font-size:13px">$${fmtM(d.monto||0)}</div>
+          <div style="font-size:10px;color:var(--texto2)">${esc(d.nroCheque||'')} · ${d.fechaRechazo||''}</div>
+        </div>
+        <span class="cheque-estado ${imp?'impago':'pagado'}">${imp?'IMPAGO':'PAGADO'}</span>
+      </div>`;
+    });
+    if (dchq.length>8) html+=`<div style="font-size:11px;color:var(--texto2);text-align:center;margin-top:6px">+${dchq.length-8} más</div>`;
+  }
+  html += `</div>`;
+
+  // ── 3. SITUACIÓN BCRA ──
   if (dd.error_bcra) {
-    html += `<div class="card"><div style="color:var(--text2);font-size:13px">⚠ No se pudo obtener información del BCRA.</div></div>`;
+    html += `<div class="card"><div style="color:var(--texto2);font-size:13px">⚠ No se pudo obtener info del BCRA.</div></div>`;
   } else if (dd.sin_deudas||!entidades.length) {
     html += `<div class="card"><div class="card-title">Situación BCRA</div><div class="sit-grid">
     <div class="sit-chip"><span class="sit-chip-label">Situación</span><span class="sit-chip-val sit-1">1 — Normal</span></div>
     <div class="sit-chip"><span class="sit-chip-label">Deuda sistema</span><span class="sit-chip-val">Sin deudas</span></div></div></div>`;
   } else {
     html += `<div class="card"><div class="card-title">Situación BCRA — ${periodos[0]?.periodo||''}</div><div class="sit-grid">
-    <div class="sit-chip"><span class="sit-chip-label">Peor situación</span><span class="sit-chip-val sit-${maxSit}">Sit ${maxSit}</span></div>
+    <div class="sit-chip"><span class="sit-chip-label">Peor sit.</span><span class="sit-chip-val sit-${maxSit}">Sit. ${maxSit}</span></div>
     <div class="sit-chip"><span class="sit-chip-label">Entidades</span><span class="sit-chip-val">${entidades.length}</span></div>
     <div class="sit-chip"><span class="sit-chip-label">Monto total</span><span class="sit-chip-val">$${fmtM(montoTotal*1000)}</span></div></div>
-    ${entidades.map(e=>`<div class="divider"></div><div class="row-data"><span class="row-key">${esc(e.entidad||'')}</span><span class="row-val sit-${e.situacion||1}">Sit ${e.situacion||1} — $${fmtM((e.monto||0)*1000)}</span></div>`).join('')}
-    </div>`;
+    ${entidades.map(e=>`<div class="divider"></div><div class="row-data"><span class="row-key">${esc(e.entidad||'')}</span><span class="row-val sit-${e.situacion||1}">Sit. ${e.situacion||1} — $${fmtM((e.monto||0)*1000)}</span></div>`).join('')}</div>`;
   }
 
-  html += `<div class="card"><div class="card-title">Cheques rechazados</div>`;
-  if (!dchq.length) { html += `<div style="color:var(--green);font-size:13px">✓ Sin cheques rechazados</div>`; }
-  else {
-    html += `<div style="font-size:12px;color:var(--text2);margin-bottom:10px">${dchq.length} total · ${activos.length} impagos</div>`;
-    dchq.slice(0,5).forEach(d=>{const imp=!d.fechaPago||d.estadoMulta==='IMPAGA';
-      html+=`<div class="cheque-item"><div><div class="cheque-monto">$${fmtM(d.monto||0)}</div>
-      <div style="font-size:10px;color:var(--text2)">${d.nroCheque||''} · ${d.fechaRechazo||''}</div></div>
-      <span class="cheque-estado ${imp?'estado-impago':'estado-pagado'}">${imp?'IMPAGO':'PAGADO'}</span></div>`;});
-    if (dchq.length>5) html+=`<div style="font-size:11px;color:var(--text2);text-align:center;margin-top:8px">+${dchq.length-5} más</div>`;
-  }
-  html += '</div>';
+  // ── 4. ANÁLISIS IA ──
   html += `<div class="card"><div class="card-title">Análisis IA</div>
     <div class="ia-loading" id="ia-loading"><div class="spinner"></div><span>Generando análisis...</span></div>
     <div class="ia-texto" id="ia-texto" style="display:none"></div></div>`;
+
   document.getElementById('consulta-resultado').innerHTML = html;
 }
 
