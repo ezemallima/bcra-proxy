@@ -322,7 +322,7 @@ async function iniciarApp() {
 function normNombre(s) {
   return String(s||'').trim().toUpperCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-    .replace(/[^A-Z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+    .replace(/[^A-Z0-9]/g,' ').replace(/\s+/g,' ').trim();
 }
 
 async function cargarSaldosCartera() {
