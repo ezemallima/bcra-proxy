@@ -1554,13 +1554,29 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
   var maxSit = entidades.length
     ? entidades.reduce(function(m,e){ return Math.max(m, e.situacion||1); }, 1)
     : sinDeudasReal ? 1 : null;
-  var pBCRA = maxSit === null ? 200
-    : maxSit === 1 ? 400
-    : maxSit === 2 ? 200
-    : maxSit === 3 ? 50
-    : 0;
+  // Situación BCRA con validación de historial crediticio
+  // montoTotal está en miles de pesos → monto real = montoTotal * 1000
+  var montoRealBCRA = 0;
+  if (bcraData && bcraData.results && bcraData.results.periodos && bcraData.results.periodos.length > 0) {
+    var entsTemp = bcraData.results.periodos[0].entidades || [];
+    montoRealBCRA = entsTemp.reduce(function(s,e){ return s+(e.monto||0); }, 0) * 1000;
+  }
+  var pBCRA, sitLabel;
+  if (maxSit === null || maxSit === undefined) {
+    pBCRA = 200; sitLabel = 'Sin datos';
+  } else if (maxSit === 1) {
+    if      (montoRealBCRA === 0)           { pBCRA = 200; sitLabel = 'Sit. 1 (sin historial bancario)'; }
+    else if (montoRealBCRA < 500000)        { pBCRA = 250; sitLabel = 'Sit. 1 (perfil pequeño)'; }
+    else if (montoRealBCRA < 2500000)       { pBCRA = 300; sitLabel = 'Sit. 1 (perfil moderado)'; }
+    else if (nPeriodosH >= 12)              { pBCRA = 400; sitLabel = 'Sit. 1 (perfil consolidado)'; }
+    else if (nPeriodosH >= 6)              { pBCRA = 350; sitLabel = 'Sit. 1 ('+nPeriodosH+'m activos)'; }
+    else if (nPeriodosH >= 2)              { pBCRA = 300; sitLabel = 'Sit. 1 ('+nPeriodosH+'m activos)'; }
+    else                                    { pBCRA = 250; sitLabel = 'Sit. 1 (cliente nuevo)'; }
+  } else if (maxSit === 2) { pBCRA = 200; sitLabel = 'Sit. 2'; }
+  else if (maxSit === 3)   { pBCRA = 50;  sitLabel = 'Sit. 3'; }
+  else                     { pBCRA = 0;   sitLabel = 'Sit. '+maxSit; }
   puntos += pBCRA;
-  detalle.push({ label:'Situación BCRA', valor: maxSit ? 'Sit. '+maxSit : 'Sin datos', puntos:pBCRA, max:400 });
+  detalle.push({ label:'Situación BCRA', valor: sitLabel, puntos:pBCRA, max:400 });
 
   // 2. HISTORIAL BCRA 24 MESES (Max 150)
   var pHistorial = 75; // neutral por defecto
