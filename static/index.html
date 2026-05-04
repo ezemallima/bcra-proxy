@@ -1613,9 +1613,18 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
       var sitMax = (p.entidades||[]).reduce(function(m,e){ return Math.max(m, e.situacion||1); }, 1);
       if (sitMax > 1) mesesMalos++;
     });
-    if (mesesMalos === 0)      { pHistorial = 150; historialLabel = 'Sin irregularidades ('+periodosHist.length+'m)'; }
-    else if (mesesMalos <= 2)  { pHistorial = 75;  historialLabel = mesesMalos+' mes(es) irregular(es)'; }
-    else                       { pHistorial = 0;   historialLabel = mesesMalos+' meses irregulares'; }
+    if (mesesMalos > 2) {
+      pHistorial = 0; historialLabel = mesesMalos+' meses irregulares';
+    } else if (mesesMalos > 0) {
+      pHistorial = 75; historialLabel = mesesMalos+' mes(es) irregular(es)';
+    } else {
+      // Historial limpio — escalar por nPeriodosH (períodos con actividad real)
+      if      (nPeriodosH >= 12) { pHistorial = 150; historialLabel = 'Sin irregularidades ('+nPeriodosH+'m activos)'; }
+      else if (nPeriodosH >= 6)  { pHistorial = 100; historialLabel = 'Sin irregularidades ('+nPeriodosH+'m)'; }
+      else if (nPeriodosH >= 2)  { pHistorial = 60;  historialLabel = 'Sin irregularidades (historial corto)'; }
+      else if (nPeriodosH >= 1)  { pHistorial = 40;  historialLabel = 'Sin irregularidades (nuevo)'; }
+      else                       { pHistorial = 20;  historialLabel = 'Sin historial activo en sistema'; }
+    }
   } else if (bcraData && bcraData.sin_deudas) {
     pHistorial = 150;
     historialLabel = 'Sin deudas registradas';
