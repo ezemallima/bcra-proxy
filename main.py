@@ -444,7 +444,12 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
 
     if cheq_fresco:
         if cheq_fresco.get('sin_deudas'):
-            pts_cheq = 150 if n_periodos_h > 6 else (70 if n_periodos_h >= 1 else 40)
+            # Sin cheques — puntaje según antigüedad en sistema financiero
+            if   n_periodos_h >= 12: pts_cheq = 150
+            elif n_periodos_h >= 6:  pts_cheq = 100
+            elif n_periodos_h >= 2:  pts_cheq = 70
+            elif n_periodos_h >= 1:  pts_cheq = 50
+            else:                    pts_cheq = 30  # sin historial
         else:
             res_c = (cheq_fresco.get('results') or {}) if isinstance(cheq_fresco, dict) else {}
             causales = res_c.get('causales') or [] if isinstance(res_c, dict) else []
