@@ -22,7 +22,7 @@ app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024
 
 GEMINI_KEY = os.environ.get('GEMINI_API_KEY', '')
 OPENAI_KEY = os.environ.get('OPENAI_API_KEY', '')
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-1.5-flash"
 DATA_DIR = '/data' if os.path.exists('/data') else os.getcwd()
 ALERTAS_FILE = os.path.join(DATA_DIR, 'alertas_cartera.json')
 DATOS_FILE = os.path.join(DATA_DIR, 'datos_bodega.json')
@@ -218,7 +218,7 @@ def consultar_bcra(cuit, reintentos=3):
     for ep_url, via in endpoints:
         try:
             print(f"[bcra] {cuit} consultando via {via}...", flush=True)
-            r = requests.get(ep_url, timeout=25, verify=False)
+            r = requests.get(ep_url, timeout=15, verify=False)
             if r.status_code == 200:
                 text = r.text.strip()
                 if not text or len(text) < 10:
@@ -1106,7 +1106,7 @@ def procesar_veraz():
             pdf_bytes = b64mod.b64decode(pdf_base64)
             doc = fitz.open(stream=pdf_bytes, filetype="pdf")
             imagenes_b64 = []
-            for page in doc:
+            for page in list(doc)[:3]:
                 mat = fitz.Matrix(2, 2)
                 pix = page.get_pixmap(matrix=mat)
                 img_bytes = pix.tobytes("png")
