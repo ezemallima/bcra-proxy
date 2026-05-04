@@ -1608,9 +1608,14 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
   // 3. CHEQUES RECHAZADOS (Max 150)
   var pCheques = 75; // neutral sin datos
   var chequesLabel = 'Sin datos';
-  // sin_deudas:true = confirmado sin cheques = 150. error_bcra = neutral 75. null = no consultado = 75
+  // Cheques cruzado con nPeriodosH — sin historial no puede recibir puntos máximos
   if (chequesBCRA && chequesBCRA.sin_deudas === true && !chequesBCRA.error_bcra) {
-    pCheques = 150; chequesLabel = 'Sin cheques rechazados';
+    // Sin cheques confirmado — puntaje según antigüedad en sistema
+    if      (nPeriodosH >= 12) { pCheques = 150; chequesLabel = 'Sin cheques ('+nPeriodosH+'m limpio)'; }
+    else if (nPeriodosH >= 6)  { pCheques = 100; chequesLabel = 'Sin cheques ('+nPeriodosH+'m)'; }
+    else if (nPeriodosH >= 2)  { pCheques = 70;  chequesLabel = 'Sin cheques (historial corto)'; }
+    else if (nPeriodosH >= 1)  { pCheques = 50;  chequesLabel = 'Sin cheques (nuevo en sistema)'; }
+    else                       { pCheques = 30;  chequesLabel = 'Sin cheques (sin historial)'; }
   } else if (chequesBCRA !== null && chequesBCRA !== undefined && !chequesBCRA.error_bcra) {
     var resC = chequesBCRA.results || chequesBCRA;
     // Estructura con causales: {causales: [{causal, entidades:[{detalle:[...]}]}]}
