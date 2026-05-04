@@ -2440,13 +2440,13 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
     var sinMonto = entidades.filter(function(e) { return !e.monto || e.monto === 0; });
     let t = `<table class="bcra-table"><thead><tr><th>Entidad</th><th>Período</th><th>Monto (miles $)</th><th>Situación</th><th>Días atraso</th></tr></thead><tbody>`;
     entidades.forEach(function(e) {
-      var monto = e.monto > 0 ? '$' + (e.monto * 1000).toLocaleString('es-AR') : '-';
+      var monto = e.monto > 0 ? '$' + (e.monto).toLocaleString('es-AR') + ' miles' : '-';
       t += `<tr><td>${e.entidad||'-'}</td><td>${e.periodo||'-'}</td><td>${monto}</td><td class="sit-${e.situacion}">${e.situacion} — ${sitNombre(e.situacion)}</td><td>${e.diasAtrasoPago||0}</td></tr>`;
     });
     t += `</tbody></table>`;
     if (conMonto.length) {
       var totalMiles = conMonto.reduce(function(s,e) { return s + (e.monto||0); }, 0);
-      t += `<div style="font-size:12px;color:#64748b;margin-top:6px;text-align:right;">Total deuda sistema financiero: <strong>$${(totalMiles*1000).toLocaleString('es-AR')}</strong></div>`;
+      t += `<div style="font-size:12px;color:#64748b;margin-top:6px;text-align:right;">Total deuda sistema financiero: <strong>$${totalMiles.toLocaleString('es-AR')} miles</strong></div>`;
     }
     document.getElementById('bcra-data').innerHTML = t;
   }
@@ -2493,6 +2493,17 @@ function mostrarWSP(cuit) {
     html += `</div>`;
   });
   el.innerHTML = html;
+}
+
+function fmtBCRA(miles) {
+  // BCRA devuelve montos en miles de pesos
+  // miles=728263 → $728M | miles=1500 → $1,5M | miles=500 → $500K
+  if (!miles || miles === 0) return '$0';
+  const pesos = miles * 1000;
+  if (pesos >= 1e9) return '$' + (pesos/1e6).toFixed(0) + 'M';
+  if (pesos >= 1e6) return '$' + (pesos/1e6).toFixed(1) + 'M';
+  if (pesos >= 1e3) return '$' + (pesos/1e3).toFixed(0) + 'K';
+  return '$' + pesos.toLocaleString('es-AR');
 }
 
 function getBadge(s) {
