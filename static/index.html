@@ -1901,7 +1901,7 @@ async function actualizarScoresAlertas() {
     var cuit = c.cuit.replace(/-/g,'');
     btn.textContent = 'Actualizando ' + (i+1) + '/' + total + '...';
     try {
-      var r = await fetch('/deudas/' + cuit, {signal: AbortSignal.timeout(15000)});
+      var r = await fetch('/deudas/' + cuit, {signal: AbortSignal.timeout(30000)});
       var bcraData = await r.json();
       var mora = buscarEnMoras(cuit);
       var wsp = buscarEnWSP(cuit) || [];
@@ -2081,7 +2081,7 @@ async function checkProxy() {
   dot.className = 'dot';
   label.textContent = '';
   try {
-    const r = await fetch('/deudas/20213106008', {signal: AbortSignal.timeout(8000)});
+    const r = await fetch('/deudas/20213106008', {signal: AbortSignal.timeout(30000)});
     const rd = await r.json();
     if (r.ok && !rd.error_bcra) {
       dot.className = 'dot online';
@@ -2208,7 +2208,7 @@ async function consultarCliente() {
   var domicilioAfip = '';
   if (!nombreFinal) {
     try {
-      var afipR = await fetch('/afip/' + raw, {signal: AbortSignal.timeout(10000)});
+      var afipR = await fetch('/afip/' + raw, {signal: AbortSignal.timeout(30000)});
       var afipData = await afipR.json();
       var afipNombre = afipData.nombre || '';
       if (afipNombre && afipNombre !== cuitFmtLocal) nombreFinal = afipNombre;
@@ -2224,7 +2224,7 @@ async function consultarCliente() {
   } else {
     // También llamar para obtener domicilio aunque tengamos nombre de cartera
     try {
-      var afipR2 = await fetch('/afip/' + raw, {signal: AbortSignal.timeout(10000)});
+      var afipR2 = await fetch('/afip/' + raw, {signal: AbortSignal.timeout(30000)});
       var afipData2 = await afipR2.json();
       estadoAfip = afipData2.estado_afip || '';
       estadoAfipGlobal = estadoAfip;
@@ -2242,7 +2242,7 @@ async function consultarCliente() {
   document.getElementById('resultado').style.display = 'block';
 
   try {
-    var bcraR = await fetch('/deudas/' + raw, {signal: AbortSignal.timeout(12000)});
+    var bcraR = await fetch('/deudas/' + raw, {signal: AbortSignal.timeout(30000)});
     var bcraData = await bcraR.json();
     // Tomar nombre del BCRA si AFIP no lo trajo
     if (!nombreFinal && bcraData.results && bcraData.results.denominacion) {
@@ -2266,7 +2266,7 @@ async function consultarCliente() {
   window._chequesUltimaConsulta = null;
   // Mostrar cheques rechazados — guardar resultado para el score
   try {
-    var chR = await fetch('/deudas/' + raw + '/cheques', {signal: AbortSignal.timeout(10000)});
+    var chR = await fetch('/deudas/' + raw + '/cheques', {signal: AbortSignal.timeout(30000)});
     if (chR.ok) {
       var chData = await chR.json();
       window._chequesUltimaConsulta = chData; // guardar para el score
@@ -2387,11 +2387,11 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
   if (scoreEl) scoreEl.innerHTML = '<div style="padding:12px;color:#94a3b8;font-size:13px;">Calculando score...</div>';
   // Cargar historial 24m y cheques en paralelo
   Promise.all([
-    fetch('/deudas/' + cuit + '/historial', {signal: AbortSignal.timeout(15000)}).then(function(r){ return r.json(); }).catch(function(){ return null; }),
+    fetch('/deudas/' + cuit + '/historial', {signal: AbortSignal.timeout(30000)}).then(function(r){ return r.json(); }).catch(function(){ return null; }),
     // Usar cheques ya consultados si están disponibles — evita segunda consulta fallida
     window._chequesUltimaConsulta
       ? Promise.resolve(window._chequesUltimaConsulta)
-      : fetch('/deudas/' + cuit + '/cheques', {signal: AbortSignal.timeout(15000)}).then(function(r){ return r.json(); }).catch(function(){ return null; })
+      : fetch('/deudas/' + cuit + '/cheques', {signal: AbortSignal.timeout(30000)}).then(function(r){ return r.json(); }).catch(function(){ return null; })
   ]).then(function(resultados) {
     var historial = resultados[0];
     if (historial) window._ultimoHistorial = historial;
@@ -3399,7 +3399,7 @@ async function consultarCheque() {
 
   // 1. Situación BCRA del librador — via servidor
   try {
-    var r1 = await fetch('/deudas/' + raw, {signal: AbortSignal.timeout(12000)});
+    var r1 = await fetch('/deudas/' + raw, {signal: AbortSignal.timeout(30000)});
     var d1 = await r1.json();
     if (d1.results) {
       nombre = d1.results.denominacion || '';
@@ -3413,7 +3413,7 @@ async function consultarCheque() {
 
   // 2. Cheques rechazados — via servidor
   try {
-    var rCh = await fetch('/deudas/' + raw + '/cheques', {signal: AbortSignal.timeout(12000)});
+    var rCh = await fetch('/deudas/' + raw + '/cheques', {signal: AbortSignal.timeout(30000)});
     chequesData = await rCh.json();
   } catch(e) {}
 
@@ -3554,7 +3554,7 @@ async function consultarBCRA(cuit) {
 
 async function obtenerNombre(cuit) {
   try {
-    const r = await fetch(`/afip/${cuit}`, {signal: AbortSignal.timeout(8000)});
+    const r = await fetch(`/afip/${cuit}`, {signal: AbortSignal.timeout(30000)});
     const data = await r.json();
     if (data.nombre && !data.error) return data.nombre;
   } catch(e) {}
