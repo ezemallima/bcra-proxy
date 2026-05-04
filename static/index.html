@@ -1554,6 +1554,24 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
   var maxSit = entidades.length
     ? entidades.reduce(function(m,e){ return Math.max(m, e.situacion||1); }, 1)
     : sinDeudasReal ? 1 : null;
+  // ── CALCULAR nPeriodosH del historial 24m (variable raíz) ──
+  var periodosHist = [];
+  if (historialBCRA && historialBCRA.results && historialBCRA.results.periodos) {
+    periodosHist = historialBCRA.results.periodos;
+  } else if (bcraData && bcraData.results && bcraData.results.periodos) {
+    periodosHist = bcraData.results.periodos;
+  }
+  var nPeriodosH = 0, nPeriodosRecientes = 0;
+  periodosHist.slice(0, 24).forEach(function(p, i) {
+    // Monto > 0 significa actividad real (el BCRA devuelve '-' para meses sin movimiento → monto=0 o null)
+    var tieneDeuda = (p.entidades||[]).some(function(e){ return (e.monto || 0) > 0; });
+    if (tieneDeuda) {
+      nPeriodosH++;
+      if (i < 6) nPeriodosRecientes++;
+    }
+  });
+  nPeriodosH = Math.min(nPeriodosH, nPeriodosRecientes * 4);
+
   // Situación BCRA con validación de historial crediticio
   // montoTotal está en miles de pesos → monto real = montoTotal * 1000
   var montoRealBCRA = 0;
@@ -2680,48 +2698,35 @@ async function analizarCliente() {
 
   var ubicacion = obtenerPromptUbicacion();
 
-  var prompt = `<rol>
-Actúa como un Analista de Riesgo Crediticio Senior para ${getNombreBodega()}. Tu objetivo es brindar un informe descriptivo y detallado para apoyar la toma de decisiones. Tu rol es puramente analítico: presentá los hechos y la interpretación financiera, pero NO tomes decisiones comerciales ni sugieras restricciones de venta.
-</rol>
+    // Score normalizado 0-100
+  var scoreNorm = scorePreAnalisis ? Math.round(scorePreAnalisis.score / 10) : 50;
+  var nivelCredito = scoreNorm >= 80 ? 'A' : scoreNorm >= 60 ? 'B' : scoreNorm >= 40 ? 'C' : 'D';
 
-<instrucciones>
-1. INTEGRACIÓN: Analizá los datos del reporte financiero en DATOS_VERAZ y cruzalos con el comportamiento histórico en HISTORIAL_BODEGA.
-2. DESCRIPCIÓN EXHAUSTIVA: En la sección "ANÁLISIS DE SOLVENCIA", no te limités a listar datos. Profundizá en qué significa la deuda del cliente, su estado BCRA y cómo esto impacta en su liquidez actual.
-3. RESTRICCIONES CRÍTICAS:
-   - PROHIBIDO sugerir decisiones (Aprobado/Rechazado) o recomendaciones operativas (Vender/No vender).
-   - PROHIBIDO mencionar cálculos de cantidad de botellas o precios unitarios.
-   - El tono debe ser profesional, analítico y neutral.
-   - PROHIBIDO inventar datos. Si algo no está en las fuentes, decí "No disponible".
-</instrucciones>
+  var prompt = `Sos experto en riesgo crediticio del sector vitivinícola argentino.
+Analizá este cliente y devolvé un dictamen CORTO (máximo 4 oraciones).
 
-<cliente>
-CUIT: ${cuit}
-Score Vende Seguro: ${scorePreAnalisis ? scorePreAnalisis.score + '/999 (' + scorePreAnalisis.rango + ')' : 'No calculado'}
-${condicionesActuales}${ubicacion}
-</cliente>
+DATOS:
+- CUIT: ${cuit} | Score: ${scorePreAnalisis ? scorePreAnalisis.score + '/999' : 'N/D'} (Nivel ${nivelCredito})
+- Situación BCRA: ${scorePreAnalisis ? scorePreAnalisis.detalle?.[0]?.valor || 'Sit.1' : 'N/D'}
+- Historial 24m: ${scorePreAnalisis ? scorePreAnalisis.detalle?.[1]?.valor || 'N/D' : 'N/D'}
+- Cheques: ${scorePreAnalisis ? scorePreAnalisis.detalle?.[2]?.valor || 'N/D' : 'N/D'}
+- DSO: ${scorePreAnalisis ? scorePreAnalisis.detalle?.[3]?.valor || 'Sin datos' : 'N/D'}
+- Mora Piattelli: ${mora ? 'SÍ — $' + (mora.saldoAdeudado||0).toLocaleString('es-AR') : 'No'}
+- Red Bodegas: ${scorePreAnalisis ? scorePreAnalisis.detalle?.[5]?.valor || 'Sin datos' : 'N/D'}
+${condicionesActuales}
 
-<DATOS_VERAZ>
-${datosVeraz}
-</DATOS_VERAZ>
+INSTRUCCIONES ESTRICTAS:
+1. Dictamen en 3-4 oraciones máximo, español informal para un vendedor de vinos.
+2. Terminá SIEMPRE con: "Límite de crédito sugerido: [monto exacto en pesos]"
+3. El límite máximo absoluto es $2.000.000. Nunca superarlo.
+4. Lógica del límite:
+   - Nivel A (score 800+): hasta $2.000.000
+   - Nivel B (score 600-799): hasta $800.000
+   - Nivel C (score 400-599): hasta $300.000 con garantías
+   - Nivel D (score <400): solo contado, $0 crédito
+5. Sin listas, sin markdown, texto directo.`;
 
-<HISTORIAL_BODEGA>
-${datosHistorial}
-</HISTORIAL_BODEGA>
-
-<formato_salida>
-PERFIL DE RIESGO
-[Resumen ejecutivo unificado: Riesgo externo financiero + Comportamiento interno]
-
-HISTORIAL COMERCIAL EN BODEGA
-[Detalle de comportamiento previo o "Sin antecedentes comerciales registrados en nuestra base"]
-
-ANÁLISIS DE SOLVENCIA
-- Estado BCRA: [Situación actual]
-- Endeudamiento Total: [Monto total en sistema financiero]
-- Análisis de Capacidad de Pago: [Interpretación detallada: cómo el nivel de deuda y el estado BCRA afectan la liquidez del cliente y la estabilidad de sus compromisos]
-</formato_salida>`;
-
-  try {
+try {
     const r = await fetch('/analizar', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ prompt })
