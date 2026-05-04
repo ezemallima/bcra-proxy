@@ -7,6 +7,12 @@ import json
 import time
 import threading
 import gc
+try:
+    import boto3
+    BOTO3_OK = True
+except ImportError:
+    BOTO3_OK = False
+    print("[aws] boto3 no instalado — usando Workers", flush=True)
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -161,6 +167,49 @@ BCRA_WORKER_3 = "https://square-pine-e6b4.ezequielmallima.workers.dev"
 BCRA_WORKER_4 = "https://fancy-feather-7ead.ezequielmallima.workers.dev"
 BCRA_WORKER_5 = "https://summer-wood-9639.ezequielmallima.workers.dev"
 BCRA_WORKERS  = [BCRA_WORKER, BCRA_WORKER_2, BCRA_WORKER_3, BCRA_WORKER_4, BCRA_WORKER_5]
+
+AWS_LAMBDA_FUNCTION = os.environ.get('AWS_LAMBDA_FUNCTION', 'vende-seguro-bcra')
+AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
+
+def consultar_bcra_lambda(cuit):
+    """Consulta deudas + historial + cheques via AWS Lambda en una sola llamada.
+    Devuelve (deudas, historial, cheques) o None si falla."""
+    if not BOTO3_OK:
+        return None
+    aws_key = os.environ.get('AWS_ACCESS_KEY_ID')
+    aws_secret = os.environ.get('AWS_SECRET_ACCESS_KEY')
+    if not aws_key or not aws_secret:
+        return None
+    try:
+        client = boto3.client(
+            'lambda',
+            region_name=AWS_REGION,
+            aws_access_key_id=aws_key,
+            aws_secret_access_key=aws_secret
+        )
+        payload = json.dumps({'cuit': cuit}).encode('utf-8')
+        response = client.invoke(
+            FunctionName=AWS_LAMBDA_FUNCTION,
+            InvocationType='RequestResponse',
+            Payload=payload
+        )
+        result = json.loads(response['Payload'].read())
+        if response.get('FunctionError') or result.get('statusCode') != 200:
+            print(f"[aws] Error Lambda {cuit}: {result}", flush=True)
+            return None
+        body = json.loads(result['body'])
+        # Validar que tenga datos reales
+        deudas = body.get('deudas')
+        historial = body.get('historial')
+        cheques = body.get('cheques')
+        if not deudas or deudas.get('error'):
+            print(f"[aws] Sin datos BCRA para {cuit}", flush=True)
+            return None
+        print(f"[aws] {cuit} OK via Lambda", flush=True)
+        return deudas, historial, cheques
+    except Exception as e:
+        print(f"[aws] Fallo Lambda {cuit}: {e}", flush=True)
+        return None
 
 def consultar_bcra(cuit, reintentos=3):
     # Rotar entre los 5 workers + BCRA directo
@@ -498,7 +547,23 @@ def ejecutar_verificacion(cartera_data):
             cliente_actualizado = dict(cliente)
 
             try:
-                bcra_data, error = consultar_bcra_cached(cuit)
+                # Intentar Lambda primero (trae deudas + historial + cheques en una sola llamada)
+                lambda_result = consultar_bcra_lambda(cuit)
+                if lambda_result:
+                    bcra_data, hist_lambda, cheq_lambda = lambda_result
+                    # Guardar historial y cheques en caché para que calcular_score_servidor los use
+                    try:
+                        hist_path = os.path.join(DATA_DIR, f'historial_{cuit}.json')
+                        with open(hist_path, 'w') as f:
+                            json.dump({'payload': hist_lambda, 'ts': time.time()}, f)
+                        cheq_path = os.path.join(DATA_DIR, f'cheques_{cuit}.json')
+                        with open(cheq_path, 'w') as f:
+                            json.dump({'payload': cheq_lambda, 'ts': time.time()}, f)
+                    except: pass
+                    error = None
+                else:
+                    # Fallback a Workers de Cloudflare
+                    bcra_data, error = consultar_bcra_cached(cuit)
                 score_data = None
                 try:
                     score_data = calcular_score_servidor(cuit, bcra_data or {}, en_mora=None)
