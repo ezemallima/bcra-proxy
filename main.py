@@ -325,12 +325,27 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
                 n_periodos_recientes += 1
     n_periodos_h = min(n_periodos_h, n_periodos_recientes * 4)
 
-    # ── 1. SITUACIÓN BCRA ponderada ────────────────────────────────────────
+    # ── 1. SITUACIÓN BCRA ponderada + validación de historial crediticio ───
+    # monto_total_m está en miles de pesos → monto real = monto_total_m * 1000
+    monto_real = monto_total_m * 1000  # pesos reales
+
     if max_sit == 1:
-        if   n_periodos_h >= 12: pts_sit = 400
-        elif n_periodos_h >= 6:  pts_sit = 300
-        elif n_periodos_h >= 2:  pts_sit = 200
-        else:                    pts_sit = 150
+        # Validar profundidad crediticia — sit1 con deuda mínima no es igual a sit1 con $5M
+        if monto_real == 0:
+            # Sin deuda en sistema financiero — sin historial bancario
+            pts_sit = 200
+        elif monto_real < 500000:
+            # Perfil pequeño — baja exposición crediticia
+            pts_sit = 250
+        elif monto_real < 2500000:
+            # Perfil moderado — historial en crecimiento
+            pts_sit = 300
+        else:
+            # Perfil consolidado — maneja volúmenes similares al crédito que pide
+            if   n_periodos_h >= 12: pts_sit = 400
+            elif n_periodos_h >= 6:  pts_sit = 350
+            elif n_periodos_h >= 2:  pts_sit = 300
+            else:                    pts_sit = 250
     elif max_sit == 2: pts_sit = 200
     elif max_sit == 3: pts_sit = 50
     else:              pts_sit = 0
