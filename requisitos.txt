@@ -1,0 +1,8 @@
+flask
+flask-cors
+requests
+urllib3
+openpyxl
+PyMuPDF
+gunicorn
+boto3
