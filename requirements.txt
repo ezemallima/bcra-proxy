@@ -1,9 +1,0 @@
-
-flask
-flask-cors
-requests
-gunicorn
-urllib3
-pandas
-openpyxl
-PyMuPDF
