@@ -1598,6 +1598,7 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
 
   // 2. HISTORIAL BCRA 24 MESES (Max 150)
   var pHistorial = 75; // neutral por defecto
+  var penaltyArrastre = false;
   var historialLabel = 'Sin datos';
   // Usar historialBCRA si está disponible, sino usar periodos del bcraData actual
   var periodosHist = [];
@@ -1620,7 +1621,8 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
         var sitMax = (p.entidades||[]).reduce(function(m,e){ return Math.max(m, e.situacion||1); }, 1);
         if (sitMax > 1) mesesMalos++;
       });
-      if (mesesMalos > 2) {
+      penaltyArrastre = (mesesMalos >= 2 && mesesMalos <= 5);
+      if (mesesMalos > 5) {
         pHistorial = 0; historialLabel = mesesMalos+' meses irregulares';
       } else if (mesesMalos > 0) {
         pHistorial = 75; historialLabel = mesesMalos+' mes(es) irregular(es)';
@@ -1676,6 +1678,9 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
     else if (activos === 0) { pCheques = 75;  chequesLabel = total + ' cheque(s) regularizados'; }
     else                    { pCheques = 0;   chequesLabel = activos + ' cheque(s) activo(s)'; }
   }
+  // Riesgo cruzado: sit BCRA cap en cheques
+  if (maxSit >= 3)                     { pCheques = 0;  chequesLabel += ' (anulado por Sit '+maxSit+')'; }
+  else if (maxSit >= 2 && pCheques > 75){ pCheques = 75; chequesLabel += ' (cap Sit 2)'; }
   puntos += pCheques;
   detalle.push({ label:'Cheques rechazados', valor:chequesLabel, puntos:pCheques, max:150 });
 
@@ -1847,14 +1852,14 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
   puntos += pConc;
   detalle.push({ label:'Concentración deuda BCRA', valor:concLabel, puntos:pConc, max:39 });
 
+  // Penalidad arrastre irregular (2-5 meses en 24m) → -25% global
+  if (penaltyArrastre) { puntos = Math.round(puntos * 0.75); }
+
   // Techo duro por condiciones críticas
-  if (mora) {
-    // En mora con Piattelli: máximo 300
-    puntos = Math.min(puntos, 300);
-  }
-  if (maxSit >= 5)       { puntos = Math.min(puntos, 1); }   // sit5/6 irrecuperable
-  else if (maxSit >= 4)  { puntos = Math.min(puntos, 250); } // sit4 alto riesgo
-  else if (maxSit === 3) { puntos = Math.min(puntos, 400); } // sit3 cap
+  if (mora)              { puntos = Math.min(puntos, 300); }
+  if (maxSit >= 5)       { puntos = Math.min(puntos, 1); }
+  else if (maxSit >= 4)  { puntos = Math.min(puntos, 250); }
+  else if (maxSit === 3) { puntos = Math.min(puntos, 400); }
 
   // TOTAL (1-999)
   var scoreTotal = Math.min(999, Math.max(1, Math.round(puntos)));

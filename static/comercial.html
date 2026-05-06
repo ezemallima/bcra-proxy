@@ -317,6 +317,8 @@ async function iniciarApp() {
   renderCartera('todos');
   renderOportunidades();
   cargarSaldosCartera();
+  // Polling cada 5 minutos: detecta nuevo DSO subido por admin
+  setInterval(() => cargarSaldosCartera(), 5 * 60 * 1000);
 
   // Restaurar última pestaña y filtro visitados
   const savedTab = localStorage.getItem('vendeSeguro_tab');
@@ -915,6 +917,7 @@ function parseFecha(s) {
 // Score completo sincrónico (con datos ya cargados) — espeja calcular_score_servidor
 function calcularScoreCompletoSync(maxSit, sinDeudas, periodos, chData, histData) {
   let pts = 0;
+  let penaltyArrastre = false;
   const entidades = periodos.length ? (periodos[0].entidades||[]) : [];
   const nroEnt = entidades.length;
   // montoM en millones (para concentración), montoMiles en miles (para sit1)
@@ -962,7 +965,9 @@ function calcularScoreCompletoSync(maxSit, sinDeudas, periodos, chData, histData
       const malos = pH.slice(0,24).filter(p =>
         Math.max(...(p.entidades||[]).map(e=>e.situacion||1),1) > 1
       ).length;
-      if (malos > 0) pHist = malos<=2 ? 75 : 0;
+      penaltyArrastre = (malos >= 2 && malos <= 5);
+      if (malos > 5) pHist = 0;
+      else if (malos > 0) pHist = malos<=2 ? 75 : 0;
       else pHist = nPH>=12 ? 150 : nPH>=3 ? 90 : nPH>=1 ? 40 : 60;
     }
   } else if (sinDeudas) { pHist = 60; }
@@ -974,12 +979,14 @@ function calcularScoreCompletoSync(maxSit, sinDeudas, periodos, chData, histData
     const causales = chData.results?.causales||[];
     let det=[]; causales.forEach(ca=>ca.entidades?.forEach(en=>det.push(...(en.detalle||[]))));
     const act = det.filter(d=>!d.fechaPago||d.estadoMulta==='IMPAGA');
-    // Hard cap: >5 activos o ≥113 totales → score colapsa a Rechazar
     if (act.length > 5 || det.length >= 113) return 1;
     if (chData.sin_deudas||!det.length) pCheq = nPH>6?150:nPH>=1?70:40;
     else if (!act.length) pCheq=75;
     else pCheq=0;
   }
+  // Riesgo cruzado: sit cap en cheques
+  if (maxSit >= 3)                  pCheq = 0;
+  else if (maxSit >= 2 && pCheq > 75) pCheq = 75;
   pts += pCheq;
 
   pts += 50; // mora neutral (comercial no tiene acceso)
@@ -995,6 +1002,9 @@ function calcularScoreCompletoSync(maxSit, sinDeudas, periodos, chData, histData
   else if (nroEnt<=5&&montoM<2000) pConc=10;
   else                             pConc=0;
   pts += pConc;
+
+  // Penalidad arrastre → -25% global antes de techos
+  if (penaltyArrastre) pts = Math.round(pts * 0.75);
 
   // Techos duros — idénticos al servidor
   if      (maxSit >= 5) pts = Math.min(pts, 1);

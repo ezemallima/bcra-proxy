@@ -22,6 +22,14 @@ app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024
 
 GEMINI_KEY = os.environ.get('GEMINI_API_KEY', '')
 OPENAI_KEY = os.environ.get('OPENAI_API_KEY', '')
+CUIT_API_KEY = os.environ.get('API_KEY_CUIT', '')
+CUIT_API_URL = os.environ.get('API_SOLVENCY_URL', '')
+
+_MONOTRIB_INGRESOS = {
+    'A': 1_500_000, 'B': 3_000_000, 'C': 5_000_000, 'D': 8_000_000,
+    'E': 12_000_000, 'F': 18_000_000, 'G': 26_000_000, 'H': 36_000_000,
+    'I': 48_000_000, 'J': 62_000_000, 'K': 82_000_000,
+}
 GEMINI_MODEL = "gemini-1.5-flash"
 DATA_DIR = '/data' if os.path.exists('/data') else os.getcwd()
 ALERTAS_FILE = os.path.join(DATA_DIR, 'alertas_cartera.json')
@@ -282,6 +290,55 @@ def analizar_bodegas_server(cuit, nombre, mensajes):
     except Exception:
         return False, ""
 
+def get_solvency_data(cuit):
+    """Ingresos estimados vía API externa + AFIP pública. Caché 24h. Fail-safe: retorna None."""
+    cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
+    cache_path = os.path.join(DATA_DIR, f'solvency_{cuit_limpio}.json')
+    try:
+        if os.path.exists(cache_path):
+            with open(cache_path, 'r') as f:
+                cached = json.load(f)
+            if time.time() - cached.get('ts', 0) < 86400:
+                return cached.get('data')
+    except: pass
+
+    data = None
+    if CUIT_API_URL and CUIT_API_KEY:
+        try:
+            url = f"{CUIT_API_URL.rstrip('/')}/{cuit_limpio}"
+            r = requests.get(url,
+                headers={'Authorization': f'Bearer {CUIT_API_KEY}', 'x-api-key': CUIT_API_KEY},
+                timeout=8, verify=False)
+            if r.status_code == 200:
+                data = r.json()
+                print(f"[solvency] {cuit_limpio} OK vía API configurada", flush=True)
+        except Exception as e:
+            print(f"[solvency] API externa error: {e}", flush=True)
+
+    if data is None:
+        try:
+            r = requests.get(
+                f"https://afip.tangofactura.com/Rest/GetContribuyenteFull?cuitContribuyente={cuit_limpio}",
+                timeout=8, verify=False)
+            if r.status_code == 200:
+                contrib = (r.json().get('Contribuyente') or {})
+                cat = (contrib.get('categMonotrib') or '').strip().upper()
+                ingresos = _MONOTRIB_INGRESOS.get(cat, 0)
+                if not ingresos and contrib.get('tipoPersona') == 'JURIDICA':
+                    ingresos = 100_000_000
+                data = {'ingresos_anuales': ingresos, 'categoria_monotrib': cat,
+                        'tipo_persona': contrib.get('tipoPersona', ''), 'fuente': 'afip_tang'}
+                print(f"[solvency] {cuit_limpio} AFIP cat={cat} ingresos≈{ingresos}", flush=True)
+        except Exception as e:
+            print(f"[solvency] AFIP fallback error: {e}", flush=True)
+
+    try:
+        with open(cache_path, 'w') as f:
+            json.dump({'data': data, 'ts': time.time()}, f)
+    except: pass
+    return data
+
+
 def calcular_score_servidor(cuit, bcra_data, en_mora=None):
     """Score completo con historial 24m, cheques y mora.
     Mejoras Gemini: memoria de historial, hard caps sit4/5, puntos ganados con datos reales.
@@ -353,6 +410,7 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
 
     # ── 2. HISTORIAL 24M — intentar fresco, sino usar caché guardado ───────
     pts_hist = 0  # 0 hasta tener datos reales
+    penalidad_arrastre = False
     hist_fresco = None
     try:
         if hist_cached:
@@ -397,7 +455,11 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
         else:
             meses_malos = sum(1 for p in periodos_h[:24]
                 if max(((e.get('situacion') or 1) for e in p.get('entidades', [])), default=1) > 1)
-            if meses_malos > 0:
+            # Arrastre 2-5 meses → penalización -25% global al final
+            penalidad_arrastre = 2 <= meses_malos <= 5
+            if meses_malos > 5:
+                pts_hist = 0
+            elif meses_malos > 0:
                 pts_hist = 75 if meses_malos <= 2 else 0
             else:
                 if   n_periodos_h >= 12: pts_hist = 150
@@ -483,6 +545,11 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
     else:
         pts_cheq = 0  # sin datos = 0, no neutral
         print(f"[score] {cuit_limpio} cheques sin datos — pts_cheq=0", flush=True)
+    # Regla de riesgo cruzado: sit BCRA cap al puntaje de cheques
+    if max_sit >= 3:
+        pts_cheq = 0   # Sit 3+: cheques anulados incluso sin rechazos activos
+    elif max_sit >= 2 and pts_cheq > 75:
+        pts_cheq = 75  # Sit 2: techo 75/150
     puntos += pts_cheq
 
     # ── 4. MORA PIATTELLI — normalización de CUIT ──────────────────────────
@@ -520,8 +587,23 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
     else: pts_conc = 0
     puntos += pts_conc
 
+    # ── 6. SOLVENCIA — ratio de apalancamiento BCRA/AFIP ──────────────────
+    solvency = get_solvency_data(cuit_limpio)
+    if solvency:
+        ingresos = solvency.get('ingresos_anuales') or 0
+        if ingresos > 0:
+            deuda_bcra_pesos = monto_total_m * 1000  # miles → pesos
+            ratio = deuda_bcra_pesos / ingresos
+            if ratio > 0.5:
+                puntos -= 200
+                print(f"[score] {cuit_limpio} ratio apalancamiento {ratio:.2f} → -200 pts", flush=True)
+
+    # ── PENALIDAD ARRASTRE — 2-5 meses irregulares → -25% global ──────────
+    if penalidad_arrastre:
+        puntos = round(puntos * 0.75)
+        print(f"[score] {cuit_limpio} arrastre irregular → -25% global", flush=True)
+
     # ── TECHOS DUROS — se aplican al final ─────────────────────────────────
-    # Techos duros — en el orden correcto
     if en_mora:         puntos = min(puntos, 300)
     if max_sit >= 5:    puntos = min(puntos, 1)    # sit5/6 irrecuperable
     elif max_sit >= 4:  puntos = min(puntos, 250)  # sit4 alto riesgo
@@ -1458,7 +1540,15 @@ def _norm_nombre(s):
 def get_saldos_cliente(cliente):
     from urllib.parse import unquote
     cn = _norm_nombre(unquote(cliente))
+    # Match exacto primero
     result = [f for f in _saldos_facturas if _norm_nombre(f.get('cliente', '')) == cn]
+    if not result:
+        # Match parcial: al menos 2 palabras del nombre buscado presentes en el registro
+        palabras = [w for w in cn.split() if len(w) > 2]
+        if palabras:
+            result = [f for f in _saldos_facturas
+                if sum(1 for p in palabras if p in _norm_nombre(f.get('cliente', '')))
+                   >= min(2, len(palabras))]
     total_saldo = sum(f.get('saldo', 0) for f in result)
     return jsonify({"facturas": result, "total_saldo": total_saldo, "cantidad": len(result)})
 
@@ -1532,7 +1622,7 @@ def get_dso_global_saldos():
 
 @app.route("/upload-saldos-facturas", methods=["POST"])
 def upload_saldos_facturas():
-    """Recibe Excel de saldos. Detecta columna CUIT automáticamente si existe."""
+    """Recibe Excel Odoo: [Vendedor, Cliente, Nro Factura, Fecha Factura, Fecha Pago, Total, Saldo]"""
     global _saldos_facturas
     try:
         if 'file' not in request.files:
@@ -1542,79 +1632,49 @@ def upload_saldos_facturas():
         wb = openpyxl.load_workbook(io.BytesIO(file.read()))
         ws = wb.active
 
-        # Detectar columnas desde la fila de encabezados
-        headers = [str(c.value or '').strip().upper() for c in next(ws.iter_rows(min_row=1, max_row=1))]
-        def col_idx(names):
-            for n in names:
-                for i, h in enumerate(headers):
-                    if n in h: return i
-            return None
-
-        idx_vendedor  = col_idx(['VENDEDOR'])
-        idx_cliente   = col_idx(['CLIENTE', 'RAZON', 'RAZÓN'])
-        idx_cuit      = col_idx(['CUIT'])
-        idx_nro       = col_idx(['NRO', 'NUMERO', 'FACTURA', 'NRO FAC'])
-        idx_fecha_fac = col_idx(['FECHA FAC', 'EMISION', 'EMISIÓN', 'FECHA F'])
-        idx_fecha_pag = col_idx(['FECHA PAG', 'VENCIM', 'VENCIMIENTO'])
-        idx_total     = col_idx(['TOTAL', 'IMPORTE'])
-        idx_saldo     = col_idx(['SALDO'])
-
-        def get_col(row, idx, fallback_idx=None):
-            if idx is not None and idx < len(row): return row[idx]
-            if fallback_idx is not None and fallback_idx < len(row): return row[fallback_idx]
-            return None
+        # Detectar si primera fila es encabezado textual
+        primera = [str(c or '').strip() for c in next(ws.iter_rows(min_row=1, max_row=1, values_only=True))]
+        tiene_header = any(p.upper() in ('VENDEDOR', 'CLIENTE', 'SALDO', 'TOTAL', 'FACTURA', 'NUMERO') for p in primera)
+        min_row = 2 if tiene_header else 1
 
         def fmt_fecha(d):
             if not d: return ''
             if hasattr(d, 'strftime'): return d.strftime('%d/%m/%Y')
-            return str(d)[:10]
+            s = str(d).strip()
+            if len(s) == 10 and s[4] == '-':  # YYYY-MM-DD → DD/MM/YYYY
+                return s[8:] + '/' + s[5:7] + '/' + s[:4]
+            return s[:10]
 
         saldos = []
-        for row in ws.iter_rows(min_row=2, values_only=True):
+        for row in ws.iter_rows(min_row=min_row, values_only=True):
             if not row: continue
-            # Fallback posicional si no se detectaron encabezados
-            if idx_cliente is None:
-                vals = list(row) + [None]*9
-                vendedor, cliente, nro_fac, fecha_fac, fecha_pago, total, saldo = vals[:7]
-                cuit_val = None
-            else:
-                vendedor  = get_col(row, idx_vendedor, 0)
-                cliente   = get_col(row, idx_cliente, 1)
-                cuit_val  = get_col(row, idx_cuit)
-                nro_fac   = get_col(row, idx_nro, 2)
-                fecha_fac = get_col(row, idx_fecha_fac, 3)
-                fecha_pag = get_col(row, idx_fecha_pag, 4)
-                total     = get_col(row, idx_total, 5)
-                saldo     = get_col(row, idx_saldo, 6)
+            vals = list(row) + [None] * 9
+            vendedor, cliente, nro_fac, fecha_fac, fecha_pago, total, saldo = vals[:7]
             if not cliente: continue
-            try: total_f = float(total or 0)
-            except: total_f = 0
             try: saldo_f = float(saldo or 0)
             except: saldo_f = 0
             if saldo_f <= 0: continue
-            entry = {
+            try: total_f = float(total or 0)
+            except: total_f = 0
+            saldos.append({
                 'vendedor': str(vendedor or '').strip(),
                 'cliente': str(cliente).strip(),
                 'nroFactura': str(nro_fac or '').strip(),
                 'fechaFactura': fmt_fecha(fecha_fac),
-                'fechaPago': fmt_fecha(fecha_pag),
+                'fechaPago': fmt_fecha(fecha_pago),
                 'totalFactura': total_f,
                 'saldo': saldo_f
-            }
-            if cuit_val:
-                entry['cuit'] = str(cuit_val).replace('-', '').replace(' ', '').strip()
-            saldos.append(entry)
+            })
 
         sf_path = os.path.join(os.getcwd(), 'saldos_facturas.json')
         with open(sf_path, 'w', encoding='utf-8') as f:
             json.dump(saldos, f, ensure_ascii=False, indent=2)
-        # Guardar timestamp para que los clientes puedan detectar actualizaciones
         ts_path = os.path.join(os.getcwd(), 'saldos_timestamp.json')
         with open(ts_path, 'w') as f:
             json.dump({'ts': time.time(), 'fecha': time.strftime('%d/%m/%Y %H:%M')}, f)
         _saldos_facturas = saldos
-        print(f"[saldos] Actualizadas {len(saldos)} facturas (CUIT col: {'sí' if idx_cuit is not None else 'no'})", flush=True)
-        return jsonify({"ok": True, "total": len(saldos), "cuit_col": idx_cuit is not None})
+        print(f"[saldos] {len(saldos)} facturas importadas (Odoo positional)", flush=True)
+        return jsonify({"ok": True, "total": len(saldos)})
     except Exception as e:
         import traceback
         print(f"[saldos] Error: {traceback.format_exc()}", flush=True)
