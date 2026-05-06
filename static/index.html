@@ -1120,63 +1120,39 @@ async function procesarDSO() {
     // ── KPI saldo: suma directa del diccionario de saldos (sin pasar por todosClientes)
     var saldoTotalKPI = Object.values(saldosPorCliente).reduce(function(s, v) { return s + v; }, 0);
 
-    // ── DSO GLOBAL — FÓRMULA CLÁSICA ──
-    // Activo = saldos + cheques del servidor (último subido)
-    var activoSaldoServidor = 0;
-    var activoChequeServidor = 0;
-    var dActS = {saldos:[]};
-    try {
-      var rActS = await fetch('/dso-saldos?modo=actual');
-      dActS = await rActS.json();
-      activoSaldoServidor = (dActS.saldos||[]).reduce(function(s,v){ return s+(v.saldo||0); }, 0);
-    } catch(e) {}
-    try {
-      var rActC = await fetch('/dso-cheques?modo=actual');
-      var dActC = await rActC.json();
-      activoChequeServidor = (dActC.cheques||[]).reduce(function(s,v){ return s+Math.abs(v.total||0); }, 0);
-    } catch(e) {}
-    var activoObjetivo = activoSaldoServidor + activoChequeServidor;
+    // ── Limpieza localStorage: eliminar datos viejos antes de calcular ──────
+    localStorage.removeItem('piat_dso_saldos_cache');
+    localStorage.removeItem('piat_dso_cheques_cache');
 
-    // Ventas = historial del servidor (todos los meses, solo positivas)
-    var ventasBrutas = (window.ventasHistoricas||[]).reduce(function(s,v){
-      var t = parseFloat(v.total)||0;
-      return s + (t > 0 ? t : 0);
-    }, 0);
+    // ── DSO GLOBAL — Fórmula clásica: (AR / Ventas) × Días ──────────────
+    // AR = saldo total real del archivo de saldos subido (sin roundtrip a server)
+    var activoObjetivo = saldoTotalKPI;
+    // Sumar cheques como parte del activo si los hay
+    var totalCheques = Object.values(chequesPorCliente).reduce(function(s,v){ return s+v; }, 0);
+    activoObjetivo += totalCheques;
 
-    // Fecha de corte = fecha más reciente de saldos
-    var fechaCorteDS = new Date();
-    var fechaMinVentas = new Date();
-    try {
-      var fechasSaldo = (dActS.saldos||[]).map(function(s){
-        if (!s.fecha_factura) return null;
-        var d = new Date(s.fecha_factura);
-        return isNaN(d) ? null : d;
-      }).filter(Boolean);
-      if (fechasSaldo.length) {
-        fechaCorteDS = new Date(Math.max.apply(null, fechasSaldo));
-      }
-    } catch(e) {}
+    // Ventas = historial acumulado (4 meses) del servidor + archivo nuevo
+    var ventasBrutas = Object.values(ventasPorCliente).reduce(function(s,v){ return s+(v>0?v:0); }, 0);
 
-    // Fecha mínima de ventas históricas
-    var fechasVentas = (window.ventasHistoricas||[]).map(function(v){
-      return v.fecha ? new Date(v.fecha) : null;
-    }).filter(function(f){ return f && !isNaN(f); });
-    if (fechasVentas.length) {
-      fechaMinVentas = new Date(Math.min.apply(null, fechasVentas));
+    // Período: rango real de fechas de ventas; si no hay fechas, usar 4 meses = 120 días
+    var diasPeriodo = 120;
+    if (fechas.length >= 2) {
+      fechas.sort(function(a,b){ return a-b; });
+      var spanDias = Math.round((fechas[fechas.length-1] - fechas[0]) / (1000*60*60*24));
+      if (spanDias >= 30) diasPeriodo = spanDias;
     }
 
-    // Días del período
-    var diasPeriodo = Math.max(1, Math.ceil((fechaCorteDS - fechaMinVentas) / (1000*60*60*24)));
-
-    // DSO clásico = (Activo / Ventas brutas) × días
-    var dsoGlobal = ventasBrutas > 0
+    // DSO = (Activo / Ventas) × Período
+    var dsoGlobal = (ventasBrutas > 0 && activoObjetivo > 0)
       ? Math.round((activoObjetivo / ventasBrutas) * diasPeriodo)
       : 0;
 
     var ventasNetasTotal = ventasBrutas;
     var activoTotalDSO = activoObjetivo;
 
-    console.log('[DSO CLASICO] activo=$' + (activoObjetivo/1e6).toFixed(0) + 'M ventas=$' + (ventasBrutas/1e6).toFixed(0) + 'M dias=' + diasPeriodo + ' DSO=' + dsoGlobal);
+    console.log('[DSO] AR=$' + (activoObjetivo/1e6).toFixed(1) + 'M ventas=$' + (ventasBrutas/1e6).toFixed(1) + 'M días=' + diasPeriodo + ' DSO=' + dsoGlobal + 'd');
+    // Notificar a la App Comercial para que actualice saldos
+    localStorage.setItem('piat_saldos_ts', Date.now().toString());
 
     // DSO individual por cliente
     dsoDatos = [];
@@ -1948,7 +1924,45 @@ function renderVendeScore(scoreObj) {
     '<details><summary style="font-size:11px;color:#94a3b8;cursor:pointer;margin-bottom:4px;">Ver desglose del score</summary>' +
       '<table style="width:100%;border-collapse:collapse;margin-top:4px;">' + filas + '</table>' +
     '</details>' +
+  '</div>' +
+  '<div id="solvencia-card" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;margin-bottom:8px;">' +
+    '<div style="font-size:12px;font-weight:700;color:#334155;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px;">Capacidad de Pago</div>' +
+    '<div id="solvencia-body" style="font-size:13px;color:#64748b;">Consultando solvencia...</div>' +
   '</div>';
+}
+
+async function cargarSolvencia(cuit, contenedor) {
+  var el = document.getElementById('solvencia-body');
+  if (!el) return;
+  try {
+    var r = await fetch('/solvencia/' + cuit.replace(/-/g,''));
+    if (!r.ok) throw new Error();
+    var d = await r.json();
+    if (!d.ok || !d.data) {
+      el.innerHTML = '<span style="color:#94a3b8;">Datos de solvencia temporalmente no disponibles</span>';
+      return;
+    }
+    var data = d.data;
+    var ingresos = data.ingresos_anuales || 0;
+    var cat = data.categoria_monotrib || '';
+    var tipo = data.tipo_persona || '';
+    var ingM = ingresos > 0 ? '$' + (ingresos/1e6).toFixed(1) + 'M/año' : 'No disponible';
+    var catLabel = cat ? ' — Cat. ' + cat : (tipo === 'JURIDICA' ? ' — Sociedad' : '');
+    el.innerHTML =
+      '<div style="display:flex;gap:24px;flex-wrap:wrap;">' +
+      '<div><span style="font-size:11px;color:#94a3b8;display:block;">Ingresos estimados</span>' +
+        '<span style="font-size:15px;font-weight:700;color:#0f2d52;">' + ingM + catLabel + '</span></div>' +
+      (ingresos > 0 && window._bcraMontoUltimo > 0 ? (function(){
+        var ratio = (window._bcraMontoUltimo * 1000) / ingresos;
+        var ok = ratio <= 0.5;
+        return '<div><span style="font-size:11px;color:#94a3b8;display:block;">Ratio apalancamiento</span>' +
+          '<span style="font-size:15px;font-weight:700;color:' + (ok?'#166534':'#991b1b') + ';">' +
+          (ratio*100).toFixed(0) + '% ' + (ok?'✓ OK':'⚠ Alto') + '</span></div>';
+      })() : '') +
+      '</div>';
+  } catch(e) {
+    if (el) el.innerHTML = '<span style="color:#94a3b8;">Datos de solvencia temporalmente no disponibles</span>';
+  }
 }
 
 
@@ -2430,6 +2444,8 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
   const entidades = todasEntidades;
   const nombre = res?.denominacion || data?.denominacion || '';
   const maxSit = entidades.length ? entidades.reduce((m,e) => Math.max(m, e.situacion||1), 1) : 1;
+  // Guardar monto BCRA para ratio de solvencia (miles de pesos)
+  window._bcraMontoUltimo = entidades.reduce(function(s,e){ return s+(e.monto||0); }, 0);
   // Jerarquía: BCRA > AFIP async > CUIT formateado
   var cuitFmt2 = cuit.length === 11 ? cuit.slice(0,2)+'-'+cuit.slice(2,10)+'-'+cuit.slice(10) : cuit;
   var nombreMostrar = nombreExterno || nombre || cuitFmt2;
@@ -2489,7 +2505,11 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
     var cheques = resultados[1];
     var scoreObjFinal = calcularVendeScore(cuit, data, _scoreMora, _scoreWsp, historial, cheques);
     var scoreElF = document.getElementById('vende-score-container');
-    if (scoreElF) scoreElF.innerHTML = renderVendeScore(scoreObjFinal);
+    if (scoreElF) {
+      scoreElF.innerHTML = renderVendeScore(scoreObjFinal);
+      // Cargar solvencia de forma asíncrona (no bloquea el score)
+      cargarSolvencia(cuit, scoreElF);
+    }
     // Guardar score correcto — tanto en alertas como en cartera local
     var alertaIdx = alertas.findIndex(function(a){ return a.cuit === cuit; });
     if (alertaIdx !== -1) {
@@ -2799,59 +2819,120 @@ try {
 function exportarReporte() {
   if (!ultimoAnalisis) return;
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const W = 210, H = 297;
+  const SIDEBAR = 58;   // ancho columna derecha (score)
+  const MAIN_W = W - SIDEBAR - 10; // ancho columna izquierda
   const cuit = document.getElementById('cuit-input').value.trim();
   const raw = cuit.replace(/-/g,'');
   const mora = buscarEnMoras(raw);
-  // Nombre: prioridad Veraz > BCRA header > cartera > CUIT
+  var cuitFmt = raw.length === 11 ? raw.slice(0,2)+'-'+raw.slice(2,10)+'-'+raw.slice(10) : cuit;
+
+  // Nombre
   var nombre = '';
   if (verazData && verazData.nombre) nombre = verazData.nombre;
-  if (!nombre) {
-    var nomEl = document.querySelector('#cliente-header .nombre-cliente');
-    if (nomEl) nombre = nomEl.textContent.trim();
-  }
-  if (!nombre || nombre === cuit) {
-    var enCartera = cartera.find(function(c) { return c.cuit === raw; });
-    if (enCartera) nombre = enCartera.nombre;
-  }
+  if (!nombre) { var nomEl = document.querySelector('#cliente-header .nombre-cliente'); if (nomEl) nombre = nomEl.textContent.trim(); }
+  if (!nombre || nombre === cuit) { var enCar = cartera.find(function(c){ return c.cuit === raw; }); if (enCar) nombre = enCar.nombre; }
   if (!nombre) nombre = cuit;
-  // CUIT formateado limpio
-  var cuitFmt = raw.length === 11 ? raw.slice(0,2)+'-'+raw.slice(2,10)+'-'+raw.slice(10) : cuit;
-  let y = 20;
-  // Header
+
+  // Score actual
+  var scoreEl = document.querySelector('#vende-score-container [style*="font-size:32px"]');
+  var scoreVal = scoreEl ? parseInt(scoreEl.textContent) || 0 : 0;
+  var scoreRango = 'Sin datos', scoreColor = [100,116,139];
+  if (scoreVal >= 700)      { scoreRango = 'Excelente';   scoreColor = [22,101,52]; }
+  else if (scoreVal >= 400) { scoreRango = 'Bueno';       scoreColor = [146,64,14]; }
+  else if (scoreVal >= 200) { scoreRango = 'Revisar';     scoreColor = [154,52,18]; }
+  else if (scoreVal >= 100) { scoreRango = 'Alto riesgo'; scoreColor = [153,27,27]; }
+  else if (scoreVal > 0)    { scoreRango = 'Rechazar';    scoreColor = [127,29,29]; }
+
+  // ── FONDO SIDEBAR (columna derecha) ─────────────────────────────────────
+  doc.setFillColor(...scoreColor);
+  doc.rect(W - SIDEBAR, 0, SIDEBAR, H, 'F');
+
+  // ── HEADER AZUL (ancho total) ────────────────────────────────────────────
   doc.setFillColor(15, 45, 82);
-  doc.rect(0, 0, 210, 30, 'F');
-  doc.setFontSize(16); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold');
-  doc.text('Vende Seguro', 20, 14);
-  doc.setFontSize(9); doc.setFont('helvetica','italic'); doc.setTextColor(147,197,253);
-  doc.text('vende sin riesgo', 20, 22);
-  doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(200,220,255);
-  doc.text('Reporte de riesgo crediticio — ' + ultimoAnalisis.fecha, 110, 14);
-  doc.text(getNombreBodega(), 110, 22);
-  y = 42;
+  doc.rect(0, 0, W - SIDEBAR, 28, 'F');
+  doc.setFontSize(14); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold');
+  doc.text('Vende Seguro', 10, 12);
+  doc.setFontSize(8); doc.setFont('helvetica','italic'); doc.setTextColor(147,197,253);
+  doc.text('Análisis crediticio — ' + ultimoAnalisis.fecha, 10, 20);
+  doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(200,220,255);
+  doc.text(getNombreBodega(), 10, 26);
+
+  // ── SCORE EN SIDEBAR ─────────────────────────────────────────────────────
+  var sx = W - SIDEBAR + 4;
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(8); doc.setFont('helvetica','bold');
+  doc.text('SCORE', sx, 14, {align:'left'});
+  doc.setFontSize(34); doc.setFont('helvetica','bold');
+  doc.text(scoreVal > 0 ? String(scoreVal) : '—', sx + SIDEBAR/2 - 4, 38, {align:'center'});
+  doc.setFontSize(10);
+  doc.text(scoreRango.toUpperCase(), sx + SIDEBAR/2 - 4, 46, {align:'center'});
+  doc.setFontSize(7.5); doc.setFont('helvetica','normal');
+  doc.text('Vende Seguro', sx + SIDEBAR/2 - 4, 52, {align:'center'});
+  doc.setFontSize(7); doc.setTextColor(220,220,220);
+  doc.text('escala 1-999', sx + SIDEBAR/2 - 4, 57, {align:'center'});
+
+  // Barra de score en sidebar
+  var barY = 62, barH = 4;
+  doc.setFillColor(255,255,255,60);
+  doc.roundedRect(sx, barY, SIDEBAR-8, barH, 2, 2, 'F');
+  doc.setFillColor(255,255,255);
+  doc.roundedRect(sx, barY, Math.max(2,(SIDEBAR-8)*scoreVal/999), barH, 2, 2, 'F');
+
+  // Metadatos en sidebar
+  var sy = 74;
+  var metaItems = [
+    ['CUIT', cuitFmt],
+    ['Fecha', ultimoAnalisis.fecha],
+    ['Bodega', getNombreBodega()],
+    ['Rango', scoreRango],
+  ];
+  metaItems.forEach(function(m) {
+    doc.setFontSize(6.5); doc.setFont('helvetica','bold'); doc.setTextColor(200,230,255);
+    doc.text(m[0].toUpperCase(), sx, sy);
+    doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(255,255,255);
+    doc.text(String(m[1]).substring(0,14), sx, sy+5);
+    sy += 13;
+  });
+
+  // ── CONTENIDO PRINCIPAL (columna izquierda) ───────────────────────────────
+  var y = 36;
   doc.setFontSize(13); doc.setTextColor(15,45,82); doc.setFont('helvetica','bold');
-  doc.text(nombre, 20, y); y += 7;
-  doc.setFontSize(10); doc.setTextColor(100,116,139); doc.setFont('helvetica','normal');
-  doc.text('CUIT: ' + cuitFmt, 20, y); y += 10;
-  doc.setDrawColor(200,215,255); doc.line(20, y, 190, y); y += 8;
+  doc.text(nombre.substring(0, 35), 10, y); y += 6;
+  doc.setFontSize(9); doc.setTextColor(100,116,139); doc.setFont('helvetica','normal');
+  doc.text('CUIT: ' + cuitFmt, 10, y); y += 8;
+  doc.setDrawColor(200,215,255); doc.line(10, y, W - SIDEBAR - 4, y); y += 6;
+
   if (mora) {
-    doc.setTextColor(153, 27, 27);
-    doc.text(`MORA: $${(mora.saldo||0).toLocaleString('es-AR')} desde ${mora.fecha_mora} (${mora.estado})`, 20, y); y += 10;
+    doc.setFillColor(254,242,242); doc.roundedRect(10, y-2, MAIN_W, 10, 2, 2, 'F');
+    doc.setTextColor(153,27,27); doc.setFontSize(8.5); doc.setFont('helvetica','bold');
+    doc.text('MORA: $' + (mora.saldo||0).toLocaleString('es-AR') + ' desde ' + mora.fecha_mora, 13, y+5);
+    y += 14;
   }
+
   if (verazData) {
-    doc.setTextColor(30); doc.setFontSize(12);
-    doc.text('Datos Veraz:', 20, y); y += 7;
-    doc.setFontSize(10); doc.setTextColor(80);
-    doc.text(`Score: ${verazData.score}/9 | Cheques rechazados: ${verazData.cheques_rechazados}`, 20, y); y += 6;
-    doc.text(`Situación: ${verazData.situacion_bcra} | Saldo vencido: ${verazData.saldo_vencido}`, 20, y); y += 6;
-    doc.text(`Deuda total: ${verazData.deuda_sistema_financiero}`, 20, y); y += 10;
+    doc.setFontSize(9); doc.setTextColor(30); doc.setFont('helvetica','bold');
+    doc.text('Datos Veraz/Nosis', 10, y); y += 6;
+    doc.setFontSize(8); doc.setTextColor(60); doc.setFont('helvetica','normal');
+    doc.text('Score: ' + verazData.score + '/9  |  Cheques: ' + verazData.cheques_rechazados, 10, y); y += 5;
+    doc.text('Situación: ' + verazData.situacion_bcra + '  |  Vencido: ' + verazData.saldo_vencido, 10, y); y += 5;
+    doc.text('Deuda SF: ' + verazData.deuda_sistema_financiero, 10, y); y += 9;
+    doc.setDrawColor(220,230,240); doc.line(10, y, W-SIDEBAR-4, y); y += 6;
   }
-  doc.setFontSize(12); doc.setTextColor(30);
-  doc.text('Análisis de riesgo:', 20, y); y += 8;
-  doc.setFontSize(10); doc.setTextColor(60);
-  const lines = doc.splitTextToSize(ultimoAnalisis.texto, 170);
-  doc.text(lines, 20, y);
-  doc.save(`VenderSeguros_${cuit}_${ultimoAnalisis.fecha.replace(/\//g,'-')}.pdf`);
+
+  doc.setFontSize(9.5); doc.setTextColor(15,45,82); doc.setFont('helvetica','bold');
+  doc.text('Análisis de riesgo', 10, y); y += 7;
+  doc.setFontSize(8.5); doc.setTextColor(40); doc.setFont('helvetica','normal');
+  var lines = doc.splitTextToSize(ultimoAnalisis.texto, MAIN_W);
+  doc.text(lines, 10, y);
+
+  // Pie de página
+  doc.setFontSize(7); doc.setTextColor(150); doc.setFont('helvetica','italic');
+  doc.text('Generado por Vende Seguro · ' + ultimoAnalisis.fecha + ' · Confidencial', 10, H-8);
+  doc.setDrawColor(220,230,240); doc.line(10, H-11, W-SIDEBAR-4, H-11);
+
+  doc.save('VendeSeguro_' + raw + '_' + ultimoAnalisis.fecha.replace(/\//g,'-') + '.pdf');
 }
 
 

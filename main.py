@@ -1536,19 +1536,50 @@ def _norm_nombre(s):
     s = re.sub(r'[^A-Z0-9 ]', ' ', s)
     return re.sub(r'\s+', ' ', s).strip()
 
+@app.route("/solvencia/<cuit>")
+def get_solvencia_endpoint(cuit):
+    """Devuelve datos de solvencia cacheados. Si no hay datos, retorna estado 'no disponible'."""
+    from urllib.parse import unquote
+    cuit_limpio = str(unquote(cuit)).replace('-', '').replace(' ', '').strip()
+    data = get_solvency_data(cuit_limpio)
+    if data:
+        return jsonify({"ok": True, "data": data})
+    return jsonify({"ok": False, "mensaje": "Datos de solvencia temporalmente no disponibles"})
+
 @app.route("/saldos-cliente/<cliente>")
 def get_saldos_cliente(cliente):
     from urllib.parse import unquote
-    cn = _norm_nombre(unquote(cliente))
-    # Match exacto primero
+    nombre_original = unquote(cliente)
+    cn = _norm_nombre(nombre_original)
+
+    # 1. Match exacto
     result = [f for f in _saldos_facturas if _norm_nombre(f.get('cliente', '')) == cn]
+
+    # 2. Match por primeras 2 palabras (caso Odoo: "ARRAYGADA LAURA" → "ARRAYGADA LAURA CAROLINA")
     if not result:
-        # Match parcial: al menos 2 palabras del nombre buscado presentes en el registro
+        prim2 = ' '.join(cn.split()[:2])
+        if len(prim2) > 3:
+            result = [f for f in _saldos_facturas
+                      if _norm_nombre(f.get('cliente', '')).startswith(prim2)]
+            if result:
+                print(f"[match-2p] '{nombre_original}' → prim2='{prim2}' → {len(result)} facturas", flush=True)
+
+    # 3. Match parcial (≥2 palabras en común, longitud >2)
+    if not result:
         palabras = [w for w in cn.split() if len(w) > 2]
         if palabras:
             result = [f for f in _saldos_facturas
                 if sum(1 for p in palabras if p in _norm_nombre(f.get('cliente', '')))
                    >= min(2, len(palabras))]
+            if result:
+                print(f"[match-parcial] '{nombre_original}' → {len(result)} facturas", flush=True)
+
+    # Audit log: sin match → registrar el string exacto de Odoo para debugging
+    if not result:
+        clientes_en_sf = list({_norm_nombre(f.get('cliente', '')) for f in _saldos_facturas})[:5]
+        print(f"[match-FAIL] No se encontró match para: '{nombre_original}' (normalizado: '{cn}'). "
+              f"Primeros 5 clientes en saldos_facturas: {clientes_en_sf}", flush=True)
+
     total_saldo = sum(f.get('saldo', 0) for f in result)
     return jsonify({"facturas": result, "total_saldo": total_saldo, "cantidad": len(result)})
 
