@@ -250,6 +250,7 @@ let SESSION = null;
 let CARTERA_LOCAL = [];
 let ALERTAS = [];
 let SALDOS_MAP = {};
+let SALDOS_TIMESTAMP = 0;
 
 // ── LOGIN ──
 function doLogin() {
@@ -271,7 +272,7 @@ function doLogin() {
 }
 
 function doLogout() {
-  SESSION = null; CARTERA_LOCAL = []; SALDOS_MAP = {};
+  SESSION = null; CARTERA_LOCAL = []; SALDOS_MAP = {}; SALDOS_TIMESTAMP = 0;
   localStorage.removeItem('vendeSeguro_session');
   document.getElementById('app').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
@@ -339,27 +340,52 @@ function normNombre(s) {
     .replace(/[^A-Z0-9]/g,' ').replace(/\s+/g,' ').trim();
 }
 
-async function cargarSaldosCartera() {
-  const nombres = [...new Set(CARTERA_LOCAL.map(c => c.nombre))];
-  for (let i = 0; i < nombres.length; i += 8) {
-    const lote = nombres.slice(i, i+8);
-    await Promise.all(lote.map(async nombre => {
+async function cargarSaldosCartera(forzar = false) {
+  // Verificar si hay una actualización nueva en el servidor
+  try {
+    const tsR = await fetch(API + '/saldos-timestamp');
+    if (tsR.ok) {
+      const tsData = await tsR.json();
+      if (!forzar && tsData.ts && tsData.ts <= SALDOS_TIMESTAMP) return; // sin cambios
+      SALDOS_TIMESTAMP = tsData.ts || 0;
+    }
+  } catch(e) {}
+
+  // Buscar saldos con prioridad CUIT > nombre
+  const clientes = CARTERA_LOCAL.filter((c,i,a) =>
+    a.findIndex(x => (x.cuit && x.cuit === c.cuit) || normNombre(x.nombre) === normNombre(c.nombre)) === i
+  );
+  for (let i = 0; i < clientes.length; i += 8) {
+    const lote = clientes.slice(i, i+8);
+    await Promise.all(lote.map(async c => {
       try {
-        const r = await fetch(API + '/saldos-cliente/' + encodeURIComponent(nombre));
-        if (r.ok) {
-          const data = await r.json();
-          if (data.facturas && data.facturas.length > 0) {
-            SALDOS_MAP[normNombre(nombre)] = data;
+        let data = null;
+        // Prioridad 1: buscar por CUIT
+        if (c.cuit) {
+          const r = await fetch(API + '/saldos-cuit/' + encodeURIComponent(c.cuit));
+          if (r.ok) {
+            const d = await r.json();
+            if (d.facturas && d.facturas.length > 0) data = d;
           }
         }
+        // Prioridad 2: buscar por nombre si no encontró por CUIT
+        if (!data) {
+          const r = await fetch(API + '/saldos-cliente/' + encodeURIComponent(c.nombre));
+          if (r.ok) {
+            const d = await r.json();
+            if (d.facturas && d.facturas.length > 0) data = d;
+          }
+        }
+        if (data) SALDOS_MAP[normNombre(c.nombre)] = data;
       } catch(e) {}
     }));
   }
   // Re-render con saldos cargados
   const filtroActivo = document.querySelector('.filter-chip.active');
-  const filtro = filtroActivo ? (filtroActivo.textContent.includes('saldo') ? 'saldo' :
-    filtroActivo.textContent.includes('Alertas') ? 'alertas' :
-    filtroActivo.textContent.includes('saldo') ? 'saldo' : 'todos') : 'todos';
+  const filtro = filtroActivo ? (
+    filtroActivo.textContent.includes('saldo') ? 'saldo' :
+    filtroActivo.textContent.includes('Alertas') ? 'alertas' : 'todos'
+  ) : 'todos';
   renderCartera(filtro);
   renderOportunidades();
 }
@@ -373,7 +399,10 @@ function switchTab(tab, btn) {
   document.getElementById('tab-' + tab).classList.add('active');
   btn.classList.add('active');
   localStorage.setItem('vendeSeguro_tab', tab);
-  if (tab === 'cartera' || tab === 'oport') refrescarScores();
+  if (tab === 'cartera' || tab === 'oport') {
+    refrescarScores();
+    cargarSaldosCartera(); // detecta si hay un DSO nuevo en el servidor
+  }
 }
 
 async function refrescarScores() {
@@ -584,22 +613,30 @@ async function abrirModalCliente(cuit, nombre) {
   document.getElementById('detail-modal').style.display = 'flex';
   document.getElementById('detail-modal').style.flexDirection = 'column';
 
-  const [sr, br, chr, hr] = await Promise.all([
-    fetch(API + '/saldos-cliente/' + encodeURIComponent(nombre)).catch(() => null),
+  const [br, chr, hr] = await Promise.all([
     fetch(API + '/deudas/' + cuit).catch(() => null),
     fetch(API + '/deudas/' + cuit + '/cheques').catch(() => null),
     fetch(API + '/deudas/' + cuit + '/historial').catch(() => null)
   ]);
 
-  // Facturas
+  // Facturas — prioridad CUIT, fallback nombre
   const factEl = document.getElementById('mtab-facturas');
-  if (sr && sr.ok) {
-    const sd = await sr.json();
-    if (sd.facturas && sd.facturas.length > 0) SALDOS_MAP[normNombre(nombre)] = sd;
-    factEl.innerHTML = renderFacturas(sd);
-  } else {
-    factEl.innerHTML = '<div class="empty"><div class="empty-icon">✅</div><div class="empty-text">Sin facturas pendientes</div></div>';
+  let sd = null;
+  try {
+    const srCuit = await fetch(API + '/saldos-cuit/' + encodeURIComponent(cuit));
+    if (srCuit && srCuit.ok) {
+      const d = await srCuit.json();
+      if (d.facturas && d.facturas.length > 0) sd = d;
+    }
+  } catch(e) {}
+  if (!sd) {
+    try {
+      const srNombre = await fetch(API + '/saldos-cliente/' + encodeURIComponent(nombre));
+      if (srNombre && srNombre.ok) sd = await srNombre.json();
+    } catch(e) {}
   }
+  if (sd && sd.facturas && sd.facturas.length > 0) SALDOS_MAP[normNombre(nombre)] = sd;
+  factEl.innerHTML = sd ? renderFacturas(sd) : '<div class="empty"><div class="empty-icon">✅</div><div class="empty-text">Sin facturas pendientes</div></div>';
 
   // BCRA
   const bcraEl = document.getElementById('mtab-bcra');
@@ -915,11 +952,19 @@ function calcularScoreCompletoSync(maxSit, sinDeudas, periodos, chData, histData
   let pHist = 75;
   if (histData) {
     const pH = (histData.results||{}).periodos||[];
-    const malos = pH.slice(0,24).filter(p =>
-      Math.max(...(p.entidades||[]).map(e=>e.situacion||1),1) > 1
-    ).length;
-    if (malos > 0) pHist = malos<=2 ? 75 : 0;
-    else pHist = nPH>=12 ? 150 : nPH>=3 ? 90 : nPH>=1 ? 40 : 60;
+    // Regla 6 meses: sit≥3 en cualquiera → pHist=0 automático
+    const sitGrave6m = pH.slice(0,6).some(p =>
+      Math.max(...(p.entidades||[]).map(e=>e.situacion||1), 1) >= 3
+    );
+    if (sitGrave6m) {
+      pHist = 0;
+    } else {
+      const malos = pH.slice(0,24).filter(p =>
+        Math.max(...(p.entidades||[]).map(e=>e.situacion||1),1) > 1
+      ).length;
+      if (malos > 0) pHist = malos<=2 ? 75 : 0;
+      else pHist = nPH>=12 ? 150 : nPH>=3 ? 90 : nPH>=1 ? 40 : 60;
+    }
   } else if (sinDeudas) { pHist = 60; }
   pts += pHist;
 
@@ -929,6 +974,8 @@ function calcularScoreCompletoSync(maxSit, sinDeudas, periodos, chData, histData
     const causales = chData.results?.causales||[];
     let det=[]; causales.forEach(ca=>ca.entidades?.forEach(en=>det.push(...(en.detalle||[]))));
     const act = det.filter(d=>!d.fechaPago||d.estadoMulta==='IMPAGA');
+    // Hard cap: >5 activos o ≥113 totales → score colapsa a Rechazar
+    if (act.length > 5 || det.length >= 113) return 1;
     if (chData.sin_deudas||!det.length) pCheq = nPH>6?150:nPH>=1?70:40;
     else if (!act.length) pCheq=75;
     else pCheq=0;

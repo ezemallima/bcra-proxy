@@ -386,15 +386,24 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
 
     if hist_fresco:
         periodos_h = (hist_fresco.get('results') or {}).get('periodos') or []
-        meses_malos = sum(1 for p in periodos_h[:24]
-            if max(((e.get('situacion') or 1) for e in p.get('entidades', [])), default=1) > 1)
-        if meses_malos > 0:
-            pts_hist = 75 if meses_malos <= 2 else 0
+        # Regla 6 meses: cualquier sit≥3 en los últimos 6 meses → pts_hist=0 automático
+        sit_grave_6m = any(
+            max(((e.get('situacion') or 1) for e in p.get('entidades', [])), default=1) >= 3
+            for p in periodos_h[:6]
+        )
+        if sit_grave_6m:
+            pts_hist = 0
+            print(f"[score] {cuit_limpio} sit≥3 en últimos 6m → pts_hist=0", flush=True)
         else:
-            if   n_periodos_h >= 12: pts_hist = 150
-            elif n_periodos_h >= 3:  pts_hist = 90
-            elif n_periodos_h >= 1:  pts_hist = 40
-            else:                    pts_hist = 60
+            meses_malos = sum(1 for p in periodos_h[:24]
+                if max(((e.get('situacion') or 1) for e in p.get('entidades', [])), default=1) > 1)
+            if meses_malos > 0:
+                pts_hist = 75 if meses_malos <= 2 else 0
+            else:
+                if   n_periodos_h >= 12: pts_hist = 150
+                elif n_periodos_h >= 3:  pts_hist = 90
+                elif n_periodos_h >= 1:  pts_hist = 40
+                else:                    pts_hist = 60
     elif sin_deudas_real:
         pts_hist = 60
     else:
@@ -464,6 +473,9 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
             total_ch = len(detalles)
             activos_ch = sum(1 for d in detalles
                 if not d.get('fechaPago') or d.get('estadoMulta') == 'IMPAGA')
+            if activos_ch > 5 or total_ch >= 113:
+                print(f"[score] {cuit_limpio} cheques críticos: {activos_ch} activos, {total_ch} total → Rechazar", flush=True)
+                return {"score": 1, "rango": "Rechazar", "color": "#7f1d1d", "emoji": "⛔"}
             if total_ch == 0:
                 pts_cheq = 150 if n_periodos_h > 6 else (70 if n_periodos_h >= 1 else 40)
             elif activos_ch == 0: pts_cheq = 75
@@ -487,9 +499,17 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
         except:
             en_mora = False
 
-    puntos += 0 if en_mora else 100   # Historial Piattelli
-    puntos += 0 if en_mora else 50    # DSO individual neutral
-    puntos += 30  # Red bodegas neutral
+    # Clientes nuevos (no en cartera activa) no acumulan puntos de relación comercial
+    en_cartera = any(
+        str(c.get('cuit', '')).replace('-', '').replace(' ', '').strip() == cuit_limpio
+        for c in _cartera_comercial
+    )
+    if en_cartera:
+        puntos += 0 if en_mora else 100   # Historial Piattelli
+        puntos += 0 if en_mora else 50    # DSO individual
+        puntos += 30                      # Red bodegas
+    else:
+        print(f"[score] {cuit_limpio} no en cartera → Piattelli/DSO/Bodegas=0", flush=True)
 
     # ── 5. CONCENTRACIÓN DEUDA ─────────────────────────────────────────────
     if nro_entidades == 0 or sin_deudas_real: pts_conc = 39
@@ -1442,6 +1462,40 @@ def get_saldos_cliente(cliente):
     total_saldo = sum(f.get('saldo', 0) for f in result)
     return jsonify({"facturas": result, "total_saldo": total_saldo, "cantidad": len(result)})
 
+@app.route("/saldos-cuit/<cuit>")
+def get_saldos_cuit(cuit):
+    """Busca facturas por CUIT (prioridad absoluta). Si no hay CUIT en registros, cae a nombre."""
+    from urllib.parse import unquote
+    cuit_limpio = str(unquote(cuit)).replace('-', '').replace(' ', '').strip()
+    # Prioridad 1: buscar por CUIT si los registros lo tienen
+    result = [f for f in _saldos_facturas if str(f.get('cuit', '')).replace('-', '').replace(' ', '').strip() == cuit_limpio]
+    if result:
+        total_saldo = sum(f.get('saldo', 0) for f in result)
+        return jsonify({"facturas": result, "total_saldo": total_saldo, "cantidad": len(result), "metodo": "cuit"})
+    # Prioridad 2: buscar por nombre en cartera comercial
+    nombre_en_cartera = next(
+        (str(c.get('nombre', '')).strip() for c in _cartera_comercial
+         if str(c.get('cuit', '')).replace('-', '').replace(' ', '').strip() == cuit_limpio),
+        None
+    )
+    if nombre_en_cartera:
+        cn = _norm_nombre(nombre_en_cartera)
+        result = [f for f in _saldos_facturas if _norm_nombre(f.get('cliente', '')) == cn]
+        total_saldo = sum(f.get('saldo', 0) for f in result)
+        return jsonify({"facturas": result, "total_saldo": total_saldo, "cantidad": len(result), "metodo": "nombre"})
+    return jsonify({"facturas": [], "total_saldo": 0, "cantidad": 0, "metodo": "nulo"})
+
+@app.route("/saldos-timestamp")
+def get_saldos_timestamp():
+    """Devuelve timestamp de la última carga de saldos para detección de actualizaciones."""
+    ts_path = os.path.join(os.getcwd(), 'saldos_timestamp.json')
+    try:
+        with open(ts_path, 'r') as f:
+            data = json.load(f)
+        return jsonify(data)
+    except:
+        return jsonify({"ts": 0, "fecha": None})
+
 @app.route("/dso-global-saldos")
 def get_dso_global_saldos():
     """DSO global y por vendedor desde saldos_facturas.json — fuente única de verdad."""
@@ -1478,7 +1532,7 @@ def get_dso_global_saldos():
 
 @app.route("/upload-saldos-facturas", methods=["POST"])
 def upload_saldos_facturas():
-    """Recibe Excel de saldos con formato: Vendedor, cliente, Nro factura, Fecha factura, Fecha pago, Total, Saldo"""
+    """Recibe Excel de saldos. Detecta columna CUIT automáticamente si existe."""
     global _saldos_facturas
     try:
         if 'file' not in request.files:
@@ -1487,34 +1541,80 @@ def upload_saldos_facturas():
         import io, openpyxl
         wb = openpyxl.load_workbook(io.BytesIO(file.read()))
         ws = wb.active
+
+        # Detectar columnas desde la fila de encabezados
+        headers = [str(c.value or '').strip().upper() for c in next(ws.iter_rows(min_row=1, max_row=1))]
+        def col_idx(names):
+            for n in names:
+                for i, h in enumerate(headers):
+                    if n in h: return i
+            return None
+
+        idx_vendedor  = col_idx(['VENDEDOR'])
+        idx_cliente   = col_idx(['CLIENTE', 'RAZON', 'RAZÓN'])
+        idx_cuit      = col_idx(['CUIT'])
+        idx_nro       = col_idx(['NRO', 'NUMERO', 'FACTURA', 'NRO FAC'])
+        idx_fecha_fac = col_idx(['FECHA FAC', 'EMISION', 'EMISIÓN', 'FECHA F'])
+        idx_fecha_pag = col_idx(['FECHA PAG', 'VENCIM', 'VENCIMIENTO'])
+        idx_total     = col_idx(['TOTAL', 'IMPORTE'])
+        idx_saldo     = col_idx(['SALDO'])
+
+        def get_col(row, idx, fallback_idx=None):
+            if idx is not None and idx < len(row): return row[idx]
+            if fallback_idx is not None and fallback_idx < len(row): return row[fallback_idx]
+            return None
+
+        def fmt_fecha(d):
+            if not d: return ''
+            if hasattr(d, 'strftime'): return d.strftime('%d/%m/%Y')
+            return str(d)[:10]
+
         saldos = []
         for row in ws.iter_rows(min_row=2, values_only=True):
-            if not row or not row[1]: continue
-            vendedor, cliente, nro_fac, fecha_fac, fecha_pago, total, saldo = (list(row) + [None]*7)[:7]
-            def fmt_fecha(d):
-                if not d: return ''
-                if hasattr(d, 'strftime'): return d.strftime('%d/%m/%Y')
-                return str(d)[:10]
+            if not row: continue
+            # Fallback posicional si no se detectaron encabezados
+            if idx_cliente is None:
+                vals = list(row) + [None]*9
+                vendedor, cliente, nro_fac, fecha_fac, fecha_pago, total, saldo = vals[:7]
+                cuit_val = None
+            else:
+                vendedor  = get_col(row, idx_vendedor, 0)
+                cliente   = get_col(row, idx_cliente, 1)
+                cuit_val  = get_col(row, idx_cuit)
+                nro_fac   = get_col(row, idx_nro, 2)
+                fecha_fac = get_col(row, idx_fecha_fac, 3)
+                fecha_pag = get_col(row, idx_fecha_pag, 4)
+                total     = get_col(row, idx_total, 5)
+                saldo     = get_col(row, idx_saldo, 6)
+            if not cliente: continue
             try: total_f = float(total or 0)
             except: total_f = 0
             try: saldo_f = float(saldo or 0)
             except: saldo_f = 0
-            if saldo_f <= 0: continue  # solo facturas con saldo pendiente
-            saldos.append({
+            if saldo_f <= 0: continue
+            entry = {
                 'vendedor': str(vendedor or '').strip(),
                 'cliente': str(cliente).strip(),
                 'nroFactura': str(nro_fac or '').strip(),
                 'fechaFactura': fmt_fecha(fecha_fac),
-                'fechaPago': fmt_fecha(fecha_pago),
+                'fechaPago': fmt_fecha(fecha_pag),
                 'totalFactura': total_f,
                 'saldo': saldo_f
-            })
+            }
+            if cuit_val:
+                entry['cuit'] = str(cuit_val).replace('-', '').replace(' ', '').strip()
+            saldos.append(entry)
+
         sf_path = os.path.join(os.getcwd(), 'saldos_facturas.json')
         with open(sf_path, 'w', encoding='utf-8') as f:
             json.dump(saldos, f, ensure_ascii=False, indent=2)
+        # Guardar timestamp para que los clientes puedan detectar actualizaciones
+        ts_path = os.path.join(os.getcwd(), 'saldos_timestamp.json')
+        with open(ts_path, 'w') as f:
+            json.dump({'ts': time.time(), 'fecha': time.strftime('%d/%m/%Y %H:%M')}, f)
         _saldos_facturas = saldos
-        print(f"[saldos] Actualizadas {len(saldos)} facturas", flush=True)
-        return jsonify({"ok": True, "total": len(saldos)})
+        print(f"[saldos] Actualizadas {len(saldos)} facturas (CUIT col: {'sí' if idx_cuit is not None else 'no'})", flush=True)
+        return jsonify({"ok": True, "total": len(saldos), "cuit_col": idx_cuit is not None})
     except Exception as e:
         import traceback
         print(f"[saldos] Error: {traceback.format_exc()}", flush=True)

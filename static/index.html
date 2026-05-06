@@ -1577,7 +1577,7 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
   var montoRealBCRA = 0;
   if (bcraData && bcraData.results && bcraData.results.periodos && bcraData.results.periodos.length > 0) {
     var entsTemp = bcraData.results.periodos[0].entidades || [];
-    montoRealBCRA = entsTemp.reduce(function(s,e){ return s+(e.monto||0); }, 0) * 1000;
+    montoRealBCRA = entsTemp.reduce(function(s,e){ return s+(e.monto||0); }, 0); // miles de pesos, igual que servidor
   }
   var pBCRA, sitLabel;
   if (maxSit === null || maxSit === undefined) {
@@ -1608,22 +1608,29 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
     periodosHist = bcraData.results.periodos;
   }
   if (periodosHist.length > 0) {
-    var mesesMalos = 0;
-    periodosHist.slice(0, 24).forEach(function(p) {
-      var sitMax = (p.entidades||[]).reduce(function(m,e){ return Math.max(m, e.situacion||1); }, 1);
-      if (sitMax > 1) mesesMalos++;
+    // Regla 6 meses: sit≥3 en cualquiera → pHistorial=0 automático
+    var sitGrave6m = periodosHist.slice(0, 6).some(function(p) {
+      return (p.entidades||[]).reduce(function(m,e){ return Math.max(m, e.situacion||1); }, 1) >= 3;
     });
-    if (mesesMalos > 2) {
-      pHistorial = 0; historialLabel = mesesMalos+' meses irregulares';
-    } else if (mesesMalos > 0) {
-      pHistorial = 75; historialLabel = mesesMalos+' mes(es) irregular(es)';
+    if (sitGrave6m) {
+      pHistorial = 0; historialLabel = 'Sit≥3 en los últimos 6 meses';
     } else {
-      // Historial limpio — escalar por nPeriodosH (períodos con actividad real)
-      if      (nPeriodosH >= 12) { pHistorial = 150; historialLabel = 'Sin irregularidades ('+nPeriodosH+'m activos)'; }
-      else if (nPeriodosH >= 6)  { pHistorial = 100; historialLabel = 'Sin irregularidades ('+nPeriodosH+'m)'; }
-      else if (nPeriodosH >= 2)  { pHistorial = 60;  historialLabel = 'Sin irregularidades (historial corto)'; }
-      else if (nPeriodosH >= 1)  { pHistorial = 40;  historialLabel = 'Sin irregularidades (nuevo)'; }
-      else                       { pHistorial = 20;  historialLabel = 'Sin historial activo en sistema'; }
+      var mesesMalos = 0;
+      periodosHist.slice(0, 24).forEach(function(p) {
+        var sitMax = (p.entidades||[]).reduce(function(m,e){ return Math.max(m, e.situacion||1); }, 1);
+        if (sitMax > 1) mesesMalos++;
+      });
+      if (mesesMalos > 2) {
+        pHistorial = 0; historialLabel = mesesMalos+' meses irregulares';
+      } else if (mesesMalos > 0) {
+        pHistorial = 75; historialLabel = mesesMalos+' mes(es) irregular(es)';
+      } else {
+        if      (nPeriodosH >= 12) { pHistorial = 150; historialLabel = 'Sin irregularidades ('+nPeriodosH+'m activos)'; }
+        else if (nPeriodosH >= 6)  { pHistorial = 100; historialLabel = 'Sin irregularidades ('+nPeriodosH+'m)'; }
+        else if (nPeriodosH >= 2)  { pHistorial = 60;  historialLabel = 'Sin irregularidades (historial corto)'; }
+        else if (nPeriodosH >= 1)  { pHistorial = 40;  historialLabel = 'Sin irregularidades (nuevo)'; }
+        else                       { pHistorial = 20;  historialLabel = 'Sin historial activo en sistema'; }
+      }
     }
   } else if (bcraData && bcraData.sin_deudas) {
     pHistorial = 150;
@@ -1658,9 +1665,13 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
     }
     var total = todosDetalles.length;
     var activos = todosDetalles.filter(function(d){
-      // Activo si no tiene fecha de pago o multa impaga
       return !d.fechaPago || d.estadoMulta === 'IMPAGA';
     }).length;
+    // Hard cap: >5 activos o ≥113 totales → Rechazar inmediato
+    if (activos > 5 || total >= 113) {
+      return { score:1, rango:'Rechazar', color:'#7f1d1d', emoji:'⛔',
+        detalle:[{ label:'Cheques rechazados', valor:activos+' activos / '+total+' total (crítico)', puntos:0, max:150 }] };
+    }
     if (total === 0)        { pCheques = 150; chequesLabel = 'Sin cheques rechazados'; }
     else if (activos === 0) { pCheques = 75;  chequesLabel = total + ' cheque(s) regularizados'; }
     else                    { pCheques = 0;   chequesLabel = activos + ' cheque(s) activo(s)'; }
@@ -1668,10 +1679,15 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
   puntos += pCheques;
   detalle.push({ label:'Cheques rechazados', valor:chequesLabel, puntos:pCheques, max:150 });
 
+  // Verificar si el CUIT está en cartera activa (clientes nuevos no acumulan puntos de relación)
+  var enCartActiva = Array.isArray(cartera) && cartera.some(function(c){ return c.cuit === cuit; });
+
   // 4. DSO INDIVIDUAL (Max 100)
   var pDSO = 50; // neutral sin datos
   var dsoLabel = 'Sin datos';
-  if (cuit) {
+  if (!enCartActiva) {
+    pDSO = 0; dsoLabel = 'Cliente nuevo — sin historial de pagos';
+  } else if (cuit) {
     var enCart = cartera.find(function(c){ return c.cuit === cuit; });
     var nombreCliente = enCart ? enCart.nombre.split(',')[0].trim() : '';
     var dsoCliente = null;
@@ -1751,10 +1767,11 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
   detalle.push({ label:'DSO individual', valor:dsoLabel, puntos:pDSO, max:100 });
 
   // 5. HISTORIAL PIATTELLI (Max 100)
-  // Si morasIndex está cargado y el cliente no aparece = sin mora = 100 pts
   var pMora = 50; // neutral si no hay datos de moras en absoluto
   var moraLabel = 'Sin datos';
-  if (mora) {
+  if (!enCartActiva) {
+    pMora = 0; moraLabel = 'Cliente nuevo — sin historial Piattelli';
+  } else if (mora) {
     pMora = 0; moraLabel = 'En mora';
   } else if (morasIndex && Object.keys(morasIndex).length > 0) {
     pMora = 100; moraLabel = 'Sin mora registrada';
@@ -1765,7 +1782,9 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
   // 6. RED DE BODEGAS (Max 60)
   var pBodegas = 30; // neutral sin datos
   var bodegasLabel = 'Sin datos';
-  if (wspThreads && wspThreads.length > 0) {
+  if (!enCartActiva) {
+    pBodegas = 0; bodegasLabel = 'Cliente nuevo — aún no en red de bodegas';
+  } else if (wspThreads && wspThreads.length > 0) {
     var textos = [];
     wspThreads.forEach(function(t){
       (t.mensajes||[]).forEach(function(m){ textos.push((m.texto||'').toLowerCase()); });
@@ -1833,13 +1852,9 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
     // En mora con Piattelli: máximo 300
     puntos = Math.min(puntos, 300);
   }
-  if (maxSit >= 4) {
-    // Situación 4+ en BCRA: máximo 250
-    puntos = Math.min(puntos, 250);
-  } else if (maxSit === 3) {
-    // Situación 3: máximo 400
-    puntos = Math.min(puntos, 400);
-  }
+  if (maxSit >= 5)       { puntos = Math.min(puntos, 1); }   // sit5/6 irrecuperable
+  else if (maxSit >= 4)  { puntos = Math.min(puntos, 250); } // sit4 alto riesgo
+  else if (maxSit === 3) { puntos = Math.min(puntos, 400); } // sit3 cap
 
   // TOTAL (1-999)
   var scoreTotal = Math.min(999, Math.max(1, Math.round(puntos)));
