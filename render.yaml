@@ -2,7 +2,7 @@ services:
   - type: web
     name: bcra-proxy
     runtime: python
-    buildCommand: pip install -r requisitos.txt
+    buildCommand: pip install -r requirements.txt
     startCommand: gunicorn main:app --workers 1 --threads 4 --timeout 120 --keep-alive 5 --max-requests 500 --max-requests-jitter 50
     envVars:
       - key: PYTHON_VERSION

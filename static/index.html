@@ -2041,18 +2041,40 @@ async function init() {
   checkProxy();
   // Cargar datos persistentes del servidor (sincroniza entre dispositivos)
   await cargarDesdServidor();
+
   await cargarHistorialVentas();
   await Promise.all([cargarWSP(), cargarMoras(), cargarCarteraServidor()]);
   actualizarMetricas();
-  // Restaurar DSO en dashboard si hay datos guardados
-  var dsoGuardado = localStorage.getItem('piat_dso_global');
-  if (dsoGuardado) {
-    var metDso = document.getElementById('met-dso');
-    if (metDso) {
-      metDso.textContent = dsoGuardado;
-      metDso.style.color = colorDSO(parseInt(dsoGuardado)).color;
+  // DSO autoritativo desde saldos_facturas.json (SSoT del servidor)
+  fetch('/dso-global-saldos').then(function(r){ return r.ok ? r.json() : null; }).then(function(d) {
+    if (d && d.dso) {
+      var metDso = document.getElementById('met-dso');
+      if (metDso) { metDso.textContent = d.dso; metDso.style.color = colorDSO(d.dso).color; }
+      localStorage.setItem('piat_dso_global', d.dso);
+    } else {
+      // Fallback: restaurar DSO guardado en localStorage
+      var dsoGuardado = localStorage.getItem('piat_dso_global');
+      if (dsoGuardado) {
+        var metDso2 = document.getElementById('met-dso');
+        if (metDso2) { metDso2.textContent = dsoGuardado; metDso2.style.color = colorDSO(parseInt(dsoGuardado)).color; }
+      }
     }
+  }).catch(function() {
+    var dsoGuardado = localStorage.getItem('piat_dso_global');
+    if (dsoGuardado) {
+      var metDso3 = document.getElementById('met-dso');
+      if (metDso3) { metDso3.textContent = dsoGuardado; metDso3.style.color = colorDSO(parseInt(dsoGuardado)).color; }
+    }
+  });
+
+  // Restaurar última pestaña visitada
+  var lastTab = localStorage.getItem('piat_tab');
+  if (lastTab && document.getElementById(lastTab)) {
+    var tabBtn = [...document.querySelectorAll('.tab')]
+      .find(function(t){ return t.getAttribute('onclick') && t.getAttribute('onclick').includes("'"+lastTab+"'"); });
+    if (tabBtn) switchTab(lastTab, tabBtn);
   }
+
   // Cargar nombre de bodega en campo config
   var nbEl = document.getElementById('input-nombre-bodega');
   if (nbEl) nbEl.value = localStorage.getItem('piat_nombre_bodega') || '';
@@ -2184,6 +2206,7 @@ function switchTab(tab, el) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   el.classList.add('active');
   document.getElementById(tab).classList.add('active');
+  localStorage.setItem('piat_tab', tab);
   if (tab === 'cheques') { document.getElementById('cheque-resultado').style.display='none'; }
   if (tab === 'historial') renderHistorial();
   if (tab === 'cartera') renderCartera();

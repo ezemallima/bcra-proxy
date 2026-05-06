@@ -355,8 +355,10 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
     pts_hist = 0  # 0 hasta tener datos reales
     hist_fresco = None
     try:
-        if hist_cached and time.time() - json.load(open(hist_path)).get('ts', 0) < 86400:
-            hist_fresco = hist_cached
+        if hist_cached:
+            with open(hist_path, 'r') as _tf:
+                if time.time() - json.load(_tf).get('ts', 0) < 86400:
+                    hist_fresco = hist_cached
     except: pass
 
     if not hist_fresco:
@@ -413,8 +415,10 @@ def calcular_score_servidor(cuit, bcra_data, en_mora=None):
 
     cheq_fresco = None
     try:
-        if cheq_cached and time.time() - json.load(open(cheq_path)).get('ts', 0) < 86400:
-            cheq_fresco = cheq_cached
+        if cheq_cached:
+            with open(cheq_path, 'r') as _tf:
+                if time.time() - json.load(_tf).get('ts', 0) < 86400:
+                    cheq_fresco = cheq_cached
     except: pass
 
     if not cheq_fresco:
@@ -1437,6 +1441,40 @@ def get_saldos_cliente(cliente):
     result = [f for f in _saldos_facturas if _norm_nombre(f.get('cliente', '')) == cn]
     total_saldo = sum(f.get('saldo', 0) for f in result)
     return jsonify({"facturas": result, "total_saldo": total_saldo, "cantidad": len(result)})
+
+@app.route("/dso-global-saldos")
+def get_dso_global_saldos():
+    """DSO global y por vendedor desde saldos_facturas.json — fuente única de verdad."""
+    from datetime import datetime
+    if not _saldos_facturas:
+        return jsonify({"dso": None, "saldo_total": 0, "clientes_count": 0, "facturas_count": 0})
+    hoy = datetime.now()
+    saldo_total = sum(f.get('saldo', 0) for f in _saldos_facturas)
+    suma_pond = 0.0
+    vencidas = 0
+    for f in _saldos_facturas:
+        try:
+            d, m, y = f['fechaFactura'].split('/')
+            fe = datetime(int(y), int(m), int(d))
+            suma_pond += f.get('saldo', 0) * max(0, (hoy - fe).days)
+        except:
+            continue
+        try:
+            dp, mp, yp = f['fechaPago'].split('/')
+            if datetime(int(yp), int(mp), int(dp)) < hoy:
+                vencidas += 1
+        except:
+            pass
+    dso = round(suma_pond / saldo_total) if saldo_total > 0 else None
+    clientes_unicos = len({f.get('cliente', '') for f in _saldos_facturas if f.get('cliente')})
+    return jsonify({
+        "dso": dso,
+        "saldo_total": saldo_total,
+        "clientes_count": clientes_unicos,
+        "facturas_count": len(_saldos_facturas),
+        "facturas_vencidas": vencidas,
+        "ultima_actualizacion": time.strftime('%d/%m/%Y')
+    })
 
 @app.route("/upload-saldos-facturas", methods=["POST"])
 def upload_saldos_facturas():

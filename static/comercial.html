@@ -197,9 +197,8 @@
       <div style="margin-bottom:12px;">
         <input type="text" id="buscar-oport" placeholder="🔍 Buscar cliente..."
           style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:14px;background:var(--surface);color:var(--text);outline:none;"
-          oninput="buscarEnOport(this.value)">
+          oninput="buscarEnOport(this.value)" translate="no">
       </div>
-      <input type="text" class="buscar-input" id="buscar-oport" placeholder="🔍 Buscar cliente..." oninput="buscarEnOport(this.value)" translate="no">
       <div id="oport-lista"></div>
     </div>
   </div>
@@ -267,6 +266,7 @@ function doLogin() {
   const cuitEsp = VENDEDORES[key];
   if (!cuitEsp.includes('X') && cuit !== cuitEsp) { err.textContent = 'CUIT no coincide.'; err.style.display = 'block'; return; }
   SESSION = { nombre: key, cuit };
+  localStorage.setItem('vendeSeguro_session', JSON.stringify(SESSION));
   iniciarApp();
 }
 
@@ -316,6 +316,20 @@ async function iniciarApp() {
   renderCartera('todos');
   renderOportunidades();
   cargarSaldosCartera();
+
+  // Restaurar última pestaña y filtro visitados
+  const savedTab = localStorage.getItem('vendeSeguro_tab');
+  if (savedTab && savedTab !== 'consulta') {
+    const tabBtn = [...document.querySelectorAll('.tab-btn')]
+      .find(b => b.getAttribute('onclick') && b.getAttribute('onclick').includes("'" + savedTab + "'"));
+    if (tabBtn) switchTab(savedTab, tabBtn);
+  }
+  const savedFiltro = localStorage.getItem('vendeSeguro_filtro');
+  if (savedFiltro && savedFiltro !== 'todos') {
+    const chipBtn = [...document.querySelectorAll('.filter-chip')]
+      .find(c => c.getAttribute('onclick') && c.getAttribute('onclick').includes("'" + savedFiltro + "'"));
+    if (chipBtn) filtrarCartera(savedFiltro, chipBtn);
+  }
 }
 
 // ── SALDOS ──
@@ -358,6 +372,7 @@ function switchTab(tab, btn) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
   btn.classList.add('active');
+  localStorage.setItem('vendeSeguro_tab', tab);
   if (tab === 'cartera' || tab === 'oport') refrescarScores();
 }
 
@@ -391,6 +406,7 @@ async function refrescarScores() {
 function filtrarCartera(filtro, btn) {
   document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
   btn.classList.add('active');
+  localStorage.setItem('vendeSeguro_filtro', filtro);
   renderCartera(filtro);
 }
 
@@ -859,14 +875,16 @@ function parseFecha(s) {
   if (s.includes('/')) { const [d,m,y]=s.split('/'); return new Date(parseInt(y),parseInt(m)-1,parseInt(d)); }
   return new Date(s);
 }
-// Score completo sincrónico (con datos ya cargados)
+// Score completo sincrónico (con datos ya cargados) — espeja calcular_score_servidor
 function calcularScoreCompletoSync(maxSit, sinDeudas, periodos, chData, histData) {
   let pts = 0;
   const entidades = periodos.length ? (periodos[0].entidades||[]) : [];
   const nroEnt = entidades.length;
-  const montoM = entidades.reduce((s,e) => s+(e.monto||0), 0) / 1000;
+  // montoM en millones (para concentración), montoMiles en miles (para sit1)
+  const montoMiles = entidades.reduce((s,e) => s+(e.monto||0), 0);
+  const montoM = montoMiles / 1000;
 
-  // Periodos activos — usar historial 24m si está disponible (más preciso)
+  // Periodos activos — usar historial 24m si está disponible
   const periodosParaNPH = histData?.results?.periodos?.length > 0
     ? histData.results.periodos
     : periodos;
@@ -878,15 +896,19 @@ function calcularScoreCompletoSync(maxSit, sinDeudas, periodos, chData, histData
   });
   nPH = Math.min(nPH, nPR * 4);
 
-  // 1. Situacion ponderada
+  // 1. Situación BCRA ponderada — idéntica a calcular_score_servidor
   let pSit;
-  if      (maxSit===1 && nPH>=12) pSit=400;
-  else if (maxSit===1 && nPH>=6)  pSit=300;
-  else if (maxSit===1 && nPH>=2)  pSit=200;
-  else if (maxSit===1)            pSit=150;
-  else if (maxSit===2)            pSit=200;
-  else if (maxSit===3)            pSit=50;
-  else                            pSit=0;
+  if (maxSit === 1) {
+    if      (montoMiles === 0)      pSit = 200; // sin historial bancario
+    else if (montoMiles < 500000)   pSit = 250; // perfil pequeño
+    else if (montoMiles < 2500000)  pSit = 300; // perfil moderado
+    else if (nPH >= 12)             pSit = 400; // perfil consolidado
+    else if (nPH >= 6)              pSit = 350;
+    else if (nPH >= 2)              pSit = 300;
+    else                            pSit = 250;
+  } else if (maxSit === 2) pSit = 200;
+  else if (maxSit === 3)   pSit = 50;
+  else                     pSit = 0;
   pts += pSit;
 
   // 2. Historial 24m
@@ -917,20 +939,22 @@ function calcularScoreCompletoSync(maxSit, sinDeudas, periodos, chData, histData
   pts += 50; // DSO neutral
   pts += 30; // bodegas neutral
 
-  // Concentracion
+  // Concentración — montoM ya está en millones
   let pConc;
-  if (!nroEnt||sinDeudas)               pConc=39;
-  else if (nroEnt===1&&montoM<50)       pConc=35;
-  else if (nroEnt<=2&&montoM<100)       pConc=28;
-  else if (nroEnt<=3&&montoM<500)       pConc=20;
-  else if (nroEnt<=5&&montoM<2000)      pConc=10;
-  else                                  pConc=0;
+  if (!nroEnt||sinDeudas)          pConc=39;
+  else if (nroEnt===1&&montoM<50)  pConc=35;
+  else if (nroEnt<=2&&montoM<100)  pConc=28;
+  else if (nroEnt<=3&&montoM<500)  pConc=20;
+  else if (nroEnt<=5&&montoM<2000) pConc=10;
+  else                             pConc=0;
   pts += pConc;
 
-  if (maxSit>=4) pts=Math.min(pts,250);
-  else if (maxSit===3) pts=Math.min(pts,400);
+  // Techos duros — idénticos al servidor
+  if      (maxSit >= 5) pts = Math.min(pts, 1);
+  else if (maxSit >= 4) pts = Math.min(pts, 250);
+  else if (maxSit === 3) pts = Math.min(pts, 400);
 
-  return Math.max(1,Math.min(999,Math.round(pts)));
+  return Math.max(1, Math.min(999, Math.round(pts)));
 }
 
 function estimarScore(maxSit,sinDeudas,chData) {
@@ -1040,7 +1064,9 @@ async function calcularScoreCompleto(cuit) {
     else                                          pConc = 0;
 
     let pts = pSit + pHist + pCheq + pMora + pDSO + pBodegas + pConc;
-    if (maxSit >= 4) pts = Math.min(pts, 250);
+    // Techos duros — idénticos al servidor
+    if      (maxSit >= 5) pts = Math.min(pts, 1);
+    else if (maxSit >= 4) pts = Math.min(pts, 250);
     else if (maxSit === 3) pts = Math.min(pts, 400);
 
     const score = Math.max(1, Math.min(999, Math.round(pts)));
