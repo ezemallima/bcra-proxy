@@ -1340,29 +1340,14 @@ def save_dso_saldos():
         nuevos = body.get('saldos', [])
         if not nuevos:
             return jsonify({"error": "Sin saldos"}), 400
-        from datetime import datetime, timedelta
+        from datetime import datetime
         hoy = datetime.now()
         f_actual = os.path.join(DATA_DIR, 'dso_saldos_actual.json')
         with open(f_actual, 'w', encoding='utf-8') as f:
             json.dump({"saldos": nuevos, "ultima_actualizacion": hoy.strftime('%d/%m/%Y %H:%M')}, f, ensure_ascii=False)
-        f_hist = os.path.join(DATA_DIR, 'dso_saldos_historico.json')
-        historico = []
-        if os.path.exists(f_hist):
-            with open(f_hist, 'r', encoding='utf-8') as f:
-                historico = json.load(f).get('saldos', [])
-        hace_4_meses = hoy - timedelta(days=120)
-        filtrado = [s for s in historico if _fecha_valida(s.get('fecha_factura',''), hace_4_meses)]
-        existentes = set((s.get('cliente',''), s.get('fecha_factura',''), str(s.get('saldo',''))) for s in filtrado)
-        for s in nuevos:
-            key = (s.get('cliente',''), s.get('fecha_factura',''), str(s.get('saldo','')))
-            if key not in existentes:
-                filtrado.append(s)
-                existentes.add(key)
-        with open(f_hist, 'w', encoding='utf-8') as f:
-            json.dump({"saldos": filtrado, "ultima_actualizacion": hoy.strftime('%d/%m/%Y %H:%M'), "total_registros": len(filtrado)}, f, ensure_ascii=False)
         total = sum(s.get('saldo', 0) for s in nuevos)
-        print(f"[dso-saldos] Actual: {len(nuevos)} registros ${total:,.0f} | Historico: {len(filtrado)}", flush=True)
-        return jsonify({"ok": True, "agregados": len(nuevos), "total": len(filtrado)})
+        print(f"[dso-saldos] Wipe & write: {len(nuevos)} saldos ${total:,.0f}", flush=True)
+        return jsonify({"ok": True, "agregados": len(nuevos), "total": len(nuevos)})
     except Exception as e:
         import traceback
         print(f"[dso-saldos] Error: {traceback.format_exc()}", flush=True)
@@ -1387,29 +1372,14 @@ def save_dso_cheques():
         nuevos = body.get('cheques', [])
         if not nuevos:
             return jsonify({"error": "Sin cheques"}), 400
-        from datetime import datetime, timedelta
+        from datetime import datetime
         hoy = datetime.now()
         f_actual = os.path.join(DATA_DIR, 'dso_cheques_actual.json')
         with open(f_actual, 'w', encoding='utf-8') as f:
             json.dump({"cheques": nuevos, "ultima_actualizacion": hoy.strftime('%d/%m/%Y %H:%M')}, f, ensure_ascii=False)
-        f_hist = os.path.join(DATA_DIR, 'dso_cheques_historico.json')
-        historico = []
-        if os.path.exists(f_hist):
-            with open(f_hist, 'r', encoding='utf-8') as f:
-                historico = json.load(f).get('cheques', [])
-        hace_4_meses = hoy - timedelta(days=120)
-        filtrado = [c for c in historico if _fecha_valida(c.get('fecha_pago',''), hace_4_meses)]
-        existentes = set((c.get('cliente',''), c.get('fecha_pago',''), str(c.get('total',''))) for c in filtrado)
-        for c in nuevos:
-            key = (c.get('cliente',''), c.get('fecha_pago',''), str(c.get('total','')))
-            if key not in existentes:
-                filtrado.append(c)
-                existentes.add(key)
-        with open(f_hist, 'w', encoding='utf-8') as f:
-            json.dump({"cheques": filtrado, "ultima_actualizacion": hoy.strftime('%d/%m/%Y %H:%M'), "total_registros": len(filtrado)}, f, ensure_ascii=False)
         total = sum(abs(c.get('total', 0)) for c in nuevos)
-        print(f"[dso-cheques] Actual: {len(nuevos)} registros ${total:,.0f} | Historico: {len(filtrado)}", flush=True)
-        return jsonify({"ok": True, "agregados": len(nuevos), "total": len(filtrado)})
+        print(f"[dso-cheques] Wipe & write: {len(nuevos)} cheques ${total:,.0f}", flush=True)
+        return jsonify({"ok": True, "agregados": len(nuevos), "total": len(nuevos)})
     except Exception as e:
         import traceback
         print(f"[dso-cheques] Error: {traceback.format_exc()}", flush=True)
@@ -1433,62 +1403,14 @@ def save_dso_ventas():
         nuevas_ventas = body.get('ventas', [])
         if not nuevas_ventas:
             return jsonify({"error": "Sin ventas"}), 400
-        dso_file = os.path.join(DATA_DIR, 'dso_ventas_historico.json')
-        historico = []
-        if os.path.exists(dso_file):
-            with open(dso_file, 'r', encoding='utf-8') as f:
-                historico = json.load(f).get('ventas', [])
-        from datetime import datetime, timedelta
+        from datetime import datetime
         hoy = datetime.now()
-        hace_4_meses = hoy - timedelta(days=120)
-        historico_filtrado = []
-        for v in historico:
-            try:
-                fecha_str = v.get('fecha', '')
-                if '/' in fecha_str:
-                    partes = fecha_str.split('/')
-                    if len(partes) == 3:
-                        fecha = datetime(int(partes[2]), int(partes[1]), int(partes[0]))
-                    else: continue
-                else:
-                    fecha = datetime.fromisoformat(fecha_str[:10])
-                if fecha >= hace_4_meses:
-                    historico_filtrado.append(v)
-            except Exception: pass
-
-        def normalizar_fecha(f):
-            if not f: return f
-            s = str(f).strip()
-            if len(s) >= 10 and s[4] == '-': return s[:10]
-            if '/' in s:
-                p = s.split('/')
-                if len(p) == 3:
-                    try:
-                        a, b, c = int(p[0]), int(p[1]), int(p[2])
-                        anio = 2000 + c if c < 100 else c
-                        if b > 12: mes, dia = a, b
-                        elif a > 12: dia, mes = a, b
-                        else: dia, mes = a, b
-                        if 1 <= mes <= 12 and 1 <= dia <= 31:
-                            return f"{anio}-{mes:02d}-{dia:02d}"
-                    except: pass
-            return s
-
-        existentes = set((v.get('cliente',''), v.get('fecha',''), str(v.get('total',''))) for v in historico_filtrado)
-        agregadas = 0
-        for v in nuevas_ventas:
-            v['fecha'] = normalizar_fecha(v.get('fecha',''))
-            key = (v.get('cliente',''), v.get('fecha',''), str(v.get('total','')))
-            if key not in existentes:
-                historico_filtrado.append(v)
-                existentes.add(key)
-                agregadas += 1
-
-        resultado = {"ventas": historico_filtrado, "ultima_actualizacion": hoy.strftime('%d/%m/%Y %H:%M'), "total_registros": len(historico_filtrado)}
+        dso_file = os.path.join(DATA_DIR, 'dso_ventas_historico.json')
+        resultado = {"ventas": nuevas_ventas, "ultima_actualizacion": hoy.strftime('%d/%m/%Y %H:%M'), "total_registros": len(nuevas_ventas)}
         with open(dso_file, 'w', encoding='utf-8') as f:
             json.dump(resultado, f, ensure_ascii=False, indent=2)
-        print(f"[dso-ventas] Agregadas {agregadas} ventas nuevas, total: {len(historico_filtrado)}", flush=True)
-        return jsonify({"ok": True, "agregadas": agregadas, "total": len(historico_filtrado)})
+        print(f"[dso-ventas] Wipe & write: {len(nuevas_ventas)} ventas", flush=True)
+        return jsonify({"ok": True, "agregadas": len(nuevas_ventas), "total": len(nuevas_ventas)})
     except Exception as e:
         import traceback
         print(f"[dso-ventas] Error: {traceback.format_exc()}", flush=True)
@@ -1521,7 +1443,7 @@ def test_modelos():
 # ── Saldos / Facturas por cliente ──
 _saldos_facturas = []
 try:
-    _sf_path = os.path.join(os.getcwd(), 'saldos_facturas.json')
+    _sf_path = os.path.join(DATA_DIR, 'saldos_facturas.json')
     with open(_sf_path, encoding='utf-8') as f:
         _saldos_facturas = json.load(f)
     print(f"[saldos] {len(_saldos_facturas)} facturas cargadas", flush=True)
@@ -1626,11 +1548,13 @@ def get_saldos_cuit(cuit):
 @app.route("/saldos-timestamp")
 def get_saldos_timestamp():
     """Devuelve timestamp de la última carga de saldos para detección de actualizaciones."""
-    ts_path = os.path.join(os.getcwd(), 'saldos_timestamp.json')
+    ts_path = os.path.join(DATA_DIR, 'saldos_timestamp.json')
     try:
         with open(ts_path, 'r') as f:
             data = json.load(f)
-        return jsonify(data)
+        resp = jsonify(data)
+        resp.headers['Cache-Control'] = 'no-store'
+        return resp
     except:
         return jsonify({"ts": 0, "fecha": None})
 
@@ -1714,10 +1638,10 @@ def upload_saldos_facturas():
                 'saldo': saldo_f
             })
 
-        sf_path = os.path.join(os.getcwd(), 'saldos_facturas.json')
+        sf_path = os.path.join(DATA_DIR, 'saldos_facturas.json')
         with open(sf_path, 'w', encoding='utf-8') as f:
             json.dump(saldos, f, ensure_ascii=False, indent=2)
-        ts_path = os.path.join(os.getcwd(), 'saldos_timestamp.json')
+        ts_path = os.path.join(DATA_DIR, 'saldos_timestamp.json')
         with open(ts_path, 'w') as f:
             json.dump({'ts': time.time(), 'fecha': time.strftime('%d/%m/%Y %H:%M')}, f)
         _saldos_facturas = saldos

@@ -308,6 +308,11 @@ async function iniciarApp() {
         }
       });
       console.log('[init] Scores:', CARTERA_LOCAL.filter(c=>c.score).length + '/' + CARTERA_LOCAL.length);
+      // Cargar scores del servidor para consultas individuales (evita divergencia JS vs Python)
+      try {
+        const scR = await fetch(API + '/scores-cartera?v=' + Date.now());
+        if (scR.ok) { const scD = await scR.json(); if (scD.ok) window._scoresCartera = scD.scores || {}; }
+      } catch(e) {}
     }
   } catch(e) {}
   hideLoading();
@@ -352,15 +357,17 @@ function normNombre(s) {
 }
 
 async function cargarSaldosCartera(forzar = false) {
-  // Verificar si hay una actualización nueva en el servidor
+  // Verificar si hay una actualización nueva — ts=0 significa server reiniciado (forzar reload)
   try {
-    const tsR = await fetch(API + '/saldos-timestamp');
+    const tsR = await fetch(API + '/saldos-timestamp?v=' + Date.now());
     if (tsR.ok) {
       const tsData = await tsR.json();
-      if (!forzar && tsData.ts && tsData.ts <= SALDOS_TIMESTAMP) return; // sin cambios
+      if (!forzar && tsData.ts > 0 && tsData.ts <= SALDOS_TIMESTAMP) return;
       SALDOS_TIMESTAMP = tsData.ts || 0;
     }
   } catch(e) {}
+
+  SALDOS_MAP = {};  // wipe — nunca acumular datos fantasma
 
   // Buscar saldos con prioridad CUIT > nombre
   const clientes = CARTERA_LOCAL.filter((c,i,a) =>
@@ -372,8 +379,9 @@ async function cargarSaldosCartera(forzar = false) {
       try {
         let data = null;
         // Prioridad 1: buscar por CUIT
+        const _v = '?v=' + SALDOS_TIMESTAMP;
         if (c.cuit) {
-          const r = await fetch(API + '/saldos-cuit/' + encodeURIComponent(c.cuit));
+          const r = await fetch(API + '/saldos-cuit/' + encodeURIComponent(c.cuit) + _v);
           if (r.ok) {
             const d = await r.json();
             if (d.facturas && d.facturas.length > 0) data = d;
@@ -381,7 +389,7 @@ async function cargarSaldosCartera(forzar = false) {
         }
         // Prioridad 2: nombre completo
         if (!data) {
-          const r = await fetch(API + '/saldos-cliente/' + encodeURIComponent(c.nombre));
+          const r = await fetch(API + '/saldos-cliente/' + encodeURIComponent(c.nombre) + _v);
           if (r.ok) {
             const d = await r.json();
             if (d.facturas && d.facturas.length > 0) data = d;
@@ -391,7 +399,7 @@ async function cargarSaldosCartera(forzar = false) {
         if (!data) {
           const prim2 = normPrim(c.nombre);
           if (prim2 && prim2 !== normNombre(c.nombre)) {
-            const r = await fetch(API + '/saldos-cliente/' + encodeURIComponent(prim2));
+            const r = await fetch(API + '/saldos-cliente/' + encodeURIComponent(prim2) + _v);
             if (r.ok) {
               const d = await r.json();
               if (d.facturas && d.facturas.length > 0) data = d;
@@ -834,7 +842,9 @@ function renderConsulta(cuit, dd, cd, hd) {
       montoTotal = entidades.reduce((s,e)=>s+(e.monto||0),0);
     }
   }
-  const scoreEst = calcularScoreCompletoSync(maxSit, dd.sin_deudas, periodos, cd, hd);
+  const _cuitConsulta = cuit;
+  const _scoreMap = window._scoresCartera || {};
+  const scoreEst = (_scoreMap[_cuitConsulta]?.scoreCompleto) || calcularScoreCompletoSync(maxSit, dd.sin_deudas, periodos, cd, hd);
   window._ultimoScoreComercial = scoreEst;
   const cc = scoreToColor(scoreEst);
 
