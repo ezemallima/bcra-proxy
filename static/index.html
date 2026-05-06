@@ -614,6 +614,23 @@
       <button class="primary" id="dso-btn-calcular" onclick="procesarDSO()" style="width:100%;display:none;">Calcular DSO →</button>
     </div>
 
+    <!-- ⚡ CARRIL RÁPIDO — Saldos de Gestión Semanal -->
+    <div class="card" style="border:2px solid #10b981;background:linear-gradient(135deg,#f0fdf4 0%,#fff 100%);margin-bottom:1rem;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px;">
+        <div>
+          <div class="card-title" style="color:#059669;margin-bottom:4px;">⚡ Actualizar Saldos Comerciales (Solo Gestión)</div>
+          <p style="font-size:13px;color:#64748b;margin:0;">Sube el reporte semanal de cuentas corrientes. Los vendedores lo ven al instante en <strong>/comercial</strong>. <strong style="color:#059669;">No afecta el DSO.</strong></p>
+        </div>
+      </div>
+      <div style="font-size:11px;font-weight:600;color:#059669;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Formato Odoo: Vendedor · Cliente · Nro Factura · Fecha · Monto · Saldo</div>
+      <div class="upload-area" id="gestion-upload-area" onclick="document.getElementById('gestion-file').click()" style="padding:14px;cursor:pointer;border-color:#10b981;margin-bottom:8px;">
+        <div style="font-size:13px;color:#64748b;">Subir Excel de saldos de gestión</div>
+        <div style="font-size:11px;color:#94a3b8;margin-top:2px;">Mismo formato que Saldos Maestros del DSO</div>
+      </div>
+      <input type="file" id="gestion-file" accept=".xlsx,.xls,.csv" style="display:none;" onchange="uploadArchivoGestion(this)" />
+      <div id="gestion-status" style="font-size:13px;color:#064e3b;background:#d1fae5;border-radius:8px;padding:8px 12px;display:none;margin-top:4px;"></div>
+    </div>
+
     <div id="dso-loading" style="display:none;text-align:center;padding:2rem;">
       <div class="loading-spinner"></div>
       <div style="font-size:13px;color:#64748b;margin-top:8px;">Calculando DSO...</div>
@@ -873,7 +890,8 @@ var DSO_ALIASES = {
   ventas: {
     contacto: ['cliente', 'contacto', 'razon social', 'razón social', 'nombre'],
     monto:    ['total', 'total con impuestos', 'importe', 'monto', 'total facturado'],
-    fecha:    ['fecha de factura', 'fecha factura', 'fecha', 'fecha emision']
+    fecha:    ['fecha de factura', 'fecha factura', 'fecha', 'fecha emision'],
+    nro:      ['número', 'numero', 'nro', 'nro factura', 'n° factura', 'id', 'factura', 'número de factura']
   },
   cheques: {
     contacto: ['cliente', 'cliente/proveedor', 'contacto', 'nombre', 'librador'],
@@ -994,6 +1012,42 @@ function cargarArchivoDSO(input, tipo) {
     } catch(err) { alert('Error al leer el archivo: ' + err.message); }
   };
   reader.readAsArrayBuffer(file);
+}
+
+async function uploadArchivoGestion(input) {
+  var file = input.files[0];
+  if (!file) return;
+  var area = document.getElementById('gestion-upload-area');
+  var status = document.getElementById('gestion-status');
+  area.style.opacity = '0.7';
+  status.style.display = 'none';
+  var formData = new FormData();
+  formData.append('file', file);
+  try {
+    area.innerHTML = '<div style="font-size:12px;color:#059669;">⏳ Subiendo ' + file.name + '...</div>';
+    var r = await fetch('/upload-saldos-gestion', { method: 'POST', body: formData });
+    var data = await r.json();
+    if (data.ok) {
+      area.className = 'upload-area success';
+      area.innerHTML = '<div style="font-size:12px;color:#059669;font-weight:600;">✓ ' + file.name + '</div>';
+      area.style.borderColor = '#10b981';
+      status.style.display = 'block';
+      status.style.background = '#d1fae5'; status.style.color = '#064e3b';
+      var ahora = new Date().toLocaleTimeString('es-AR', {hour:'2-digit', minute:'2-digit'});
+      status.innerHTML = '✓ <strong>' + data.total + '</strong> facturas actualizadas (' + ahora + '). Los vendedores ya ven los nuevos saldos.';
+      localStorage.setItem('piat_saldos_ts', Date.now().toString());
+    } else {
+      area.innerHTML = '<div style="font-size:12px;color:#dc2626;">✗ ' + (data.error || 'Error') + '</div>';
+      status.style.display = 'block';
+      status.style.background = '#fee2e2'; status.style.color = '#991b1b';
+      status.textContent = 'Error: ' + (data.error || 'No se pudo subir el archivo');
+    }
+  } catch(e) {
+    area.innerHTML = '<div style="font-size:12px;color:#dc2626;">✗ Error de conexión</div>';
+  } finally {
+    area.style.opacity = '1';
+    input.value = '';
+  }
 }
 
 async function procesarDSO() {
@@ -1204,13 +1258,15 @@ async function procesarDSO() {
         var cV2 = mapearColumna(hV2, DSO_ALIASES.ventas.contacto);
         var mV2 = mapearColumna(hV2, DSO_ALIASES.ventas.monto);
         var fV2 = mapearColumna(hV2, DSO_ALIASES.ventas.fecha);
+        var nV2 = mapearColumna(hV2, DSO_ALIASES.ventas.nro || []);
         var ventasParaGuardar = [];
         rowsVentas.forEach(function(row) {
           var cliente = (row[cV2]||'').toString().trim();
           var monto = parseFloat((row[mV2]||'0').toString().replace(/[^0-9.-]/g,'')) || 0;
           var fecha = (row[fV2]||'').toString().trim();
+          var nro = nV2 ? (row[nV2]||'').toString().trim() : '';
           if (cliente && fecha) {
-            ventasParaGuardar.push({ cliente: cliente, fecha: fecha, total: monto });
+            ventasParaGuardar.push({ cliente: cliente, fecha: fecha, total: monto, nro_factura: nro });
           }
         });
         if (ventasParaGuardar.length > 0) {

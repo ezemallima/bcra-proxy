@@ -837,7 +837,8 @@ def get_cartera_por_vendedor(vendedor):
     v = unquote(vendedor).strip().lower()
 
     clientes_map = {}
-    for f in _saldos_facturas:
+    fuente_v = _saldos_gestion if _saldos_gestion else _saldos_facturas
+    for f in fuente_v:
         vend_f = (f.get('vendedor') or '').strip().lower()
         if v not in ('todos', 'all', '') and vend_f != v:
             continue
@@ -1457,19 +1458,48 @@ def get_dso_ventas():
 
 @app.route("/dso-ventas", methods=["POST"])
 def save_dso_ventas():
+    """Smart merge: acumula 120 días usando nro_factura+cliente como clave única."""
     try:
         body = request.get_json(force=True)
         nuevas_ventas = body.get('ventas', [])
         if not nuevas_ventas:
             return jsonify({"error": "Sin ventas"}), 400
-        from datetime import datetime
+        from datetime import datetime, timedelta
         hoy = datetime.now()
+        hace_4_meses = hoy - timedelta(days=120)
         dso_file = os.path.join(DATA_DIR, 'dso_ventas_historico.json')
-        resultado = {"ventas": nuevas_ventas, "ultima_actualizacion": hoy.strftime('%d/%m/%Y %H:%M'), "total_registros": len(nuevas_ventas)}
+        historico = []
+        if os.path.exists(dso_file):
+            with open(dso_file, 'r', encoding='utf-8') as f:
+                historico = json.load(f).get('ventas', [])
+        # Filtrar historico: solo últimos 120 días
+        filtrado = []
+        for v in historico:
+            try:
+                fs = (v.get('fecha') or '')[:10]
+                fd = datetime.fromisoformat(fs) if '-' in fs else datetime(int(fs[6:]), int(fs[3:5]), int(fs[:2]))
+                if fd >= hace_4_meses:
+                    filtrado.append(v)
+            except: pass
+        # Smart merge usando nro_factura+cliente como clave primaria
+        def _vkey(v):
+            nro = (v.get('nro_factura') or '').strip()
+            cli = (v.get('cliente') or '').strip()
+            fecha = (v.get('fecha') or '')[:10]
+            return (nro + '||' + cli) if nro else (cli + '||' + fecha)
+        existentes = {_vkey(v) for v in filtrado}
+        agregadas = 0
+        for v in nuevas_ventas:
+            k = _vkey(v)
+            if k not in existentes:
+                filtrado.append(v)
+                existentes.add(k)
+                agregadas += 1
+        resultado = {"ventas": filtrado, "ultima_actualizacion": hoy.strftime('%d/%m/%Y %H:%M'), "total_registros": len(filtrado)}
         with open(dso_file, 'w', encoding='utf-8') as f:
             json.dump(resultado, f, ensure_ascii=False, indent=2)
-        print(f"[dso-ventas] Wipe & write: {len(nuevas_ventas)} ventas", flush=True)
-        return jsonify({"ok": True, "agregadas": len(nuevas_ventas), "total": len(nuevas_ventas)})
+        print(f"[dso-ventas] Smart merge: +{agregadas} nuevas, total: {len(filtrado)}", flush=True)
+        return jsonify({"ok": True, "agregadas": agregadas, "total": len(filtrado)})
     except Exception as e:
         import traceback
         print(f"[dso-ventas] Error: {traceback.format_exc()}", flush=True)
@@ -1508,6 +1538,21 @@ try:
     print(f"[saldos] {len(_saldos_facturas)} facturas cargadas", flush=True)
 except Exception as e:
     print(f"[saldos] Error cargando facturas: {e}", flush=True)
+
+# ── Saldos de Gestión (vista semanal para vendedores — separado del DSO) ──
+_saldos_gestion = []
+try:
+    _sg_path = os.path.join(DATA_DIR, 'saldos_gestion_vendedores.json')
+    if os.path.exists(_sg_path):
+        with open(_sg_path, encoding='utf-8') as f:
+            _saldos_gestion = json.load(f)
+        print(f"[gestion] {len(_saldos_gestion)} facturas de gestión cargadas", flush=True)
+    else:
+        _saldos_gestion = list(_saldos_facturas)
+        print("[gestion] Usando saldos_facturas como fallback inicial para gestión", flush=True)
+except Exception as e:
+    _saldos_gestion = list(_saldos_facturas)
+    print(f"[gestion] Error cargando gestión: {e}", flush=True)
 
 def _norm_nombre(s):
     import unicodedata, re
@@ -1548,16 +1593,18 @@ def get_saldos_cliente(cliente):
     from urllib.parse import unquote
     nombre_original = unquote(cliente)
     cn = _norm_nombre(nombre_original)
+    # Lee de _saldos_gestion (gestión semanal) — _saldos_facturas es solo para DSO/auditoría
+    fuente = _saldos_gestion if _saldos_gestion else _saldos_facturas
 
     # 1. Match exacto
-    result = [f for f in _saldos_facturas if _norm_nombre(f.get('cliente', '')) == cn]
+    result = [f for f in fuente if _norm_nombre(f.get('cliente', '')) == cn]
 
     # 2. Match por primeras 2 palabras con normUltra (strips S.A., S.R.L., etc.)
     if not result:
         cu = _norm_ultra(nombre_original)
         prim2 = ' '.join(cu.split()[:2])
         if len(prim2) > 3:
-            result = [f for f in _saldos_facturas
+            result = [f for f in fuente
                       if ' '.join(_norm_ultra(f.get('cliente', '')).split()[:2]) == prim2]
             if result:
                 print(f"[match-2p] '{nombre_original}' → prim2='{prim2}' → {len(result)} facturas", flush=True)
@@ -1566,7 +1613,7 @@ def get_saldos_cliente(cliente):
     if not result:
         palabras = [w for w in cn.split() if len(w) > 2]
         if palabras:
-            result = [f for f in _saldos_facturas
+            result = [f for f in fuente
                 if sum(1 for p in palabras if p in _norm_nombre(f.get('cliente', '')))
                    >= min(2, len(palabras))]
             if result:
@@ -1574,7 +1621,7 @@ def get_saldos_cliente(cliente):
 
     # Audit log: sin match → registrar el string exacto de Odoo para debugging
     if not result:
-        clientes_en_sf = list({_norm_nombre(f.get('cliente', '')) for f in _saldos_facturas})[:5]
+        clientes_en_sf = list({_norm_nombre(f.get('cliente', '')) for f in fuente})[:5]
         print(f"[match-FAIL] No se encontró match para: '{nombre_original}' (normalizado: '{cn}'). "
               f"Primeros 5 clientes en saldos_facturas: {clientes_en_sf}", flush=True)
 
@@ -1586,8 +1633,9 @@ def get_saldos_cuit(cuit):
     """Busca facturas por CUIT (prioridad absoluta). Si no hay CUIT en registros, cae a nombre."""
     from urllib.parse import unquote
     cuit_limpio = str(unquote(cuit)).replace('-', '').replace(' ', '').strip()
-    # Prioridad 1: buscar por CUIT si los registros lo tienen
-    result = [f for f in _saldos_facturas if str(f.get('cuit', '')).replace('-', '').replace(' ', '').strip() == cuit_limpio]
+    # Prioridad 1: buscar por CUIT si los registros lo tienen (fuente: gestión semanal)
+    fuente_g = _saldos_gestion if _saldos_gestion else _saldos_facturas
+    result = [f for f in fuente_g if str(f.get('cuit', '')).replace('-', '').replace(' ', '').strip() == cuit_limpio]
     if result:
         total_saldo = sum(f.get('saldo', 0) for f in result)
         return jsonify({"facturas": result, "total_saldo": total_saldo, "cantidad": len(result), "metodo": "cuit"})
@@ -1599,10 +1647,65 @@ def get_saldos_cuit(cuit):
     )
     if nombre_en_cartera:
         cn = _norm_nombre(nombre_en_cartera)
-        result = [f for f in _saldos_facturas if _norm_nombre(f.get('cliente', '')) == cn]
+        result = [f for f in fuente_g if _norm_nombre(f.get('cliente', '')) == cn]
         total_saldo = sum(f.get('saldo', 0) for f in result)
         return jsonify({"facturas": result, "total_saldo": total_saldo, "cantidad": len(result), "metodo": "nombre"})
     return jsonify({"facturas": [], "total_saldo": 0, "cantidad": 0, "metodo": "nulo"})
+
+@app.route("/upload-saldos-gestion", methods=["POST"])
+def upload_saldos_gestion():
+    """Saldos semanales de gestión — actualiza la vista comercial sin tocar el DSO de cierre de mes."""
+    global _saldos_gestion
+    try:
+        if 'file' not in request.files:
+            return jsonify({"error": "Sin archivo"}), 400
+        file = request.files['file']
+        import io, openpyxl
+        wb = openpyxl.load_workbook(io.BytesIO(file.read()))
+        ws = wb.active
+        primera = [str(c or '').strip() for c in next(ws.iter_rows(min_row=1, max_row=1, values_only=True))]
+        tiene_header = any(p.upper() in ('VENDEDOR', 'CLIENTE', 'SALDO', 'TOTAL', 'FACTURA', 'NUMERO') for p in primera)
+        min_row = 2 if tiene_header else 1
+        def fmt_fecha(d):
+            if not d: return ''
+            if hasattr(d, 'strftime'): return d.strftime('%d/%m/%Y')
+            s = str(d).strip()
+            if len(s) == 10 and s[4] == '-':
+                return s[8:] + '/' + s[5:7] + '/' + s[:4]
+            return s[:10]
+        saldos = []
+        for row in ws.iter_rows(min_row=min_row, values_only=True):
+            if not row: continue
+            vals = list(row) + [None] * 9
+            vendedor, cliente, nro_fac, fecha_fac, fecha_pago, total, saldo = vals[:7]
+            if not cliente: continue
+            try: saldo_f = float(saldo or 0)
+            except: saldo_f = 0
+            if saldo_f <= 0: continue
+            try: total_f = float(total or 0)
+            except: total_f = 0
+            saldos.append({
+                'vendedor': str(vendedor or '').strip(),
+                'cliente': str(cliente).strip(),
+                'nroFactura': str(nro_fac or '').strip(),
+                'fechaFactura': fmt_fecha(fecha_fac),
+                'fechaPago': fmt_fecha(fecha_pago),
+                'totalFactura': total_f,
+                'saldo': saldo_f
+            })
+        sg_path = os.path.join(DATA_DIR, 'saldos_gestion_vendedores.json')
+        with open(sg_path, 'w', encoding='utf-8') as f:
+            json.dump(saldos, f, ensure_ascii=False, indent=2)
+        ts_path = os.path.join(DATA_DIR, 'saldos_timestamp.json')
+        with open(ts_path, 'w') as f:
+            json.dump({'ts': time.time(), 'fecha': time.strftime('%d/%m/%Y %H:%M'), 'tipo': 'gestion'}, f)
+        _saldos_gestion = saldos
+        print(f"[gestion] {len(saldos)} facturas de gestión importadas (wipe & write)", flush=True)
+        return jsonify({"ok": True, "total": len(saldos)})
+    except Exception as e:
+        import traceback
+        print(f"[gestion] Error: {traceback.format_exc()}", flush=True)
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/saldos-timestamp")
 def get_saldos_timestamp():
