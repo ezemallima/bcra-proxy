@@ -412,9 +412,16 @@ async function cargarSaldosCartera(forzar = false) {
   renderOportunidades();
 }
 
-// Primeras N palabras — match Odoo sin CUIT (ej: "ARRAYGADA LAURA" ↔ "ARRAYGADA LAURA CAROLINA")
+function normUltra(s) {
+  if (!s) return '';
+  return String(s).toUpperCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/\bS\.?A\.?\b|\bS\.?R\.?L\.?\b|\bS\.?H\.?\b|\bS\.?A\.?S\.?\b|\bS\.?C\.?A\.?\b|\bSRLH?\b/g, ' ')
+    .replace(/[^A-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+// Primeras N palabras — match Odoo sin CUIT, strips S.A./S.R.L./etc. (ej: "ARRAYGADA LAURA" ↔ "ARRAYGADA LAURA CAROLINA")
 function normPrim(s, n = 2) {
-  return normNombre(s).split(' ').filter(Boolean).slice(0, n).join(' ');
+  return normUltra(s).split(' ').filter(Boolean).slice(0, n).join(' ');
 }
 function getSaldos(nombre) {
   // Exacto primero, luego por primeras 2 palabras
@@ -553,7 +560,7 @@ async function renderOportunidades() {
   const candidatos = CARTERA_LOCAL.filter(c => {
     const saldoData = getSaldos(c.nombre);
     const tieneSaldo = saldoData && saldoData.total_saldo > 0;
-    return tieneSaldo && (c.score || 0) > 600;
+    return tieneSaldo && (c.score || 0) >= 700;
   });
 
   if (!candidatos.length) {

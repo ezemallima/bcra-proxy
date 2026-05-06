@@ -1536,6 +1536,22 @@ def _norm_nombre(s):
     s = re.sub(r'[^A-Z0-9 ]', ' ', s)
     return re.sub(r'\s+', ' ', s).strip()
 
+_SUFIJOS_RE = None
+def _norm_ultra(s):
+    import unicodedata, re
+    global _SUFIJOS_RE
+    if _SUFIJOS_RE is None:
+        _SUFIJOS_RE = re.compile(
+            r'\b(S\.?A\.?|S\.?R\.?L\.?|S\.?H\.?|S\.?A\.?S\.?|S\.?C\.?A\.?|SRLH?)\b',
+            re.IGNORECASE
+        )
+    s = str(s or '').strip().upper()
+    s = unicodedata.normalize('NFD', s)
+    s = ''.join(c for c in s if unicodedata.category(c) != 'Mn')
+    s = _SUFIJOS_RE.sub(' ', s)
+    s = re.sub(r'[^A-Z0-9 ]', ' ', s)
+    return re.sub(r'\s+', ' ', s).strip()
+
 @app.route("/solvencia/<cuit>")
 def get_solvencia_endpoint(cuit):
     """Devuelve datos de solvencia cacheados. Si no hay datos, retorna estado 'no disponible'."""
@@ -1555,12 +1571,13 @@ def get_saldos_cliente(cliente):
     # 1. Match exacto
     result = [f for f in _saldos_facturas if _norm_nombre(f.get('cliente', '')) == cn]
 
-    # 2. Match por primeras 2 palabras (caso Odoo: "ARRAYGADA LAURA" → "ARRAYGADA LAURA CAROLINA")
+    # 2. Match por primeras 2 palabras con normUltra (strips S.A., S.R.L., etc.)
     if not result:
-        prim2 = ' '.join(cn.split()[:2])
+        cu = _norm_ultra(nombre_original)
+        prim2 = ' '.join(cu.split()[:2])
         if len(prim2) > 3:
             result = [f for f in _saldos_facturas
-                      if _norm_nombre(f.get('cliente', '')).startswith(prim2)]
+                      if ' '.join(_norm_ultra(f.get('cliente', '')).split()[:2]) == prim2]
             if result:
                 print(f"[match-2p] '{nombre_original}' → prim2='{prim2}' → {len(result)} facturas", flush=True)
 

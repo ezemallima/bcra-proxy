@@ -1012,38 +1012,52 @@ async function procesarDSO() {
 
     // parseMonto y parseFecha son globales
 
-    // ── VENTAS ── usar historial del servidor + archivo subido
-    var ventasPorCliente = {};
-    var fechas = [];
+    // ── VENTAS ── rolling 4-month localStorage (no acumulación desde server)
+    var ROLLING_KEY = 'piat_ventas_rolling';
+    var CUT_MS = 120 * 24 * 60 * 60 * 1000;
+    var hoyMs = Date.now();
+    var corteVentas = hoyMs - CUT_MS;
 
-    // Primero cargar del historial del servidor (ya guardado)
-    if (window.ventasHistoricas && window.ventasHistoricas.length > 0) {
-      window.ventasHistoricas.forEach(function(v) {
-        var contacto = normalizarNombre(v.cliente || '');
-        var total = parseFloat(v.total) || 0;
-        if (!contacto || total === 0) return;
-        ventasPorCliente[contacto] = (ventasPorCliente[contacto] || 0) + total;
-        var d = v.fecha ? new Date(v.fecha) : null;
-        if (d && !isNaN(d) && total > 0) fechas.push(d);
-      });
-    }
+    var rollingExistente = [];
+    try { rollingExistente = JSON.parse(localStorage.getItem(ROLLING_KEY) || '[]'); } catch(e) {}
 
-    // Luego agregar el archivo subido (puede tener datos nuevos no guardados aún)
+    var nuevasVentas = [];
+    var hV, cV, mV, fV;
     if (rowsVentas.length) {
-      var hV = Object.keys(rowsVentas[0]);
-      var cV = mapearColumna(hV, DSO_ALIASES.ventas.contacto);
-      var mV = mapearColumna(hV, DSO_ALIASES.ventas.monto);
-      var fV = mapearColumna(hV, DSO_ALIASES.ventas.fecha);
+      hV = Object.keys(rowsVentas[0]);
+      cV = mapearColumna(hV, DSO_ALIASES.ventas.contacto);
+      mV = mapearColumna(hV, DSO_ALIASES.ventas.monto);
+      fV = mapearColumna(hV, DSO_ALIASES.ventas.fecha);
       if (!cV) throw new Error('Archivo de ventas: no se encontró columna de cliente. Columnas: ' + hV.join(', '));
       if (!mV) throw new Error('Archivo de ventas: no se encontró columna de monto. Columnas: ' + hV.join(', '));
-      rowsVentas.forEach(function(r) {
-        var contacto = normalizarNombre(r[cV] || '');
+      rowsVentas.forEach(function(r, idx) {
+        var contacto = (r[cV] || '').toString().trim();
         var total = parseMonto(r[mV]);
         if (!contacto || total === 0) return;
-        ventasPorCliente[contacto] = (ventasPorCliente[contacto] || 0) + total;
-        if (fV && total > 0) { var d = parseFecha(r[fV]); if (d) fechas.push(d); }
+        var d = fV ? parseFecha(r[fV]) : null;
+        var fechaMs = d ? d.getTime() : hoyMs;
+        if (fechaMs < corteVentas) return;
+        nuevasVentas.push({ id: 'r' + idx + '_' + contacto.slice(0, 10), contacto: contacto, total: total, fechaMs: fechaMs });
       });
     }
+
+    // Merge: filtrar rolling existente a 120d + agregar nuevas (id como clave)
+    var mergedMapV = {};
+    rollingExistente.forEach(function(v) {
+      if ((v.fechaMs || 0) >= corteVentas) mergedMapV[v.id] = v;
+    });
+    nuevasVentas.forEach(function(v) { mergedMapV[v.id] = v; });
+    var rollingFinal = Object.values(mergedMapV);
+    localStorage.setItem(ROLLING_KEY, JSON.stringify(rollingFinal));
+
+    var ventasPorCliente = {};
+    var fechas = [];
+    rollingFinal.forEach(function(v) {
+      var contacto = normalizarNombre(v.contacto);
+      if (!contacto || v.total === 0) return;
+      ventasPorCliente[contacto] = (ventasPorCliente[contacto] || 0) + v.total;
+      if (v.fechaMs) fechas.push(new Date(v.fechaMs));
+    });
 
     // Período
     // diasPeriodo = días entre primera venta y fecha del saldo (más reciente)
@@ -1139,7 +1153,7 @@ async function procesarDSO() {
     if (fechas.length >= 2) {
       fechas.sort(function(a,b){ return a-b; });
       var spanDias = Math.round((fechas[fechas.length-1] - fechas[0]) / (1000*60*60*24));
-      if (spanDias >= 30) diasPeriodo = spanDias;
+      if (spanDias >= 30) diasPeriodo = Math.min(120, spanDias);
     }
 
     // DSO = (Activo / Ventas) × Período
@@ -2055,6 +2069,14 @@ function normalizarNombre(n) {
     .replace(/(sa|srl|sas|sl|inc|spa|scrl|ltda|coop|sa i|s\.a|s\.r\.l)/g, '') // quitar formas jurídicas
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function normUltra(s) {
+  if (!s) return '';
+  return String(s).toUpperCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/\bS\.?A\.?\b|\bS\.?R\.?L\.?\b|\bS\.?H\.?\b|\bS\.?A\.?S\.?\b|\bS\.?C\.?A\.?\b|\bSRLH?\b/g, ' ')
+    .replace(/[^A-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 // Comparar dos nombres normalizados — true si son el mismo cliente
