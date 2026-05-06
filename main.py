@@ -822,6 +822,65 @@ def ping():
 def comercial():
     return send_from_directory('static', 'comercial.html')
 
+@app.route("/todos-los-clientes")
+def get_todos_los_clientes():
+    """Devuelve la cartera completa con CUITs para que el admin pueda verificar sin localStorage."""
+    resp = jsonify(_cartera_comercial)
+    resp.headers['Cache-Control'] = 'no-store'
+    return resp
+
+@app.route("/cartera-por-vendedor/<vendedor>")
+def get_cartera_por_vendedor(vendedor):
+    """Cartera del vendedor derivada de _saldos_facturas (columna Vendedor del Excel Odoo).
+    Fuente única de verdad: cada carga de saldos define qué clientes pertenecen a cada vendedor."""
+    from urllib.parse import unquote
+    v = unquote(vendedor).strip().lower()
+
+    clientes_map = {}
+    for f in _saldos_facturas:
+        vend_f = (f.get('vendedor') or '').strip().lower()
+        if v not in ('todos', 'all', '') and vend_f != v:
+            continue
+        cli = (f.get('cliente') or '').strip()
+        if not cli:
+            continue
+        if cli not in clientes_map:
+            clientes_map[cli] = {'nombre': cli, 'vendedor': f.get('vendedor', ''), 'total_saldo': 0}
+        clientes_map[cli]['total_saldo'] += f.get('saldo', 0)
+
+    cuit_map = {_norm_nombre(c.get('nombre', '')): c for c in _cartera_comercial}
+
+    scores = {}
+    try:
+        if os.path.exists(ALERTAS_FILE):
+            with open(ALERTAS_FILE, 'r', encoding='utf-8') as f_al:
+                ad = json.load(f_al)
+            scores = {c['cuit']: c for c in ad.get('cartera', []) if c.get('cuit')}
+    except: pass
+
+    result = []
+    for nombre, data in clientes_map.items():
+        cc = cuit_map.get(_norm_nombre(nombre), {})
+        cuit = cc.get('cuit', '')
+        sc = scores.get(cuit, {})
+        result.append({
+            'nombre': nombre,
+            'cuit': cuit,
+            'ciudad': cc.get('ciudad', ''),
+            'vendedor': data['vendedor'],
+            'total_saldo': data['total_saldo'],
+            'score': sc.get('scoreCompleto'),
+            'scoreRango': sc.get('scoreRango'),
+            'scoreColor': sc.get('scoreColor'),
+            'scoreEmoji': sc.get('scoreEmoji'),
+            'ultimaSit': sc.get('ultimaSit', 1),
+        })
+
+    result.sort(key=lambda x: -(x.get('total_saldo') or 0))
+    resp = jsonify(result)
+    resp.headers['Cache-Control'] = 'no-store'
+    return resp
+
 @app.route("/cartera-comercial/<vendedor>")
 def get_cartera_comercial(vendedor):
     from urllib.parse import unquote

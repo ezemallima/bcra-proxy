@@ -3296,7 +3296,22 @@ function verCliente(cuit) {
 }
 
 async function verificarTodos(forzar) {
-  if (!cartera.length) { alert('No hay clientes en la cartera.'); return; }
+  if (!cartera.length) {
+    // Intentar cargar desde el servidor antes de rendirse
+    try {
+      var rc = await fetch('/todos-los-clientes');
+      if (rc.ok) {
+        var datos = await rc.json();
+        if (datos && datos.length) {
+          cartera = datos;
+          localStorage.setItem('piat_cartera', JSON.stringify(cartera));
+          actualizarMetricas();
+          renderCarteraAdmin();
+        }
+      }
+    } catch(e) {}
+    if (!cartera.length) { alert('No hay clientes en la cartera. Subí el archivo de cartera primero.'); return; }
+  }
   const btn = document.getElementById('btn-verificar');
   const prog = document.getElementById('verificar-progress');
 

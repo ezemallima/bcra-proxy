@@ -288,10 +288,19 @@ async function iniciarApp() {
   showLoading('Cargando cartera...');
   try {
     const [cr, ar] = await Promise.all([
-      fetch(API + '/cartera-comercial/' + encodeURIComponent(SESSION.nombre)).catch(() => null),
-      fetch(API + '/alertas').catch(() => null)
+      fetch(API + '/cartera-por-vendedor/' + encodeURIComponent(SESSION.nombre) + '?v=' + Date.now()).catch(() => null),
+      fetch(API + '/alertas?v=' + Date.now()).catch(() => null)
     ]);
-    if (cr && cr.ok) CARTERA_LOCAL = await cr.json();
+    if (cr && cr.ok) {
+      CARTERA_LOCAL = await cr.json();
+      // Pre-poblar SALDOS_MAP con total_saldo del endpoint para mostrar saldos antes de cargarSaldosCartera
+      CARTERA_LOCAL.forEach(c => {
+        if ((c.total_saldo || 0) > 0) {
+          const k = normNombre(c.nombre);
+          if (!SALDOS_MAP[k]) SALDOS_MAP[k] = { total_saldo: c.total_saldo, facturas: [] };
+        }
+      });
+    }
     if (ar && ar.ok) {
       const ad = await ar.json();
       ALERTAS = ad.alertas || [];
