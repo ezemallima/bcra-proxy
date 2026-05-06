@@ -97,6 +97,11 @@
   .alerta-badge { font-size: 10px; font-weight: 600; background: rgba(248,113,113,0.15); color: var(--red); border-radius: 4px; padding: 2px 6px; }
   .sit-badge { font-size: 10px; font-weight: 600; border-radius: 4px; padding: 2px 6px; }
   .saldo-badge { font-size: 10px; font-weight: 600; background: rgba(200,169,110,0.12); color: var(--accent); border-radius: 4px; padding: 2px 6px; }
+  .excedido-badge { font-size: 10px; font-weight: 600; background: rgba(220,38,38,0.12); color: var(--red); border-radius: 4px; padding: 2px 6px; }
+  .credit-bar-wrap { margin-top: 8px; }
+  .credit-bar-track { height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; margin-bottom: 4px; }
+  .credit-bar-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+  .credit-bar-label { font-size: 10px; color: var(--text2); }
 
   /* OPORTUNIDADES */
   .oport-card { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--green); border-radius: var(--radius); padding: 14px; margin-bottom: 10px; cursor: pointer; }
@@ -521,6 +526,12 @@ function renderCartera(filtro) {
     const tieneAlerta = alertaCuits.has(c.cuit);
     const saldosData = getSaldos(c.nombre);
     const scoreColor = scoreToColor(score);
+    const limiteCredito = c.limite_credito || 0;
+    const saldoActual = (saldosData && saldosData.total_saldo) || c.total_saldo || 0;
+    const cupoDisponible = limiteCredito > 0 ? Math.max(0, limiteCredito - saldoActual) : 0;
+    const excedido = limiteCredito > 0 && saldoActual >= limiteCredito;
+    const pctUsado = limiteCredito > 0 ? Math.min(100, (saldoActual / limiteCredito) * 100) : 0;
+    const barColor = excedido ? 'var(--red)' : pctUsado > 80 ? 'var(--orange)' : 'var(--green)';
     return `<div class="cliente-card${tieneAlerta?' alerta':''}" data-cuit="${esc(c.cuit)}" data-nombre="${esc(c.nombre)}" onclick="abrirModalCliente(this.dataset.cuit, this.dataset.nombre)">
       <div class="cliente-row1">
         <div class="cliente-nombre">${esc(c.nombre)}</div>
@@ -530,8 +541,13 @@ function renderCartera(filtro) {
         <span class="cliente-ciudad">${esc(c.ciudad||'')}</span>
         <span class="sit-badge sit-${sit}" style="background:${sitBg(sit)}">Sit ${sit}</span>
         ${tieneAlerta ? '<span class="alerta-badge">⚠ Alerta</span>' : ''}
-        ${saldosData ? `<span class="saldo-badge">💰 $${fmtM(saldosData.total_saldo)}</span>` : ''}
+        ${excedido ? '<span class="excedido-badge">⛔ Límite Excedido</span>' : ''}
+        ${saldosData && !excedido ? `<span class="saldo-badge">💰 $${fmtM(saldosData.total_saldo)}</span>` : ''}
       </div>
+      ${limiteCredito > 0 ? `<div class="credit-bar-wrap">
+        <div class="credit-bar-track"><div class="credit-bar-fill" style="width:${pctUsado}%;background:${barColor}"></div></div>
+        <div class="credit-bar-label">${excedido ? '<span style="color:var(--red);font-weight:600">Crédito agotado — $'+fmtM(saldoActual)+' de $'+fmtM(limiteCredito)+'</span>' : 'Crédito: $'+fmtM(cupoDisponible)+' disp. de $'+fmtM(limiteCredito)}</div>
+      </div>` : ''}
     </div>`;
   }).join('');
 }
@@ -579,11 +595,14 @@ async function renderOportunidades() {
   const alertaCuits = new Set(ALERTAS.map(a => a.cuit));
   const hoy = new Date(); hoy.setHours(0,0,0,0);
 
-  // Oportunidad = tiene saldo pendiente (ya compró) Y score crediticio bueno
+  // Oportunidad = score >= 700 + tiene saldo (es cliente activo) + no excedió límite de crédito
   const candidatos = CARTERA_LOCAL.filter(c => {
     const saldoData = getSaldos(c.nombre);
     const tieneSaldo = saldoData && saldoData.total_saldo > 0;
-    return tieneSaldo && (c.score || 0) >= 700;
+    const limiteCredito = c.limite_credito || 0;
+    const saldoActual = (saldoData && saldoData.total_saldo) || c.total_saldo || 0;
+    const excedido = limiteCredito > 0 && saldoActual >= limiteCredito;
+    return tieneSaldo && (c.score || 0) >= 700 && !excedido;
   });
 
   if (!candidatos.length) {
@@ -642,12 +661,19 @@ async function renderOportunidades() {
 
   el.innerHTML = oppsFiltradas.map(function(c) {
     const score = c.score || 0;
+    const saldosData = getSaldos(c.nombre);
+    const saldoActual = (saldosData && saldosData.total_saldo) || c.total_saldo || 0;
+    const limiteCredito = c.limite_credito || 0;
+    const cupoDisponible = c.cupo_disponible !== undefined && c.cupo_disponible !== null
+      ? c.cupo_disponible
+      : (limiteCredito > 0 ? Math.max(0, limiteCredito - saldoActual) : 0);
     const tags = [];
     if (score >= 700) tags.push('Score Excelente');
     else tags.push('Score Bueno');
     if (c.dias === null || c.dias >= 30) tags.push('🔥 Contactar');
     if (!c.tieneSaldo) tags.push('Sin deuda pendiente');
-    if (c.tieneSaldo) tags.push('Saldo: $' + fmtM(getSaldos(c.nombre).total_saldo));
+    if (c.tieneSaldo) tags.push('Saldo: $' + fmtM(saldoActual));
+    if (limiteCredito > 0) tags.push('Cupo: $' + fmtM(cupoDisponible));
 
     return `<div class="oport-card" data-cuit="${c.cuit}" data-nombre="${esc(c.nombre)}" onclick="abrirModalCliente(this.dataset.cuit, this.dataset.nombre)">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">

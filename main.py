@@ -864,12 +864,17 @@ def get_cartera_por_vendedor(vendedor):
         cc = cuit_map.get(_norm_nombre(nombre), {})
         cuit = cc.get('cuit', '')
         sc = scores.get(cuit, {})
+        limite_credito = float(cc.get('limiteCredito') or 0)
+        total_saldo = data['total_saldo']
+        cupo_disponible = max(0.0, limite_credito - total_saldo) if limite_credito > 0 else None
         result.append({
             'nombre': nombre,
             'cuit': cuit,
             'ciudad': cc.get('ciudad', ''),
             'vendedor': data['vendedor'],
-            'total_saldo': data['total_saldo'],
+            'total_saldo': total_saldo,
+            'limite_credito': limite_credito,
+            'cupo_disponible': cupo_disponible,
             'score': sc.get('scoreCompleto'),
             'scoreRango': sc.get('scoreRango'),
             'scoreColor': sc.get('scoreColor'),
