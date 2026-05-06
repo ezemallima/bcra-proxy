@@ -286,14 +286,12 @@ async function iniciarApp() {
   document.getElementById('app').style.display = 'flex';
   document.getElementById('header-name').textContent = SESSION.nombre;
   showLoading('Cargando cartera...');
+
+  // BLOQUE 1: Cartera (crítico — si falla, no hay app)
   try {
-    const [cr, ar] = await Promise.all([
-      fetch(API + '/cartera-por-vendedor/' + encodeURIComponent(SESSION.nombre) + '?v=' + Date.now()).catch(() => null),
-      fetch(API + '/alertas?v=' + Date.now()).catch(() => null)
-    ]);
+    const cr = await fetch(API + '/cartera-por-vendedor/' + encodeURIComponent(SESSION.nombre) + '?v=' + Date.now()).catch(() => null);
     if (cr && cr.ok) {
       CARTERA_LOCAL = await cr.json();
-      // Pre-poblar SALDOS_MAP con total_saldo del endpoint para mostrar saldos antes de cargarSaldosCartera
       CARTERA_LOCAL.forEach(c => {
         if ((c.total_saldo || 0) > 0) {
           const k = normNombre(c.nombre);
@@ -301,29 +299,37 @@ async function iniciarApp() {
         }
       });
     }
+    if (!CARTERA_LOCAL.length) console.warn('[init] Cartera vacía — verificá que /upload-saldos-gestion fue ejecutado');
+  } catch(e) { console.error('[init] Error cargando cartera:', e); }
+
+  // BLOQUE 2: Alertas y scores (opcional — su ausencia NO rompe la cartera)
+  try {
+    const ar = await fetch(API + '/alertas?v=' + Date.now()).catch(() => null);
     if (ar && ar.ok) {
       const ad = await ar.json();
-      ALERTAS = ad.alertas || [];
-      // Aplicar scores de alertas_cartera.json — misma fuente que app principal
-      const scoreMap = {};
-      (ad.cartera || []).forEach(c => { if(c.cuit && c.scoreCompleto) scoreMap[c.cuit] = c; });
-      CARTERA_LOCAL.forEach((c, i) => {
-        if (scoreMap[c.cuit]) {
-          CARTERA_LOCAL[i].score      = scoreMap[c.cuit].scoreCompleto;
-          CARTERA_LOCAL[i].scoreRango = scoreMap[c.cuit].scoreRango;
-          CARTERA_LOCAL[i].scoreColor = scoreMap[c.cuit].scoreColor;
-          CARTERA_LOCAL[i].scoreEmoji = scoreMap[c.cuit].scoreEmoji;
-          CARTERA_LOCAL[i].ultimaSit  = scoreMap[c.cuit].ultimaSit || c.ultimaSit || 1;
-        }
-      });
-      console.log('[init] Scores:', CARTERA_LOCAL.filter(c=>c.score).length + '/' + CARTERA_LOCAL.length);
-      // Cargar scores del servidor para consultas individuales (evita divergencia JS vs Python)
-      try {
-        const scR = await fetch(API + '/scores-cartera?v=' + Date.now());
-        if (scR.ok) { const scD = await scR.json(); if (scD.ok) window._scoresCartera = scD.scores || {}; }
-      } catch(e) {}
+      if (!ad.error) {
+        ALERTAS = ad.alertas || [];
+        const scoreMap = {};
+        (ad.cartera || []).forEach(c => { if(c.cuit && c.scoreCompleto) scoreMap[c.cuit] = c; });
+        CARTERA_LOCAL.forEach((c, i) => {
+          if (scoreMap[c.cuit]) {
+            CARTERA_LOCAL[i].score      = scoreMap[c.cuit].scoreCompleto;
+            CARTERA_LOCAL[i].scoreRango = scoreMap[c.cuit].scoreRango;
+            CARTERA_LOCAL[i].scoreColor = scoreMap[c.cuit].scoreColor;
+            CARTERA_LOCAL[i].scoreEmoji = scoreMap[c.cuit].scoreEmoji;
+            CARTERA_LOCAL[i].ultimaSit  = scoreMap[c.cuit].ultimaSit || c.ultimaSit || 1;
+          }
+        });
+        console.log('[init] Scores:', CARTERA_LOCAL.filter(c=>c.score).length + '/' + CARTERA_LOCAL.length);
+      } else {
+        console.warn('[init] alertas_cartera.json no disponible — cartera carga igual sin scores');
+      }
     }
-  } catch(e) {}
+    // Precargar scores para consultas individuales
+    const scR = await fetch(API + '/scores-cartera?v=' + Date.now()).catch(() => null);
+    if (scR && scR.ok) { const scD = await scR.json(); if (scD.ok) window._scoresCartera = scD.scores || {}; }
+  } catch(e) { console.warn('[init] Alertas no disponibles (archivo puede no existir):', e); }
+
   hideLoading();
   const n = CARTERA_LOCAL.length;
   document.getElementById('header-cartera').textContent = n + ' cliente' + (n!==1?'s':'');

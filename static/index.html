@@ -3474,21 +3474,26 @@ async function verificarTodos(forzar) {
 
 
 async function limpiarAlertas() {
-  if (!confirm('¿Limpiar todas las alertas?')) return;
+  if (!confirm('¿Borrar físicamente el archivo de alertas? Esta acción no se puede deshacer.')) return;
   alertas = [];
   localStorage.setItem('piat_alertas', JSON.stringify([]));
-  var ultimaVerif = localStorage.getItem('piat_ultima_verif') || '';
-  var carteraResumen = cartera.map(function(c) {
-    return {cuit: c.cuit, ultimaSit: c.ultimaSit, ultimaVerif: c.ultimaVerif};
-  });
+  var btnLimpiar = document.querySelector('button[onclick="limpiarAlertas()"]');
+  if (btnLimpiar) { btnLimpiar.disabled = true; btnLimpiar.textContent = 'Eliminando...'; }
   try {
-    await fetch('/alertas', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({alertas: [], ultima_verif: ultimaVerif, cartera: carteraResumen})
-    });
-  } catch(e) {}
-  renderAlertas();
+    var r = await fetch('/alertas/limpiar', { method: 'POST' });
+    var data = await r.json();
+    if (data.ok) {
+      renderAlertas();
+      actualizarMetricas();
+      alert('✓ ' + (data.mensaje || 'Alertas eliminadas con éxito.'));
+    } else {
+      alert('✗ Error: ' + (data.error || 'No se pudo eliminar el archivo.'));
+    }
+  } catch(e) {
+    alert('✗ Error de conexión al intentar limpiar alertas.');
+  } finally {
+    if (btnLimpiar) { btnLimpiar.disabled = false; btnLimpiar.textContent = 'Limpiar alertas'; }
+  }
 }
 
 function renderAlertas() {

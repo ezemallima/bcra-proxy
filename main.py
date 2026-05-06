@@ -1009,6 +1009,22 @@ def save_datos_bodega():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/alertas/limpiar", methods=["POST", "DELETE"])
+def limpiar_alertas():
+    """Elimina físicamente alertas_cartera.json. Más robusto que sobrescribir."""
+    try:
+        if os.path.exists(ALERTAS_FILE):
+            os.remove(ALERTAS_FILE)
+            print(f"[alertas] Archivo eliminado: {ALERTAS_FILE}", flush=True)
+            return jsonify({"ok": True, "mensaje": "Archivo eliminado con éxito. Las alertas fueron limpiadas."})
+        return jsonify({"ok": True, "mensaje": "No había archivo de alertas. La cartera está limpia."})
+    except PermissionError as e:
+        print(f"[alertas] Sin permisos para eliminar: {e}", flush=True)
+        return jsonify({"ok": False, "error": f"Sin permisos para eliminar el archivo: {e}"}), 500
+    except Exception as e:
+        print(f"[alertas] Error al eliminar: {e}", flush=True)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
 @app.route("/alertas", methods=["GET"])
 def get_alertas():
     try:
@@ -1017,7 +1033,7 @@ def get_alertas():
                 return jsonify(json.load(f))
         return jsonify({"alertas": [], "ultima_verif": "", "cartera": []})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"alertas": [], "ultima_verif": "", "cartera": [], "error": str(e)})
 
 @app.route("/alertas", methods=["POST"])
 def save_alertas():
