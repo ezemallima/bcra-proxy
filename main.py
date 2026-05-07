@@ -44,11 +44,13 @@ BCRA_VACIO = {"results": None, "sin_deudas": None, "error_bcra": None}
 
 # ── Cartera comercial ──
 _cartera_comercial = []
+_CC_FILE = os.path.join(DATA_DIR, 'cartera_comercial.json')
 try:
-    _cc_path = os.path.join(os.getcwd(), 'cartera_comercial.json')
+    # DATA_DIR first (persistent on Render), fallback to repo copy
+    _cc_path = _CC_FILE if os.path.exists(_CC_FILE) else os.path.join(os.getcwd(), 'cartera_comercial.json')
     with open(_cc_path, encoding='utf-8') as f:
         _cartera_comercial = json.load(f)
-    print(f"[comercial] {len(_cartera_comercial)} clientes cargados", flush=True)
+    print(f"[comercial] {len(_cartera_comercial)} clientes cargados desde {_cc_path}", flush=True)
 except Exception as e:
     print(f"[comercial] Error cargando cartera: {e}", flush=True)
 
@@ -829,60 +831,129 @@ def get_todos_los_clientes():
     resp.headers['Cache-Control'] = 'no-store'
     return resp
 
+@app.route("/vendedores")
+def get_vendedores():
+    vs = sorted({(c.get('vendedor') or '').strip() for c in _cartera_comercial if (c.get('vendedor') or '').strip()})
+    resp = jsonify(vs)
+    resp.headers['Cache-Control'] = 'no-store'
+    return resp
+
+@app.route("/cliente/guardar", methods=["POST"])
+def guardar_cliente():
+    global _cartera_comercial
+    try:
+        data = request.get_json(force=True)
+        cuit = str(data.get('cuit', '')).replace('-', '').replace(' ', '').strip()
+        nombre = str(data.get('nombre', '')).strip()
+        if not cuit or not nombre:
+            return jsonify({"ok": False, "error": "CUIT y nombre son obligatorios"}), 400
+
+        cuit_orig = str(data.get('_cuitOriginal', cuit)).replace('-', '').replace(' ', '').strip()
+
+        cliente = {
+            'nombre': nombre,
+            'cuit': cuit,
+            'ciudad': str(data.get('ciudad', '')).strip(),
+            'vendedor': str(data.get('vendedor', '')).strip(),
+            'email': str(data.get('email', '')).strip(),
+            'limiteCredito': float(data.get('limiteCredito', 0) or 0),
+        }
+
+        idx = next((i for i, c in enumerate(_cartera_comercial)
+                    if str(c.get('cuit', '')).replace('-', '').replace(' ', '').strip() == cuit_orig), None)
+
+        if idx is not None:
+            # Preserve fields not managed here (e.g. plazoDias)
+            merged = dict(_cartera_comercial[idx])
+            merged.update(cliente)
+            _cartera_comercial[idx] = merged
+            accion = "actualizado"
+        else:
+            _cartera_comercial.append(cliente)
+            accion = "agregado"
+
+        with open(_CC_FILE, 'w', encoding='utf-8') as f:
+            json.dump(_cartera_comercial, f, ensure_ascii=False, indent=2)
+
+        return jsonify({"ok": True, "accion": accion, "total": len(_cartera_comercial)})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
 @app.route("/cartera-por-vendedor/<vendedor>")
 def get_cartera_por_vendedor(vendedor):
-    """Cartera del vendedor derivada de _saldos_facturas (columna Vendedor del Excel Odoo).
-    Fuente única de verdad: cada carga de saldos define qué clientes pertenecen a cada vendedor."""
+    """Fuente: cartera_comercial.json (todos los clientes del vendedor).
+    Saldo viene del cruce con _saldos_gestion. Nunca limita a clientes con saldo."""
     from urllib.parse import unquote
     v = unquote(vendedor).strip().lower()
 
-    clientes_map = {}
-    fuente_v = _saldos_gestion if _saldos_gestion else _saldos_facturas
-    for f in fuente_v:
-        vend_f = (f.get('vendedor') or '').strip().lower()
-        if v not in ('todos', 'all', '') and vend_f != v:
-            continue
+    # Base: todos los clientes del vendedor en cartera_comercial
+    if v in ('todos', 'all', ''):
+        base = _cartera_comercial
+    else:
+        base = [c for c in _cartera_comercial if (c.get('vendedor') or '').strip().lower() == v]
+
+    # Mapa de saldos desde gestión (o auditoría como fallback)
+    fuente_s = _saldos_gestion if _saldos_gestion else _saldos_facturas
+    saldo_map = {}
+    for f in fuente_s:
         cli = (f.get('cliente') or '').strip()
         if not cli:
             continue
-        if cli not in clientes_map:
-            clientes_map[cli] = {'nombre': cli, 'vendedor': f.get('vendedor', ''), 'total_saldo': 0}
-        clientes_map[cli]['total_saldo'] += f.get('saldo', 0)
+        key = _norm_nombre(cli)
+        saldo_map[key] = saldo_map.get(key, 0) + (f.get('saldo') or 0)
 
-    cuit_map = {_norm_nombre(c.get('nombre', '')): c for c in _cartera_comercial}
-
+    # Scores y alertas
     scores = {}
+    alertas_cuits = set()
     try:
         if os.path.exists(ALERTAS_FILE):
             with open(ALERTAS_FILE, 'r', encoding='utf-8') as f_al:
                 ad = json.load(f_al)
             scores = {c['cuit']: c for c in ad.get('cartera', []) if c.get('cuit')}
-    except: pass
+            alertas_cuits = {a.get('cuit') for a in ad.get('alertas', []) if a.get('cuit')}
+    except:
+        pass
 
     result = []
-    for nombre, data in clientes_map.items():
-        cc = cuit_map.get(_norm_nombre(nombre), {})
-        cuit = cc.get('cuit', '')
+    for cc in base:
+        nombre = (cc.get('nombre') or '').strip()
+        cuit = (cc.get('cuit') or '').strip()
         sc = scores.get(cuit, {})
+
+        # Buscar saldo: exacto primero, luego por primeras 2 palabras
+        nombre_norm = _norm_nombre(nombre)
+        total_saldo = saldo_map.get(nombre_norm, 0)
+        if total_saldo == 0:
+            prim2 = ' '.join(nombre_norm.split()[:2])
+            for k, sv in saldo_map.items():
+                if ' '.join(k.split()[:2]) == prim2:
+                    total_saldo = sv
+                    break
+
         limite_credito = float(cc.get('limiteCredito') or 0)
-        total_saldo = data['total_saldo']
         cupo_disponible = max(0.0, limite_credito - total_saldo) if limite_credito > 0 else None
+        score_val = sc.get('scoreCompleto')
+
         result.append({
             'nombre': nombre,
             'cuit': cuit,
             'ciudad': cc.get('ciudad', ''),
-            'vendedor': data['vendedor'],
+            'vendedor': cc.get('vendedor', ''),
+            'email': cc.get('email', ''),
             'total_saldo': total_saldo,
             'limite_credito': limite_credito,
             'cupo_disponible': cupo_disponible,
-            'score': sc.get('scoreCompleto'),
+            'score': score_val,
             'scoreRango': sc.get('scoreRango'),
             'scoreColor': sc.get('scoreColor'),
             'scoreEmoji': sc.get('scoreEmoji'),
             'ultimaSit': sc.get('ultimaSit', 1),
+            'alerta': cuit in alertas_cuits,
+            'oportunidad': bool(score_val and score_val > 700 and total_saldo == 0),
         })
 
-    result.sort(key=lambda x: -(x.get('total_saldo') or 0))
+    # Primero con saldo (desc), luego sin saldo alfabético
+    result.sort(key=lambda x: (0 if x['total_saldo'] > 0 else 1, -(x['total_saldo'] or 0), x['nombre']))
     resp = jsonify(result)
     resp.headers['Cache-Control'] = 'no-store'
     return resp

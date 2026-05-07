@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import json; c=json.load\\(open\\('cartera_comercial.json',encoding='utf-8'\\)\\); vs=sorted\\(set\\(x.get\\('vendedor',''\\) for x in c if x.get\\('vendedor'\\)\\)\\); print\\(len\\(c\\),'clientes'\\); [print\\(' -',v\\) for v in vs]\")",
+      "Bash(python3 -c \"import json; c=json.load\\(open\\('cartera_comercial.json',encoding='utf-8'\\)\\); vs=sorted\\(set\\(x.get\\('vendedor',''\\) for x in c if x.get\\('vendedor'\\)\\)\\); print\\(len\\(c\\),'clientes'\\); [print\\(' -',v\\) for v in vs]\")"
+    ]
+  }
+}

@@ -566,6 +566,39 @@
         <input type="number" id="nuevo-plazo" placeholder="Plazo días" style="max-width:100px;" />
         <button class="primary" onclick="agregarCliente()">Agregar</button>
       </div>
+      <div class="input-row" style="margin-top:8px;">
+        <input list="vend-datalist-nuevo" id="nuevo-vendedor" placeholder="Vendedor asignado *" style="flex:1;" />
+        <datalist id="vend-datalist-nuevo"></datalist>
+        <input type="text" id="nuevo-ciudad" placeholder="Ciudad" style="flex:1;" />
+      </div>
+    </div>
+
+    <!-- Modal editar cliente -->
+    <div id="modal-editar-cliente" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;align-items:center;justify-content:center;">
+      <div style="background:#fff;border-radius:14px;padding:24px;width:92%;max-width:480px;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+          <h3 style="margin:0;font-size:16px;font-weight:700;" id="modal-editar-titulo">Editar Cliente</h3>
+          <button onclick="cerrarModalEditar()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#64748b;line-height:1;">×</button>
+        </div>
+        <input type="hidden" id="editar-cuit-original" />
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Razón Social *</label>
+            <input id="editar-nombre" type="text" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" /></div>
+          <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">CUIT *</label>
+            <input id="editar-cuit" type="text" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" /></div>
+          <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Ciudad</label>
+            <input id="editar-ciudad" type="text" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" /></div>
+          <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Vendedor Asignado *</label>
+            <select id="editar-vendedor" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;background:#fff;color:#1e293b;"></select></div>
+          <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Límite de Crédito ($)</label>
+            <input id="editar-limite" type="number" min="0" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" /></div>
+        </div>
+        <div id="editar-error" style="display:none;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 12px;font-size:13px;color:#991b1b;margin-top:12px;"></div>
+        <div style="display:flex;gap:10px;margin-top:20px;">
+          <button onclick="guardarEdicionCliente()" class="primary" style="flex:1;padding:11px;" id="btn-guardar-edicion">Guardar cambios</button>
+          <button onclick="cerrarModalEditar()" style="flex:1;padding:11px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;cursor:pointer;font-size:14px;font-weight:600;">Cancelar</button>
+        </div>
+      </div>
     </div>
     <div style="margin-bottom:10px;">
       <input type="text" id="buscar-cartera-admin" placeholder="🔍 Buscar por nombre o CUIT..." 
@@ -2155,6 +2188,7 @@ async function init() {
   await cargarDesdServidor();
 
   await cargarHistorialVentas();
+  poblarVendedoresNuevo(); // no-await: carga en background
   await Promise.all([cargarWSP(), cargarMoras(), cargarCarteraServidor()]);
   actualizarMetricas();
   // DSO autoritativo desde saldos_facturas.json (SSoT del servidor)
@@ -3286,26 +3320,36 @@ function limpiarHistorial() {
   renderHistorial();
 }
 
-function agregarCliente() {
+async function agregarCliente() {
   const cuit = document.getElementById('nuevo-cuit').value.replace(/-/g,'').trim();
   const nombre = document.getElementById('nuevo-nombre').value.trim();
+  const vendedor = document.getElementById('nuevo-vendedor').value.trim();
+  const ciudad = document.getElementById('nuevo-ciudad').value.trim();
   if (!cuit || !nombre) { alert('Completá CUIT y razón social'); return; }
+  if (!vendedor) { alert('Seleccioná un vendedor asignado'); return; }
   if (cartera.find(c=>c.cuit===cuit)) { alert('Este cliente ya está en la cartera'); return; }
   var limite = document.getElementById('nuevo-limite').value.trim();
   var plazo = document.getElementById('nuevo-plazo').value.trim();
-  cartera.push({
-    cuit, nombre,
+  var nuevo = {
+    cuit, nombre, vendedor, ciudad,
     fechaAlta: new Date().toLocaleDateString('es-AR'),
     ultimaSit: null, ultimaVerif: null,
+    limiteCredito: limite ? parseFloat(limite) : 0,
     limiteCreditoARS: limite ? parseFloat(limite) : null,
     plazoDias: plazo ? parseInt(plazo) : null
-  });
+  };
+  try {
+    await fetch('/cliente/guardar', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(nuevo)
+    });
+  } catch(e) { console.warn('[cartera] No se pudo persistir en servidor:', e); }
+  cartera.push(nuevo);
   localStorage.setItem('piat_cartera', JSON.stringify(cartera));
   sincronizarServidor();
-  document.getElementById('nuevo-cuit').value = '';
-  document.getElementById('nuevo-nombre').value = '';
-  document.getElementById('nuevo-limite').value = '';
-  document.getElementById('nuevo-plazo').value = '';
+  ['nuevo-cuit','nuevo-nombre','nuevo-limite','nuevo-plazo','nuevo-vendedor','nuevo-ciudad'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
   renderCartera();
 }
 
@@ -3340,9 +3384,100 @@ function renderCartera() {
         ${buscarEnMoras(c.cuit) ? '<span class="badge badge-mora">Mora</span>' : ''}
         ${buscarEnWSP(c.cuit) ? '<span class="badge badge-wsp">En bodegas</span>' : ''}
         <button onclick="verCliente('${c.cuit}')" style="font-size:12px;padding:5px 12px;">Ver</button>
+        <button onclick="event.stopPropagation();editarCliente('${c.cuit}')" style="font-size:12px;padding:5px 10px;" title="Editar">✏</button>
         <button onclick="eliminarCliente(${i})" style="font-size:12px;padding:5px 10px;color:#991b1b;">×</button>
       </div>
     </div>`).join('');
+}
+
+function renderCarteraAdmin() { renderCartera(); }
+
+var _vendedoresCache = null;
+async function _cargarVendedores() {
+  if (_vendedoresCache) return _vendedoresCache;
+  try {
+    var r = await fetch('/vendedores');
+    if (r.ok) { _vendedoresCache = await r.json(); return _vendedoresCache; }
+  } catch(e) {}
+  _vendedoresCache = [...new Set(cartera.map(c => c.vendedor).filter(Boolean))].sort();
+  return _vendedoresCache;
+}
+
+async function editarCliente(cuit) {
+  var c = cartera.find(function(x){ return x.cuit === String(cuit); });
+  if (!c) { alert('Cliente no encontrado en cartera local'); return; }
+  var vendedores = await _cargarVendedores();
+  var sel = document.getElementById('editar-vendedor');
+  sel.innerHTML = '<option value="">-- Sin asignar --</option>' +
+    vendedores.map(function(vn) {
+      return '<option value="' + vn + '"' + (vn === (c.vendedor||'') ? ' selected' : '') + '>' + vn + '</option>';
+    }).join('');
+  if (c.vendedor && !vendedores.includes(c.vendedor)) {
+    sel.innerHTML += '<option value="' + c.vendedor + '" selected>' + c.vendedor + '</option>';
+  }
+  document.getElementById('editar-cuit-original').value = cuit;
+  document.getElementById('editar-nombre').value = c.nombre || '';
+  document.getElementById('editar-cuit').value = c.cuit || '';
+  document.getElementById('editar-ciudad').value = c.ciudad || '';
+  document.getElementById('editar-limite').value = c.limiteCredito || c.limiteCreditoARS || '';
+  document.getElementById('editar-error').style.display = 'none';
+  document.getElementById('modal-editar-titulo').textContent = 'Editar: ' + c.nombre;
+  document.getElementById('modal-editar-cliente').style.display = 'flex';
+}
+
+function cerrarModalEditar() {
+  document.getElementById('modal-editar-cliente').style.display = 'none';
+}
+
+async function guardarEdicionCliente() {
+  var btn = document.getElementById('btn-guardar-edicion');
+  var errEl = document.getElementById('editar-error');
+  var cuitOrig = document.getElementById('editar-cuit-original').value;
+  var nombre = document.getElementById('editar-nombre').value.trim();
+  var cuit = document.getElementById('editar-cuit').value.replace(/-/g,'').trim();
+  var ciudad = document.getElementById('editar-ciudad').value.trim();
+  var vendedor = document.getElementById('editar-vendedor').value;
+  var limite = document.getElementById('editar-limite').value;
+  if (!nombre || !cuit) {
+    errEl.textContent = 'Nombre y CUIT son obligatorios';
+    errEl.style.display = 'block'; return;
+  }
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  errEl.style.display = 'none';
+  try {
+    var r = await fetch('/cliente/guardar', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ cuit, nombre, ciudad, vendedor,
+        limiteCredito: limite ? parseFloat(limite) : 0,
+        _cuitOriginal: cuitOrig })
+    });
+    var d = await r.json();
+    if (!d.ok) { errEl.textContent = d.error || 'Error al guardar'; errEl.style.display = 'block'; return; }
+    // Actualizar cartera local
+    var idx = cartera.findIndex(function(c){ return c.cuit === cuitOrig || c.cuit === cuit; });
+    var updated = { cuit, nombre, ciudad, vendedor,
+      limiteCredito: limite ? parseFloat(limite) : 0,
+      limiteCreditoARS: limite ? parseFloat(limite) : null };
+    if (idx >= 0) cartera[idx] = Object.assign({}, cartera[idx], updated);
+    else cartera.push(Object.assign(updated, { fechaAlta: new Date().toLocaleDateString('es-AR') }));
+    _vendedoresCache = null; // invalidar cache
+    localStorage.setItem('piat_cartera', JSON.stringify(cartera));
+    cerrarModalEditar();
+    renderCartera();
+    actualizarMetricas();
+  } catch(e) {
+    errEl.textContent = 'Error de conexión: ' + e.message;
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Guardar cambios';
+  }
+}
+
+// Poblar datalist de vendedores en el formulario de alta
+async function poblarVendedoresNuevo() {
+  var vendedores = await _cargarVendedores();
+  var dl = document.getElementById('vend-datalist-nuevo');
+  if (dl) dl.innerHTML = vendedores.map(function(v){ return '<option value="' + v + '">'; }).join('');
 }
 
 function verCliente(cuit) {

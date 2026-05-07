@@ -304,7 +304,7 @@ async function iniciarApp() {
         }
       });
     }
-    if (!CARTERA_LOCAL.length) console.warn('[init] Cartera vacía — verificá que /upload-saldos-gestion fue ejecutado');
+    if (!CARTERA_LOCAL.length) console.warn('[init] Cartera vacía — verificá que el vendedor tiene clientes asignados en cartera_comercial.json');
   } catch(e) { console.error('[init] Error cargando cartera:', e); }
 
   // BLOQUE 2: Alertas y scores (opcional — su ausencia NO rompe la cartera)
@@ -595,14 +595,15 @@ async function renderOportunidades() {
   const alertaCuits = new Set(ALERTAS.map(a => a.cuit));
   const hoy = new Date(); hoy.setHours(0,0,0,0);
 
-  // Oportunidad = score >= 700 + tiene saldo (es cliente activo) + no excedió límite de crédito
+  // Oportunidad = score >= 700 + (tiene saldo O marcado por servidor) + no excedió límite
   const candidatos = CARTERA_LOCAL.filter(c => {
     const saldoData = getSaldos(c.nombre);
-    const tieneSaldo = saldoData && saldoData.total_saldo > 0;
+    const tieneSaldo = (saldoData && saldoData.total_saldo > 0) || (c.total_saldo || 0) > 0;
     const limiteCredito = c.limite_credito || 0;
     const saldoActual = (saldoData && saldoData.total_saldo) || c.total_saldo || 0;
     const excedido = limiteCredito > 0 && saldoActual >= limiteCredito;
-    return tieneSaldo && (c.score || 0) >= 700 && !excedido;
+    // Include server-flagged oportunidades (score>700 + saldo==0) even without local saldo data
+    return !excedido && ((c.score || 0) >= 700) && (tieneSaldo || c.oportunidad);
   });
 
   if (!candidatos.length) {
