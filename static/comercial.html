@@ -345,9 +345,32 @@ async function iniciarApp() {
         console.warn('[init] alertas_cartera.json no disponible — cartera carga igual sin scores');
       }
     }
-    // Precargar scores para consultas individuales
+    // Precargar scores para consultas individuales (keyed by CUIT normalizado)
     const scR = await fetch(API + '/scores-cartera?v=' + Date.now()).catch(() => null);
-    if (scR && scR.ok) { const scD = await scR.json(); if (scD.ok) window._scoresCartera = scD.scores || {}; }
+    if (scR && scR.ok) {
+      const scD = await scR.json();
+      if (scD.ok) {
+        window._scoresCartera = scD.scores || {};
+        // Aplicar como pasada final: enriquecer cualquier cliente que aún no tenga score
+        const ncFn = c => String(c||'').replace(/-/g,'').replace(/\s/g,'').trim();
+        CARTERA_LOCAL.forEach((c, i) => {
+          if (c.score) return; // ya tiene score
+          const sc = window._scoresCartera[ncFn(c.cuit)];
+          if (sc && sc.scoreCompleto) {
+            CARTERA_LOCAL[i].score      = sc.scoreCompleto;
+            CARTERA_LOCAL[i].scoreRango = sc.scoreRango;
+            CARTERA_LOCAL[i].scoreColor = sc.scoreColor;
+            CARTERA_LOCAL[i].scoreEmoji = sc.scoreEmoji;
+            CARTERA_LOCAL[i].ultimaSit  = sc.ultimaSit || 1;
+            if (sc.scoreCompleto > 700 && !(c.total_saldo > 0)) CARTERA_LOCAL[i].oportunidad = true;
+          }
+        });
+        const conScore = CARTERA_LOCAL.filter(c=>c.score).length;
+        console.log('[init] scores-cartera fallback aplicado — total con score:', conScore + '/' + CARTERA_LOCAL.length);
+        // Re-render si esta pasada aportó scores nuevos
+        if (conScore > 0) { renderCartera(document.querySelector('.filter-chip.active')?.dataset?.filtro || 'todos'); renderOportunidades(); }
+      }
+    }
   } catch(e) { console.warn('[init] Alertas no disponibles (archivo puede no existir):', e); }
 
   hideLoading();

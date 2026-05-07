@@ -769,7 +769,8 @@ def ejecutar_verificacion(cartera_data):
                         "alertas": nuevas_alertas,
                         "ultima_verif": time.strftime('%d/%m/%Y %H:%M') + ' (parcial)',
                         "cartera": [{
-                            "cuit": c.get('cuit'), "ultimaSit": c.get('ultimaSit'),
+                            "cuit": c.get('cuit'), "nombre": c.get('nombre', ''),
+                            "ultimaSit": c.get('ultimaSit'),
                             "ultimaVerif": c.get('ultimaVerif'), "scoreCompleto": c.get('scoreCompleto'),
                             "scoreRango": c.get('scoreRango'), "scoreColor": c.get('scoreColor'),
                             "scoreEmoji": c.get('scoreEmoji')
@@ -789,7 +790,8 @@ def ejecutar_verificacion(cartera_data):
                 "alertas": nuevas_alertas,
                 "ultima_verif": ahora,
                 "cartera": [{
-                    "cuit": c.get('cuit'), "ultimaSit": c.get('ultimaSit'),
+                    "cuit": c.get('cuit'), "nombre": c.get('nombre', ''),
+                    "ultimaSit": c.get('ultimaSit'),
                     "ultimaVerif": c.get('ultimaVerif'), "scoreCompleto": c.get('scoreCompleto'),
                     "scoreRango": c.get('scoreRango'), "scoreColor": c.get('scoreColor'),
                     "scoreEmoji": c.get('scoreEmoji')
@@ -905,30 +907,72 @@ def get_cartera_por_vendedor(vendedor):
     def _nc(x):
         return str(x or '').replace('-', '').replace(' ', '').strip()
 
-    # Scores y alertas — normalizar CUITs para evitar mismatches por guiones/espacios
-    scores = {}
+    # ── Cargar scores y alertas ────────────────────────────────────────────────
+    # Busca en DATA_DIR primero, luego en os.getcwd() como fallback
+    scores = {}          # cuit_norm → entry
+    scores_by_nombre = {}  # norm_nombre → entry  (plan B para el cruce)
     alertas_cuits = set()
-    try:
-        if os.path.exists(ALERTAS_FILE):
-            with open(ALERTAS_FILE, 'r', encoding='utf-8') as f_al:
-                ad = json.load(f_al)
-            for c in ad.get('cartera', []):
-                nc = _nc(c.get('cuit', ''))
-                if nc:
-                    scores[nc] = c
-            for a in ad.get('alertas', []):
-                nc = _nc(a.get('cuit', ''))
-                if nc:
-                    alertas_cuits.add(nc)
-    except:
-        pass
+    _arch_usado = None
+
+    for _ruta in [ALERTAS_FILE, os.path.join(os.getcwd(), 'alertas_cartera.json')]:
+        if not os.path.exists(_ruta):
+            continue
+        try:
+            with open(_ruta, 'r', encoding='utf-8') as _f:
+                _ad = json.load(_f)
+            # Índice por CUIT
+            for _c in _ad.get('cartera', []):
+                _nc_val = _nc(_c.get('cuit', ''))
+                if _nc_val:
+                    scores[_nc_val] = _c
+                # Índice por nombre si el campo está guardado (nuevas verificaciones)
+                _n = (_c.get('nombre') or '').strip()
+                if _n:
+                    scores_by_nombre[_norm_nombre(_n)] = _c
+            # Alertas — también indexar nombre de alertas (siempre tienen nombre)
+            for _a in _ad.get('alertas', []):
+                _nc_val = _nc(_a.get('cuit', ''))
+                if _nc_val:
+                    alertas_cuits.add(_nc_val)
+                _n = (_a.get('nombre') or '').strip()
+                if _n and _a.get('scoreCompleto'):
+                    scores_by_nombre.setdefault(_norm_nombre(_n), _a)
+            _arch_usado = _ruta
+            break
+        except Exception as _e:
+            print(f"[cartera-vendedor] Error leyendo {_ruta}: {_e}", flush=True)
+
+    print(
+        f"[cartera-vendedor] vendedor={v!r} | base={len(base)} clientes | "
+        f"archivo={'OK:'+_arch_usado if _arch_usado else 'NO ENCONTRADO'} | "
+        f"scores={len(scores)} | scores_nombre={len(scores_by_nombre)} | alertas={len(alertas_cuits)}",
+        flush=True
+    )
+    if scores:
+        print(f"[cartera-vendedor] CUITs en scores (muestra): {list(scores.keys())[:5]}", flush=True)
+    # ──────────────────────────────────────────────────────────────────────────
 
     result = []
     for cc in base:
         nombre = (cc.get('nombre') or '').strip()
         cuit = (cc.get('cuit') or '').strip()
         cuit_n = _nc(cuit)
+
+        # Plan A: cruce por CUIT normalizado
         sc = scores.get(cuit_n, {})
+
+        # Plan B: cruce por nombre normalizado (si plan A falla)
+        if not sc.get('scoreCompleto'):
+            nombre_norm_b = _norm_nombre(nombre)
+            sc = scores_by_nombre.get(nombre_norm_b, {})
+
+        # Plan C: primeras 2 palabras del nombre
+        if not sc.get('scoreCompleto'):
+            prim2_b = ' '.join(_norm_nombre(nombre).split()[:2])
+            for _k, _sv in scores_by_nombre.items():
+                if ' '.join(_k.split()[:2]) == prim2_b:
+                    sc = _sv
+                    break
 
         # Buscar saldo: exacto primero, luego por primeras 2 palabras
         nombre_norm = _norm_nombre(nombre)
@@ -942,7 +986,7 @@ def get_cartera_por_vendedor(vendedor):
 
         limite_credito = float(cc.get('limiteCredito') or 0)
         cupo_disponible = max(0.0, limite_credito - total_saldo) if limite_credito > 0 else None
-        score_val = sc.get('scoreCompleto')
+        score_val = sc.get('scoreCompleto') or None
 
         result.append({
             'nombre': nombre,
@@ -954,10 +998,10 @@ def get_cartera_por_vendedor(vendedor):
             'limite_credito': limite_credito,
             'cupo_disponible': cupo_disponible,
             'score': score_val,
-            'scoreRango': sc.get('scoreRango'),
-            'scoreColor': sc.get('scoreColor'),
-            'scoreEmoji': sc.get('scoreEmoji'),
-            'ultimaSit': sc.get('ultimaSit', 1),
+            'scoreRango': sc.get('scoreRango') or None,
+            'scoreColor': sc.get('scoreColor') or None,
+            'scoreEmoji': sc.get('scoreEmoji') or None,
+            'ultimaSit': sc.get('ultimaSit') or 1,
             'alerta': cuit_n in alertas_cuits,
             'oportunidad': bool(score_val and score_val > 700 and total_saldo == 0),
         })
@@ -989,30 +1033,37 @@ def get_cartera_comercial(vendedor):
 
 @app.route("/scores-cartera", methods=["GET"])
 def get_scores_cartera():
-    """Devuelve scores de toda la cartera. Si no existen los calcula en background."""
-    try:
-        if os.path.exists(ALERTAS_FILE):
-            with open(ALERTAS_FILE, 'r', encoding='utf-8') as f:
+    """Devuelve scores de toda la cartera indexados por CUIT normalizado."""
+    def _nc2(x):
+        return str(x or '').replace('-', '').replace(' ', '').strip()
+
+    for _ruta in [ALERTAS_FILE, os.path.join(os.getcwd(), 'alertas_cartera.json')]:
+        if not os.path.exists(_ruta):
+            continue
+        try:
+            with open(_ruta, 'r', encoding='utf-8') as f:
                 alertas_data = json.load(f)
             cartera = alertas_data.get('cartera', [])
             con_score = [c for c in cartera if c.get('scoreCompleto')]
-            total = len(_cartera_comercial)
-            if con_score:  # devolver cualquier score disponible
-                return jsonify({
-                    "ok": True,
-                    "scores": {c['cuit']: {
-                        "scoreCompleto": c.get('scoreCompleto'),
-                        "scoreRango": c.get('scoreRango'),
-                        "scoreColor": c.get('scoreColor'),
-                        "scoreEmoji": c.get('scoreEmoji'),
-                        "ultimaSit": c.get('ultimaSit', 1)
-                    } for c in con_score if c.get('cuit')},
-                    "total": len(con_score)
-                })
-        # No hay scores suficientes todavía
-        return jsonify({"ok": False, "mensaje": "Sin scores disponibles. Corré la verificación desde la app principal.", "total": 0, "scores": {}})
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e), "scores": {}})
+            if con_score:
+                scores_out = {}
+                for c in con_score:
+                    nc = _nc2(c.get('cuit', ''))
+                    if nc:
+                        scores_out[nc] = {
+                            "scoreCompleto": c.get('scoreCompleto'),
+                            "scoreRango":    c.get('scoreRango'),
+                            "scoreColor":    c.get('scoreColor'),
+                            "scoreEmoji":    c.get('scoreEmoji'),
+                            "ultimaSit":     c.get('ultimaSit', 1),
+                            "nombre":        c.get('nombre', ''),
+                        }
+                print(f"[scores-cartera] {len(scores_out)} scores desde {_ruta}", flush=True)
+                return jsonify({"ok": True, "scores": scores_out, "total": len(scores_out)})
+        except Exception as e:
+            print(f"[scores-cartera] Error leyendo {_ruta}: {e}", flush=True)
+
+    return jsonify({"ok": False, "mensaje": "Sin scores — corré la verificación desde App Principal.", "scores": {}, "total": 0})
 
 @app.route("/whatsapp_index.json")
 def wsp_index_route():
