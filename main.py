@@ -6,12 +6,17 @@ import os
 import json
 import time
 import threading
+import random
+import traceback
 import gc
 try:
     import boto3
     BOTO3_OK = True
+    from botocore.config import Config as _BotoCfg
+    _LAMBDA_CFG = _BotoCfg(connect_timeout=10, read_timeout=30, retries={'max_attempts': 1})
 except ImportError:
     BOTO3_OK = False
+    _LAMBDA_CFG = None
     print("[aws] boto3 no instalado — usando Workers", flush=True)
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -195,7 +200,8 @@ def consultar_bcra_lambda(cuit):
             'lambda',
             region_name=AWS_REGION,
             aws_access_key_id=aws_key,
-            aws_secret_access_key=aws_secret
+            aws_secret_access_key=aws_secret,
+            **({'config': _LAMBDA_CFG} if _LAMBDA_CFG else {})
         )
         payload = json.dumps({'cuit': cuit}).encode('utf-8')
         response = client.invoke(
@@ -662,152 +668,175 @@ def ejecutar_verificacion(cartera_data):
         print("[verif] Caché historial y cheques limpiado", flush=True)
     except: pass
 
+    def _guardar_alertas(nuevas_alertas, cartera_actualizada, parcial=False):
+        sufijo = ' (parcial)' if parcial else ''
+        datos = {
+            "alertas": nuevas_alertas,
+            "ultima_verif": time.strftime('%d/%m/%Y %H:%M') + sufijo,
+            "cartera": [{
+                "cuit": c.get('cuit'), "nombre": c.get('nombre', ''),
+                "ultimaSit": c.get('ultimaSit'),
+                "ultimaVerif": c.get('ultimaVerif'),
+                "scoreCompleto": c.get('scoreCompleto'),
+                "scoreRango": c.get('scoreRango'),
+                "scoreColor": c.get('scoreColor'),
+                "scoreEmoji": c.get('scoreEmoji'),
+            } for c in cartera_actualizada]
+        }
+        with open(ALERTAS_FILE, 'w', encoding='utf-8') as _f:
+            json.dump(datos, _f, ensure_ascii=False, indent=None if parcial else 2)
+
+    total = len(cartera_data)
     try:
         for i, cliente in enumerate(cartera_data):
-            cuit = cliente.get('cuit', '')
-            nombre = cliente.get('nombre', '')
+            cuit         = str(cliente.get('cuit', '') or '').strip()
+            nombre       = str(cliente.get('nombre', '') or '').strip()
             sit_anterior = cliente.get('ultimaSit', 1) or 1
+            tag          = f"[verif {i+1}/{total} {cuit}]"
 
-            verificacion_estado["progreso"] = i + 1
+            verificacion_estado["progreso"]       = i + 1
             verificacion_estado["cliente_actual"] = nombre
-            verificacion_estado["mensaje"] = "Verificando " + str(i+1) + "/" + str(len(cartera_data)) + ": " + nombre
+            verificacion_estado["mensaje"]        = f"Verificando {i+1}/{total}: {nombre}"
 
             cliente_actualizado = dict(cliente)
+            bcra_ok = False
 
-            try:
-                # Intentar Lambda primero (trae deudas + historial + cheques en una sola llamada)
-                lambda_result = consultar_bcra_lambda(cuit)
-                if lambda_result:
-                    bcra_data, hist_lambda, cheq_lambda = lambda_result
-                    # Guardar historial y cheques en caché para que calcular_score_servidor los use
-                    try:
-                        hist_path = os.path.join(DATA_DIR, f'historial_{cuit}.json')
-                        with open(hist_path, 'w') as f:
-                            json.dump({'payload': hist_lambda, 'ts': time.time()}, f)
-                        cheq_path = os.path.join(DATA_DIR, f'cheques_{cuit}.json')
-                        with open(cheq_path, 'w') as f:
-                            json.dump({'payload': cheq_lambda, 'ts': time.time()}, f)
-                    except: pass
-                    error = None
-                else:
-                    # Fallback a Workers de Cloudflare
-                    bcra_data, error = consultar_bcra_cached(cuit)
-                score_data = None
+            # ── BCRA: 2 intentos con log detallado ───────────────────────────
+            for intento in range(2):
                 try:
-                    score_data = calcular_score_servidor(cuit, bcra_data or {}, en_mora=None)
-                    cliente_actualizado['scoreCompleto'] = score_data['score']
-                    cliente_actualizado['scoreRango'] = score_data['rango']
-                    cliente_actualizado['scoreColor'] = score_data['color']
-                    cliente_actualizado['scoreEmoji'] = score_data['emoji']
-                    print(f"[verif] {cuit} score={score_data['score']}", flush=True)
-                except Exception as e_score:
-                    print(f"[verif] Error score {cuit}: {e_score}", flush=True)
-
-                if bcra_data and bcra_data.get('results') is not None:
-                    periodos = (bcra_data.get('results') or {}).get('periodos') or []
-                    entidades = periodos[0].get('entidades', []) if periodos else []
-                    max_sit = max((e.get('situacion', 1) or 1) for e in entidades) if entidades else 1
-                    cliente_actualizado['ultimaSit'] = max_sit
-                    cliente_actualizado['ultimaVerif'] = time.strftime('%d/%m/%Y')
-
-                    if max_sit > sit_anterior or max_sit >= 3:
-                        alerta = {
-                            "nombre": nombre, "cuit": cuit,
-                            "sitAnterior": sit_anterior, "sitActual": max_sit,
-                            "fecha": time.strftime('%d/%m/%Y'), "tipo": "bcra"
-                        }
-                        if score_data:
-                            alerta.update({"scoreCompleto": score_data["score"], "scoreRango": score_data["rango"],
-                                           "scoreColor": score_data["color"], "scoreEmoji": score_data["emoji"]})
-                        nuevas_alertas.append(alerta)
-                else:
-                    cliente_actualizado['ultimaVerif'] = time.strftime('%d/%m/%Y')
-            except Exception as e_verif:
-                print(f"[verif] Error {cuit}: {e_verif}", flush=True)
-
-            try:
-                threads = wsp_index.get(cuit, [])
-                from datetime import datetime, timedelta
-                hace_6_meses = datetime.now() - timedelta(days=180)
-                threads_recientes = []
-                for t in threads:
-                    fecha_str = t.get('fecha') or (t.get('mensajes', [{}])[0].get('fecha') if t.get('mensajes') else None)
-                    if fecha_str:
+                    lambda_result = consultar_bcra_lambda(cuit)
+                    if lambda_result:
+                        bcra_data, hist_lambda, cheq_lambda = lambda_result
                         try:
-                            if datetime.fromisoformat(str(fecha_str)[:10]) >= hace_6_meses:
-                                threads_recientes.append(t)
-                        except: pass
-                if threads_recientes:
-                    todos_mensajes = []
-                    tiene_sospecha = False
-                    for t in threads_recientes:
-                        for m in t.get('mensajes', []):
-                            texto_msg = m.get('texto', '')
-                            todos_mensajes.append(m.get('autor', '') + ': ' + texto_msg)
-                            if any(p in texto_msg.lower() for p in palabras_riesgo):
-                                tiene_sospecha = True
-                    if tiene_sospecha:
-                        ya_existe = any(a['cuit'] == cuit and a['tipo'] == 'bodegas' for a in nuevas_alertas)
-                        if not ya_existe:
-                            es_negativo, motivo = analizar_bodegas_server(cuit, nombre, todos_mensajes[:10])
-                            if es_negativo:
-                                nuevas_alertas.append({
-                                    "nombre": nombre, "cuit": cuit,
-                                    "fecha": time.strftime('%d/%m/%Y'),
-                                    "tipo": "bodegas", "mensajes": [motivo]
+                            with open(os.path.join(DATA_DIR, f'historial_{cuit}.json'), 'w') as _f:
+                                json.dump({'payload': hist_lambda, 'ts': time.time()}, _f)
+                            with open(os.path.join(DATA_DIR, f'cheques_{cuit}.json'), 'w') as _f:
+                                json.dump({'payload': cheq_lambda, 'ts': time.time()}, _f)
+                        except Exception as _e:
+                            print(f"{tag} Advertencia caché Lambda: {_e}", flush=True)
+                    else:
+                        bcra_data, _ = consultar_bcra_cached(cuit)
+
+                    # Score
+                    score_data = None
+                    try:
+                        score_data = calcular_score_servidor(cuit, bcra_data or {}, en_mora=None)
+                        cliente_actualizado['scoreCompleto'] = score_data['score']
+                        cliente_actualizado['scoreRango']    = score_data['rango']
+                        cliente_actualizado['scoreColor']    = score_data['color']
+                        cliente_actualizado['scoreEmoji']    = score_data['emoji']
+                        print(f"{tag} score={score_data['score']}", flush=True)
+                    except Exception as e_sc:
+                        print(f"{tag} ERROR score: {type(e_sc).__name__}: {e_sc}", flush=True)
+
+                    # Situación BCRA
+                    if bcra_data and bcra_data.get('results') is not None:
+                        periodos  = (bcra_data.get('results') or {}).get('periodos') or []
+                        entidades = periodos[0].get('entidades', []) if periodos else []
+                        max_sit   = max((e.get('situacion', 1) or 1) for e in entidades) if entidades else 1
+                        cliente_actualizado['ultimaSit']   = max_sit
+                        cliente_actualizado['ultimaVerif'] = time.strftime('%d/%m/%Y')
+                        if max_sit > sit_anterior or max_sit >= 3:
+                            alerta = {
+                                "nombre": nombre, "cuit": cuit,
+                                "sitAnterior": sit_anterior, "sitActual": max_sit,
+                                "fecha": time.strftime('%d/%m/%Y'), "tipo": "bcra"
+                            }
+                            if score_data:
+                                alerta.update({
+                                    "scoreCompleto": score_data["score"], "scoreRango": score_data["rango"],
+                                    "scoreColor": score_data["color"], "scoreEmoji": score_data["emoji"]
                                 })
+                            nuevas_alertas.append(alerta)
+                    else:
+                        cliente_actualizado['ultimaVerif'] = time.strftime('%d/%m/%Y')
+
+                    bcra_ok = True
+                    break  # éxito
+
+                except Exception as e_bcra:
+                    tb_short = ' | '.join(traceback.format_exc().splitlines()[-4:])
+                    print(f"{tag} ERROR intento {intento+1}/2 — {type(e_bcra).__name__}: {e_bcra}", flush=True)
+                    print(f"{tag} Traceback: {tb_short}", flush=True)
+                    if intento == 0:
+                        print(f"{tag} Reintentando en 3s...", flush=True)
+                        time.sleep(3)
+                    else:
+                        print(f"{tag} FALLIDO definitivo — continúa con siguiente cliente", flush=True)
+                        cliente_actualizado['verificacion_fallida'] = True
+                        cliente_actualizado['ultimaVerif']          = time.strftime('%d/%m/%Y')
+
+            if not bcra_ok:
+                print(f"{tag} Sin datos BCRA — conserva estado anterior (sit={sit_anterior})", flush=True)
+
+            # ── WhatsApp bodegas ──────────────────────────────────────────────
+            try:
+                from datetime import datetime, timedelta
+                threads_cli = wsp_index.get(cuit, [])
+                hace_6m     = datetime.now() - timedelta(days=180)
+                threads_rec = []
+                for t in threads_cli:
+                    fs = t.get('fecha') or (t.get('mensajes', [{}])[0].get('fecha') if t.get('mensajes') else None)
+                    if fs:
+                        try:
+                            if datetime.fromisoformat(str(fs)[:10]) >= hace_6m:
+                                threads_rec.append(t)
+                        except Exception:
+                            pass
+                if threads_rec:
+                    todos_msgs, tiene_sospecha = [], False
+                    for t in threads_rec:
+                        for m in t.get('mensajes', []):
+                            txt = m.get('texto', '')
+                            todos_msgs.append(m.get('autor', '') + ': ' + txt)
+                            if any(p in txt.lower() for p in palabras_riesgo):
+                                tiene_sospecha = True
+                    if tiene_sospecha and not any(a['cuit'] == cuit and a['tipo'] == 'bodegas' for a in nuevas_alertas):
+                        es_neg, motivo = analizar_bodegas_server(cuit, nombre, todos_msgs[:10])
+                        if es_neg:
+                            nuevas_alertas.append({"nombre": nombre, "cuit": cuit,
+                                "fecha": time.strftime('%d/%m/%Y'), "tipo": "bodegas", "mensajes": [motivo]})
             except Exception:
                 pass
 
             cartera_actualizada.append(cliente_actualizado)
-            gc.collect()  # liberar memoria después de cada cliente
+            gc.collect()
 
-            # Guardado parcial cada 50 clientes
-            if (i + 1) % 50 == 0:
+            # Guardado parcial cada 10 clientes
+            if (i + 1) % 10 == 0:
                 try:
-                    parcial = {
-                        "alertas": nuevas_alertas,
-                        "ultima_verif": time.strftime('%d/%m/%Y %H:%M') + ' (parcial)',
-                        "cartera": [{
-                            "cuit": c.get('cuit'), "nombre": c.get('nombre', ''),
-                            "ultimaSit": c.get('ultimaSit'),
-                            "ultimaVerif": c.get('ultimaVerif'), "scoreCompleto": c.get('scoreCompleto'),
-                            "scoreRango": c.get('scoreRango'), "scoreColor": c.get('scoreColor'),
-                            "scoreEmoji": c.get('scoreEmoji')
-                        } for c in cartera_actualizada]
-                    }
-                    with open(ALERTAS_FILE, 'w', encoding='utf-8') as f:
-                        json.dump(parcial, f, ensure_ascii=False)
-                    print(f"[verif] Guardado parcial en cliente {i+1}", flush=True)
-                except: pass
+                    _guardar_alertas(nuevas_alertas, cartera_actualizada, parcial=True)
+                    print(f"[verif] Parcial guardado — {i+1}/{total}", flush=True)
+                except Exception as e_sv:
+                    print(f"[verif] Error guardado parcial: {e_sv}", flush=True)
 
-            if i < len(cartera_data) - 1:
-                time.sleep(0.5)
+            # Delay aleatorio anti-bloqueo (excepto después del último)
+            if i < total - 1:
+                delay = random.uniform(2.0, 5.0)
+                print(f"{tag} Pausa {delay:.1f}s...", flush=True)
+                time.sleep(delay)
 
-        ahora = time.strftime('%d/%m/%Y %H:%M')
-        try:
-            datos_guardar = {
-                "alertas": nuevas_alertas,
-                "ultima_verif": ahora,
-                "cartera": [{
-                    "cuit": c.get('cuit'), "nombre": c.get('nombre', ''),
-                    "ultimaSit": c.get('ultimaSit'),
-                    "ultimaVerif": c.get('ultimaVerif'), "scoreCompleto": c.get('scoreCompleto'),
-                    "scoreRango": c.get('scoreRango'), "scoreColor": c.get('scoreColor'),
-                    "scoreEmoji": c.get('scoreEmoji')
-                } for c in cartera_actualizada]
-            }
-            with open(ALERTAS_FILE, 'w', encoding='utf-8') as f:
-                json.dump(datos_guardar, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            print(f"[verif] Error guardando alertas: {e}", flush=True)
+        # ── Guardado final ────────────────────────────────────────────────────
+        _guardar_alertas(nuevas_alertas, cartera_actualizada, parcial=False)
+        ok_count  = sum(1 for c in cartera_actualizada if c.get('scoreCompleto'))
+        err_count = sum(1 for c in cartera_actualizada if c.get('verificacion_fallida'))
+        print(f"[verif] FIN: {ok_count}/{total} con score, {err_count} fallidos, {len(nuevas_alertas)} alerta(s)", flush=True)
+        verificacion_estado["mensaje"] = (
+            f"Completado: {ok_count}/{total} verificados, {err_count} fallidos, {len(nuevas_alertas)} alerta(s)."
+        )
+        verificacion_estado["progreso"] = total
 
-        verificacion_estado["mensaje"] = "Verificacion completada. " + str(len(nuevas_alertas)) + " alerta(s) detectada(s)."
-        verificacion_estado["progreso"] = len(cartera_data)
-
-    except Exception as e:
-        print(f"[verif] Error general: {e}", flush=True)
-        verificacion_estado["mensaje"] = f"Error: {str(e)}"
+    except BaseException as e_fatal:
+        print(f"[verif] ERROR FATAL — {type(e_fatal).__name__}: {e_fatal}", flush=True)
+        print(f"[verif] Traceback:\n{traceback.format_exc()}", flush=True)
+        verificacion_estado["mensaje"] = f"Error crítico: {type(e_fatal).__name__}: {e_fatal}"
+        # Guardar lo que se procesó hasta el momento
+        if cartera_actualizada:
+            try:
+                _guardar_alertas(nuevas_alertas, cartera_actualizada, parcial=True)
+                print(f"[verif] Guardado de emergencia: {len(cartera_actualizada)} clientes", flush=True)
+            except Exception:
+                pass
     finally:
         verificacion_estado["corriendo"] = False
         print("[verif] Flag liberado.", flush=True)
