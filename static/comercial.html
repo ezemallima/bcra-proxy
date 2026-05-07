@@ -96,6 +96,7 @@
   .cliente-row2 { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
   .cliente-ciudad { font-size: 11px; color: var(--text2); }
   .alerta-badge { font-size: 10px; font-weight: 600; background: rgba(248,113,113,0.15); color: var(--red); border-radius: 4px; padding: 2px 6px; }
+  .alerta-temprana-badge { font-size: 10px; font-weight: 600; background: rgba(234,179,8,0.15); color: var(--yellow); border-radius: 4px; padding: 2px 6px; }
   .sit-badge { font-size: 10px; font-weight: 600; border-radius: 4px; padding: 2px 6px; }
   .saldo-badge { font-size: 10px; font-weight: 600; background: rgba(200,169,110,0.12); color: var(--accent); border-radius: 4px; padding: 2px 6px; }
   .excedido-badge { font-size: 10px; font-weight: 600; background: rgba(220,38,38,0.12); color: var(--red); border-radius: 4px; padding: 2px 6px; }
@@ -326,16 +327,19 @@ async function iniciarApp() {
         CARTERA_LOCAL.forEach((c, i) => {
           const nc = normCuit(c.cuit);
           if (scoreMap[nc]) {
-            CARTERA_LOCAL[i].score      = scoreMap[nc].scoreCompleto;
-            CARTERA_LOCAL[i].scoreRango = scoreMap[nc].scoreRango;
-            CARTERA_LOCAL[i].scoreColor = scoreMap[nc].scoreColor;
-            CARTERA_LOCAL[i].scoreEmoji = scoreMap[nc].scoreEmoji;
-            CARTERA_LOCAL[i].ultimaSit  = scoreMap[nc].ultimaSit || c.ultimaSit || 1;
+            CARTERA_LOCAL[i].score               = scoreMap[nc].scoreCompleto;
+            CARTERA_LOCAL[i].scoreRango          = scoreMap[nc].scoreRango;
+            CARTERA_LOCAL[i].scoreColor          = scoreMap[nc].scoreColor;
+            CARTERA_LOCAL[i].scoreEmoji          = scoreMap[nc].scoreEmoji;
+            CARTERA_LOCAL[i].ultimaSit           = scoreMap[nc].ultimaSit || c.ultimaSit || 1;
+            CARTERA_LOCAL[i].alerta_temprana     = scoreMap[nc].alerta_temprana || false;
+            CARTERA_LOCAL[i].bloquear_oportunidad = scoreMap[nc].bloquear_oportunidad || false;
           }
           // alerta desde alertas_cartera.json como segunda fuente (el servidor ya inyecta c.alerta)
           if (alertaSet.has(nc)) CARTERA_LOCAL[i].alerta = true;
-          // recalcular oportunidad con score definitivo
-          if ((CARTERA_LOCAL[i].score||0) > 700 && !(CARTERA_LOCAL[i].total_saldo > 0)) {
+          // recalcular oportunidad con score definitivo (threshold v8.0 = 750)
+          const _sc8 = CARTERA_LOCAL[i];
+          if ((_sc8.score||0) >= 750 && !(_sc8.total_saldo > 0) && !_sc8.bloquear_oportunidad) {
             CARTERA_LOCAL[i].oportunidad = true;
           }
         });
@@ -359,12 +363,14 @@ async function iniciarApp() {
           if (c.score) return;
           const sc = _sc[ncFn(c.cuit)];
           if (sc && sc.scoreCompleto) {
-            CARTERA_LOCAL[i].score      = sc.scoreCompleto;
-            CARTERA_LOCAL[i].scoreRango = sc.scoreRango;
-            CARTERA_LOCAL[i].scoreColor = sc.scoreColor;
-            CARTERA_LOCAL[i].scoreEmoji = sc.scoreEmoji;
-            CARTERA_LOCAL[i].ultimaSit  = sc.ultimaSit || 1;
-            if (sc.scoreCompleto > 700 && !(c.total_saldo > 0)) CARTERA_LOCAL[i].oportunidad = true;
+            CARTERA_LOCAL[i].score                = sc.scoreCompleto;
+            CARTERA_LOCAL[i].scoreRango           = sc.scoreRango;
+            CARTERA_LOCAL[i].scoreColor           = sc.scoreColor;
+            CARTERA_LOCAL[i].scoreEmoji           = sc.scoreEmoji;
+            CARTERA_LOCAL[i].ultimaSit            = sc.ultimaSit || 1;
+            CARTERA_LOCAL[i].alerta_temprana      = sc.alerta_temprana || false;
+            CARTERA_LOCAL[i].bloquear_oportunidad = sc.bloquear_oportunidad || false;
+            if (sc.scoreCompleto >= 750 && !(c.total_saldo > 0) && !sc.bloquear_oportunidad) CARTERA_LOCAL[i].oportunidad = true;
             nuevos++;
           }
         });
@@ -564,6 +570,7 @@ function renderCartera(filtro) {
     const sit = c.ultimaSit || 1;
     const score = c.score || null;
     const tieneAlerta = c.alerta || alertaCuits.has(c.cuit);
+    const tieneAlertaTemprana = c.alerta_temprana && !tieneAlerta;
     const esOportunidad = c.oportunidad;
     const saldosData = getSaldos(c.nombre);
     const scoreColor = scoreToColor(score);
@@ -588,6 +595,7 @@ function renderCartera(filtro) {
         <span class="cliente-ciudad">${esc(c.ciudad||'')}</span>
         <span class="sit-badge sit-${sit}" style="background:${sitBg(sit)};color:${dotColor}">Sit ${sit}</span>
         ${tieneAlerta ? '<span class="alerta-badge">⚠ Alerta</span>' : ''}
+        ${tieneAlertaTemprana ? '<span class="alerta-temprana-badge">⚡ Alerta Temprana</span>' : ''}
         ${excedido ? '<span class="excedido-badge">⛔ Límite Excedido</span>' : ''}
         ${saldoActual > 0 && !excedido ? `<span class="saldo-badge">💰 $${fmtM(saldoActual)}</span>` : ''}
       </div>
@@ -642,19 +650,19 @@ async function renderOportunidades() {
   const alertaCuits = new Set(ALERTAS.map(a => a.cuit));
   const hoy = new Date(); hoy.setHours(0,0,0,0);
 
-  // Oportunidad = score >= 700 + (tiene saldo O marcado por servidor) + no excedió límite
+  // Oportunidad = score >= 750 + (tiene saldo O marcado por servidor) + no excedió límite + no bloqueado
   const candidatos = CARTERA_LOCAL.filter(c => {
+    if (c.bloquear_oportunidad) return false;
     const saldoData = getSaldos(c.nombre);
     const tieneSaldo = (saldoData && saldoData.total_saldo > 0) || (c.total_saldo || 0) > 0;
     const limiteCredito = c.limite_credito || 0;
     const saldoActual = (saldoData && saldoData.total_saldo) || c.total_saldo || 0;
     const excedido = limiteCredito > 0 && saldoActual >= limiteCredito;
-    // Include server-flagged oportunidades (score>700 + saldo==0) even without local saldo data
-    return !excedido && ((c.score || 0) >= 700) && (tieneSaldo || c.oportunidad);
+    return !excedido && ((c.score || 0) >= 750) && (tieneSaldo || c.oportunidad);
   });
 
   if (!candidatos.length) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">⚡</div><div class="empty-text">Sin oportunidades detectadas. Los clientes con score ≥ 700 aparecerán aquí.</div></div>';
+    el.innerHTML = '<div class="empty"><div class="empty-icon">⚡</div><div class="empty-text">Sin oportunidades detectadas. Los clientes con score ≥ 750 aparecerán aquí.</div></div>';
     return;
   }
 
@@ -723,7 +731,7 @@ async function renderOportunidades() {
     const borderColor = c.oportunidad ? 'var(--accent)' : 'var(--green)';
     const tags = [];
     if (c.oportunidad) tags.push('⭐ Sin saldo — listo para comprar');
-    if (score >= 700) tags.push('Score Excelente');
+    if (score >= 750) tags.push('Score Excelente');
     else tags.push('Score Bueno');
     if (c.dias === null || c.dias >= 30) tags.push('🔥 Contactar');
     if (!c.tieneSaldo) tags.push('Sin deuda pendiente');

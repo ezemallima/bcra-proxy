@@ -348,284 +348,429 @@ def get_solvency_data(cuit):
     return data
 
 
-def calcular_score_servidor(cuit, bcra_data, en_mora=None):
-    """Score completo con historial 24m, cheques y mora.
-    Mejoras Gemini: memoria de historial, hard caps sit4/5, puntos ganados con datos reales.
-    """
-    puntos = 0
-    cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
-    sin_deudas_real = bcra_data.get('sin_deudas', False)
-    periodos = (bcra_data.get('results') or {}).get('periodos') or []
-    max_sit = 1
-    nro_entidades = 0
-    monto_total_m = 0
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  MODELO PREDICTIVO VENDE SEGURO v8.0 — Credit Scoring                  ║
+# ║  Ponderación: BCRA(30%) + AFIP(20%) + Interno(35%) + Liquidez(15%)      ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
 
-    if periodos:
-        entidades = periodos[0].get('entidades', [])
-        nro_entidades = len(entidades)
-        if entidades:
-            max_sit = max((e.get('situacion', 1) or 1) for e in entidades)
-            monto_total_m = sum(e.get('monto', 0) or 0 for e in entidades) / 1000
+_SCORE_VERSION = "8.0"
+
+
+def analizar_solvencia_previsional(cuit: str, solvency_data: dict = None) -> dict:
+    """
+    Analiza la estabilidad previsional usando datos AFIP disponibles como señales proxy.
+    - Categoría Monotributo  → proxy de capacidad y regularidad de pago
+    - Tipo de persona jurídica → proxy de solidez institucional
+    - Categorías bajas (A-B) generan alerta_temprana: posible dificultad futura
+
+    Returns dict con: indice (0.0-1.0), alerta_temprana (bool), impagos_3m (int),
+                      categoria (str), fuente (str)
+    """
+    resultado = {
+        'indice': 0.5,           # valor promedio — no rompe el cálculo si no hay datos
+        'alerta_temprana': False,
+        'impagos_3m': 0,
+        'categoria': 'desconocido',
+        'fuente': 'sin_datos',
+    }
+    if not solvency_data:
+        return resultado
+
+    cat     = (solvency_data.get('categoria_monotrib') or '').strip().upper()
+    tipo    = (solvency_data.get('tipo_persona') or '').strip().upper()
+    ingresos = float(solvency_data.get('ingresos_anuales') or 0)
+    fuente  = solvency_data.get('fuente', 'cache')
+    resultado.update({'categoria': cat or tipo, 'fuente': fuente})
+
+    if tipo == 'JURIDICA':
+        resultado['indice'] = 0.72
+        return resultado
+
+    if not cat and ingresos > 5_000_000:
+        resultado.update({'indice': 0.78, 'fuente': 'ri_estimado'})
+        return resultado
+
+    # Índice por categoría Monotributista — proxy de sostenibilidad de pagos previsionales
+    CAT_INDICE = {
+        'A': 0.52, 'B': 0.58, 'C': 0.63, 'D': 0.68,
+        'E': 0.73, 'F': 0.77, 'G': 0.80, 'H': 0.84,
+        'I': 0.87, 'J': 0.90, 'K': 0.93,
+    }
+    if cat in CAT_INDICE:
+        resultado.update({'indice': CAT_INDICE[cat], 'fuente': f'monotrib_{cat}'})
+        if cat in ('A', 'B'):          # categorías bajas → señal preventiva
+            resultado['alerta_temprana'] = True
+    return resultado
+
+
+def _pts_componente_bcra(max_sit: int, n_periodos_h: int, monto_real: float) -> int:
+    """Situación BCRA → 0-300 pts (30% del score total)."""
+    if max_sit == 1:
+        if   monto_real == 0:             return 160
+        elif monto_real < 500_000:        return 200
+        elif monto_real < 2_500_000:      return 240
+        elif n_periodos_h >= 12:          return 300
+        elif n_periodos_h >= 6:           return 270
+        elif n_periodos_h >= 2:           return 250
+        else:                             return 220
+    elif max_sit == 2:                    return 120
+    elif max_sit == 3:                    return 30
+    elif max_sit == 4:                    return 10
+    return 0
+
+
+def _pts_componente_afip(aportes: dict) -> tuple:
+    """
+    AFIP Aportes → 0-200 pts (20% del score total).
+    Aplica degradación exponencial por impagos recientes: pts × e^(-1.5 × impagos).
+    Returns (puntos: int, alerta_temprana: bool)
+    """
+    import math
+    indice  = float(aportes.get('indice', 0.5))
+    impagos = int(aportes.get('impagos_3m', 0))
+    base = round(indice * 200)
+    if impagos > 0:
+        base = round(base * math.exp(-1.5 * impagos))
+    pts    = max(0, min(200, base))
+    alerta = aportes.get('alerta_temprana', False) or indice < 0.55 or impagos > 0
+    return pts, alerta
+
+
+def _pts_componente_historial(
+    cuit_limpio: str,
+    en_mora: bool,
+    moras_norm: dict,
+    wsp_index: dict,
+    n_periodos_h: int,
+    periodos_hist: list,
+    en_cartera: bool,
+) -> tuple:
+    """
+    Historial Interno → 0-350 pts (35% del score total).
+    Mora Piattelli (0-150) + Chat bodegas (0-100) + Tendencia BCRA (0-100).
+    Returns (puntos: int, bloquear_oportunidad: bool, tendencia: str)
+    """
+    import datetime
+
+    # ── Mora Piattelli (0-150) ──────────────────────────────────────────────
+    mora_entry = moras_norm.get(cuit_limpio, {})
+    if en_mora:
+        pts_mora = 0
+        try:
+            fs   = str(mora_entry.get('fechaMora', '') or '')
+            saldo = float(mora_entry.get('saldoAdeudado', 0) or 0)
+            if fs:
+                partes = fs.replace('/', '-').split('-')
+                if len(partes) == 3:
+                    nums = [int(p) for p in partes]
+                    fm   = datetime.date(nums[0], nums[1], nums[2]) if nums[0] > 31 \
+                           else datetime.date(nums[2], nums[1], nums[0])
+                    if (datetime.date.today() - fm).days > 180 and saldo < 150_000:
+                        pts_mora = 30   # mora antigua y pequeña → posible rehabilitación
+        except Exception:
+            pass
+    else:
+        pts_mora = 150 if en_cartera else 80
+
+    # ── Chat bodegas (0-100) ─────────────────────────────────────────────────
+    wsp_entry = wsp_index.get(cuit_limpio, {})
+    if not wsp_entry:
+        pts_wsp = 50            # neutral — sin datos no penaliza ni bonifica
+    elif wsp_entry.get('es_negativo'):
+        pts_wsp = 0
+    else:
+        pts_wsp = 100
+
+    # ── Tendencia histórica BCRA (0-100) ────────────────────────────────────
+    pts_tendencia = 40          # base neutral si no hay suficientes períodos
+    tendencia     = 'neutral'
+    if periodos_hist and len(periodos_hist) >= 4:
+        def _ms(p):
+            return max(((e.get('situacion') or 1) for e in p.get('entidades', [])), default=1)
+        sits_rec = [_ms(p) for p in periodos_hist[:3]]
+        sits_ant = [_ms(p) for p in periodos_hist[3:12]]
+        pr = sum(sits_rec) / len(sits_rec)
+        pa = sum(sits_ant) / len(sits_ant)
+        if   pr < pa - 0.3:    pts_tendencia = 100; tendencia = 'mejorando'
+        elif pr <= pa + 0.1:   pts_tendencia = 50;  tendencia = 'estable'
+        else:                  pts_tendencia = 0;   tendencia = 'deteriorando'
+
+    # Bloquear oportunidad: mora activa + cliente en cartera comercial
+    bloquear = bool(en_mora and en_cartera)
+    return (pts_mora + pts_wsp + pts_tendencia, bloquear, tendencia)
+
+
+def _pts_componente_liquidez(cheq_data: dict, max_sit: int, n_periodos_h: int) -> tuple:
+    """
+    Liquidez (Cheques rechazados) → 0-150 pts (15% del score total).
+    Returns (puntos: int, rechazar: bool)  — rechazar=True fuerza score=1.
+    """
+    if not cheq_data:
+        return 0, False
+    if cheq_data.get('sin_deudas'):
+        if   n_periodos_h >= 12: pts = 150
+        elif n_periodos_h >= 6:  pts = 120
+        elif n_periodos_h >= 2:  pts = 80
+        elif n_periodos_h >= 1:  pts = 60
+        else:                    pts = 40
+    else:
+        res_c    = cheq_data.get('results') or {}
+        causales = res_c.get('causales', []) if isinstance(res_c, dict) else []
+        detalles = []
+        for causal in causales:
+            for ent in causal.get('entidades', []):
+                detalles.extend(ent.get('detalle', []))
+        total_ch   = len(detalles)
+        activos_ch = sum(1 for d in detalles
+                         if not d.get('fechaPago') or d.get('estadoMulta') == 'IMPAGA')
+        if activos_ch > 5 or total_ch >= 113:
+            return 0, True                              # señal de rechazo directo
+        if   total_ch == 0:   pts = 150 if n_periodos_h > 6 else (70 if n_periodos_h >= 1 else 40)
+        elif activos_ch == 0: pts = 75
+        else:                 pts = 0
+    if   max_sit >= 3:               pts = 0
+    elif max_sit == 2 and pts > 75:  pts = 75
+    return pts, False
+
+
+def calcular_rating_predictivo(
+    cuit: str,
+    bcra_data: dict,
+    hist_data: dict    = None,
+    cheq_data: dict    = None,
+    en_mora: bool      = None,
+    solvency_data: dict = None,
+) -> dict:
+    """
+    Modelo Predictivo Vende Seguro v8.0 — función maestra.
+
+    Ponderación dinámica:
+      Comportamiento Externo  50%:  BCRA Situación (30%) + AFIP Aportes (20%)
+      Historial Interno       35%:  Mora Piattelli + Chat Bodegas + Tendencia BCRA
+      Liquidez Inmediata      15%:  Cheques rechazados
+
+    Umbrales v8.0: >=750 Excelente | >=600 Bueno | >=400 Revisar | >=200 Alto riesgo | <200 Rechazar
+    Oportunidades: score > 750 (umbral elevado respecto a v7)
+    """
+    cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
+
+    # ── Parsear BCRA actual ───────────────────────────────────────────────────
+    sin_deudas_real = bcra_data.get('sin_deudas', False)
+    periodos_curr   = (bcra_data.get('results') or {}).get('periodos') or []
+    max_sit = 1; nro_entidades = 0; monto_total_m = 0.0
+    if periodos_curr:
+        ents = periodos_curr[0].get('entidades', [])
+        nro_entidades = len(ents)
+        if ents:
+            max_sit       = max((e.get('situacion', 1) or 1) for e in ents)
+            monto_total_m = sum((e.get('monto', 0) or 0) for e in ents) / 1000
     elif sin_deudas_real:
         max_sit = 1
+    monto_real = monto_total_m * 1000
 
-    # ── N_PERIODOS_H: usar historial guardado (sin límite de TTL) ──────────
-    hist_path = os.path.join(DATA_DIR, f'historial_{cuit_limpio}.json')
-    hist_cached = None
-    try:
-        if os.path.exists(hist_path):
-            with open(hist_path, 'r') as f:
-                hc = json.load(f)
-            hist_cached = hc.get('payload')  # sin límite de TTL — memoria del historial
-    except: pass
-
-    periodos_para_nph = (hist_cached.get('results') or {}).get('periodos') or [] if hist_cached else periodos
-
-    n_periodos_h = 0
-    n_periodos_recientes = 0
-    for idx_p, p in enumerate(periodos_para_nph[:24]):
+    # ── Historial 24m ─────────────────────────────────────────────────────────
+    periodos_hist = (hist_data.get('results') or {}).get('periodos') or [] if hist_data else []
+    if not periodos_hist:
+        periodos_hist = periodos_curr
+    n_periodos_h = n_periodos_recientes = meses_malos = 0
+    sit_grave_6m = False
+    for idx_p, p in enumerate(periodos_hist[:24]):
+        smax        = max(((e.get('situacion') or 1) for e in p.get('entidades', [])), default=1)
         tiene_deuda = any((e.get('monto') or 0) > 0 for e in p.get('entidades', []))
         if tiene_deuda:
             n_periodos_h += 1
-            if idx_p < 6:
-                n_periodos_recientes += 1
+            if idx_p < 6: n_periodos_recientes += 1
+        if smax > 1:           meses_malos  += 1
+        if idx_p < 6 and smax >= 3: sit_grave_6m = True
     n_periodos_h = min(n_periodos_h, n_periodos_recientes * 4)
 
-    # ── 1. SITUACIÓN BCRA ponderada + validación de historial crediticio ───
-    # monto_total_m está en miles de pesos → monto real = monto_total_m * 1000
-    monto_real = monto_total_m * 1000  # pesos reales
-
-    if max_sit == 1:
-        # Validar profundidad crediticia — sit1 con deuda mínima no es igual a sit1 con $5M
-        if monto_real == 0:
-            # Sin deuda en sistema financiero — sin historial bancario
-            pts_sit = 200
-        elif monto_real < 500000:
-            # Perfil pequeño — baja exposición crediticia
-            pts_sit = 250
-        elif monto_real < 2500000:
-            # Perfil moderado — historial en crecimiento
-            pts_sit = 300
-        else:
-            # Perfil consolidado — maneja volúmenes similares al crédito que pide
-            if   n_periodos_h >= 12: pts_sit = 400
-            elif n_periodos_h >= 6:  pts_sit = 350
-            elif n_periodos_h >= 2:  pts_sit = 300
-            else:                    pts_sit = 250
-    elif max_sit == 2: pts_sit = 200
-    elif max_sit == 3: pts_sit = 50
-    else:              pts_sit = 0
-    puntos += pts_sit
-
-    # ── 2. HISTORIAL 24M — intentar fresco, sino usar caché guardado ───────
-    pts_hist = 0  # 0 hasta tener datos reales
-    penalidad_arrastre = False
-    hist_fresco = None
+    # ── Mora Piattelli ────────────────────────────────────────────────────────
+    moras_norm: dict = {}
+    _mp = os.path.join(DATA_DIR, 'moras_piattelli.json')
+    if not os.path.exists(_mp): _mp = os.path.join(os.getcwd(), 'moras_piattelli.json')
     try:
-        if hist_cached:
-            with open(hist_path, 'r') as _tf:
-                if time.time() - json.load(_tf).get('ts', 0) < 86400:
-                    hist_fresco = hist_cached
+        with open(_mp, 'r', encoding='utf-8') as _mf:
+            _md = json.load(_mf)
+        moras_norm = {str(k).replace('-','').replace(' ','').strip(): v for k, v in _md.items()}
     except: pass
-
-    if not hist_fresco:
-        urls_hist = [w + "/deudas/" + cuit_limpio + "/historial" for w in BCRA_WORKERS] +                     ["https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit_limpio]
-        for intento_global in range(6):
-            url_h = urls_hist[intento_global % len(urls_hist)]
-            try:
-                r_h = requests.get(url_h, timeout=25, verify=False)
-                if r_h.status_code == 200 and len(r_h.text.strip()) > 10:
-                    hist_fresco = r_h.json()
-                    try:
-                        with open(hist_path, 'w') as f:
-                            json.dump({'payload': hist_fresco, 'ts': time.time()}, f)
-                    except: pass
-                    print(f"[score] {cuit_limpio} historial OK intento {intento_global+1}", flush=True)
-                    break
-                time.sleep(3)
-            except Exception as e:
-                print(f"[score] {cuit_limpio} historial error intento {intento_global+1}: {e}", flush=True)
-                time.sleep(3)
-        # Si sigue sin datos frescos, usar caché guardado aunque sea viejo
-        if not hist_fresco and hist_cached:
-            hist_fresco = hist_cached
-            print(f"[score] {cuit_limpio} historial usando caché guardado (memoria)", flush=True)
-
-    if hist_fresco:
-        periodos_h = (hist_fresco.get('results') or {}).get('periodos') or []
-        # Regla 6 meses: cualquier sit≥3 en los últimos 6 meses → pts_hist=0 automático
-        sit_grave_6m = any(
-            max(((e.get('situacion') or 1) for e in p.get('entidades', [])), default=1) >= 3
-            for p in periodos_h[:6]
-        )
-        if sit_grave_6m:
-            pts_hist = 0
-            print(f"[score] {cuit_limpio} sit≥3 en últimos 6m → pts_hist=0", flush=True)
-        else:
-            meses_malos = sum(1 for p in periodos_h[:24]
-                if max(((e.get('situacion') or 1) for e in p.get('entidades', [])), default=1) > 1)
-            # Arrastre 2-5 meses → penalización -25% global al final
-            penalidad_arrastre = 2 <= meses_malos <= 5
-            if meses_malos > 5:
-                pts_hist = 0
-            elif meses_malos > 0:
-                pts_hist = 75 if meses_malos <= 2 else 0
-            else:
-                if   n_periodos_h >= 12: pts_hist = 150
-                elif n_periodos_h >= 3:  pts_hist = 90
-                elif n_periodos_h >= 1:  pts_hist = 40
-                else:                    pts_hist = 60
-    elif sin_deudas_real:
-        pts_hist = 60
-    else:
-        pts_hist = 0  # sin datos = 0, no neutral
-        print(f"[score] {cuit_limpio} historial sin datos — pts_hist=0", flush=True)
-    puntos += pts_hist
-
-    # ── 3. CHEQUES — intentar fresco, sino usar caché guardado ─────────────
-    pts_cheq = 0  # 0 hasta tener datos reales
-    cheq_path = os.path.join(DATA_DIR, f'cheques_{cuit_limpio}.json')
-    cheq_cached = None
-    try:
-        if os.path.exists(cheq_path):
-            with open(cheq_path, 'r') as f:
-                cc = json.load(f)
-            cheq_cached = cc.get('payload')  # sin límite de TTL
-    except: pass
-
-    cheq_fresco = None
-    try:
-        if cheq_cached:
-            with open(cheq_path, 'r') as _tf:
-                if time.time() - json.load(_tf).get('ts', 0) < 86400:
-                    cheq_fresco = cheq_cached
-    except: pass
-
-    if not cheq_fresco:
-        urls_cheq = [w + "/deudas/" + cuit_limpio + "/cheques" for w in BCRA_WORKERS] +                     ["https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/" + cuit_limpio]
-        for intento_global in range(6):
-            url_c = urls_cheq[intento_global % len(urls_cheq)]
-            try:
-                r_c = requests.get(url_c, timeout=25, verify=False)
-                if r_c.status_code == 200 and len(r_c.text.strip()) > 10:
-                    cheq_fresco = r_c.json()
-                    try:
-                        with open(cheq_path, 'w') as f:
-                            json.dump({'payload': cheq_fresco, 'ts': time.time()}, f)
-                    except: pass
-                    print(f"[score] {cuit_limpio} cheques OK intento {intento_global+1}", flush=True)
-                    break
-                elif r_c.status_code == 404:
-                    cheq_fresco = {"results": {"causales": []}, "sin_deudas": True}
-                    break
-                time.sleep(3)
-            except Exception as e:
-                print(f"[score] {cuit_limpio} cheques error intento {intento_global+1}: {e}", flush=True)
-                time.sleep(3)
-        if not cheq_fresco and cheq_cached:
-            cheq_fresco = cheq_cached
-            print(f"[score] {cuit_limpio} cheques usando caché guardado (memoria)", flush=True)
-
-    if cheq_fresco:
-        if cheq_fresco.get('sin_deudas'):
-            # Sin cheques — puntaje según antigüedad en sistema financiero
-            if   n_periodos_h >= 12: pts_cheq = 150
-            elif n_periodos_h >= 6:  pts_cheq = 100
-            elif n_periodos_h >= 2:  pts_cheq = 70
-            elif n_periodos_h >= 1:  pts_cheq = 50
-            else:                    pts_cheq = 30  # sin historial
-        else:
-            res_c = (cheq_fresco.get('results') or {}) if isinstance(cheq_fresco, dict) else {}
-            causales = res_c.get('causales') or [] if isinstance(res_c, dict) else []
-            detalles = []
-            for causal in causales:
-                for ent in causal.get('entidades', []):
-                    detalles.extend(ent.get('detalle', []))
-            total_ch = len(detalles)
-            activos_ch = sum(1 for d in detalles
-                if not d.get('fechaPago') or d.get('estadoMulta') == 'IMPAGA')
-            if activos_ch > 5 or total_ch >= 113:
-                print(f"[score] {cuit_limpio} cheques críticos: {activos_ch} activos, {total_ch} total → Rechazar", flush=True)
-                return {"score": 1, "rango": "Rechazar", "color": "#7f1d1d", "emoji": "⛔"}
-            if total_ch == 0:
-                pts_cheq = 150 if n_periodos_h > 6 else (70 if n_periodos_h >= 1 else 40)
-            elif activos_ch == 0: pts_cheq = 75
-            else:                 pts_cheq = 0
-    else:
-        pts_cheq = 0  # sin datos = 0, no neutral
-        print(f"[score] {cuit_limpio} cheques sin datos — pts_cheq=0", flush=True)
-    # Regla de riesgo cruzado: sit BCRA cap al puntaje de cheques
-    if max_sit >= 3:
-        pts_cheq = 0   # Sit 3+: cheques anulados incluso sin rechazos activos
-    elif max_sit >= 2 and pts_cheq > 75:
-        pts_cheq = 75  # Sit 2: techo 75/150
-    puntos += pts_cheq
-
-    # ── 4. MORA PIATTELLI — normalización de CUIT ──────────────────────────
     if en_mora is None:
-        try:
-            moras_path = os.path.join(DATA_DIR, 'moras_piattelli.json')
-            if not os.path.exists(moras_path):
-                moras_path = os.path.join(os.getcwd(), 'moras_piattelli.json')
-            with open(moras_path, 'r', encoding='utf-8') as mf:
-                moras_d = json.load(mf)
-            # Normalizar ambos lados antes de comparar
-            moras_norm = {str(k).replace('-','').replace(' ','').strip() for k in moras_d.keys()}
-            en_mora = cuit_limpio in moras_norm
-        except:
-            en_mora = False
+        en_mora = cuit_limpio in moras_norm
 
-    # Clientes nuevos (no en cartera activa) no acumulan puntos de relación comercial
     en_cartera = any(
         str(c.get('cuit', '')).replace('-', '').replace(' ', '').strip() == cuit_limpio
         for c in _cartera_comercial
     )
-    if en_cartera:
-        puntos += 0 if en_mora else 100   # Historial Piattelli
-        puntos += 0 if en_mora else 50    # DSO individual
-        puntos += 30                      # Red bodegas
-    else:
-        print(f"[score] {cuit_limpio} no en cartera → Piattelli/DSO/Bodegas=0", flush=True)
 
-    # ── 5. CONCENTRACIÓN DEUDA ─────────────────────────────────────────────
-    if nro_entidades == 0 or sin_deudas_real: pts_conc = 39
-    elif nro_entidades == 1 and monto_total_m < 50:   pts_conc = 35
-    elif nro_entidades <= 2 and monto_total_m < 100:  pts_conc = 28
-    elif nro_entidades <= 3 and monto_total_m < 500:  pts_conc = 20
-    elif nro_entidades <= 5 and monto_total_m < 2000: pts_conc = 10
-    else: pts_conc = 0
-    puntos += pts_conc
+    # ── WhatsApp index ────────────────────────────────────────────────────────
+    wsp_index: dict = {}
+    try:
+        with open(WSP_FILE, 'r', encoding='utf-8') as _wf:
+            wsp_index = json.load(_wf)
+    except: pass
 
-    # ── 6. SOLVENCIA — ratio de apalancamiento BCRA/AFIP ──────────────────
-    solvency = get_solvency_data(cuit_limpio)
-    if solvency:
-        ingresos = solvency.get('ingresos_anuales') or 0
-        if ingresos > 0:
-            deuda_bcra_pesos = monto_total_m * 1000  # miles → pesos
-            ratio = deuda_bcra_pesos / ingresos
-            if ratio > 0.5:
-                puntos -= 200
-                print(f"[score] {cuit_limpio} ratio apalancamiento {ratio:.2f} → -200 pts", flush=True)
+    # ── Solvencia AFIP ────────────────────────────────────────────────────────
+    if solvency_data is None:
+        solvency_data = get_solvency_data(cuit_limpio)
+    aportes_info = analizar_solvencia_previsional(cuit_limpio, solvency_data)
 
-    # ── PENALIDAD ARRASTRE — 2-5 meses irregulares → -25% global ──────────
-    if penalidad_arrastre:
+    # ══ COMPONENTE 1: BCRA (0-300) ════════════════════════════════════════════
+    pts_bcra = _pts_componente_bcra(max_sit, n_periodos_h, monto_real)
+
+    # ══ COMPONENTE 2: AFIP Aportes (0-200) ════════════════════════════════════
+    pts_afip, alerta_temprana = _pts_componente_afip(aportes_info)
+    # Refuerzo: Sit 1 pero señal AFIP débil → alerta predictiva
+    if max_sit == 1 and aportes_info.get('indice', 0.5) < 0.60:
+        alerta_temprana = True
+
+    # ══ COMPONENTE 3: Historial Interno (0-350) ════════════════════════════════
+    pts_interno, bloquear_oportunidad, tendencia = _pts_componente_historial(
+        cuit_limpio, en_mora, moras_norm, wsp_index,
+        n_periodos_h, periodos_hist, en_cartera
+    )
+
+    # ══ COMPONENTE 4: Liquidez/Cheques (0-150) ════════════════════════════════
+    pts_liquidez, rechazar = _pts_componente_liquidez(cheq_data or {}, max_sit, n_periodos_h)
+    if rechazar:
+        print(f"[score v{_SCORE_VERSION}] {cuit_limpio} RECHAZAR — cheques críticos", flush=True)
+        return {
+            'score': 1, 'rango': 'Rechazar', 'color': '#7f1d1d', 'emoji': '⛔',
+            'alerta_temprana': False, 'bloquear_oportunidad': True,
+            'componentes': {'bcra': 0, 'afip': 0, 'interno': 0, 'liquidez': 0},
+            'indice_previsional': aportes_info['indice'], 'version': _SCORE_VERSION,
+        }
+
+    # ── Suma ──────────────────────────────────────────────────────────────────
+    puntos = pts_bcra + pts_afip + pts_interno + pts_liquidez
+
+    # ── Ajuste: Concentración de deuda ────────────────────────────────────────
+    if   nro_entidades == 0 or sin_deudas_real:      puntos += 39
+    elif nro_entidades == 1 and monto_total_m <  50: puntos += 35
+    elif nro_entidades <= 2 and monto_total_m < 100: puntos += 28
+    elif nro_entidades <= 3 and monto_total_m < 500: puntos += 20
+    elif nro_entidades <= 5 and monto_total_m < 2000:puntos += 10
+
+    # ── Ajuste: Ratio de apalancamiento BCRA/AFIP ─────────────────────────────
+    if solvency_data:
+        _ing = float(solvency_data.get('ingresos_anuales') or 0)
+        if _ing > 0 and (monto_total_m * 1000) / _ing > 0.5:
+            puntos -= 200
+            print(f"[score v{_SCORE_VERSION}] {cuit_limpio} apalancamiento alto → -200", flush=True)
+
+    # ── Penalidades históricas ────────────────────────────────────────────────
+    if 2 <= meses_malos <= 5:
         puntos = round(puntos * 0.75)
-        print(f"[score] {cuit_limpio} arrastre irregular → -25% global", flush=True)
+        print(f"[score v{_SCORE_VERSION}] {cuit_limpio} arrastre {meses_malos}m → -25%", flush=True)
+    if sit_grave_6m:
+        puntos = min(puntos, 150)
 
-    # ── TECHOS DUROS — se aplican al final ─────────────────────────────────
+    # ── Techos duros ──────────────────────────────────────────────────────────
     if en_mora:         puntos = min(puntos, 300)
-    if max_sit >= 5:    puntos = min(puntos, 1)    # sit5/6 irrecuperable
-    elif max_sit >= 4:  puntos = min(puntos, 250)  # sit4 alto riesgo
-    elif max_sit == 3:  puntos = min(puntos, 400)  # sit3 cap
+    if   max_sit >= 5:  puntos = min(puntos, 1)
+    elif max_sit >= 4:  puntos = min(puntos, 250)
+    elif max_sit == 3:  puntos = min(puntos, 400)
 
     score = max(1, min(999, round(puntos)))
-    if score >= 700: rango, color, emoji = 'Excelente', '#16a34a', '🟢'
-    elif score >= 400: rango, color, emoji = 'Bueno',    '#ca8a04', '🟡'
-    elif score >= 200: rango, color, emoji = 'Revisar',  '#ea580c', '🟠'
-    elif score >= 100: rango, color, emoji = 'Alto riesgo', '#dc2626', '🔴'
-    else:              rango, color, emoji = 'Rechazar', '#7f1d1d', '⛔'
 
-    return {"score": score, "rango": rango, "color": color, "emoji": emoji}
+    # ── Rango y etiqueta ─────────────────────────────────────────────────────
+    if   score >= 750: rango, color, emoji = 'Excelente',   '#16a34a', '🟢'
+    elif score >= 600: rango, color, emoji = 'Bueno',       '#ca8a04', '🟡'
+    elif score >= 400: rango, color, emoji = 'Revisar',     '#ea580c', '🟠'
+    elif score >= 200: rango, color, emoji = 'Alto riesgo', '#dc2626', '🔴'
+    else:              rango, color, emoji = 'Rechazar',    '#7f1d1d', '⛔'
+
+    if en_mora and score > 700:
+        bloquear_oportunidad = True
+
+    print(
+        f"[score v{_SCORE_VERSION}] {cuit_limpio} sit={max_sit} trend={tendencia} "
+        f"bcra={pts_bcra} afip={pts_afip} hist={pts_interno} liq={pts_liquidez} "
+        f"→ {score} {rango} | alerta={alerta_temprana} bloq={bloquear_oportunidad}",
+        flush=True
+    )
+    return {
+        'score':               score,
+        'rango':               rango,
+        'color':               color,
+        'emoji':               emoji,
+        'alerta_temprana':     alerta_temprana,
+        'bloquear_oportunidad': bloquear_oportunidad,
+        'componentes': {'bcra': pts_bcra, 'afip': pts_afip,
+                        'interno': pts_interno, 'liquidez': pts_liquidez},
+        'indice_previsional':  aportes_info['indice'],
+        'version':             _SCORE_VERSION,
+    }
+
+
+def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None) -> dict:
+    """
+    Wrapper de calcular_rating_predictivo v8.0.
+    Carga historial y cheques desde caché local antes de calcular.
+    Mantiene compatibilidad con todos los callers existentes.
+    """
+    cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
+
+    def _cache_load(fname):
+        p = os.path.join(DATA_DIR, fname)
+        try:
+            if os.path.exists(p):
+                with open(p, 'r') as f:
+                    return json.load(f).get('payload')
+        except: pass
+        return None
+
+    hist_data = _cache_load(f'historial_{cuit_limpio}.json')
+    cheq_data = _cache_load(f'cheques_{cuit_limpio}.json')
+
+    # Fetch historial si no hay caché
+    if not hist_data:
+        urls_h = ([w + "/deudas/" + cuit_limpio + "/historial" for w in BCRA_WORKERS]
+                  + ["https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit_limpio])
+        for u in urls_h[:3]:
+            try:
+                r = requests.get(u, timeout=25, verify=False)
+                if r.status_code == 200 and len(r.text.strip()) > 10:
+                    hist_data = r.json()
+                    try:
+                        with open(os.path.join(DATA_DIR, f'historial_{cuit_limpio}.json'), 'w') as f:
+                            json.dump({'payload': hist_data, 'ts': time.time()}, f)
+                    except: pass
+                    break
+                time.sleep(2)
+            except Exception as eh:
+                print(f"[score wrapper] hist {cuit_limpio}: {eh}", flush=True)
+                time.sleep(2)
+
+    # Fetch cheques si no hay caché
+    if not cheq_data:
+        urls_c = ([w + "/deudas/" + cuit_limpio + "/cheques" for w in BCRA_WORKERS]
+                  + ["https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/" + cuit_limpio])
+        for u in urls_c[:3]:
+            try:
+                r = requests.get(u, timeout=25, verify=False)
+                if r.status_code == 200 and len(r.text.strip()) > 10:
+                    cheq_data = r.json()
+                    try:
+                        with open(os.path.join(DATA_DIR, f'cheques_{cuit_limpio}.json'), 'w') as f:
+                            json.dump({'payload': cheq_data, 'ts': time.time()}, f)
+                    except: pass
+                    break
+                elif r.status_code == 404:
+                    cheq_data = {"results": {"causales": []}, "sin_deudas": True}
+                    break
+                time.sleep(2)
+            except Exception as ec:
+                print(f"[score wrapper] cheq {cuit_limpio}: {ec}", flush=True)
+                time.sleep(2)
+
+    return calcular_rating_predictivo(
+        cuit=cuit_limpio, bcra_data=bcra_data,
+        hist_data=hist_data, cheq_data=cheq_data, en_mora=en_mora,
+    )
+
+
+# Alias para mantener compatibilidad con código legado
+_calcular_score = calcular_score_servidor
+
 
 
 def ejecutar_verificacion(cartera_data):
@@ -701,6 +846,8 @@ def ejecutar_verificacion(cartera_data):
                 "ultimaSit": c.get('ultimaSit'), "ultimaVerif": c.get('ultimaVerif'),
                 "scoreCompleto": c.get('scoreCompleto'), "scoreRango": c.get('scoreRango'),
                 "scoreColor": c.get('scoreColor'), "scoreEmoji": c.get('scoreEmoji'),
+                "alerta_temprana": c.get('alerta_temprana', False),
+                "bloquear_oportunidad": c.get('bloquear_oportunidad', False),
                 "pendiente": c.get('pendiente', False),
             }
 
@@ -762,11 +909,19 @@ def ejecutar_verificacion(cartera_data):
                     # Score
                     score_data = None
                     try:
-                        score_data = calcular_score_servidor(cuit, bcra_data or {}, en_mora=None)
-                        cliente_actualizado['scoreCompleto'] = score_data['score']
-                        cliente_actualizado['scoreRango']    = score_data['rango']
-                        cliente_actualizado['scoreColor']    = score_data['color']
-                        cliente_actualizado['scoreEmoji']    = score_data['emoji']
+                        if lambda_result:
+                            score_data = calcular_rating_predictivo(
+                                cuit=cuit, bcra_data=bcra_data or {},
+                                hist_data=hist_lambda, cheq_data=cheq_lambda, en_mora=None,
+                            )
+                        else:
+                            score_data = calcular_score_servidor(cuit, bcra_data or {}, en_mora=None)
+                        cliente_actualizado['scoreCompleto']        = score_data['score']
+                        cliente_actualizado['scoreRango']           = score_data['rango']
+                        cliente_actualizado['scoreColor']           = score_data['color']
+                        cliente_actualizado['scoreEmoji']           = score_data['emoji']
+                        cliente_actualizado['alerta_temprana']      = score_data.get('alerta_temprana', False)
+                        cliente_actualizado['bloquear_oportunidad'] = score_data.get('bloquear_oportunidad', False)
                         print(f"{tag} score={score_data['score']}", flush=True)
                     except Exception as e_sc:
                         print(f"{tag} ERROR score: {type(e_sc).__name__}: {e_sc}", flush=True)
@@ -1070,7 +1225,9 @@ def get_cartera_por_vendedor(vendedor):
 
         limite_credito = float(cc.get('limiteCredito') or 0)
         cupo_disponible = max(0.0, limite_credito - total_saldo) if limite_credito > 0 else None
-        score_val = sc.get('scoreCompleto') or None
+        score_val           = sc.get('scoreCompleto') or None
+        alerta_temprana     = sc.get('alerta_temprana', False)
+        bloquear_oportunidad = sc.get('bloquear_oportunidad', False)
 
         result.append({
             'nombre': nombre,
@@ -1086,8 +1243,14 @@ def get_cartera_por_vendedor(vendedor):
             'scoreColor': sc.get('scoreColor') or None,
             'scoreEmoji': sc.get('scoreEmoji') or None,
             'ultimaSit': sc.get('ultimaSit') or 1,
-            'alerta': cuit_n in alertas_cuits,
-            'oportunidad': bool(score_val and score_val > 700 and total_saldo == 0),
+            'alerta': cuit_n in alertas_cuits or alerta_temprana,
+            'alerta_temprana': alerta_temprana,
+            'bloquear_oportunidad': bloquear_oportunidad,
+            'oportunidad': bool(
+                score_val and score_val >= 750
+                and total_saldo == 0
+                and not bloquear_oportunidad
+            ),
         })
 
     # Primero con saldo (desc), luego sin saldo alfabético
@@ -1143,12 +1306,14 @@ def get_scores_cartera():
                 nc = _nc2(c.get('cuit', ''))
                 if nc:
                     scores_out[nc] = {
-                        "scoreCompleto": c.get('scoreCompleto'),
-                        "scoreRango":    c.get('scoreRango'),
-                        "scoreColor":    c.get('scoreColor'),
-                        "scoreEmoji":    c.get('scoreEmoji'),
-                        "ultimaSit":     c.get('ultimaSit', 1),
-                        "nombre":        c.get('nombre', ''),
+                        "scoreCompleto":      c.get('scoreCompleto'),
+                        "scoreRango":         c.get('scoreRango'),
+                        "scoreColor":         c.get('scoreColor'),
+                        "scoreEmoji":         c.get('scoreEmoji'),
+                        "ultimaSit":          c.get('ultimaSit', 1),
+                        "nombre":             c.get('nombre', ''),
+                        "alerta_temprana":    c.get('alerta_temprana', False),
+                        "bloquear_oportunidad": c.get('bloquear_oportunidad', False),
                     }
             # Estructura plana: {cuit: score_data}
             if not _ad.get('cartera') and not _ad.get('alertas'):
@@ -1157,12 +1322,14 @@ def get_scores_cartera():
                         nc = _nc2(k)
                         if nc:
                             scores_out[nc] = {
-                                "scoreCompleto": v.get('scoreCompleto'),
-                                "scoreRango":    v.get('scoreRango'),
-                                "scoreColor":    v.get('scoreColor'),
-                                "scoreEmoji":    v.get('scoreEmoji'),
-                                "ultimaSit":     v.get('ultimaSit', 1),
-                                "nombre":        v.get('nombre', ''),
+                                "scoreCompleto":      v.get('scoreCompleto'),
+                                "scoreRango":         v.get('scoreRango'),
+                                "scoreColor":         v.get('scoreColor'),
+                                "scoreEmoji":         v.get('scoreEmoji'),
+                                "ultimaSit":          v.get('ultimaSit', 1),
+                                "nombre":             v.get('nombre', ''),
+                                "alerta_temprana":    v.get('alerta_temprana', False),
+                                "bloquear_oportunidad": v.get('bloquear_oportunidad', False),
                             }
             nuevos = len(scores_out) - antes
             archivos_log.append(f"{os.path.basename(_ruta)}(+{nuevos})")

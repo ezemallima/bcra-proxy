@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(python -c \"import json; c=json.load\\(open\\('cartera_comercial.json',encoding='utf-8'\\)\\); vs=sorted\\(set\\(x.get\\('vendedor',''\\) for x in c if x.get\\('vendedor'\\)\\)\\); print\\(len\\(c\\),'clientes'\\); [print\\(' -',v\\) for v in vs]\")",
-      "Bash(python3 -c \"import json; c=json.load\\(open\\('cartera_comercial.json',encoding='utf-8'\\)\\); vs=sorted\\(set\\(x.get\\('vendedor',''\\) for x in c if x.get\\('vendedor'\\)\\)\\); print\\(len\\(c\\),'clientes'\\); [print\\(' -',v\\) for v in vs]\")"
+      "Bash(python3 -c \"import json; c=json.load\\(open\\('cartera_comercial.json',encoding='utf-8'\\)\\); vs=sorted\\(set\\(x.get\\('vendedor',''\\) for x in c if x.get\\('vendedor'\\)\\)\\); print\\(len\\(c\\),'clientes'\\); [print\\(' -',v\\) for v in vs]\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('main.py'\\).read\\(\\)\\); print\\('OK — no parse errors'\\)\")",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('main.py'\\).read\\(\\)\\); print\\('OK — no parse errors'\\)\")",
+      "PowerShell(py -c \"import ast; ast.parse\\(open\\('main.py'\\).read\\(\\)\\); print\\('OK - no parse errors'\\)\" 2>&1)"
     ]
   }
 }
