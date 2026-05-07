@@ -548,7 +548,7 @@ function filtrarCartera(filtro, btn) {
 function renderCartera(filtro) {
   const alertaCuits = new Set(ALERTAS.map(a => a.cuit));
   let lista = CARTERA_LOCAL;
-  if (filtro === 'alertas') lista = lista.filter(c => alertaCuits.has(c.cuit));
+  if (filtro === 'alertas') lista = lista.filter(c => c.alerta || alertaCuits.has(c.cuit));
   else if (filtro === 'riesgo') lista = lista.filter(c => (c.ultimaSit||1) >= 3);
   else if (filtro === 'buenos') lista = lista.filter(c => (c.score||0) >= 700);
   else if (filtro === 'saldo') lista = lista.filter(c => getSaldos(c.nombre));

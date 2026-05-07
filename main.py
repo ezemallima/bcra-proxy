@@ -1133,6 +1133,54 @@ def get_scores_cartera():
         return jsonify({"ok": True, "scores": scores_out, "total": len(scores_out)})
     return jsonify({"ok": False, "scores": {}, "total": 0})
 
+
+@app.route("/debug-scores")
+def debug_scores():
+    """Diagnóstico: muestra qué archivos de scores existen, cuántos tienen score real, y muestra de CUITs."""
+    def _nc3(x):
+        return str(x or '').replace('-', '').replace(' ', '').strip()
+
+    info = {"data_dir": DATA_DIR, "archivos": {}}
+    rutas = {
+        "alertas_cartera.json": ALERTAS_FILE,
+        "alertas_bcra.json":    ALERTAS_BCRA_FILE,
+        "alertas_cartera_cwd":  os.path.join(os.getcwd(), 'alertas_cartera.json'),
+        "alertas_bcra_cwd":     os.path.join(os.getcwd(), 'alertas_bcra.json'),
+    }
+    for nombre, ruta in rutas.items():
+        existe = os.path.exists(ruta)
+        entry = {"ruta": ruta, "existe": existe}
+        if existe:
+            try:
+                size = os.path.getsize(ruta)
+                with open(ruta, 'r', encoding='utf-8') as f:
+                    d = json.load(f)
+                cartera = d.get('cartera', [])
+                con_score = [c for c in cartera if c.get('scoreCompleto')]
+                alertas  = d.get('alertas', [])
+                entry.update({
+                    "size_kb": round(size / 1024, 1),
+                    "cartera_total": len(cartera),
+                    "cartera_con_score": len(con_score),
+                    "alertas_total": len(alertas),
+                    "ultima_verif": d.get('ultima_verif', ''),
+                    "muestra_cuits_cartera": [_nc3(c.get('cuit','')) for c in cartera[:5]],
+                    "muestra_cuits_alertas": [_nc3(a.get('cuit','')) for a in alertas[:5]],
+                })
+            except Exception as e:
+                entry["error"] = str(e)
+        info["archivos"][nombre] = entry
+
+    # Muestra de CUITs de cartera_comercial para comparar
+    info["cartera_comercial_muestra"] = [
+        _nc3(c.get('cuit','')) for c in _cartera_comercial[:5]
+    ]
+    info["cartera_comercial_total"] = len(_cartera_comercial)
+    resp = jsonify(info)
+    resp.headers['Cache-Control'] = 'no-store'
+    return resp
+
+
 @app.route("/whatsapp_index.json")
 def wsp_index_route():
     return send_from_directory(os.getcwd(), 'whatsapp_index.json')
