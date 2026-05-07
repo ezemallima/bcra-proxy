@@ -715,6 +715,7 @@
       <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
         <button class="primary" onclick="verificarTodos()" id="btn-verificar" style="flex:1;">Verificar toda la cartera →</button>
         <button onclick="limpiarAlertas()" style="font-size:13px;color:#991b1b;">Limpiar alertas</button>
+        <button onclick="resetVerificacion()" style="font-size:13px;color:#6b7280;" title="Limpia localStorage y recarga desde cartera_comercial.json">↺ Reset caché</button>
         <button onclick="actualizarScoresAlertas()" style="font-size:13px;color:#1d4ed8;">↻ Actualizar scores</button>
         <label style="font-size:13px;cursor:pointer;padding:6px 12px;background:var(--bg2);border-radius:8px;border:1px solid var(--border);display:inline-flex;align-items:center;gap:4px;">
           📂 Actualizar moras
@@ -3487,85 +3488,29 @@ function verCliente(cuit) {
 }
 
 async function verificarTodos(forzar) {
-  if (!cartera.length) {
-    // Intentar cargar desde el servidor antes de rendirse
-    try {
-      var rc = await fetch('/todos-los-clientes');
-      if (rc.ok) {
-        var datos = await rc.json();
-        if (datos && datos.length) {
-          cartera = datos;
-          localStorage.setItem('piat_cartera', JSON.stringify(cartera));
-          actualizarMetricas();
-          renderCarteraAdmin();
-        }
-      }
-    } catch(e) {}
-    if (!cartera.length) { alert('No hay clientes en la cartera. Subí el archivo de cartera primero.'); return; }
-  }
   const btn = document.getElementById('btn-verificar');
   const prog = document.getElementById('verificar-progress');
 
-  // Filtrar: solo pendientes y eliminar duplicados Odoo
-  var cartFiltrada = cartera.filter(function(c) {
-    // Excluir contactos duplicados de Odoo
-    if (/,\s*(contacto|entrega|almacen|comercial|boada|alvear|contacto\s*\d)/i.test(c.nombre)) return false;
-    if (forzar) return true;
-    // Sin situación nunca verificada
-    if (!c.ultimaSit) return true;
-    // Verificados hace más de 7 días
-    if (!c.ultimaVerif) return true;
-    // Parsear DD/MM/YYYY
-    var partes = c.ultimaVerif.split('/');
-    if (partes.length !== 3) return true;
-    var dia = parseInt(partes[0], 10);
-    var mes = parseInt(partes[1], 10) - 1;
-    var anio = parseInt(partes[2], 10);
-    var fechaVerif = new Date(anio, mes, dia);
-    var ahora = new Date();
-    ahora.setHours(0,0,0,0);
-    fechaVerif.setHours(0,0,0,0);
-    var diasDesde = Math.floor((ahora - fechaVerif) / (1000*60*60*24));
-    return diasDesde > 7;
-  });
+  prog.textContent = 'Iniciando verificación desde cartera_comercial.json...';
 
-  if (!cartFiltrada.length) {
-    prog.textContent = 'Todos los clientes ya fueron verificados hoy.';
-    return;
-  }
-  // Agregar clientes con alertas activas aunque hayan sido verificados recientemente
-  var cuitsEnAlertas = new Set(alertas.map(function(a){ return a.cuit; }));
-  var cartConAlertas = cartera.filter(function(c){
-    return cuitsEnAlertas.has(c.cuit) && !cartFiltrada.find(function(x){ return x.cuit === c.cuit; });
-  });
-  var cartTotal = cartFiltrada.concat(cartConAlertas);
-
-  // Si no hay nada para verificar, usar toda la cartera
-  if (!cartTotal.length) {
-    cartTotal = cartera.slice();
-  }
-
-  prog.textContent = 'Verificando ' + cartTotal.length + ' clientes (de ' + cartera.length + ' en cartera)...';
-
-  // Iniciar verificacion en el servidor
+  // El servidor usa cartera_comercial.json directamente — no enviamos lista
   try {
     const r = await fetch('/verificar-cartera', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({cartera: cartTotal})
+      body: JSON.stringify({})
     });
     const data = await r.json();
     if (data.error) {
-      prog.textContent = data.error;
+      prog.textContent = '✗ ' + data.error;
       return;
     }
+    btn.disabled = true;
+    prog.textContent = data.mensaje || 'Verificación iniciada.';
   } catch(e) {
-    prog.textContent = 'No se pudo iniciar la verificacion.';
+    prog.textContent = 'No se pudo iniciar la verificación.';
     return;
   }
-
-  btn.disabled = true;
-  prog.textContent = 'Verificacion iniciada en el servidor. Podes cerrar esta ventana.';
 
   // Polling cada 5 segundos para actualizar progreso
   var interval = setInterval(async function() {
@@ -3607,6 +3552,34 @@ async function verificarTodos(forzar) {
   }, 5000);
 }
 
+
+async function resetVerificacion() {
+  if (!confirm('Esto limpia el caché local y recarga la cartera desde el servidor (514 clientes). ¿Continuar?')) return;
+  // Limpiar todo el estado local relacionado con verificación
+  ['piat_cartera', 'piat_situaciones', 'piat_alertas', 'piat_ultima_verif'].forEach(k => localStorage.removeItem(k));
+  cartera = [];
+  situaciones = {};
+  alertas = [];
+  // Recargar cartera desde el servidor
+  try {
+    const r = await fetch('/todos-los-clientes?v=' + Date.now());
+    if (r.ok) {
+      const datos = await r.json();
+      if (datos && datos.length) {
+        cartera = datos;
+        localStorage.setItem('piat_cartera', JSON.stringify(cartera));
+        actualizarMetricas();
+        renderCarteraAdmin();
+        alert('✓ Cache limpiado. Cartera recargada: ' + cartera.length + ' clientes desde el servidor.');
+        return;
+      }
+    }
+  } catch(e) {}
+  alert('✓ Cache limpiado. Recargá la página para sincronizar.');
+}
+
+// También disponible desde la consola del navegador:
+window.resetVerificacion = resetVerificacion;
 
 async function limpiarAlertas() {
   if (!confirm('¿Borrar físicamente el archivo de alertas? Esta acción no se puede deshacer.')) return;

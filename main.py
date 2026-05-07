@@ -653,6 +653,29 @@ def ejecutar_verificacion(cartera_data):
     nuevas_alertas = []
     cartera_actualizada = []
 
+    # ── Pre-poblar alertas_cartera.json con stubs para todos los clientes ─────
+    # Esto garantiza que la App Comercial vea todos los clientes desde el inicio,
+    # con scores llenándose a medida que el robot avanza.
+    def _nc_v(x):
+        return str(x or '').replace('-', '').replace(' ', '').strip()
+
+    try:
+        stubs = [{
+            "cuit": c.get("cuit"), "nombre": c.get("nombre", ""),
+            "ultimaSit": c.get("ultimaSit", 1), "ultimaVerif": None,
+            "scoreCompleto": None, "scoreRango": None, "scoreColor": None, "scoreEmoji": None,
+            "pendiente": True,
+        } for c in cartera_data if c.get("cuit")]
+        with open(ALERTAS_FILE, 'w', encoding='utf-8') as _f:
+            json.dump({
+                "alertas": [],
+                "ultima_verif": f"En progreso — {time.strftime('%d/%m/%Y %H:%M')}",
+                "cartera": stubs,
+            }, _f, ensure_ascii=False, indent=2)
+        print(f"[verif] Pre-poblado: {len(stubs)} stubs guardados en {ALERTAS_FILE}", flush=True)
+    except Exception as _ep:
+        print(f"[verif] Error pre-poblar: {_ep}", flush=True)
+
     try:
         cache_file = os.path.join(DATA_DIR, 'bcra_cache.json')
         if os.path.exists(cache_file):
@@ -671,18 +694,36 @@ def ejecutar_verificacion(cartera_data):
 
     def _guardar_alertas(nuevas_alertas, cartera_actualizada, parcial=False):
         sufijo = ' (parcial)' if parcial else ''
+
+        def _entry(c):
+            return {
+                "cuit": c.get('cuit'), "nombre": c.get('nombre', ''),
+                "ultimaSit": c.get('ultimaSit'), "ultimaVerif": c.get('ultimaVerif'),
+                "scoreCompleto": c.get('scoreCompleto'), "scoreRango": c.get('scoreRango'),
+                "scoreColor": c.get('scoreColor'), "scoreEmoji": c.get('scoreEmoji'),
+                "pendiente": c.get('pendiente', False),
+            }
+
+        if parcial and os.path.exists(ALERTAS_FILE):
+            # Merge: preservar stubs no procesados aún, actualizar los ya procesados
+            try:
+                with open(ALERTAS_FILE, 'r', encoding='utf-8') as _fr:
+                    existente = json.load(_fr)
+                base = {_nc_v(c.get('cuit', '')): _entry(c) for c in existente.get('cartera', [])}
+                for c in cartera_actualizada:
+                    nc = _nc_v(c.get('cuit', ''))
+                    if nc:
+                        base[nc] = _entry(c)
+                cartera_final = list(base.values())
+            except Exception:
+                cartera_final = [_entry(c) for c in cartera_actualizada]
+        else:
+            cartera_final = [_entry(c) for c in cartera_actualizada]
+
         datos = {
             "alertas": nuevas_alertas,
             "ultima_verif": time.strftime('%d/%m/%Y %H:%M') + sufijo,
-            "cartera": [{
-                "cuit": c.get('cuit'), "nombre": c.get('nombre', ''),
-                "ultimaSit": c.get('ultimaSit'),
-                "ultimaVerif": c.get('ultimaVerif'),
-                "scoreCompleto": c.get('scoreCompleto'),
-                "scoreRango": c.get('scoreRango'),
-                "scoreColor": c.get('scoreColor'),
-                "scoreEmoji": c.get('scoreEmoji'),
-            } for c in cartera_actualizada]
+            "cartera": cartera_final,
         }
         with open(ALERTAS_FILE, 'w', encoding='utf-8') as _f:
             json.dump(datos, _f, ensure_ascii=False, indent=None if parcial else 2)
@@ -1283,10 +1324,14 @@ def get_alertas():
     try:
         if os.path.exists(ALERTAS_FILE):
             with open(ALERTAS_FILE, 'r', encoding='utf-8') as f:
-                return jsonify(json.load(f))
-        return jsonify({"alertas": [], "ultima_verif": "", "cartera": []})
+                data = json.load(f)
+        else:
+            data = {"alertas": [], "ultima_verif": "", "cartera": []}
     except Exception as e:
-        return jsonify({"alertas": [], "ultima_verif": "", "cartera": [], "error": str(e)})
+        data = {"alertas": [], "ultima_verif": "", "cartera": [], "error": str(e)}
+    resp = jsonify(data)
+    resp.headers['Cache-Control'] = 'no-store'
+    return resp
 
 @app.route("/alertas", methods=["POST"])
 def save_alertas():
@@ -1332,13 +1377,22 @@ def verificar_cartera():
     if verificacion_estado["corriendo"]:
         return jsonify({"error": "Ya hay una verificacion en curso"}), 400
     try:
-        body = request.get_json(force=True)
-        cartera_data = body.get('cartera', [])
+        # Siempre usar cartera_comercial.json como fuente canónica — ignorar lista del cliente
+        cartera_data = [
+            {
+                "cuit":     str(c.get("cuit") or "").strip(),
+                "nombre":   str(c.get("nombre") or "").strip(),
+                "ultimaSit": c.get("ultimaSit", 1),
+                "ultimaVerif": c.get("ultimaVerif"),
+            }
+            for c in _cartera_comercial
+            if str(c.get("cuit") or "").strip()
+        ]
         if not cartera_data:
-            return jsonify({"error": "Cartera vacia"}), 400
+            return jsonify({"error": "cartera_comercial.json está vacía o sin CUITs"}), 400
         t = threading.Thread(target=ejecutar_verificacion, args=(cartera_data,), daemon=True)
         t.start()
-        return jsonify({"ok": True, "mensaje": "Verificacion iniciada en el servidor"})
+        return jsonify({"ok": True, "mensaje": f"Verificación iniciada: {len(cartera_data)} clientes desde cartera_comercial.json", "total": len(cartera_data)})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
