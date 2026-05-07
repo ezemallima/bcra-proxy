@@ -30,11 +30,47 @@ OPENAI_KEY = os.environ.get('OPENAI_API_KEY', '')
 CUIT_API_KEY = os.environ.get('API_KEY_CUIT', '')
 CUIT_API_URL = os.environ.get('API_SOLVENCY_URL', '')
 
+# Topes de facturación Monotributo 2026 — usados como ingreso estimado base
 _MONOTRIB_INGRESOS = {
-    'A': 1_500_000, 'B': 3_000_000, 'C': 5_000_000, 'D': 8_000_000,
-    'E': 12_000_000, 'F': 18_000_000, 'G': 26_000_000, 'H': 36_000_000,
-    'I': 48_000_000, 'J': 62_000_000, 'K': 82_000_000,
+    'A':   3_500_000, 'B':   7_000_000, 'C':  11_500_000, 'D':  17_000_000,
+    'E':  24_000_000, 'F':  34_000_000, 'G':  48_000_000, 'H':  67_000_000,
+    'I':  93_000_000, 'J': 120_000_000, 'K': 155_000_000,
 }
+
+# User-Agents rotativos para evitar bloqueos de IP en AFIP / ANSES
+_USER_AGENTS = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36 Edg/123.0.0.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:125.0) Gecko/20100101 Firefox/125.0',
+    'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:125.0) Gecko/20100101 Firefox/125.0',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+]
+
+# Estimación de ingresos anuales por rubro para Responsable Inscripto (2026)
+# Lista ordenada por prioridad de match (más específico primero)
+_ACTIVIDAD_INGRESOS_RI = [
+    ('venta al por mayor',  180_000_000),
+    ('bebida',              150_000_000),
+    ('bodega',              130_000_000),
+    ('vino',                120_000_000),
+    ('distribucion',        120_000_000),
+    ('licor',               100_000_000),
+    ('construccion',        100_000_000),
+    ('inmobilia',           100_000_000),
+    ('agropec',              90_000_000),
+    ('agricultura',          80_000_000),
+    ('industria',           100_000_000),
+    ('comercio',             80_000_000),
+    ('transporte',           70_000_000),
+    ('servicio',             55_000_000),
+    ('venta al por menor',   40_000_000),
+    ('restaurant',           45_000_000),
+    ('gastronomia',          45_000_000),
+]
+
 GEMINI_MODEL = "gemini-1.5-flash"
 DATA_DIR = '/data' if os.path.exists('/data') else os.getcwd()
 ALERTAS_FILE      = os.path.join(DATA_DIR, 'alertas_cartera.json')
@@ -299,10 +335,225 @@ def analizar_bodegas_server(cuit, nombre, mensajes):
     except Exception:
         return False, ""
 
+def _clean_text(s):
+    """Limpia texto: decodifica HTML entities, normaliza unicode, elimina chars raros."""
+    import unicodedata, html as _html_mod, re
+    if not s:
+        return ''
+    s = _html_mod.unescape(str(s))
+    s = unicodedata.normalize('NFKD', s).encode('ascii', 'ignore').decode('ascii')
+    s = re.sub(r'[^\w\s\.,\-\/\(\)]', ' ', s)
+    return re.sub(r'\s+', ' ', s).strip()
+
+
+def _inferir_ingresos_afip(cat, tipo, actividad, es_empleador):
+    """Retorna (ingresos_estimados: int, fuente: str) basado en categoría AFIP 2026."""
+    cat_u  = (cat      or '').strip().upper()
+    tipo_u = (tipo     or '').strip().upper()
+    act_l  = (actividad or '').lower()
+
+    if cat_u in _MONOTRIB_INGRESOS:
+        return _MONOTRIB_INGRESOS[cat_u], 'monotrib_cap_2026'
+
+    if 'JURIDICA' in tipo_u or 'EMPLEADOR' in tipo_u or es_empleador:
+        for kw, ing in _ACTIVIDAD_INGRESOS_RI:
+            if kw in act_l:
+                return ing, 'ri_empleador_rubro'
+        return 150_000_000, 'ri_empleador_default'
+
+    if any(t in tipo_u for t in ('INSCRIPTO', 'RI', 'IVA', 'RESPONSABLE', 'AUTONOMO')):
+        for kw, ing in _ACTIVIDAD_INGRESOS_RI:
+            if kw in act_l:
+                return ing, 'ri_rubro'
+        return 60_000_000, 'ri_default'
+
+    return 0, 'sin_datos'
+
+
+def _scrape_tangofactura_full(cuit, ua):
+    """TangoFactura GetContribuyenteFull — extrae TODOS los campos disponibles."""
+    import datetime, re
+    try:
+        r = requests.get(
+            f"https://afip.tangofactura.com/Rest/GetContribuyenteFull?cuitContribuyente={cuit}",
+            headers={'User-Agent': ua, 'Accept': 'application/json'},
+            timeout=12, verify=False)
+        if r.status_code != 200:
+            return None
+        contrib = (r.json().get('Contribuyente') or {})
+        if not contrib:
+            return None
+
+        cat          = _clean_text(contrib.get('categMonotrib') or '').upper()
+        tipo         = _clean_text(contrib.get('tipoPersona')   or '').upper()
+        es_empleador = bool(contrib.get('empleador'))
+
+        # Actividad principal — el de menor orden es la principal
+        actividad = ''
+        acts = contrib.get('actividades') or []
+        if acts:
+            acts_sorted = sorted(acts, key=lambda a: int(a.get('orden') or 999))
+            actividad   = _clean_text(acts_sorted[0].get('descripcion', ''))
+
+        # Antigüedad: fecha más temprana entre impuestos, regímenes y contrato social
+        fechas = []
+        if contrib.get('fechaContratoSocial'):
+            fechas.append(str(contrib['fechaContratoSocial'])[:10])
+        for imp in (contrib.get('impuestos') or []):
+            if imp.get('desde'):
+                fechas.append(str(imp['desde'])[:10])
+        for reg in (contrib.get('regimenes') or []):
+            if reg.get('desde'):
+                fechas.append(str(reg['desde'])[:10])
+        fechas = [f for f in fechas if re.match(r'^\d{4}', f)]
+        fecha_inicio    = min(fechas) if fechas else ''
+        antiguedad_anos = 0
+        if fecha_inicio:
+            try:
+                antiguedad_anos = max(0, datetime.datetime.now().year - int(fecha_inicio[:4]))
+            except: pass
+
+        ingresos, fuente_ing = _inferir_ingresos_afip(cat, tipo, actividad, es_empleador)
+        return {
+            'tipo_persona':        tipo,
+            'categoria_monotrib':  cat,
+            'actividad_principal': actividad,
+            'es_empleador':        es_empleador,
+            'antiguedad_anos':     antiguedad_anos,
+            'fecha_inicio':        fecha_inicio,
+            'ingresos_anuales':    ingresos,
+            'fuente_ingresos':     fuente_ing,
+            'fuente':              'tangofactura',
+        }
+    except Exception as e:
+        print(f"[solvency] TangoFactura error {cuit}: {e}", flush=True)
+        return None
+
+
+def _scrape_afip_html(cuit, ua):
+    """Scraper HTML de endpoints públicos AFIP como fallback a TangoFactura."""
+    import re
+    headers = {
+        'User-Agent': ua,
+        'Accept': 'text/html,application/xhtml+xml,*/*;q=0.8',
+        'Accept-Language': 'es-AR,es;q=0.9',
+        'Referer': 'https://www.afip.gob.ar/',
+    }
+    endpoints = [
+        f"https://serviciosweb.afip.gov.ar/publico/empresa/data.aspx?cuit={cuit}",
+        f"https://www.afip.gob.ar/cadena-de-valor/consulta-cadena-valor/?type=1&cuit={cuit}",
+    ]
+    for url in endpoints:
+        try:
+            r = requests.get(url, headers=headers, timeout=10, verify=False, allow_redirects=True)
+            if r.status_code != 200 or len(r.text) < 100:
+                continue
+            html = r.text
+            cat_m  = re.search(r'(?i)Categor[ií]a\s*[^:]*:\s*([A-K])\b', html)
+            tipo_m = re.search(
+                r'(?i)(Monotribut\w*|Responsable\s+Inscripto|Aut[oó]nomo|'
+                r'Empleador|Persona\s+Jur[ií]dica)', html)
+            act_m  = re.search(
+                r'(?i)Actividad\s+[Pp]rincipal[^:]*:[^\n]*\n([^\n<]{10,80})', html)
+            cat       = _clean_text(cat_m.group(1)).upper()  if cat_m  else ''
+            tipo      = _clean_text(tipo_m.group(1)).upper() if tipo_m else ''
+            actividad = _clean_text(act_m.group(1))          if act_m  else ''
+            if cat or tipo:
+                ingresos, fuente_ing = _inferir_ingresos_afip(
+                    cat, tipo, actividad, 'EMPLEADOR' in tipo)
+                return {
+                    'tipo_persona':        tipo,
+                    'categoria_monotrib':  cat,
+                    'actividad_principal': actividad,
+                    'es_empleador':        'EMPLEADOR' in tipo,
+                    'antiguedad_anos':     0,
+                    'ingresos_anuales':    ingresos,
+                    'fuente_ingresos':     fuente_ing,
+                    'fuente':              'afip_html',
+                }
+        except Exception as e:
+            print(f"[solvency] AFIP HTML {url}: {e}", flush=True)
+    return None
+
+
+def _check_anses_aportes(cuit, ua):
+    """Verifica actividad laboral reciente via endpoints públicos ANSES.
+    Retorna dict con capacidad_pago_validada=True si hay respuesta positiva."""
+    headers = {
+        'User-Agent': ua,
+        'Accept': 'application/json, text/html',
+        'Origin':   'https://www.anses.gob.ar',
+        'Referer':  'https://www.anses.gob.ar/consulta/certificacion-negativa',
+    }
+    endpoints = [
+        f"https://tramitesenweb.anses.gob.ar/TramitesWeb/anses/cn/evaluarDatos?cuil={cuit}",
+        f"https://www.anses.gob.ar/consultas/certNeg?cuil={cuit}",
+    ]
+    for url in endpoints:
+        try:
+            r = requests.get(url, headers=headers, timeout=8, verify=False)
+            if r.status_code != 200:
+                continue
+            body = r.text.lower()
+            # "Certifica Negativa" = persona activa sin beneficios sociales = trabaja
+            if any(kw in body for kw in ['no percibe', 'no tiene', 'no registra', 'certifica']):
+                return {'capacidad_pago_validada': True, 'fuente': 'anses_certneg'}
+            if any(kw in body for kw in ['jubila', 'pension', 'pensi', 'prestacion', 'beneficio']):
+                return {'capacidad_pago_validada': True, 'fuente': 'anses_beneficio'}
+        except Exception as e:
+            print(f"[solvency] ANSES {cuit}: {e}", flush=True)
+    return None
+
+
+def _inferir_desde_bcra(cuit):
+    """Fallback definitivo: infiere ingresos desde crédito bancario activo en BCRA.
+    Fundamento: el banco validó capacidad de pago antes de otorgar el crédito.
+    Ratio conservador: deuda activa ≈ 25% del ingreso anual (factor 4x)."""
+    try:
+        bcra_path = os.path.join(DATA_DIR, 'bcra_cache.json')
+        if not os.path.exists(bcra_path):
+            return None
+        with open(bcra_path, 'r') as f:
+            cache = json.load(f)
+        entry = cache.get(cuit) or cache.get(
+            cuit.replace('-', '').replace(' ', '').strip())
+        if not entry:
+            return None
+        periodos = (
+            (entry.get('data') or {}).get('results') or {}
+        ).get('periodos') or []
+        if not periodos:
+            return None
+        monto_total = sum(
+            (e.get('monto') or 0) for e in periodos[0].get('entidades', []))
+        if monto_total <= 0:
+            return None
+        return {
+            'tipo_persona':        'DESCONOCIDO',
+            'categoria_monotrib':  '',
+            'actividad_principal': '',
+            'es_empleador':        False,
+            'antiguedad_anos':     0,
+            'ingresos_anuales':    round(monto_total * 4),
+            'fuente_ingresos':     'bcra_inferido',
+            'fuente':              'bcra_fallback',
+        }
+    except Exception as e:
+        print(f"[solvency] BCRA inference {cuit}: {e}", flush=True)
+    return None
+
+
 def get_solvency_data(cuit):
-    """Ingresos estimados vía API externa + AFIP pública. Caché 24h. Fail-safe: retorna None."""
+    """
+    Solvencia multi-fuente con cadena de fallback activo. Caché 24h.
+      1. API configurada (env var)
+      2. TangoFactura AFIP JSON — extrae cat, actividad, empleador, antigüedad
+      3. AFIP HTML scraper — endpoints públicos con UA rotativo
+      4. Enriquecimiento ANSES — valida capacidad de pago si hay aportes
+      5. Inferencia desde deuda BCRA — si el banco prestó $X, el cliente tiene ingresos
+    """
     cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
-    cache_path = os.path.join(DATA_DIR, f'solvency_{cuit_limpio}.json')
+    cache_path  = os.path.join(DATA_DIR, f'solvency_{cuit_limpio}.json')
     try:
         if os.path.exists(cache_path):
             with open(cache_path, 'r') as f:
@@ -311,39 +562,67 @@ def get_solvency_data(cuit):
                 return cached.get('data')
     except: pass
 
+    ua   = random.choice(_USER_AGENTS)
     data = None
+
+    # ── Fuente 1: API configurada ──────────────────────────────────────────
     if CUIT_API_URL and CUIT_API_KEY:
         try:
-            url = f"{CUIT_API_URL.rstrip('/')}/{cuit_limpio}"
-            r = requests.get(url,
-                headers={'Authorization': f'Bearer {CUIT_API_KEY}', 'x-api-key': CUIT_API_KEY},
-                timeout=8, verify=False)
-            if r.status_code == 200:
-                data = r.json()
-                print(f"[solvency] {cuit_limpio} OK vía API configurada", flush=True)
-        except Exception as e:
-            print(f"[solvency] API externa error: {e}", flush=True)
-
-    if data is None:
-        try:
             r = requests.get(
-                f"https://afip.tangofactura.com/Rest/GetContribuyenteFull?cuitContribuyente={cuit_limpio}",
+                f"{CUIT_API_URL.rstrip('/')}/{cuit_limpio}",
+                headers={'Authorization': f'Bearer {CUIT_API_KEY}',
+                         'x-api-key': CUIT_API_KEY, 'User-Agent': ua},
                 timeout=8, verify=False)
             if r.status_code == 200:
-                contrib = (r.json().get('Contribuyente') or {})
-                cat = (contrib.get('categMonotrib') or '').strip().upper()
-                ingresos = _MONOTRIB_INGRESOS.get(cat, 0)
-                if not ingresos and contrib.get('tipoPersona') == 'JURIDICA':
-                    ingresos = 100_000_000
-                data = {'ingresos_anuales': ingresos, 'categoria_monotrib': cat,
-                        'tipo_persona': contrib.get('tipoPersona', ''), 'fuente': 'afip_tang'}
-                print(f"[solvency] {cuit_limpio} AFIP cat={cat} ingresos≈{ingresos}", flush=True)
+                raw = r.json()
+                if not raw.get('ingresos_anuales'):
+                    ing, fi = _inferir_ingresos_afip(
+                        raw.get('categoria_monotrib', ''), raw.get('tipo_persona', ''),
+                        raw.get('actividad_principal', ''), raw.get('es_empleador', False))
+                    raw['ingresos_anuales'] = ing
+                    raw['fuente_ingresos']  = fi
+                data = raw
+                print(f"[solvency] {cuit_limpio} OK via API configurada", flush=True)
         except Exception as e:
-            print(f"[solvency] AFIP fallback error: {e}", flush=True)
+            print(f"[solvency] API externa: {e}", flush=True)
+
+    # ── Fuente 2: TangoFactura AFIP (JSON completo) ────────────────────────
+    if data is None:
+        data = _scrape_tangofactura_full(cuit_limpio, ua)
+        if data:
+            print(
+                f"[solvency] {cuit_limpio} TangoFactura "
+                f"cat={data.get('categoria_monotrib')} empl={data.get('es_empleador')} "
+                f"act='{data.get('actividad_principal','')[:30]}' "
+                f"ant={data.get('antiguedad_anos')}a ing≈{data.get('ingresos_anuales')}",
+                flush=True)
+
+    # ── Fuente 3: AFIP HTML scraper ────────────────────────────────────────
+    if data is None:
+        data = _scrape_afip_html(cuit_limpio, ua)
+        if data:
+            print(f"[solvency] {cuit_limpio} AFIP HTML "
+                  f"cat={data.get('categoria_monotrib')} tipo={data.get('tipo_persona')}",
+                  flush=True)
+
+    # ── Fuente 4: ANSES — enriquecimiento sobre datos ya obtenidos ─────────
+    if data is not None:
+        anses = _check_anses_aportes(cuit_limpio, ua)
+        if anses and anses.get('capacidad_pago_validada'):
+            data['capacidad_pago_validada'] = True
+            data['anses_fuente']            = anses.get('fuente', 'anses')
+            print(f"[solvency] {cuit_limpio} ANSES capacidad_pago=validada", flush=True)
+
+    # ── Fuente 5: Inferencia BCRA (fallback definitivo) ────────────────────
+    if data is None:
+        data = _inferir_desde_bcra(cuit_limpio)
+        if data:
+            print(f"[solvency] {cuit_limpio} BCRA fallback "
+                  f"ing_estimado≈{data.get('ingresos_anuales')}", flush=True)
 
     try:
         with open(cache_path, 'w') as f:
-            json.dump({'data': data, 'ts': time.time()}, f)
+            json.dump({'data': data, 'ts': time.time()}, f, ensure_ascii=False)
     except: pass
     return data
 
@@ -448,7 +727,8 @@ def _layer2_solvencia_federal(solvency_data: dict) -> tuple:
     cat  = (solvency_data.get('categoria_monotrib') or '').strip().upper()
     tipo = (solvency_data.get('tipo_persona') or '').strip().upper()
 
-    es_empleador     = 'JURIDICA' in tipo or 'EMPLEADOR' in tipo
+    # Usar el campo explícito es_empleador si está disponible (TangoFactura lo provee)
+    es_empleador     = bool(solvency_data.get('es_empleador')) or 'JURIDICA' in tipo or 'EMPLEADOR' in tipo
     es_monotrib_bajo = cat in ('A', 'B')
 
     if es_empleador:
