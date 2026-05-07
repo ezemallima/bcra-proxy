@@ -89,6 +89,7 @@
   .cliente-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-bottom: 10px; cursor: pointer; transition: border-color 0.15s; }
   .cliente-card:active { border-color: var(--accent); }
   .cliente-card.alerta { border-left: 3px solid var(--red); }
+  .cliente-card.excedido-card { border-left: 3px solid var(--orange); }
   .cliente-row1 { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
   .cliente-nombre { font-size: 14px; font-weight: 600; line-height: 1.3; flex: 1; }
   .score-badge { font-size: 13px; font-weight: 700; font-family: 'DM Mono', monospace; padding: 3px 8px; border-radius: 6px; background: var(--surface2); }
@@ -314,18 +315,32 @@ async function iniciarApp() {
       const ad = await ar.json();
       if (!ad.error) {
         ALERTAS = ad.alertas || [];
+        // Normalizar CUITs para evitar mismatches por guiones/espacios
+        const normCuit = c => String(c||'').replace(/-/g,'').replace(/\s/g,'').trim();
         const scoreMap = {};
-        (ad.cartera || []).forEach(c => { if(c.cuit && c.scoreCompleto) scoreMap[c.cuit] = c; });
+        (ad.cartera || []).forEach(c => {
+          const nc = normCuit(c.cuit);
+          if (nc && c.scoreCompleto) scoreMap[nc] = c;
+        });
+        const alertaSet = new Set((ad.alertas||[]).map(a => normCuit(a.cuit)).filter(Boolean));
         CARTERA_LOCAL.forEach((c, i) => {
-          if (scoreMap[c.cuit]) {
-            CARTERA_LOCAL[i].score      = scoreMap[c.cuit].scoreCompleto;
-            CARTERA_LOCAL[i].scoreRango = scoreMap[c.cuit].scoreRango;
-            CARTERA_LOCAL[i].scoreColor = scoreMap[c.cuit].scoreColor;
-            CARTERA_LOCAL[i].scoreEmoji = scoreMap[c.cuit].scoreEmoji;
-            CARTERA_LOCAL[i].ultimaSit  = scoreMap[c.cuit].ultimaSit || c.ultimaSit || 1;
+          const nc = normCuit(c.cuit);
+          if (scoreMap[nc]) {
+            CARTERA_LOCAL[i].score      = scoreMap[nc].scoreCompleto;
+            CARTERA_LOCAL[i].scoreRango = scoreMap[nc].scoreRango;
+            CARTERA_LOCAL[i].scoreColor = scoreMap[nc].scoreColor;
+            CARTERA_LOCAL[i].scoreEmoji = scoreMap[nc].scoreEmoji;
+            CARTERA_LOCAL[i].ultimaSit  = scoreMap[nc].ultimaSit || c.ultimaSit || 1;
+          }
+          // alerta desde alertas_cartera.json como segunda fuente (el servidor ya inyecta c.alerta)
+          if (alertaSet.has(nc)) CARTERA_LOCAL[i].alerta = true;
+          // recalcular oportunidad con score definitivo
+          if ((CARTERA_LOCAL[i].score||0) > 700 && !(CARTERA_LOCAL[i].total_saldo > 0)) {
+            CARTERA_LOCAL[i].oportunidad = true;
           }
         });
-        console.log('[init] Scores:', CARTERA_LOCAL.filter(c=>c.score).length + '/' + CARTERA_LOCAL.length);
+        console.log('[init] Scores:', CARTERA_LOCAL.filter(c=>c.score).length + '/' + CARTERA_LOCAL.length,
+          '| Alertas:', alertaSet.size, '| Oportunidades:', CARTERA_LOCAL.filter(c=>c.oportunidad).length);
       } else {
         console.warn('[init] alertas_cartera.json no disponible — cartera carga igual sin scores');
       }
@@ -523,7 +538,8 @@ function renderCartera(filtro) {
   el.innerHTML = lista.map(c => {
     const sit = c.ultimaSit || 1;
     const score = c.score || null;
-    const tieneAlerta = alertaCuits.has(c.cuit);
+    const tieneAlerta = c.alerta || alertaCuits.has(c.cuit);
+    const esOportunidad = c.oportunidad;
     const saldosData = getSaldos(c.nombre);
     const scoreColor = scoreToColor(score);
     const limiteCredito = c.limite_credito || 0;
@@ -532,17 +548,23 @@ function renderCartera(filtro) {
     const excedido = limiteCredito > 0 && saldoActual >= limiteCredito;
     const pctUsado = limiteCredito > 0 ? Math.min(100, (saldoActual / limiteCredito) * 100) : 0;
     const barColor = excedido ? 'var(--red)' : pctUsado > 80 ? 'var(--orange)' : 'var(--green)';
-    return `<div class="cliente-card${tieneAlerta?' alerta':''}" data-cuit="${esc(c.cuit)}" data-nombre="${esc(c.nombre)}" onclick="abrirModalCliente(this.dataset.cuit, this.dataset.nombre)">
+    // Colored dot: green=sit1, yellow=sit2, red=sit3+, gray=sin verificar
+    const dotColor = !score ? 'var(--text2)' : sit === 1 ? 'var(--green)' : sit === 2 ? 'var(--yellow)' : 'var(--red)';
+    const cardBorderClass = tieneAlerta ? ' alerta' : excedido ? ' excedido-card' : '';
+    return `<div class="cliente-card${cardBorderClass}" data-cuit="${esc(c.cuit)}" data-nombre="${esc(c.nombre)}" onclick="abrirModalCliente(this.dataset.cuit, this.dataset.nombre)">
       <div class="cliente-row1">
-        <div class="cliente-nombre">${esc(c.nombre)}</div>
-        ${score ? `<div class="score-badge" style="color:${scoreColor}">${score}</div>` : ''}
+        <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
+          <span style="flex-shrink:0;width:10px;height:10px;border-radius:50%;background:${dotColor};display:inline-block;" title="Situación ${sit}"></span>
+          <div class="cliente-nombre">${esc(c.nombre)}${esOportunidad ? ' <span style="font-size:13px;" title="Oportunidad de venta">⭐</span>' : ''}</div>
+        </div>
+        ${score ? `<div class="score-badge" style="color:${scoreColor};flex-shrink:0;">${score}</div>` : '<div class="score-badge" style="color:var(--text2);flex-shrink:0;">—</div>'}
       </div>
       <div class="cliente-row2">
         <span class="cliente-ciudad">${esc(c.ciudad||'')}</span>
-        <span class="sit-badge sit-${sit}" style="background:${sitBg(sit)}">Sit ${sit}</span>
+        <span class="sit-badge sit-${sit}" style="background:${sitBg(sit)};color:${dotColor}">Sit ${sit}</span>
         ${tieneAlerta ? '<span class="alerta-badge">⚠ Alerta</span>' : ''}
         ${excedido ? '<span class="excedido-badge">⛔ Límite Excedido</span>' : ''}
-        ${saldosData && !excedido ? `<span class="saldo-badge">💰 $${fmtM(saldosData.total_saldo)}</span>` : ''}
+        ${saldoActual > 0 && !excedido ? `<span class="saldo-badge">💰 $${fmtM(saldoActual)}</span>` : ''}
       </div>
       ${limiteCredito > 0 ? `<div class="credit-bar-wrap">
         <div class="credit-bar-track"><div class="credit-bar-fill" style="width:${pctUsado}%;background:${barColor}"></div></div>
@@ -636,8 +658,11 @@ async function renderOportunidades() {
 
     return Object.assign({}, c, {dias, prioridad, motivo, color, tieneSaldo});
   })
-  // Ordenar: primero los que no compran hace más tiempo y tienen mejor score
+  // Ordenar: server-flagged oportunidad primero, luego por prioridad/días/score
   .sort(function(a, b) {
+    const aOp = a.oportunidad ? 0 : 1;
+    const bOp = b.oportunidad ? 0 : 1;
+    if (aOp !== bOp) return aOp - bOp;
     if (a.prioridad !== b.prioridad) return a.prioridad - b.prioridad;
     const dA = a.dias === null ? 999 : a.dias;
     const dB = b.dias === null ? 999 : b.dias;
@@ -662,13 +687,17 @@ async function renderOportunidades() {
 
   el.innerHTML = oppsFiltradas.map(function(c) {
     const score = c.score || 0;
+    const sit = c.ultimaSit || 1;
     const saldosData = getSaldos(c.nombre);
     const saldoActual = (saldosData && saldosData.total_saldo) || c.total_saldo || 0;
     const limiteCredito = c.limite_credito || 0;
     const cupoDisponible = c.cupo_disponible !== undefined && c.cupo_disponible !== null
       ? c.cupo_disponible
       : (limiteCredito > 0 ? Math.max(0, limiteCredito - saldoActual) : 0);
+    const dotColor = sit === 1 ? 'var(--green)' : sit === 2 ? 'var(--yellow)' : 'var(--red)';
+    const borderColor = c.oportunidad ? 'var(--accent)' : 'var(--green)';
     const tags = [];
+    if (c.oportunidad) tags.push('⭐ Sin saldo — listo para comprar');
     if (score >= 700) tags.push('Score Excelente');
     else tags.push('Score Bueno');
     if (c.dias === null || c.dias >= 30) tags.push('🔥 Contactar');
@@ -676,9 +705,12 @@ async function renderOportunidades() {
     if (c.tieneSaldo) tags.push('Saldo: $' + fmtM(saldoActual));
     if (limiteCredito > 0) tags.push('Cupo: $' + fmtM(cupoDisponible));
 
-    return `<div class="oport-card" data-cuit="${c.cuit}" data-nombre="${esc(c.nombre)}" onclick="abrirModalCliente(this.dataset.cuit, this.dataset.nombre)">
+    return `<div class="oport-card" style="border-left-color:${borderColor}" data-cuit="${c.cuit}" data-nombre="${esc(c.nombre)}" onclick="abrirModalCliente(this.dataset.cuit, this.dataset.nombre)">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        <div class="oport-nombre">${esc(c.nombre)}</div>
+        <div style="display:flex;align-items:center;gap:7px;flex:1;min-width:0;">
+          <span style="flex-shrink:0;width:10px;height:10px;border-radius:50%;background:${dotColor};display:inline-block;" title="Sit ${sit}"></span>
+          <div class="oport-nombre">${c.oportunidad ? '⭐ ' : ''}${esc(c.nombre)}</div>
+        </div>
         <div class="oport-score" style="color:${scoreToColor(score)}">${score}</div>
       </div>
       <div style="font-size:12px;color:${c.color};font-weight:600;margin-top:4px;">${c.motivo}</div>

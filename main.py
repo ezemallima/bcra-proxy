@@ -902,15 +902,24 @@ def get_cartera_por_vendedor(vendedor):
         key = _norm_nombre(cli)
         saldo_map[key] = saldo_map.get(key, 0) + (f.get('saldo') or 0)
 
-    # Scores y alertas
+    def _nc(x):
+        return str(x or '').replace('-', '').replace(' ', '').strip()
+
+    # Scores y alertas — normalizar CUITs para evitar mismatches por guiones/espacios
     scores = {}
     alertas_cuits = set()
     try:
         if os.path.exists(ALERTAS_FILE):
             with open(ALERTAS_FILE, 'r', encoding='utf-8') as f_al:
                 ad = json.load(f_al)
-            scores = {c['cuit']: c for c in ad.get('cartera', []) if c.get('cuit')}
-            alertas_cuits = {a.get('cuit') for a in ad.get('alertas', []) if a.get('cuit')}
+            for c in ad.get('cartera', []):
+                nc = _nc(c.get('cuit', ''))
+                if nc:
+                    scores[nc] = c
+            for a in ad.get('alertas', []):
+                nc = _nc(a.get('cuit', ''))
+                if nc:
+                    alertas_cuits.add(nc)
     except:
         pass
 
@@ -918,7 +927,8 @@ def get_cartera_por_vendedor(vendedor):
     for cc in base:
         nombre = (cc.get('nombre') or '').strip()
         cuit = (cc.get('cuit') or '').strip()
-        sc = scores.get(cuit, {})
+        cuit_n = _nc(cuit)
+        sc = scores.get(cuit_n, {})
 
         # Buscar saldo: exacto primero, luego por primeras 2 palabras
         nombre_norm = _norm_nombre(nombre)
@@ -948,7 +958,7 @@ def get_cartera_por_vendedor(vendedor):
             'scoreColor': sc.get('scoreColor'),
             'scoreEmoji': sc.get('scoreEmoji'),
             'ultimaSit': sc.get('ultimaSit', 1),
-            'alerta': cuit in alertas_cuits,
+            'alerta': cuit_n in alertas_cuits,
             'oportunidad': bool(score_val and score_val > 700 and total_saldo == 0),
         })
 
