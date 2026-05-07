@@ -534,7 +534,7 @@ def _inferir_desde_bcra(cuit):
             'actividad_principal': '',
             'es_empleador':        False,
             'antiguedad_anos':     0,
-            'ingresos_anuales':    round(monto_total * 4),
+            'ingresos_anuales':    round(monto_total * 3),
             'fuente_ingresos':     'bcra_inferido',
             'fuente':              'bcra_fallback',
         }
@@ -559,7 +559,27 @@ def get_solvency_data(cuit):
             with open(cache_path, 'r') as f:
                 cached = json.load(f)
             if time.time() - cached.get('ts', 0) < 86400:
-                return cached.get('data')
+                cached_data = cached.get('data') or {}
+                # Sanity: re-inferir si el caché guardó ingresos=0 con tipo/cat válidos
+                if not cached_data.get('ingresos_anuales') and (
+                    cached_data.get('categoria_monotrib') or cached_data.get('tipo_persona')
+                ):
+                    _ing, _fi = _inferir_ingresos_afip(
+                        cached_data.get('categoria_monotrib', ''),
+                        cached_data.get('tipo_persona', ''),
+                        cached_data.get('actividad_principal', ''),
+                        cached_data.get('es_empleador', False),
+                    )
+                    if _ing > 0:
+                        cached_data['ingresos_anuales'] = _ing
+                        cached_data['fuente_ingresos']  = _fi
+                        try:
+                            with open(cache_path, 'w') as _fw:
+                                json.dump({'data': cached_data,
+                                           'ts': cached.get('ts', time.time())},
+                                          _fw, ensure_ascii=False)
+                        except: pass
+                return cached_data or None
     except: pass
 
     ua   = random.choice(_USER_AGENTS)
@@ -613,12 +633,19 @@ def get_solvency_data(cuit):
             data['anses_fuente']            = anses.get('fuente', 'anses')
             print(f"[solvency] {cuit_limpio} ANSES capacidad_pago=validada", flush=True)
 
-    # ── Fuente 5: Inferencia BCRA (fallback definitivo) ────────────────────
-    if data is None:
-        data = _inferir_desde_bcra(cuit_limpio)
-        if data:
-            print(f"[solvency] {cuit_limpio} BCRA fallback "
-                  f"ing_estimado≈{data.get('ingresos_anuales')}", flush=True)
+    # ── Fuente 5: Inferencia BCRA — fallback completo y piso obligatorio ─────
+    if data is None or not (data or {}).get('ingresos_anuales'):
+        _bcra_inf = _inferir_desde_bcra(cuit_limpio)
+        if _bcra_inf:
+            if data is None:
+                data = _bcra_inf
+                print(f"[solvency] {cuit_limpio} BCRA fallback completo "
+                      f"ing≈{data.get('ingresos_anuales')}", flush=True)
+            else:
+                data['ingresos_anuales'] = _bcra_inf.get('ingresos_anuales', 0)
+                data['fuente_ingresos']  = 'bcra_piso'
+                print(f"[solvency] {cuit_limpio} BCRA piso aplicado "
+                      f"ing≈{data['ingresos_anuales']}", flush=True)
 
     try:
         with open(cache_path, 'w') as f:
@@ -938,6 +965,11 @@ def calcular_rating_predictivo(
 
     # ── Ajuste: ratio de apalancamiento BCRA/AFIP ─────────────────────────
     if solvency_data:
+        # Piso de emergencia: deuda bancaria implica ingresos mínimos (×3)
+        if not solvency_data.get('ingresos_anuales') and monto_total_m > 0:
+            solvency_data = dict(solvency_data)
+            solvency_data['ingresos_anuales'] = round(monto_total_m * 1_000 * 3)
+            solvency_data['fuente_ingresos']  = 'bcra_floor_scorer'
         _ing = float(solvency_data.get('ingresos_anuales') or 0)
         if _ing > 0 and (monto_total_m * 1000) / _ing > 0.5:
             puntos -= 200
@@ -1958,16 +1990,37 @@ def verificar_reset():
     return jsonify({"ok": True, "estaba_corriendo": estaba_corriendo})
 
 
+@app.route("/limpiar-solvency", methods=["POST"])
+def limpiar_solvency():
+    """Elimina todos los solvency_*.json en DATA_DIR para forzar re-scraping en cartera completa."""
+    import glob as _glob
+    eliminados = 0
+    try:
+        for _fp in _glob.glob(os.path.join(DATA_DIR, 'solvency_*.json')):
+            os.remove(_fp)
+            eliminados += 1
+        print(f"[limpiar-solvency] {eliminados} archivos eliminados", flush=True)
+        return jsonify({"ok": True, "eliminados": eliminados})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @app.route("/calcular-score/<cuit>")
 def calcular_score_individual(cuit):
     """
     SSoT de scoring v9.0: calcula el score para un CUIT usando el mismo motor que el batch.
-    Usa datos cacheados si están frescos; persiste resultado en alertas_cartera.json.
+    ?fresh=1 → invalida caché de solvency para re-scraping forzado.
     """
     from urllib.parse import unquote
     cuit_limpio = str(unquote(cuit)).replace('-', '').replace(' ', '').strip()
     if len(cuit_limpio) < 10:
         return jsonify({"ok": False, "error": "CUIT inválido"}), 400
+    if request.args.get('fresh') == '1':
+        _fp = os.path.join(DATA_DIR, f'solvency_{cuit_limpio}.json')
+        if os.path.exists(_fp):
+            os.remove(_fp)
+        _score_session_cache.pop(cuit_limpio, None)
+        print(f"[calcular-score] fresh=1 → caché limpiado para {cuit_limpio}", flush=True)
     try:
         bcra_data, _ = consultar_bcra_cached(cuit_limpio)
         score_data   = calcular_score_servidor(cuit_limpio, bcra_data or {})
