@@ -5,7 +5,11 @@
       "Bash(python3 -c \"import json; c=json.load\\(open\\('cartera_comercial.json',encoding='utf-8'\\)\\); vs=sorted\\(set\\(x.get\\('vendedor',''\\) for x in c if x.get\\('vendedor'\\)\\)\\); print\\(len\\(c\\),'clientes'\\); [print\\(' -',v\\) for v in vs]\")",
       "Bash(python -c \"import ast; ast.parse\\(open\\('main.py'\\).read\\(\\)\\); print\\('OK — no parse errors'\\)\")",
       "Bash(python3 -c \"import ast; ast.parse\\(open\\('main.py'\\).read\\(\\)\\); print\\('OK — no parse errors'\\)\")",
-      "PowerShell(py -c \"import ast; ast.parse\\(open\\('main.py'\\).read\\(\\)\\); print\\('OK - no parse errors'\\)\" 2>&1)"
+      "PowerShell(py -c \"import ast; ast.parse\\(open\\('main.py'\\).read\\(\\)\\); print\\('OK - no parse errors'\\)\" 2>&1)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('main.py'\\).read\\(\\)\\); print\\('OK - no syntax errors'\\)\")",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('main.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(py -c \"import ast; ast.parse\\(open\\('main.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "PowerShell(python -c \"import ast; ast.parse\\(open\\('main.py'\\).read\\(\\)\\); print\\('OK - sin errores de sintaxis'\\)\")"
     ]
   }
 }
