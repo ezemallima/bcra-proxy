@@ -37,8 +37,9 @@ _MONOTRIB_INGRESOS = {
 }
 GEMINI_MODEL = "gemini-1.5-flash"
 DATA_DIR = '/data' if os.path.exists('/data') else os.getcwd()
-ALERTAS_FILE = os.path.join(DATA_DIR, 'alertas_cartera.json')
-DATOS_FILE = os.path.join(DATA_DIR, 'datos_bodega.json')
+ALERTAS_FILE      = os.path.join(DATA_DIR, 'alertas_cartera.json')
+ALERTAS_BCRA_FILE = os.path.join(DATA_DIR, 'alertas_bcra.json')
+DATOS_FILE        = os.path.join(DATA_DIR, 'datos_bodega.json')
 print(f"[init] Almacenamiento en: {DATA_DIR}", flush=True)
 WSP_FILE = os.path.join(os.getcwd(), 'whatsapp_index.json')
 
@@ -936,29 +937,38 @@ def get_cartera_por_vendedor(vendedor):
     def _nc(x):
         return str(x or '').replace('-', '').replace(' ', '').strip()
 
-    # ── Cargar scores y alertas ────────────────────────────────────────────────
-    # Busca en DATA_DIR primero, luego en os.getcwd() como fallback
-    scores = {}          # cuit_norm → entry
-    scores_by_nombre = {}  # norm_nombre → entry  (plan B para el cruce)
+    # ── Merge obligatorio desde TODOS los archivos de scores del servidor ────────
+    # Fuentes: alertas_bcra.json (queries individuales) + alertas_cartera.json (verificación)
+    # Prioridad: alertas_cartera sobreescribe alertas_bcra para el mismo CUIT
+    scores = {}            # cuit_norm → entry
+    scores_by_nombre = {}  # norm_nombre → entry  (plan B)
     alertas_cuits = set()
-    _arch_usado = None
+    _archivos_usados = []
 
-    for _ruta in [ALERTAS_FILE, os.path.join(os.getcwd(), 'alertas_cartera.json')]:
-        if not os.path.exists(_ruta):
-            continue
+    def _load_score_file(ruta):
+        if not os.path.exists(ruta):
+            return
         try:
-            with open(_ruta, 'r', encoding='utf-8') as _f:
+            with open(ruta, 'r', encoding='utf-8') as _f:
                 _ad = json.load(_f)
-            # Índice por CUIT
+            loaded = 0
+            # Estructura estándar: {cartera: [...], alertas: [...]}
             for _c in _ad.get('cartera', []):
                 _nc_val = _nc(_c.get('cuit', ''))
                 if _nc_val:
-                    scores[_nc_val] = _c
-                # Índice por nombre si el campo está guardado (nuevas verificaciones)
+                    scores[_nc_val] = _c  # sobreescribe — última fuente cargada gana
+                    loaded += 1
                 _n = (_c.get('nombre') or '').strip()
                 if _n:
                     scores_by_nombre[_norm_nombre(_n)] = _c
-            # Alertas — también indexar nombre de alertas (siempre tienen nombre)
+            # Estructura plana: {cuit: score_data} (posible formato de alertas_bcra.json)
+            if not _ad.get('cartera') and not _ad.get('alertas'):
+                for _k, _v in _ad.items():
+                    if isinstance(_v, dict) and _v.get('scoreCompleto'):
+                        _nc_val = _nc(_k)
+                        if _nc_val:
+                            scores[_nc_val] = _v
+                            loaded += 1
             for _a in _ad.get('alertas', []):
                 _nc_val = _nc(_a.get('cuit', ''))
                 if _nc_val:
@@ -966,19 +976,23 @@ def get_cartera_por_vendedor(vendedor):
                 _n = (_a.get('nombre') or '').strip()
                 if _n and _a.get('scoreCompleto'):
                     scores_by_nombre.setdefault(_norm_nombre(_n), _a)
-            _arch_usado = _ruta
-            break
+            _archivos_usados.append(f"{os.path.basename(ruta)}({loaded}sc)")
         except Exception as _e:
-            print(f"[cartera-vendedor] Error leyendo {_ruta}: {_e}", flush=True)
+            print(f"[cartera-vendedor] Error leyendo {ruta}: {_e}", flush=True)
+
+    # Cargar en orden ascendente de prioridad (cartera sobreescribe bcra)
+    for _ruta in list(dict.fromkeys([
+        os.path.join(os.getcwd(), 'alertas_bcra.json'), ALERTAS_BCRA_FILE,
+        os.path.join(os.getcwd(), 'alertas_cartera.json'), ALERTAS_FILE,
+    ])):
+        _load_score_file(_ruta)
 
     print(
-        f"[cartera-vendedor] vendedor={v!r} | base={len(base)} clientes | "
-        f"archivo={'OK:'+_arch_usado if _arch_usado else 'NO ENCONTRADO'} | "
+        f"[cartera-vendedor] vendedor={v!r} | base={len(base)} | "
+        f"archivos={_archivos_usados or ['NINGUNO']} | "
         f"scores={len(scores)} | scores_nombre={len(scores_by_nombre)} | alertas={len(alertas_cuits)}",
         flush=True
     )
-    if scores:
-        print(f"[cartera-vendedor] CUITs en scores (muestra): {list(scores.keys())[:5]}", flush=True)
     # ──────────────────────────────────────────────────────────────────────────
 
     result = []
@@ -1062,37 +1076,62 @@ def get_cartera_comercial(vendedor):
 
 @app.route("/scores-cartera", methods=["GET"])
 def get_scores_cartera():
-    """Devuelve scores de toda la cartera indexados por CUIT normalizado."""
+    """Devuelve scores de toda la cartera indexados por CUIT normalizado.
+    Merge de alertas_bcra.json (queries individuales) + alertas_cartera.json (verificación).
+    alertas_cartera tiene prioridad para el mismo CUIT."""
     def _nc2(x):
         return str(x or '').replace('-', '').replace(' ', '').strip()
 
-    for _ruta in [ALERTAS_FILE, os.path.join(os.getcwd(), 'alertas_cartera.json')]:
+    scores_out = {}
+    archivos_log = []
+
+    for _ruta in list(dict.fromkeys([
+        os.path.join(os.getcwd(), 'alertas_bcra.json'), ALERTAS_BCRA_FILE,
+        os.path.join(os.getcwd(), 'alertas_cartera.json'), ALERTAS_FILE,
+    ])):
         if not os.path.exists(_ruta):
             continue
         try:
             with open(_ruta, 'r', encoding='utf-8') as f:
-                alertas_data = json.load(f)
-            cartera = alertas_data.get('cartera', [])
-            con_score = [c for c in cartera if c.get('scoreCompleto')]
-            if con_score:
-                scores_out = {}
-                for c in con_score:
-                    nc = _nc2(c.get('cuit', ''))
-                    if nc:
-                        scores_out[nc] = {
-                            "scoreCompleto": c.get('scoreCompleto'),
-                            "scoreRango":    c.get('scoreRango'),
-                            "scoreColor":    c.get('scoreColor'),
-                            "scoreEmoji":    c.get('scoreEmoji'),
-                            "ultimaSit":     c.get('ultimaSit', 1),
-                            "nombre":        c.get('nombre', ''),
-                        }
-                print(f"[scores-cartera] {len(scores_out)} scores desde {_ruta}", flush=True)
-                return jsonify({"ok": True, "scores": scores_out, "total": len(scores_out)})
+                _ad = json.load(f)
+            antes = len(scores_out)
+            # Estructura estándar: {cartera: [...]}
+            for c in _ad.get('cartera', []):
+                if not c.get('scoreCompleto'):
+                    continue
+                nc = _nc2(c.get('cuit', ''))
+                if nc:
+                    scores_out[nc] = {
+                        "scoreCompleto": c.get('scoreCompleto'),
+                        "scoreRango":    c.get('scoreRango'),
+                        "scoreColor":    c.get('scoreColor'),
+                        "scoreEmoji":    c.get('scoreEmoji'),
+                        "ultimaSit":     c.get('ultimaSit', 1),
+                        "nombre":        c.get('nombre', ''),
+                    }
+            # Estructura plana: {cuit: score_data}
+            if not _ad.get('cartera') and not _ad.get('alertas'):
+                for k, v in _ad.items():
+                    if isinstance(v, dict) and v.get('scoreCompleto'):
+                        nc = _nc2(k)
+                        if nc:
+                            scores_out[nc] = {
+                                "scoreCompleto": v.get('scoreCompleto'),
+                                "scoreRango":    v.get('scoreRango'),
+                                "scoreColor":    v.get('scoreColor'),
+                                "scoreEmoji":    v.get('scoreEmoji'),
+                                "ultimaSit":     v.get('ultimaSit', 1),
+                                "nombre":        v.get('nombre', ''),
+                            }
+            nuevos = len(scores_out) - antes
+            archivos_log.append(f"{os.path.basename(_ruta)}(+{nuevos})")
         except Exception as e:
-            print(f"[scores-cartera] Error leyendo {_ruta}: {e}", flush=True)
+            print(f"[scores-cartera] Error {_ruta}: {e}", flush=True)
 
-    return jsonify({"ok": False, "mensaje": "Sin scores — corré la verificación desde App Principal.", "scores": {}, "total": 0})
+    print(f"[scores-cartera] {len(scores_out)} scores totales — {archivos_log}", flush=True)
+    if scores_out:
+        return jsonify({"ok": True, "scores": scores_out, "total": len(scores_out)})
+    return jsonify({"ok": False, "scores": {}, "total": 0})
 
 @app.route("/whatsapp_index.json")
 def wsp_index_route():

@@ -349,13 +349,15 @@ async function iniciarApp() {
     const scR = await fetch(API + '/scores-cartera?v=' + Date.now()).catch(() => null);
     if (scR && scR.ok) {
       const scD = await scR.json();
-      if (scD.ok) {
-        window._scoresCartera = scD.scores || {};
-        // Aplicar como pasada final: enriquecer cualquier cliente que aún no tenga score
+      const _sc = scD.scores || {};
+      if (Object.keys(_sc).length > 0) {
+        window._scoresCartera = _sc;
+        // Pasada final: enriquecer cualquier cliente que aún no tenga score
         const ncFn = c => String(c||'').replace(/-/g,'').replace(/\s/g,'').trim();
+        let nuevos = 0;
         CARTERA_LOCAL.forEach((c, i) => {
-          if (c.score) return; // ya tiene score
-          const sc = window._scoresCartera[ncFn(c.cuit)];
+          if (c.score) return;
+          const sc = _sc[ncFn(c.cuit)];
           if (sc && sc.scoreCompleto) {
             CARTERA_LOCAL[i].score      = sc.scoreCompleto;
             CARTERA_LOCAL[i].scoreRango = sc.scoreRango;
@@ -363,12 +365,12 @@ async function iniciarApp() {
             CARTERA_LOCAL[i].scoreEmoji = sc.scoreEmoji;
             CARTERA_LOCAL[i].ultimaSit  = sc.ultimaSit || 1;
             if (sc.scoreCompleto > 700 && !(c.total_saldo > 0)) CARTERA_LOCAL[i].oportunidad = true;
+            nuevos++;
           }
         });
         const conScore = CARTERA_LOCAL.filter(c=>c.score).length;
-        console.log('[init] scores-cartera fallback aplicado — total con score:', conScore + '/' + CARTERA_LOCAL.length);
-        // Re-render si esta pasada aportó scores nuevos
-        if (conScore > 0) { renderCartera(document.querySelector('.filter-chip.active')?.dataset?.filtro || 'todos'); renderOportunidades(); }
+        console.log('[init] scores-cartera aplicado — total con score:', conScore + '/' + CARTERA_LOCAL.length, '| nuevos en esta pasada:', nuevos);
+        if (nuevos > 0) { renderCartera(document.querySelector('.filter-chip.active')?.dataset?.filtro || 'todos'); renderOportunidades(); }
       }
     }
   } catch(e) { console.warn('[init] Alertas no disponibles (archivo puede no existir):', e); }
@@ -652,7 +654,7 @@ async function renderOportunidades() {
   });
 
   if (!candidatos.length) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">⚡</div><div class="empty-text">Corré la verificación de cartera primero para calcular scores.</div></div>';
+    el.innerHTML = '<div class="empty"><div class="empty-icon">⚡</div><div class="empty-text">Sin oportunidades detectadas. Los clientes con score ≥ 700 aparecerán aquí.</div></div>';
     return;
   }
 
