@@ -1072,6 +1072,46 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
 _calcular_score = calcular_score_servidor
 
 
+def _actualizar_score_en_cartera(cuit_limpio: str, score_data: dict, solvency: dict = None):
+    """Merge atómico: actualiza / inserta el score de un CUIT en alertas_cartera.json.
+    Llamada tanto desde /calcular-score como desde el batch, para garantizar SSoT."""
+    try:
+        try:
+            with open(ALERTAS_FILE, 'r', encoding='utf-8') as _f:
+                existente = json.load(_f)
+        except:
+            existente = {"alertas": [], "ultima_verif": "", "cartera": []}
+        cartera = existente.get('cartera', [])
+        nc = str(cuit_limpio).replace('-', '').replace(' ', '').strip()
+        patch = {
+            'scoreCompleto':        score_data.get('score'),
+            'scoreRango':           score_data.get('rango'),
+            'scoreColor':           score_data.get('color'),
+            'scoreEmoji':           score_data.get('emoji'),
+            'alerta_temprana':      score_data.get('alerta_temprana', False),
+            'bloquear_oportunidad': score_data.get('bloquear_oportunidad', False),
+            'alerta_logistica':     score_data.get('alerta_logistica', ''),
+            'inferencia_ingresos':  (solvency or {}).get('ingresos_anuales'),
+            'fuente_ingresos':      (solvency or {}).get('fuente_ingresos'),
+            'actividad_principal':  (solvency or {}).get('actividad_principal'),
+            'ultimaVerif':          time.strftime('%d/%m/%Y'),
+            'score_ts':             time.time(),
+            'pendiente':            False,
+        }
+        found = False
+        for i, c in enumerate(cartera):
+            if str(c.get('cuit', '')).replace('-', '').replace(' ', '').strip() == nc:
+                cartera[i].update(patch)
+                found = True
+                break
+        if not found:
+            cartera.append({'cuit': cuit_limpio, 'nombre': '', 'ciudad': '', **patch})
+        existente['cartera'] = cartera
+        with open(ALERTAS_FILE, 'w', encoding='utf-8') as _f:
+            json.dump(existente, _f, ensure_ascii=False)
+    except Exception as _e:
+        print(f"[score-update] Error persistiendo {cuit_limpio}: {_e}", flush=True)
+
 
 def ejecutar_verificacion(cartera_data):
     global verificacion_estado
@@ -1128,14 +1168,22 @@ def ejecutar_verificacion(cartera_data):
             os.remove(cache_file)
             print("[verif] Caché BCRA limpiado para verificación fresca", flush=True)
     except: pass
-    # Limpiar caché de historial y cheques (pueden tener datos vacíos de consultas fallidas)
+    # Eliminar solo caché de historial/cheques STALE (> 24h) — los frescos se reutilizan
     try:
-        import glob
-        for f in glob.glob(os.path.join(DATA_DIR, 'historial_*.json')):
-            os.remove(f)
-        for f in glob.glob(os.path.join(DATA_DIR, 'cheques_*.json')):
-            os.remove(f)
-        print("[verif] Caché historial y cheques limpiado", flush=True)
+        import glob as _glob
+        ahora_v = time.time()
+        elim = 0
+        for _fp in _glob.glob(os.path.join(DATA_DIR, 'historial_*.json')) + \
+                   _glob.glob(os.path.join(DATA_DIR, 'cheques_*.json')):
+            try:
+                with open(_fp, 'r') as _ff:
+                    _ts = json.load(_ff).get('ts', 0)
+                if ahora_v - _ts > 86400:
+                    os.remove(_fp); elim += 1
+            except:
+                try: os.remove(_fp); elim += 1
+                except: pass
+        print(f"[verif] Caché stale eliminado: {elim} archivos (frescos conservados)", flush=True)
     except: pass
 
     def _guardar_alertas(nuevas_alertas, cartera_actualizada, parcial=False):
@@ -1143,15 +1191,23 @@ def ejecutar_verificacion(cartera_data):
 
         def _entry(c):
             return {
-                "cuit": c.get('cuit'), "nombre": c.get('nombre', ''),
-                "ciudad": c.get('ciudad', ''),
-                "ultimaSit": c.get('ultimaSit'), "ultimaVerif": c.get('ultimaVerif'),
-                "scoreCompleto": c.get('scoreCompleto'), "scoreRango": c.get('scoreRango'),
-                "scoreColor": c.get('scoreColor'), "scoreEmoji": c.get('scoreEmoji'),
-                "alerta_temprana": c.get('alerta_temprana', False),
+                "cuit":                 c.get('cuit'),
+                "nombre":               c.get('nombre', ''),
+                "ciudad":               c.get('ciudad', ''),
+                "ultimaSit":            c.get('ultimaSit'),
+                "ultimaVerif":          c.get('ultimaVerif'),
+                "scoreCompleto":        c.get('scoreCompleto'),
+                "scoreRango":           c.get('scoreRango'),
+                "scoreColor":           c.get('scoreColor'),
+                "scoreEmoji":           c.get('scoreEmoji'),
+                "alerta_temprana":      c.get('alerta_temprana', False),
                 "bloquear_oportunidad": c.get('bloquear_oportunidad', False),
-                "alerta_logistica": c.get('alerta_logistica', ''),
-                "pendiente": c.get('pendiente', False),
+                "alerta_logistica":     c.get('alerta_logistica', ''),
+                "inferencia_ingresos":  c.get('inferencia_ingresos'),
+                "fuente_ingresos":      c.get('fuente_ingresos'),
+                "actividad_principal":  c.get('actividad_principal'),
+                "score_ts":             c.get('score_ts', 0),
+                "pendiente":            c.get('pendiente', False),
             }
 
         if parcial and os.path.exists(ALERTAS_FILE):
@@ -1230,6 +1286,13 @@ def ejecutar_verificacion(cartera_data):
                         cliente_actualizado['alerta_temprana']      = score_data.get('alerta_temprana', False)
                         cliente_actualizado['bloquear_oportunidad'] = score_data.get('bloquear_oportunidad', False)
                         cliente_actualizado['alerta_logistica']     = score_data.get('alerta_logistica', '')
+                        # Enriquecer con solvencia (ya cacheada por calcular_rating_predictivo)
+                        _sv = get_solvency_data(cuit)
+                        if _sv:
+                            cliente_actualizado['inferencia_ingresos'] = _sv.get('ingresos_anuales')
+                            cliente_actualizado['fuente_ingresos']     = _sv.get('fuente_ingresos')
+                            cliente_actualizado['actividad_principal'] = _sv.get('actividad_principal')
+                        cliente_actualizado['score_ts'] = time.time()
                         print(f"{tag} score={score_data['score']}", flush=True)
                     except Exception as e_sc:
                         print(f"{tag} ERROR score: {type(e_sc).__name__}: {e_sc}", flush=True)
@@ -1625,6 +1688,9 @@ def get_scores_cartera():
                         "alerta_temprana":      c.get('alerta_temprana', False),
                         "bloquear_oportunidad": c.get('bloquear_oportunidad', False),
                         "alerta_logistica":     c.get('alerta_logistica', ''),
+                        "inferencia_ingresos":  c.get('inferencia_ingresos'),
+                        "fuente_ingresos":      c.get('fuente_ingresos'),
+                        "actividad_principal":  c.get('actividad_principal'),
                     }
             # Estructura plana: {cuit: score_data}
             if not _ad.get('cartera') and not _ad.get('alertas'):
@@ -1642,6 +1708,9 @@ def get_scores_cartera():
                                 "alerta_temprana":      v.get('alerta_temprana', False),
                                 "bloquear_oportunidad": v.get('bloquear_oportunidad', False),
                                 "alerta_logistica":     v.get('alerta_logistica', ''),
+                                "inferencia_ingresos":  v.get('inferencia_ingresos'),
+                                "fuente_ingresos":      v.get('fuente_ingresos'),
+                                "actividad_principal":  v.get('actividad_principal'),
                             }
             nuevos = len(scores_out) - antes
             archivos_log.append(f"{os.path.basename(_ruta)}(+{nuevos})")
@@ -1887,6 +1956,117 @@ def verificar_reset():
     verificacion_estado["mensaje"] = "Reset manual. Listo para nueva verificacion."
     print(f"[verif] Reset manual. Estaba corriendo: {estaba_corriendo}", flush=True)
     return jsonify({"ok": True, "estaba_corriendo": estaba_corriendo})
+
+
+@app.route("/calcular-score/<cuit>")
+def calcular_score_individual(cuit):
+    """
+    SSoT de scoring v9.0: calcula el score para un CUIT usando el mismo motor que el batch.
+    Usa datos cacheados si están frescos; persiste resultado en alertas_cartera.json.
+    """
+    from urllib.parse import unquote
+    cuit_limpio = str(unquote(cuit)).replace('-', '').replace(' ', '').strip()
+    if len(cuit_limpio) < 10:
+        return jsonify({"ok": False, "error": "CUIT inválido"}), 400
+    try:
+        bcra_data, _ = consultar_bcra_cached(cuit_limpio)
+        score_data   = calcular_score_servidor(cuit_limpio, bcra_data or {})
+        solvency     = get_solvency_data(cuit_limpio)   # ya cacheada por el scorer
+        _actualizar_score_en_cartera(cuit_limpio, score_data, solvency)
+        return jsonify({
+            "ok":                   True,
+            "score":                score_data.get('score'),
+            "rango":                score_data.get('rango'),
+            "color":                score_data.get('color'),
+            "emoji":                score_data.get('emoji'),
+            "alerta_temprana":      score_data.get('alerta_temprana', False),
+            "bloquear_oportunidad": score_data.get('bloquear_oportunidad', False),
+            "alerta_logistica":     score_data.get('alerta_logistica', ''),
+            "tendencia":            score_data.get('tendencia'),
+            "es_empleador":         score_data.get('es_empleador', False),
+            "indice_solvencia":     score_data.get('indice_solvencia'),
+            "inferencia_ingresos":  (solvency or {}).get('ingresos_anuales'),
+            "fuente_ingresos":      (solvency or {}).get('fuente_ingresos'),
+            "actividad_principal":  (solvency or {}).get('actividad_principal'),
+            "version":              _SCORE_VERSION,
+        })
+    except Exception as e:
+        print(f"[calcular-score] Error {cuit_limpio}: {e}", flush=True)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/recalcular-scores", methods=["POST"])
+def recalcular_scores():
+    """
+    Re-calcula scores para toda la cartera usando datos en caché (sin re-scrapear BCRA).
+    Botón '↻ Actualizar scores': aplica lógica v9.0 sobre datos ya guardados.
+    """
+    try:
+        with open(ALERTAS_FILE, 'r', encoding='utf-8') as _f:
+            existente = json.load(_f)
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"alertas_cartera.json no disponible: {e}"}), 404
+
+    cartera    = existente.get('cartera', [])
+    recalc     = 0
+    sin_cache  = 0
+
+    def _cache_load_fresh(fname):
+        p = os.path.join(DATA_DIR, fname)
+        try:
+            with open(p, 'r') as _f:
+                d = json.load(_f)
+            if time.time() - d.get('ts', 0) < 86400:
+                return d.get('payload')
+        except: pass
+        return None
+
+    for i, c in enumerate(cartera):
+        cuit = str(c.get('cuit', '') or '').replace('-', '').replace(' ', '').strip()
+        if not cuit:
+            continue
+        bcra_cached, _ = cache_get(cuit)
+        if not bcra_cached:
+            sin_cache += 1
+            continue
+        hist_data = _cache_load_fresh(f'historial_{cuit}.json')
+        cheq_data = _cache_load_fresh(f'cheques_{cuit}.json')
+        solvency  = get_solvency_data(cuit)
+        try:
+            sd = calcular_rating_predictivo(
+                cuit=cuit, bcra_data=bcra_cached,
+                hist_data=hist_data, cheq_data=cheq_data,
+                en_mora=None, solvency_data=solvency,
+                ciudad=str(c.get('ciudad', '') or ''),
+            )
+            cartera[i].update({
+                'scoreCompleto':        sd['score'],
+                'scoreRango':           sd['rango'],
+                'scoreColor':           sd['color'],
+                'scoreEmoji':           sd['emoji'],
+                'alerta_temprana':      sd.get('alerta_temprana', False),
+                'bloquear_oportunidad': sd.get('bloquear_oportunidad', False),
+                'alerta_logistica':     sd.get('alerta_logistica', ''),
+                'inferencia_ingresos':  (solvency or {}).get('ingresos_anuales'),
+                'fuente_ingresos':      (solvency or {}).get('fuente_ingresos'),
+                'actividad_principal':  (solvency or {}).get('actividad_principal'),
+                'score_ts':             time.time(),
+                'pendiente':            False,
+            })
+            recalc += 1
+        except Exception as e_r:
+            print(f"[recalcular] Error {cuit}: {e_r}", flush=True)
+
+    existente['cartera']      = cartera
+    existente['ultima_verif'] = time.strftime('%d/%m/%Y %H:%M') + ' (recalc v9.0)'
+    try:
+        with open(ALERTAS_FILE, 'w', encoding='utf-8') as _f:
+            json.dump(existente, _f, ensure_ascii=False)
+        print(f"[recalcular] {recalc} scores actualizados, {sin_cache} sin caché BCRA", flush=True)
+        return jsonify({"ok": True, "recalculados": recalc, "sin_cache": sin_cache})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
 
 @app.route("/analizar-bodegas", methods=["POST"])
 def analizar_bodegas():

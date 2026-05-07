@@ -196,6 +196,7 @@
         <button class="filter-chip active" onclick="filtrarCartera('todos',this)">Todos</button>
         <button class="filter-chip" onclick="filtrarCartera('alertas',this)">⚠ Alertas</button>
         <button class="filter-chip" onclick="filtrarCartera('saldo',this)">💰 Con saldo</button>
+        <button id="btn-recalc" onclick="actualizarScores(this)" style="margin-left:auto;background:none;border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:12px;color:var(--text2);cursor:pointer;font-family:'DM Sans',sans-serif;">↻ Scores</button>
 
       </div>
       <div id="cartera-lista"></div>
@@ -509,6 +510,40 @@ function getSaldos(nombre) {
 }
 
 // ── TABS ──
+async function actualizarScores(btn) {
+  const orig = btn.textContent;
+  btn.textContent = '⏳…'; btn.disabled = true;
+  try {
+    const r = await fetch(API + '/recalcular-scores', { method: 'POST' });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'error');
+    btn.textContent = '✓ ' + d.recalculados;
+    // Refrescar scores en CARTERA_LOCAL y re-renderizar
+    const scR = await fetch(API + '/scores-cartera?v=' + Date.now()).catch(()=>null);
+    if (scR && scR.ok) {
+      const _sc = (await scR.json()).scores || {};
+      window._scoresCartera = _sc;
+      const ncFn = x => String(x||'').replace(/-/g,'').replace(/\s/g,'').trim();
+      CARTERA_LOCAL.forEach((c,i) => {
+        const sc = _sc[ncFn(c.cuit)];
+        if (sc && sc.scoreCompleto) {
+          CARTERA_LOCAL[i].score                = sc.scoreCompleto;
+          CARTERA_LOCAL[i].scoreRango           = sc.scoreRango;
+          CARTERA_LOCAL[i].scoreColor           = sc.scoreColor;
+          CARTERA_LOCAL[i].scoreEmoji           = sc.scoreEmoji;
+          CARTERA_LOCAL[i].alerta_temprana      = sc.alerta_temprana || false;
+          CARTERA_LOCAL[i].bloquear_oportunidad = sc.bloquear_oportunidad || false;
+          CARTERA_LOCAL[i].alerta_logistica     = sc.alerta_logistica || '';
+        }
+      });
+      const filtroActive = document.querySelector('.filter-chip.active');
+      renderCartera(filtroActive?.dataset?.filtro || 'todos');
+      renderOportunidades();
+    }
+  } catch(e) { btn.textContent = '⚠'; }
+  setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 3000);
+}
+
 function switchTab(tab, btn) {
   document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -802,9 +837,27 @@ async function abrirModalCliente(cuit, nombre) {
   const bcraData = (br && br.ok) ? await br.json() : null;
   const chData   = (chr && chr.ok) ? await chr.json() : null;
   const histData = (hr && hr.ok)   ? await hr.json()  : null;
-  // SSoT: buscar score del servidor primero
+  // SSoT: score del servidor v9.0 (misma lógica que el batch)
   const clienteLocal = CARTERA_LOCAL.find(function(c){return c.cuit===cuit;});
-  const scoreServidor = (clienteLocal && clienteLocal.score) ? clienteLocal.score : null;
+  let scoreServidor = (clienteLocal && clienteLocal.score) ? clienteLocal.score : null;
+  if (!scoreServidor) {
+    try {
+      const scr = await fetch(API + '/calcular-score/' + cuit);
+      if (scr.ok) {
+        const scData = await scr.json();
+        if (scData.score) {
+          scoreServidor = scData.score;
+          if (clienteLocal) {
+            clienteLocal.score                = scData.score;
+            clienteLocal.scoreRango           = scData.rango;
+            clienteLocal.scoreColor           = scData.color;
+            clienteLocal.alerta_temprana      = scData.alerta_temprana;
+            clienteLocal.bloquear_oportunidad = scData.bloquear_oportunidad;
+          }
+        }
+      }
+    } catch(e) {}
+  }
   bcraEl.innerHTML = renderBcraModal(bcraData, chData, histData, scoreServidor);
 }
 
@@ -918,16 +971,19 @@ async function consultarCuit() {
   showLoading('Consultando BCRA...');
   document.getElementById('consulta-resultado').innerHTML = '';
   try {
-    const [dr, chr, hr] = await Promise.all([
+    // SSoT: BCRA + score v9.0 en paralelo (misma lógica que el batch)
+    const [dr, chr, hr, scoreR] = await Promise.all([
       fetch(API+'/deudas/'+cuit),
       fetch(API+'/deudas/'+cuit+'/cheques'),
-      fetch(API+'/deudas/'+cuit+'/historial')
+      fetch(API+'/deudas/'+cuit+'/historial'),
+      fetch(API+'/calcular-score/'+cuit).catch(()=>null)
     ]);
     const dd = await dr.json();
     const cd = await chr.json();
     const hd = hr.ok ? await hr.json() : null;
+    const serverScore = (scoreR && scoreR.ok) ? await scoreR.json() : null;
     hideLoading();
-    renderConsulta(cuit, dd, cd, hd);
+    renderConsulta(cuit, dd, cd, hd, serverScore);
     lanzarAnalisisIA(cuit, dd, cd);
   } catch(e) {
     hideLoading();
@@ -945,7 +1001,7 @@ function veredictoRapido(score, activosCheques, maxSit) {
   return {texto:'👁 Revisar con cautela', bg:'#fff7ed', color:'var(--naranja)', borde:'var(--naranja)'};
 }
 
-function renderConsulta(cuit, dd, cd, hd) {
+function renderConsulta(cuit, dd, cd, hd, serverScore) {
   const results = dd.results||{}, periodos = results.periodos||[];
   let maxSit=1, entidades=[], montoTotal=0;
   if (periodos.length) {
@@ -957,7 +1013,8 @@ function renderConsulta(cuit, dd, cd, hd) {
   }
   const _cuitConsulta = cuit;
   const _scoreMap = window._scoresCartera || {};
-  const scoreEst = (_scoreMap[_cuitConsulta]?.scoreCompleto) || calcularScoreCompletoSync(maxSit, dd.sin_deudas, periodos, cd, hd);
+  // SSoT: servidor v9.0 primero; luego caché cartera; fallback JS solo si el servidor no responde
+  const scoreEst = (serverScore?.score) || (_scoreMap[_cuitConsulta]?.scoreCompleto) || calcularScoreCompletoSync(maxSit, dd.sin_deudas, periodos, cd, hd);
   window._ultimoScoreComercial = scoreEst;
   const cc = scoreToColor(scoreEst);
 
