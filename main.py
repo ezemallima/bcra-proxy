@@ -1049,8 +1049,12 @@ def calcular_rating_predictivo(
     else:              rango, color, emoji = 'Rechazar',    '#7f1d1d', '⛔'
 
     alerta_temprana      = alerta_creciente or es_monotrib_bajo or indice_solv < 0.40
-    bloquear_oportunidad = hard_block_mora or (en_mora and score > 700)
+    bloquear_oportunidad = (hard_block_mora or (en_mora and score > 700)) and not es_mora_tecnica
     alerta_log           = _alerta_logistica(ciudad)
+    # Mora técnica: color siempre naranja para distinguirlo de un perfil limpio
+    if es_mora_tecnica:
+        color = '#ca8a04'
+        rango = rango if score >= 750 else ('Revisar' if rango == 'Rechazar' or rango == 'Alto riesgo' else rango)
 
     print(
         f"[score v{_SCORE_VERSION}] {cuit_limpio} sit={max_sit} sp={sit_ponderada:.2f} "
