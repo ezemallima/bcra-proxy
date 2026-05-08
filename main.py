@@ -691,14 +691,17 @@ def _layer1_estabilidad_bancaria(
     monto_real: float,
     periodos_hist: list,
     periodos_curr: list,
+    sit_pond: float = None,
 ) -> tuple:
     """
     Capa 1: Estabilidad Bancaria — 40% del score (0-400 pts).
     Situación BCRA (0-280) + Tendencia 24m (0-120).
-    Penalización doble en pts_sit si tendencia es negativa (Sit 1→2 reciente).
+    sit_pond: situación ponderada por monto; None → usa max_sit binario.
     Returns (pts: int, tendencia: str, alerta_deuda_creciente: bool)
     """
-    if max_sit == 1:
+    sp = sit_pond if sit_pond is not None else float(max_sit)
+    if sp < 1.15:
+        # Cartera virtualmente íntegra en Sit.1 → tratar como Sit.1 pura
         if   monto_real == 0:         pts_sit = 160
         elif monto_real < 500_000:    pts_sit = 200
         elif monto_real < 2_500_000:  pts_sit = 240
@@ -706,10 +709,13 @@ def _layer1_estabilidad_bancaria(
         elif n_periodos_h >= 6:       pts_sit = 260
         elif n_periodos_h >= 2:       pts_sit = 240
         else:                         pts_sit = 210
-    elif max_sit == 2:  pts_sit = 100
-    elif max_sit == 3:  pts_sit = 20
-    elif max_sit == 4:  pts_sit = 5
-    else:               pts_sit = 0
+    elif sp < 1.5:  pts_sit = 180
+    elif sp < 2.0:  pts_sit = 130
+    elif sp < 2.1:  pts_sit = 100   # ≈ Sit.2 puro
+    elif sp < 2.5:  pts_sit = 70
+    elif sp < 3.0:  pts_sit = 40
+    elif sp < 4.0:  pts_sit = 15
+    else:           pts_sit = 5
 
     pts_tend = 55
     tendencia = 'neutral'
@@ -726,7 +732,7 @@ def _layer1_estabilidad_bancaria(
         elif pr <= pa + 0.5: pts_tend = 10;  tendencia = 'deteriorando_leve'
         else:                pts_tend = 0;   tendencia = 'deteriorando'
 
-    if tendencia in ('deteriorando_leve', 'deteriorando') and max_sit <= 2:
+    if tendencia in ('deteriorando_leve', 'deteriorando') and sp <= 2.1:
         pts_sit = pts_sit // 2   # penalización doble
 
     alerta_creciente = False
@@ -882,6 +888,31 @@ def calcular_rating_predictivo(
         max_sit = 1
     monto_real = monto_total_m * 1000
 
+    # ── Ponderación de mora por monto ─────────────────────────────────────
+    # Evita que $89k en Sit.4 tenga el mismo impacto que $2M en Sit.4.
+    # Unidad de trabajo: las mismas "miles de pesos" que devuelve la API BCRA.
+    _ents_curr    = periodos_curr[0].get('entidades', []) if periodos_curr else []
+    _raw_total_m  = monto_total_m * 1000           # miles de pesos (raw BCRA)
+    monto_mora_k  = 0.0                            # miles de pesos en Sit.>1
+    sit_ponderada = float(max_sit)
+    if _ents_curr and _raw_total_m > 0:
+        monto_mora_k = sum(
+            (e.get('monto', 0) or 0) for e in _ents_curr
+            if (e.get('situacion', 1) or 1) > 1
+        )
+        sit_ponderada = sum(
+            (e.get('situacion', 1) or 1) * (e.get('monto', 0) or 0)
+            for e in _ents_curr
+        ) / _raw_total_m
+    pct_mora = monto_mora_k / _raw_total_m if _raw_total_m > 0 else (0.0 if max_sit == 1 else 1.0)
+    # Mora técnica: importe problemático < $150k (150 miles) O < 5 % del total
+    _MORA_TEC_K   = 150.0    # $150.000 ARS en miles de pesos
+    _MORA_TEC_PCT = 0.05
+    es_mora_tecnica = (
+        max_sit > 1 and _raw_total_m > 0 and
+        (monto_mora_k <= _MORA_TEC_K or pct_mora <= _MORA_TEC_PCT)
+    )
+
     # ── Historial 24m ─────────────────────────────────────────────────────
     periodos_hist = (hist_data.get('results') or {}).get('periodos') or [] if hist_data else []
     if not periodos_hist:
@@ -929,7 +960,7 @@ def calcular_rating_predictivo(
 
     # ═══ CAPA 1: Estabilidad Bancaria (0-400 pts) ════════════════════════
     pts_c1, tendencia, alerta_creciente = _layer1_estabilidad_bancaria(
-        max_sit, n_periodos_h, monto_real, periodos_hist, periodos_curr
+        max_sit, n_periodos_h, monto_real, periodos_hist, periodos_curr, sit_ponderada
     )
 
     # ═══ CAPA 2: Solvencia Federal (0-300 pts) ═══════════════════════════
@@ -976,15 +1007,20 @@ def calcular_rating_predictivo(
             print(f"[score v{_SCORE_VERSION}] {cuit_limpio} apalancamiento alto → -200", flush=True)
 
     # ── Penalidades históricas ────────────────────────────────────────────
-    if 2 <= meses_malos <= 5:
+    if 2 <= meses_malos <= 5 and not es_mora_tecnica:
         puntos = round(puntos * 0.75)
-    if sit_grave_6m:
+    if sit_grave_6m and not es_mora_tecnica:
         puntos = min(puntos, 150)
+    elif sit_grave_6m and es_mora_tecnica:
+        puntos = min(puntos, 350)
 
-    # ── Techos duros por situación BCRA ───────────────────────────────────
-    if   max_sit >= 5:  puntos = min(puntos, 1)
-    elif max_sit >= 4:  puntos = min(puntos, 250)
-    elif max_sit == 3:  puntos = min(puntos, 400)
+    # ── Techos duros por situación BCRA (mora técnica → caps más suaves) ──
+    if max_sit >= 5:
+        puntos = min(puntos, 400 if es_mora_tecnica else 1)
+    elif max_sit >= 4:
+        puntos = min(puntos, 650 if es_mora_tecnica else 250)
+    elif max_sit == 3:
+        puntos = min(puntos, 650 if es_mora_tecnica else 400)
 
     # ── Hard Block: mora interna → score ≤ 400 ────────────────────────────
     if hard_block_mora:
@@ -1007,7 +1043,8 @@ def calcular_rating_predictivo(
     alerta_log           = _alerta_logistica(ciudad)
 
     print(
-        f"[score v{_SCORE_VERSION}] {cuit_limpio} sit={max_sit} tend={tendencia} "
+        f"[score v{_SCORE_VERSION}] {cuit_limpio} sit={max_sit} sp={sit_ponderada:.2f} "
+        f"mt={es_mora_tecnica} tend={tendencia} "
         f"c1={pts_c1} c2={pts_c2} c3={pts_c3} liq={pts_liq} "
         f"→ {score} {rango} | at={alerta_temprana} bloq={bloquear_oportunidad} geo={alerta_log or '-'}",
         flush=True
@@ -1029,6 +1066,9 @@ def calcular_rating_predictivo(
         'es_empleador':         es_empleador,
         'indice_solvencia':     indice_solv,
         'version':              _SCORE_VERSION,
+        'mora_tecnica':         es_mora_tecnica,
+        'sit_ponderada':        round(sit_ponderada, 3),
+        'pct_mora':             round(pct_mora, 4),
     }
     _score_session_cache[cuit_limpio] = resultado
     return resultado
@@ -2038,6 +2078,9 @@ def calcular_score_individual(cuit):
             "tendencia":            score_data.get('tendencia'),
             "es_empleador":         score_data.get('es_empleador', False),
             "indice_solvencia":     score_data.get('indice_solvencia'),
+            "mora_tecnica":         score_data.get('mora_tecnica', False),
+            "sit_ponderada":        score_data.get('sit_ponderada'),
+            "pct_mora":             score_data.get('pct_mora'),
             "inferencia_ingresos":  (solvency or {}).get('ingresos_anuales'),
             "fuente_ingresos":      (solvency or {}).get('fuente_ingresos'),
             "actividad_principal":  (solvency or {}).get('actividad_principal'),
@@ -2601,9 +2644,12 @@ def _rebuild_saldos_index():
     idx_c: dict = {}
     idx_n: dict = {}
     for f in fuente:
-        c = str(f.get('cuit', '')).replace('-', '').replace(' ', '').strip()
-        if c:
-            idx_c.setdefault(c, []).append(f)
+        if not isinstance(f, dict):
+            continue
+        c = str(f.get('cuit', '') or '').replace('-', '').replace(' ', '').strip()
+        if not c or len(c) < 7:
+            continue
+        idx_c.setdefault(c, []).append(f)
         n = _norm_nombre(f.get('cliente', ''))
         if n:
             idx_n.setdefault(n, []).append(f)
@@ -2639,8 +2685,6 @@ def _buscar_por_nombre_en_idx(nombre: str) -> list:
             return merged
     return []
 
-_rebuild_saldos_index()
-
 def _norm_nombre(s):
     import unicodedata, re
     s = str(s or '').strip().upper()
@@ -2664,6 +2708,11 @@ def _norm_ultra(s):
     s = _SUFIJOS_RE.sub(' ', s)
     s = re.sub(r'[^A-Z0-9 ]', ' ', s)
     return re.sub(r'\s+', ' ', s).strip()
+
+try:
+    _rebuild_saldos_index()
+except Exception as e:
+    print(f"[idx] Error en indexación inicial: {e}", flush=True)
 
 @app.route("/solvencia/<cuit>")
 def get_solvencia_endpoint(cuit):
