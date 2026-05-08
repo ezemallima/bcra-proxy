@@ -912,12 +912,8 @@ def calcular_rating_predictivo(
         max_sit > 1 and _raw_total_m > 0 and
         (monto_mora_k <= _MORA_TEC_K or pct_mora <= _MORA_TEC_PCT)
     )
-    print(
-        f"DEBUG RIAL: CUIT={cuit_limpio} Monto Mora: {monto_mora_k:.1f}k "
-        f"Porcentaje: {pct_mora:.4f} Es Técnica: {es_mora_tecnica} "
-        f"max_sit={max_sit} sit_pond={sit_ponderada:.3f}",
-        flush=True
-    )
+    if es_mora_tecnica:
+        print(f"[mora_tec] {cuit_limpio} mora={monto_mora_k:.0f}k pct={pct_mora:.3f} sp={sit_ponderada:.2f}", flush=True)
 
     # ── Historial 24m ─────────────────────────────────────────────────────
     periodos_hist = (hist_data.get('results') or {}).get('periodos') or [] if hist_data else []
@@ -1119,7 +1115,7 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
                   + ["https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit_limpio])
         for u in urls_h[:3]:
             try:
-                r = requests.get(u, timeout=25, verify=False)
+                r = requests.get(u, timeout=10, verify=False)
                 if r.status_code == 200 and len(r.text.strip()) > 10:
                     hist_data = r.json()
                     try:
@@ -1137,7 +1133,7 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
                   + ["https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/" + cuit_limpio])
         for u in urls_c[:3]:
             try:
-                r = requests.get(u, timeout=25, verify=False)
+                r = requests.get(u, timeout=10, verify=False)
                 if r.status_code == 200 and len(r.text.strip()) > 10:
                     cheq_data = r.json()
                     try:

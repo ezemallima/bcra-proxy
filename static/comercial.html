@@ -799,45 +799,32 @@ async function abrirModalCliente(cuit, nombre) {
   document.getElementById('detail-modal').style.display = 'flex';
   document.getElementById('detail-modal').style.flexDirection = 'column';
 
-  // Lanzar TODAS las solicitudes en paralelo — facturas no espera BCRA ni viceversa
-  const brP   = fetch(API + '/deudas/' + cuit).catch(() => null);
-  const chrP  = fetch(API + '/deudas/' + cuit + '/cheques').catch(() => null);
-  const hrP   = fetch(API + '/deudas/' + cuit + '/historial').catch(() => null);
-  const facP  = fetch(API + '/api/facturas/' + encodeURIComponent(cuit)
-                      + '?nombre=' + encodeURIComponent(nombre)).catch(() => null);
-  // Score: siempre fresh=1 para pisar caché de sesión del servidor
-  let _scoreData = null;
-  const scrP = fetch(API + '/calcular-score/' + cuit + '?fresh=1').catch(() => null)
-    .then(async r => {
-      try {
-        if (r && r.ok) {
-          _scoreData = await r.json();
-        } else {
-          console.warn('[score fetch] status:', r?.status, 'url:', r?.url);
-        }
-      } catch(e) {
-        console.error('[score fetch] parse error:', e);
-      }
-    });
+  // Lanzar TODAS las solicitudes en paralelo con safeFetch (retry + HTML detection)
+  const facP  = safeFetch(API + '/api/facturas/' + encodeURIComponent(cuit) + '?nombre=' + encodeURIComponent(nombre));
+  const brP   = safeFetch(API + '/deudas/' + cuit,           { retries: 1 });
+  const chrP  = safeFetch(API + '/deudas/' + cuit + '/cheques', { retries: 1 });
+  const hrP   = safeFetch(API + '/deudas/' + cuit + '/historial');
+  const scrP  = safeFetch(API + '/calcular-score/' + cuit + '?fresh=1', { retries: 1 });
 
   // ── Facturas: renderiza en cuanto llegan (sin esperar BCRA) ──
-  facP.then(async r => {
+  facP.then(sd => {
     const factEl = document.getElementById('mtab-facturas');
     if (!factEl) return;
-    let sd = null;
-    try { if (r && r.ok) sd = await r.json(); } catch(e) {}
-    if (sd && sd.facturas && sd.facturas.length) SALDOS_MAP[normNombre(nombre)] = sd;
-    factEl.innerHTML = (sd && sd.facturas && sd.facturas.length)
+    if (sd?.facturas?.length) SALDOS_MAP[normNombre(nombre)] = sd;
+    factEl.innerHTML = sd?.facturas?.length
       ? renderFacturas(sd)
       : '<div class="empty"><div class="empty-icon">✅</div><div class="empty-text">Sin facturas pendientes</div></div>';
   });
 
   // ── BCRA + Score: esperar las 3 respuestas BCRA + score, luego renderizar ──
-  const [br, chr, hr] = await Promise.all([brP, chrP, hrP, scrP]);
-  const bcraEl   = document.getElementById('mtab-bcra');
-  const bcraData = (br  && br.ok)  ? await br.json()  : null;
-  const chData   = (chr && chr.ok) ? await chr.json() : null;
-  const histData = (hr  && hr.ok)  ? await hr.json()  : null;
+  const [bcraData, chData, histData, _scoreData] = await Promise.all([brP, chrP, hrP, scrP]);
+  const bcraEl = document.getElementById('mtab-bcra');
+
+  // Detectar error de gateway en respuesta BCRA
+  if (bcraData?._gateway_error) {
+    if (bcraEl) bcraEl.innerHTML = `<div class="card"><div style="color:var(--text2);font-size:13px;text-align:center;padding:16px">⏳ El servidor está procesando datos pesados, reintentando…<br><small>Cerrá y volvé a abrir en unos segundos.</small></div></div>`;
+    return;
+  }
   // Actualizar CARTERA_LOCAL con score fresco
   const clienteLocal = CARTERA_LOCAL.find(c => c.cuit === cuit);
   if (_scoreData?.score != null && clienteLocal) {
@@ -909,8 +896,8 @@ function renderBcraModal(bcraData, chData, histData, scoreData, clienteLocal) {
     entidades = periodos[0].entidades||[];
     if (entidades.length) { maxSit=Math.max(...entidades.map(e=>e.situacion||1)); montoTotal=entidades.reduce((s,e)=>s+(e.monto||0),0); }
   }
-  // SSoT: score del servidor tiene prioridad absoluta (?? no descarta 0)
-  const scoreEst    = scoreData?.score ?? calcularScoreCompletoSync(maxSit, bcraData.sin_deudas, periodos, chData, histData||null);
+  // SSoT: score del servidor es la única fuente — sin recálculo JS
+  const scoreEst    = scoreData?.score ?? null;
   const moraTecnica = scoreData?.mora_tecnica === true;
   const cc          = moraTecnica ? '#ca8a04' : scoreToColor(scoreEst);
   // Badge mora interna: el cliente tiene deuda con Piattelli pero score BCRA es bueno
@@ -925,8 +912,11 @@ function renderBcraModal(bcraData, chData, histData, scoreData, clienteLocal) {
   let dchq=[]; causales.forEach(ca=>ca.entidades?.forEach(en=>dchq.push(...(en.detalle||[]))));
   const activos=dchq.filter(d=>!d.fechaPago||d.estadoMulta==='IMPAGA');
 
-  const _origenScore = scoreData?.score != null ? 'SERVER' : 'JS-FALLBACK';
-  const _debugHtml = `<div style="font-size:10px;font-family:monospace;color:#9ca3af;text-align:center;margin-top:6px;padding:4px;background:#f9fafb;border-radius:4px">[DEBUG: Score Server = ${scoreData?.score ?? 'null'} | MT = ${scoreData?.mora_tecnica ?? 'null'} | origen = ${_origenScore}]</div>`;
+  const _debugHtml = `<div style="font-size:10px;font-family:monospace;color:#9ca3af;text-align:center;margin-top:6px;padding:4px;background:#f9fafb;border-radius:4px">[SVR=${scoreData?.score ?? 'null'} | MT=${scoreData?.mora_tecnica ?? '?'}]</div>`;
+
+  if (scoreEst == null) {
+    return `<div class="card"><div style="color:var(--text2);font-size:13px;text-align:center;padding:16px">⚠ Error de conexión — no se pudo obtener el score del servidor.<br><small>Cerrá y volvé a abrir para reintentar.</small></div></div>`;
+  }
 
   let html = `<div class="card"><div class="card-title">Score estimado</div>
     <div class="score-hero"><div class="score-num" style="color:${cc}">${scoreEst}</div>
@@ -978,28 +968,26 @@ async function consultarCuit() {
   if (cuit.length < 10) { alert('CUIT inválido'); return; }
   showLoading('Consultando BCRA...');
   document.getElementById('consulta-resultado').innerHTML = '';
+  const resEl = document.getElementById('consulta-resultado');
   try {
-    // SSoT: BCRA + score v9.0 en paralelo (misma lógica que el batch)
-    const [dr, chr, hr, scoreR] = await Promise.all([
-      fetch(API+'/deudas/'+cuit),
-      fetch(API+'/deudas/'+cuit+'/cheques'),
-      fetch(API+'/deudas/'+cuit+'/historial'),
-      fetch(API+'/calcular-score/'+cuit).catch(()=>null)
+    showLoading('Consultando BCRA…');
+    const [dd, cd, hd, serverScore] = await Promise.all([
+      safeFetch(API + '/deudas/' + cuit,              { retries: 1 }),
+      safeFetch(API + '/deudas/' + cuit + '/cheques', { retries: 1 }),
+      safeFetch(API + '/deudas/' + cuit + '/historial'),
+      safeFetch(API + '/calcular-score/' + cuit + '?fresh=1', { retries: 1 }),
     ]);
-    const dd = await dr.json();
-    const cd = await chr.json();
-    const hd = hr.ok ? await hr.json() : null;
-    const serverScore = (scoreR && scoreR.ok) ? await scoreR.json() : null;
-    console.log("Score recibido del server:", serverScore?.score,
-                "| mora_tecnica:", serverScore?.mora_tecnica,
-                "| http_ok:", scoreR?.ok ?? false,
-                "| raw:", serverScore);
     hideLoading();
-    renderConsulta(cuit, dd, cd, hd, serverScore);
-    lanzarAnalisisIA(cuit, dd, cd);
+    if (!dd || dd._gateway_error) {
+      resEl.innerHTML = `<div class="card"><div style="color:var(--text2);text-align:center;padding:16px">⏳ El servidor está procesando datos pesados, reintentando…<br><small>Esperá unos segundos e intentá de nuevo.</small></div></div>`;
+      return;
+    }
+    console.log('[consulta] score=', serverScore?.score, 'mt=', serverScore?.mora_tecnica);
+    renderConsulta(cuit, dd, cd || {}, hd, serverScore);
+    lanzarAnalisisIA(cuit, dd, cd || {});
   } catch(e) {
     hideLoading();
-    document.getElementById('consulta-resultado').innerHTML = '<div class="card"><div style="color:var(--red)">Error consultando BCRA. Intentá de nuevo.</div></div>';
+    resEl.innerHTML = '<div class="card"><div style="color:var(--red)">Error consultando BCRA. Intentá de nuevo.</div></div>';
   }
 }
 
@@ -1025,8 +1013,8 @@ function renderConsulta(cuit, dd, cd, hd, serverScore) {
   }
   const _cuitConsulta = cuit;
   const _scoreMap = window._scoresCartera || {};
-  // SSoT: servidor primero (??  no descarta 0); caché cartera; fallback JS solo si servidor no responde
-  const scoreEst = serverScore?.score ?? (_scoreMap[_cuitConsulta]?.scoreCompleto) ?? calcularScoreCompletoSync(maxSit, dd.sin_deudas, periodos, cd, hd);
+  // SSoT: servidor es la única fuente de verdad — sin recálculo JS
+  const scoreEst = serverScore?.score ?? (_scoreMap[_cuitConsulta]?.scoreCompleto) ?? null;
   window._ultimoScoreComercial = scoreEst;
   // Mora técnica: color del círculo siempre naranja aunque maxSit sea alto
   const cc = (serverScore?.mora_tecnica) ? '#ca8a04' : scoreToColor(scoreEst);
@@ -1184,6 +1172,34 @@ async function lanzarAnalisisIA(cuit, dd, cd) {
 function closeModal() { document.getElementById('detail-modal').style.display='none'; }
 function showLoading(txt){document.getElementById('loading-text').textContent=txt||'Cargando...';document.getElementById('loading-overlay').style.display='flex';}
 function hideLoading(){document.getElementById('loading-overlay').style.display='none';}
+
+// ── safeFetch: detecta HTML de error, reintenta en 502/503, devuelve JSON o null ──
+async function safeFetch(url, { retries = 1, timeoutMs = 18000 } = {}) {
+  for (let i = 0; i <= retries; i++) {
+    let r;
+    try {
+      r = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+    } catch (e) {
+      if (i < retries) { await new Promise(res => setTimeout(res, 2500)); continue; }
+      console.warn('[safeFetch] network error:', url, e?.message);
+      return null;
+    }
+    if (r.status === 502 || r.status === 503 || r.status === 504) {
+      console.warn('[safeFetch] gateway error', r.status, url);
+      if (i < retries) { await new Promise(res => setTimeout(res, 3000)); continue; }
+      return { _gateway_error: true, _status: r.status };
+    }
+    if (!r.ok) return null;
+    let text;
+    try { text = await r.text(); } catch (e) { return null; }
+    if (text.trimStart().startsWith('<')) {
+      console.warn('[safeFetch] HTML response (error page) from', url);
+      return null;
+    }
+    try { return JSON.parse(text); } catch (e) { return null; }
+  }
+  return null;
+}
 
 function parseFecha(s) {
   if (!s) return new Date(9999,0,1);
