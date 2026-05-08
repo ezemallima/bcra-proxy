@@ -830,15 +830,19 @@ async function abrirModalCliente(cuit, nombre) {
   const histData = (hr  && hr.ok)  ? await hr.json()  : null;
   // Actualizar CARTERA_LOCAL con score fresco
   const clienteLocal = CARTERA_LOCAL.find(c => c.cuit === cuit);
-  if (_scoreData?.score && clienteLocal) {
+  if (_scoreData?.score != null && clienteLocal) {
     clienteLocal.score                = _scoreData.score;
     clienteLocal.scoreRango           = _scoreData.rango;
     clienteLocal.scoreColor           = _scoreData.color;
     clienteLocal.alerta_temprana      = _scoreData.alerta_temprana;
     clienteLocal.bloquear_oportunidad = _scoreData.bloquear_oportunidad;
   }
-  const scoreServidor = clienteLocal?.score || _scoreData?.score || null;
-  if (bcraEl) bcraEl.innerHTML = renderBcraModal(bcraData, chData, histData, scoreServidor);
+  console.log("[modal] Score server:", _scoreData?.score,
+              "| mora_tecnica:", _scoreData?.mora_tecnica,
+              "| cache anterior:", clienteLocal?.score,
+              "| scoreData:", _scoreData);
+  // Pasar el objeto completo — renderBcraModal usará _scoreData.score, no el caché de CARTERA_LOCAL
+  if (bcraEl) bcraEl.innerHTML = renderBcraModal(bcraData, chData, histData, _scoreData, clienteLocal);
 }
 
 function switchModalTab(tab, btn) {
@@ -886,7 +890,7 @@ function renderFacturas(data) {
   return html;
 }
 
-function renderBcraModal(bcraData, chData, histData, scoreServidor) {
+function renderBcraModal(bcraData, chData, histData, scoreData, clienteLocal) {
   if (!bcraData || bcraData.error_bcra) return '<div class="card"><div style="color:var(--text2);font-size:13px">⚠ No se pudo obtener información del BCRA.</div></div>';
   const results = bcraData.results || {};
   const periodos = results.periodos || [];
@@ -895,18 +899,28 @@ function renderBcraModal(bcraData, chData, histData, scoreServidor) {
     entidades = periodos[0].entidades||[];
     if (entidades.length) { maxSit=Math.max(...entidades.map(e=>e.situacion||1)); montoTotal=entidades.reduce((s,e)=>s+(e.monto||0),0); }
   }
-  // SSoT: usar score del servidor (calculado por App Principal) si existe
-  const scoreEst = scoreServidor || calcularScoreCompletoSync(maxSit, bcraData.sin_deudas, periodos, chData, histData||null);
-  const cc = scoreToColor(scoreEst);
+  // SSoT: score del servidor tiene prioridad absoluta (?? no descarta 0)
+  const scoreEst    = scoreData?.score ?? calcularScoreCompletoSync(maxSit, bcraData.sin_deudas, periodos, chData, histData||null);
+  const moraTecnica = scoreData?.mora_tecnica === true;
+  const cc          = moraTecnica ? '#ca8a04' : scoreToColor(scoreEst);
+  // Badge mora interna: el cliente tiene deuda con Piattelli pero score BCRA es bueno
+  const tieneMoraInterna = (clienteLocal?.total_saldo > 0) || (clienteLocal?.bloquear_oportunidad === true);
+  const badgeMoraInterna = (tieneMoraInterna && scoreEst >= 600)
+    ? `<div style="margin-top:8px;background:#fef3c7;border:1px solid #d97706;border-radius:6px;padding:6px 10px;font-size:11px;color:#92400e;text-align:left">⚠ Score BCRA Protegido — Revisar Deuda Interna</div>`
+    : '';
+  const badgeMoraTecnica = moraTecnica
+    ? `<div style="margin-top:8px;background:#fef9c3;border:1px solid #ca8a04;border-radius:6px;padding:6px 10px;font-size:11px;color:#92400e;text-align:left">⚠ ${esc(scoreData?.nota_mora_tecnica || 'Mora técnica por monto menor — riesgo moderado')}</div>`
+    : '';
   const causales = chData?.results?.causales||[];
   let dchq=[]; causales.forEach(ca=>ca.entidades?.forEach(en=>dchq.push(...(en.detalle||[]))));
   const activos=dchq.filter(d=>!d.fechaPago||d.estadoMulta==='IMPAGA');
 
   let html = `<div class="card"><div class="card-title">Score estimado</div>
     <div class="score-hero"><div class="score-num" style="color:${cc}">${scoreEst}</div>
-    <div><div class="score-rango" style="color:${cc}">${scoreToRango(scoreEst)}</div>
+    <div><div class="score-rango" style="color:${cc}">${moraTecnica ? 'Revisar' : scoreToRango(scoreEst)}</div>
     <div style="font-size:11px;color:var(--text2);margin-top:2px">Sin historial Piattelli</div></div></div>
     <div class="score-bar-wrap"><div class="score-bar" style="width:${scoreEst/10}%;background:${cc}"></div></div>
+    ${badgeMoraTecnica}${badgeMoraInterna}
   </div>
   <div class="credito-box"><div class="credito-label">💡 Crédito sugerido</div>
     <div class="credito-monto">${calcularCredito(scoreEst)}</div>
