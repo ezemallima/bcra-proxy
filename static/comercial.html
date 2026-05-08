@@ -962,6 +962,10 @@ async function consultarCuit() {
     const cd = await chr.json();
     const hd = hr.ok ? await hr.json() : null;
     const serverScore = (scoreR && scoreR.ok) ? await scoreR.json() : null;
+    console.log("Score recibido del server:", serverScore?.score,
+                "| mora_tecnica:", serverScore?.mora_tecnica,
+                "| http_ok:", scoreR?.ok ?? false,
+                "| raw:", serverScore);
     hideLoading();
     renderConsulta(cuit, dd, cd, hd, serverScore);
     lanzarAnalisisIA(cuit, dd, cd);
@@ -993,17 +997,27 @@ function renderConsulta(cuit, dd, cd, hd, serverScore) {
   }
   const _cuitConsulta = cuit;
   const _scoreMap = window._scoresCartera || {};
-  // SSoT: servidor v9.0 primero; luego caché cartera; fallback JS solo si el servidor no responde
-  const scoreEst = (serverScore?.score) || (_scoreMap[_cuitConsulta]?.scoreCompleto) || calcularScoreCompletoSync(maxSit, dd.sin_deudas, periodos, cd, hd);
+  // SSoT: servidor primero (??  no descarta 0); caché cartera; fallback JS solo si servidor no responde
+  const scoreEst = serverScore?.score ?? (_scoreMap[_cuitConsulta]?.scoreCompleto) ?? calcularScoreCompletoSync(maxSit, dd.sin_deudas, periodos, cd, hd);
   window._ultimoScoreComercial = scoreEst;
-  const cc = scoreToColor(scoreEst);
+  // Mora técnica: color del círculo siempre naranja aunque maxSit sea alto
+  const cc = (serverScore?.mora_tecnica) ? '#ca8a04' : scoreToColor(scoreEst);
 
   // Cheques
   const causales = cd.results?.causales||[]; let dchq=[];
   causales.forEach(ca=>ca.entidades?.forEach(en=>dchq.push(...(en.detalle||[]))));
   const activos = dchq.filter(d=>!d.fechaPago||d.estadoMulta==='IMPAGA');
   const montoImpagos = activos.reduce((s,d)=>s+(d.monto||0),0);
-  const verd = veredictoRapido(scoreEst, activos.length, maxSit);
+  let verd = veredictoRapido(scoreEst, activos.length, maxSit);
+  if (serverScore?.mora_tecnica) {
+    // Mora técnica pisa cualquier veredicto basado en maxSit puro
+    verd = {
+      texto: '⚠ Revisar — mora técnica por monto menor',
+      bg:    '#fef9c3',
+      color: '#ca8a04',
+      borde: '#ca8a04',
+    };
+  }
 
   let html = `<div class="card" style="padding:12px 14px">
     <div style="font-size:15px;font-weight:700;color:var(--azul)">${esc(results.denominacion||'Sin nombre')}</div>
