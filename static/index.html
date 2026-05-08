@@ -874,7 +874,7 @@ let ultimoAnalisis = null;
 let historialConsultas = JSON.parse(localStorage.getItem('piat_historial') || '[]');
 
 function getNombreBodega() {
-  return localStorage.getItem('piat_nombre_bodega') || 'tu bodega';
+  return localStorage.getItem('piat_nombre_bodega') || 'Bodega Piattelli';
 }
 let cartera = JSON.parse(localStorage.getItem('piat_cartera') || '[]');
 let situaciones = JSON.parse(localStorage.getItem('piat_situaciones') || '{}');
@@ -2044,18 +2044,38 @@ function renderBcraHistoryChart(periodos) {
   var colors = values.map(function(v) {
     return v === 1 ? '#16a34a' : v === 2 ? '#ca8a04' : v === 3 ? '#ea580c' : '#dc2626';
   });
+  var mesesChq = _extraerMesesCheques();
+  var chqOverlay = labels.map(function(lbl) { return mesesChq[lbl] ? 5.2 : null; });
+  var tieneChq = chqOverlay.some(function(v) { return v !== null; });
+  var datasets = [
+    { type: 'bar', label: 'Situación BCRA', data: values, backgroundColor: colors, borderRadius: 3, borderSkipped: false, order: 2 }
+  ];
+  if (tieneChq) {
+    datasets.push({
+      type: 'line', label: 'Cheque rechazado',
+      data: chqOverlay,
+      backgroundColor: '#dc2626', borderColor: 'transparent',
+      pointBackgroundColor: '#dc2626', pointBorderColor: '#7f1d1d',
+      pointStyle: 'crossRot', pointRadius: 7, pointBorderWidth: 2.5,
+      spanGaps: false, showLine: false, order: 1
+    });
+  }
   var existing = Chart.getChart(canvas);
   if (existing) existing.destroy();
   new Chart(canvas, {
     type: 'bar',
-    data: { labels: labels, datasets: [{ data: values, backgroundColor: colors, borderRadius: 3, borderSkipped: false }] },
+    data: { labels: labels, datasets: datasets },
     options: {
-      plugins: { legend: { display: false }, tooltip: {
-        callbacks: { label: function(ctx) { return sitNombre(ctx.raw); } }
-      }},
+      plugins: {
+        legend: { display: tieneChq, labels: { font: { size: 9 }, usePointStyle: true } },
+        tooltip: { callbacks: { label: function(ctx) {
+          if (ctx.dataset.type === 'line') return 'Cheque rechazado';
+          return 'Sit. ' + ctx.raw + ' — ' + sitNombre(ctx.raw);
+        }}}
+      },
       scales: {
-        y: { min: 0, max: 5, ticks: { stepSize: 1,
-          callback: function(v) { return v > 0 ? 'Sit.'+v : ''; },
+        y: { min: 0, max: 6, ticks: { stepSize: 1,
+          callback: function(v) { return v > 0 && v <= 5 ? 'Sit.'+v : ''; },
           font: { size: 9 } }, grid: { color: '#f1f5f9' } },
         x: { ticks: { font: { size: 8 }, maxRotation: 45 }, grid: { display: false } }
       }
@@ -2964,6 +2984,26 @@ try {
   btn.disabled = false; btn.textContent = 'Analizar riesgo crediticio →';
 }
 
+function _extraerMesesCheques() {
+  var meses = {};
+  var chData = window._chequesUltimaConsulta;
+  if (!chData) return meses;
+  var causales = (chData.results && chData.results.causales) || chData.causales || [];
+  causales.forEach(function(ca) {
+    (ca.entidades || []).forEach(function(en) {
+      (en.detalle || []).forEach(function(d) {
+        var f = String(d.fechaRechazo || '');
+        var mm = '', yy = '';
+        if (f.match(/^\d{4}-\d{2}/))         { mm = f.slice(5,7); yy = f.slice(2,4); }
+        else if (f.match(/^\d{2}\/\d{2}\/\d{4}/)) { mm = f.slice(3,5); yy = f.slice(8,10); }
+        else if (f.match(/^\d{6}/))            { mm = f.slice(4,6); yy = f.slice(2,4); }
+        if (mm && yy) { var k = mm + '/' + yy; meses[k] = (meses[k] || 0) + 1; }
+      });
+    });
+  });
+  return meses;
+}
+
 async function buildBcraChartImage() {
   if (typeof Chart === 'undefined') return null;
   var periodos = [];
@@ -2985,22 +3025,47 @@ async function buildBcraChartImage() {
     return v === 1 ? '#16a34a' : v === 2 ? '#ca8a04' : v === 3 ? '#ea580c' : '#dc2626';
   });
 
+  var mesesChq = _extraerMesesCheques();
+  var chqOverlay = labels.map(function(lbl) { return mesesChq[lbl] ? 5.2 : null; });
+  var tieneChq = chqOverlay.some(function(v) { return v !== null; });
+
+  var datasets = [
+    { type: 'bar', label: 'Situación BCRA', data: values, backgroundColor: bgColors,
+      borderRadius: 5, borderSkipped: false, order: 2 }
+  ];
+  if (tieneChq) {
+    datasets.push({
+      type: 'line', label: 'Cheque rechazado',
+      data: chqOverlay,
+      backgroundColor: '#dc2626', borderColor: 'transparent',
+      pointBackgroundColor: '#dc2626', pointBorderColor: '#7f1d1d',
+      pointStyle: 'crossRot', pointRadius: 9, pointBorderWidth: 3,
+      spanGaps: false, showLine: false, order: 1
+    });
+  }
+
   return new Promise(function(resolve) {
     var canvas = document.createElement('canvas');
-    canvas.width = 800; canvas.height = 200;
+    canvas.width = 820; canvas.height = 230;
     canvas.style.cssText = 'position:absolute;left:-9999px;top:-9999px;';
     document.body.appendChild(canvas);
-    var chart = new Chart(canvas.getContext('2d'), {
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    var chart = new Chart(ctx, {
       type: 'bar',
-      data: { labels: labels, datasets: [{ data: values, backgroundColor: bgColors, borderRadius: 4, borderSkipped: false }] },
+      data: { labels: labels, datasets: datasets },
       options: {
         responsive: false, animation: false,
-        plugins: { legend: { display: false } },
+        plugins: {
+          legend: { display: tieneChq, position: 'top',
+            labels: { font: { size: 11 }, color: '#334155', usePointStyle: true, padding: 14 } }
+        },
         scales: {
-          y: { min: 0, max: 5, ticks: { stepSize: 1,
-            callback: function(v) { return v > 0 ? 'Sit.'+v : ''; }, font: { size: 12 } },
-            grid: { color: '#e2e8f0' } },
-          x: { ticks: { font: { size: 10 }, maxRotation: 45 }, grid: { display: false } }
+          y: { min: 0, max: 6,
+            ticks: { stepSize: 1, callback: function(v) { return v > 0 && v <= 5 ? 'Sit.'+v : ''; }, font: { size: 12 } },
+            grid: { color: '#e8edf4' } },
+          x: { ticks: { font: { size: 10 }, maxRotation: 50 }, grid: { display: false } }
         }
       }
     });
@@ -3009,7 +3074,7 @@ async function buildBcraChartImage() {
       chart.destroy();
       document.body.removeChild(canvas);
       resolve(img);
-    }, 350);
+    }, 400);
   });
 }
 
@@ -3054,32 +3119,56 @@ async function exportarReporte() {
   }
 
   // ── HEADER ────────────────────────────────────────────────────────────────
-  doc.setFillColor(15, 45, 82);
-  doc.rect(0, 0, W, 24, 'F');
-  doc.setFontSize(16); doc.setFont('helvetica','bold'); doc.setTextColor(255,255,255);
-  doc.text(bodega, 10, 11);
-  doc.setFontSize(9); doc.setFont('helvetica','italic'); doc.setTextColor(147,197,253);
-  doc.text('Análisis de Riesgo Crediticio — ' + ultimoAnalisis.fecha, 10, 19);
-  doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(180,210,255);
-  doc.text('CONFIDENCIAL', W-10, 19, {align:'right'});
+  // Franja oscura principal
+  doc.setFillColor(10, 34, 64);
+  doc.rect(0, 0, W, 30, 'F');
+  // Acento de color en la izquierda (3mm)
+  doc.setFillColor(...scoreRGB);
+  doc.rect(0, 0, 4, 30, 'F');
+
+  // Nombre de la bodega — principal
+  doc.setFontSize(17); doc.setFont('helvetica','bold'); doc.setTextColor(255,255,255);
+  doc.text(bodega, 10, 12);
+  // Subline: tecnología + fecha
+  doc.setFontSize(8); doc.setFont('helvetica','italic'); doc.setTextColor(147,197,253);
+  doc.text('Vende Seguro — vende sin riesgo', 10, 21);
+  doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(180,200,240);
+  doc.text('Análisis de Riesgo Crediticio · ' + ultimoAnalisis.fecha, 10, 27);
+  // Sello confidencial — derecha
+  doc.setFontSize(7.5); doc.setFont('helvetica','bold'); doc.setTextColor(220,60,60);
+  doc.text('CONFIDENCIAL — ' + bodega.toUpperCase(), W-10, 27, {align:'right'});
 
   // ── NOMBRE CLIENTE + SCORE HERO ───────────────────────────────────────────
-  var y = 34;
-  doc.setFontSize(15); doc.setFont('helvetica','bold'); doc.setTextColor(15,45,82);
+  var y = 40;
+  doc.setFontSize(15); doc.setFont('helvetica','bold'); doc.setTextColor(10,34,64);
   doc.text(nombre.substring(0, 38), 10, y);
   doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(100,116,139);
   doc.text('CUIT ' + cuitFmt, 10, y+7);
 
-  // Score hero — caja derecha
+  // Score hero — caja derecha, estética moderna
+  var sbX = 144, sbY = 33, sbW = 56, sbH = 26, sbR = 4;
+  // Sombra suave (rect levemente desplazado, color oscurecido)
+  doc.setFillColor(scoreRGB[0]*0.6, scoreRGB[1]*0.6, scoreRGB[2]*0.6);
+  doc.roundedRect(sbX+1, sbY+1.5, sbW, sbH, sbR, sbR, 'F');
+  // Caja principal
   doc.setFillColor(...scoreRGB);
-  doc.roundedRect(142, 28, 58, 22, 3, 3, 'F');
+  doc.roundedRect(sbX, sbY, sbW, sbH, sbR, sbR, 'F');
+  // Línea inferior de acento (borde inferior más claro)
+  doc.setDrawColor(255,255,255,60);
+  doc.setLineWidth(0.5);
+  doc.roundedRect(sbX, sbY, sbW, sbH, sbR, sbR, 'S');
+  // Valor del score
   doc.setTextColor(255,255,255);
-  doc.setFontSize(26); doc.setFont('helvetica','bold');
-  doc.text(scoreVal > 0 ? String(scoreVal) : '—', 171, 41, {align:'center'});
-  doc.setFontSize(8); doc.setFont('helvetica','normal');
-  doc.text(scoreRango.toUpperCase(), 171, 48, {align:'center'});
+  doc.setFontSize(24); doc.setFont('helvetica','bold');
+  doc.text(scoreVal > 0 ? String(scoreVal) : '—', sbX + sbW/2, sbY + 14, {align:'center'});
+  // Rango
+  doc.setFontSize(7.5); doc.setFont('helvetica','bold');
+  doc.text(scoreRango.toUpperCase(), sbX + sbW/2, sbY + 21, {align:'center'});
+  // "/ 999" discreto debajo
+  doc.setFontSize(6.5); doc.setFont('helvetica','normal'); doc.setTextColor(220,235,255);
+  doc.text('escala 1–999', sbX + sbW/2, sbY + 27, {align:'center'});
 
-  y = 58;
+  y = 63;
   doc.setDrawColor(210,220,240); doc.setLineWidth(0.4); doc.line(10, y, W-10, y);
   y += 6;
 
@@ -3089,7 +3178,7 @@ async function exportarReporte() {
     doc.roundedRect(10, y, W-20, 11, 2, 2, 'F');
     doc.setFillColor(220,38,38); doc.rect(10, y, 3, 11, 'F');
     doc.setTextColor(153,27,27); doc.setFontSize(9); doc.setFont('helvetica','bold');
-    doc.text('MORA INTERNA ' + bodega.split(' ')[0].toUpperCase() + ': $' +
+    doc.text('MORA INTERNA ' + bodega.toUpperCase() + ': $' +
       (mora.saldo||0).toLocaleString('es-AR') + ' — desde ' + (mora.fecha_mora||''), 16, y+7.5);
     y += 16;
   }
@@ -3137,7 +3226,7 @@ async function exportarReporte() {
 function sumarsARed() {
   var nombre = getNombreBodega();
   var contador = parseInt(localStorage.getItem('piat_red_contador') || '1');
-  if (nombre && nombre !== 'tu bodega') {
+  if (nombre && nombre !== 'Bodega Piattelli') {
     contador = Math.max(contador, 2);
     localStorage.setItem('piat_red_contador', contador);
     document.getElementById('red-contador').textContent = contador;
