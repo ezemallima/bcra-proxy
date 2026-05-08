@@ -1098,6 +1098,11 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
     """
     cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
 
+    # ── Bypass mora técnica: retorno instantáneo antes de cualquier consulta ──
+    if cuit_limpio in _MORA_TECNICA_BYPASS:
+        print(f"[bypass] {cuit_limpio} → mora técnica (desde calcular_score_servidor)", flush=True)
+        return {**_MORA_TECNICA_BYPASS[cuit_limpio], 'fuente': 'bypass_manual', 'version': _SCORE_VERSION}
+
     def _cache_load(fname):
         p = os.path.join(DATA_DIR, fname)
         try:
@@ -2111,10 +2116,10 @@ def _calcular_score_handler(cuit: str):
     if len(cuit_limpio) < 10:
         return jsonify({"ok": False, "error": "CUIT inválido"}), 400
 
-    # ── Bypass instantáneo para CUITs con mora técnica confirmada ──────────
+    # ── Bypass: primero de todo, antes de caché, BCRA y solvencia ──────────
     if cuit_limpio in _MORA_TECNICA_BYPASS:
-        print(f"[score] {cuit_limpio} → bypass mora técnica", flush=True)
-        return jsonify(_score_response(_MORA_TECNICA_BYPASS[cuit_limpio]))
+        print(f"[bypass] {cuit_limpio} → mora técnica manual", flush=True)
+        return jsonify({**_score_response(_MORA_TECNICA_BYPASS[cuit_limpio]), 'fuente': 'bypass_manual'})
 
     if request.args.get('fresh') == '1':
         _fp = os.path.join(DATA_DIR, f'solvency_{cuit_limpio}.json')
