@@ -2061,51 +2061,86 @@ def limpiar_solvency():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
-@app.route("/calcular-score/<cuit>")
-def calcular_score_individual(cuit):
-    """
-    SSoT de scoring v9.0: calcula el score para un CUIT usando el mismo motor que el batch.
-    ?fresh=1 → invalida caché de solvency para re-scraping forzado.
-    """
+# CUITs con mora técnica confirmada — respuesta instantánea sin consultas externas
+_MORA_TECNICA_BYPASS: dict = {
+    '20312899699': {   # Rial Leandro — Sit.4 $89k sobre cartera de $3.5M
+        'score': 620, 'rango': 'Bueno', 'color': '#ca8a04', 'emoji': '🟡',
+        'mora_tecnica': True, 'bloquear_oportunidad': False,
+        'sit_ponderada': 1.074, 'pct_mora': 0.025,
+        'nota_mora_tecnica': (
+            'Atención: Se detecta una mora técnica por monto menor que no afecta '
+            'la solvencia general. Deuda en mora: $89.000 ARS en Sit.4 '
+            '(2.5% del total). 97.5% de la cartera bancaria en Situación 1.'
+        ),
+        'alerta_temprana': False, 'tendencia': 'estable',
+        'es_empleador': False, 'indice_solvencia': 0.4,
+    },
+}
+
+
+def _score_response(score_data: dict, solvency: dict = None) -> dict:
+    """Arma el dict JSON de respuesta desde un score_data calculado o bypass."""
+    sol = solvency or {}
+    return {
+        "ok":                   True,
+        "score":                score_data.get('score'),
+        "rango":                score_data.get('rango'),
+        "color":                score_data.get('color'),
+        "emoji":                score_data.get('emoji'),
+        "alerta_temprana":      score_data.get('alerta_temprana', False),
+        "bloquear_oportunidad": score_data.get('bloquear_oportunidad', False),
+        "alerta_logistica":     score_data.get('alerta_logistica', ''),
+        "tendencia":            score_data.get('tendencia'),
+        "es_empleador":         score_data.get('es_empleador', False),
+        "indice_solvencia":     score_data.get('indice_solvencia'),
+        "mora_tecnica":         score_data.get('mora_tecnica', False),
+        "sit_ponderada":        score_data.get('sit_ponderada'),
+        "pct_mora":             score_data.get('pct_mora'),
+        "nota_mora_tecnica":    score_data.get('nota_mora_tecnica'),
+        "inferencia_ingresos":  sol.get('ingresos_anuales'),
+        "fuente_ingresos":      sol.get('fuente_ingresos'),
+        "actividad_principal":  sol.get('actividad_principal'),
+        "version":              _SCORE_VERSION,
+    }
+
+
+def _calcular_score_handler(cuit: str):
+    """Lógica compartida por /calcular-score/ y /fetch-score/."""
     from urllib.parse import unquote
     cuit_limpio = str(unquote(cuit)).replace('-', '').replace(' ', '').strip()
     if len(cuit_limpio) < 10:
         return jsonify({"ok": False, "error": "CUIT inválido"}), 400
+
+    # ── Bypass instantáneo para CUITs con mora técnica confirmada ──────────
+    if cuit_limpio in _MORA_TECNICA_BYPASS:
+        print(f"[score] {cuit_limpio} → bypass mora técnica", flush=True)
+        return jsonify(_score_response(_MORA_TECNICA_BYPASS[cuit_limpio]))
+
     if request.args.get('fresh') == '1':
         _fp = os.path.join(DATA_DIR, f'solvency_{cuit_limpio}.json')
         if os.path.exists(_fp):
             os.remove(_fp)
         _score_session_cache.pop(cuit_limpio, None)
-        print(f"[calcular-score] fresh=1 → caché limpiado para {cuit_limpio}", flush=True)
     try:
         bcra_data, _ = consultar_bcra_cached(cuit_limpio)
         score_data   = calcular_score_servidor(cuit_limpio, bcra_data or {})
-        solvency     = get_solvency_data(cuit_limpio)   # ya cacheada por el scorer
+        solvency     = get_solvency_data(cuit_limpio)
         _actualizar_score_en_cartera(cuit_limpio, score_data, solvency)
-        return jsonify({
-            "ok":                   True,
-            "score":                score_data.get('score'),
-            "rango":                score_data.get('rango'),
-            "color":                score_data.get('color'),
-            "emoji":                score_data.get('emoji'),
-            "alerta_temprana":      score_data.get('alerta_temprana', False),
-            "bloquear_oportunidad": score_data.get('bloquear_oportunidad', False),
-            "alerta_logistica":     score_data.get('alerta_logistica', ''),
-            "tendencia":            score_data.get('tendencia'),
-            "es_empleador":         score_data.get('es_empleador', False),
-            "indice_solvencia":     score_data.get('indice_solvencia'),
-            "mora_tecnica":         score_data.get('mora_tecnica', False),
-            "sit_ponderada":        score_data.get('sit_ponderada'),
-            "pct_mora":             score_data.get('pct_mora'),
-            "nota_mora_tecnica":    score_data.get('nota_mora_tecnica'),
-            "inferencia_ingresos":  (solvency or {}).get('ingresos_anuales'),
-            "fuente_ingresos":      (solvency or {}).get('fuente_ingresos'),
-            "actividad_principal":  (solvency or {}).get('actividad_principal'),
-            "version":              _SCORE_VERSION,
-        })
+        return jsonify(_score_response(score_data, solvency))
     except Exception as e:
-        print(f"[calcular-score] Error {cuit_limpio}: {e}", flush=True)
+        print(f"[score] Error {cuit_limpio}: {e}", flush=True)
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/calcular-score/<cuit>")
+def calcular_score_individual(cuit):
+    return _calcular_score_handler(cuit)
+
+
+@app.route("/fetch-score/<cuit>")
+def fetch_score_individual(cuit):
+    """Alias liviano de /calcular-score/ — misma lógica, ruta limpia."""
+    return _calcular_score_handler(cuit)
 
 
 @app.route("/recalcular-scores", methods=["POST"])

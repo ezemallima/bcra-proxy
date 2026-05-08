@@ -799,12 +799,12 @@ async function abrirModalCliente(cuit, nombre) {
   document.getElementById('detail-modal').style.display = 'flex';
   document.getElementById('detail-modal').style.flexDirection = 'column';
 
-  // Lanzar TODAS las solicitudes en paralelo con safeFetch (retry + HTML detection)
+  // Lanzar TODAS las solicitudes en paralelo con safeFetch
   const facP  = safeFetch(API + '/api/facturas/' + encodeURIComponent(cuit) + '?nombre=' + encodeURIComponent(nombre));
-  const brP   = safeFetch(API + '/deudas/' + cuit,           { retries: 1 });
-  const chrP  = safeFetch(API + '/deudas/' + cuit + '/cheques', { retries: 1 });
+  const brP   = safeFetch(API + '/deudas/' + cuit);
+  const chrP  = safeFetch(API + '/deudas/' + cuit + '/cheques');
   const hrP   = safeFetch(API + '/deudas/' + cuit + '/historial');
-  const scrP  = safeFetch(API + '/calcular-score/' + cuit + '?fresh=1', { retries: 1 });
+  const scrP  = safeFetch(API + '/fetch-score/' + cuit + '?fresh=1');
 
   // ── Facturas: renderiza en cuanto llegan (sin esperar BCRA) ──
   facP.then(sd => {
@@ -820,9 +820,9 @@ async function abrirModalCliente(cuit, nombre) {
   const [bcraData, chData, histData, _scoreData] = await Promise.all([brP, chrP, hrP, scrP]);
   const bcraEl = document.getElementById('mtab-bcra');
 
-  // Detectar error de gateway en respuesta BCRA
-  if (bcraData?._gateway_error) {
-    if (bcraEl) bcraEl.innerHTML = `<div class="card"><div style="color:var(--text2);font-size:13px;text-align:center;padding:16px">⏳ El servidor está procesando datos pesados, reintentando…<br><small>Cerrá y volvé a abrir en unos segundos.</small></div></div>`;
+  // Detectar error de gateway
+  if (bcraData?._gateway_error || chData?._gateway_error) {
+    if (bcraEl) bcraEl.innerHTML = _gateway502Html(cuit, nombre);
     return;
   }
   // Actualizar CARTERA_LOCAL con score fresco
@@ -972,14 +972,19 @@ async function consultarCuit() {
   try {
     showLoading('Consultando BCRA…');
     const [dd, cd, hd, serverScore] = await Promise.all([
-      safeFetch(API + '/deudas/' + cuit,              { retries: 1 }),
-      safeFetch(API + '/deudas/' + cuit + '/cheques', { retries: 1 }),
+      safeFetch(API + '/deudas/' + cuit),
+      safeFetch(API + '/deudas/' + cuit + '/cheques'),
       safeFetch(API + '/deudas/' + cuit + '/historial'),
-      safeFetch(API + '/calcular-score/' + cuit + '?fresh=1', { retries: 1 }),
+      safeFetch(API + '/fetch-score/' + cuit + '?fresh=1'),
     ]);
     hideLoading();
     if (!dd || dd._gateway_error) {
-      resEl.innerHTML = `<div class="card"><div style="color:var(--text2);text-align:center;padding:16px">⏳ El servidor está procesando datos pesados, reintentando…<br><small>Esperá unos segundos e intentá de nuevo.</small></div></div>`;
+      resEl.innerHTML = `<div class="card" style="text-align:center;padding:20px">
+        <div style="font-size:28px">⏳</div>
+        <div style="font-weight:700;margin:8px 0">Servidor ocupado (502)</div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:12px">Esperá unos segundos e intentá de nuevo.</div>
+        <button onclick="consultarCuit()" style="background:var(--azul);color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer">🔄 Forzar Recálculo</button>
+      </div>`;
       return;
     }
     console.log('[consulta] score=', serverScore?.score, 'mt=', serverScore?.mora_tecnica);
@@ -1173,32 +1178,43 @@ function closeModal() { document.getElementById('detail-modal').style.display='n
 function showLoading(txt){document.getElementById('loading-text').textContent=txt||'Cargando...';document.getElementById('loading-overlay').style.display='flex';}
 function hideLoading(){document.getElementById('loading-overlay').style.display='none';}
 
-// ── safeFetch: detecta HTML de error, reintenta en 502/503, devuelve JSON o null ──
-async function safeFetch(url, { retries = 1, timeoutMs = 18000 } = {}) {
+// ── safeFetch: sin retry en 502, detecta HTML, devuelve JSON o null ──────────
+async function safeFetch(url, { retries = 0, timeoutMs = 15000 } = {}) {
   for (let i = 0; i <= retries; i++) {
     let r;
     try {
       r = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
     } catch (e) {
-      if (i < retries) { await new Promise(res => setTimeout(res, 2500)); continue; }
-      console.warn('[safeFetch] network error:', url, e?.message);
+      if (i < retries) { await new Promise(res => setTimeout(res, 2000)); continue; }
+      console.warn('[safeFetch] red:', url, e?.message);
       return null;
     }
     if (r.status === 502 || r.status === 503 || r.status === 504) {
-      console.warn('[safeFetch] gateway error', r.status, url);
-      if (i < retries) { await new Promise(res => setTimeout(res, 3000)); continue; }
-      return { _gateway_error: true, _status: r.status };
+      console.warn('[safeFetch] gateway', r.status, url);
+      return { _gateway_error: true, _status: r.status };   // sin retry
     }
     if (!r.ok) return null;
     let text;
-    try { text = await r.text(); } catch (e) { return null; }
+    try { text = await r.text(); } catch(e) { return null; }
     if (text.trimStart().startsWith('<')) {
-      console.warn('[safeFetch] HTML response (error page) from', url);
-      return null;
+      console.warn('[safeFetch] HTML error page:', url);
+      return { _gateway_error: true, _status: r.status };
     }
-    try { return JSON.parse(text); } catch (e) { return null; }
+    try { return JSON.parse(text); } catch(e) { return null; }
   }
   return null;
+}
+
+function _gateway502Html(cuit, nombre) {
+  return `<div class="card" style="text-align:center;padding:20px">
+    <div style="font-size:32px;margin-bottom:8px">⏳</div>
+    <div style="font-weight:700;font-size:15px;margin-bottom:6px">Servidor ocupado</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:14px">Render está procesando una consulta pesada. Esperá unos segundos e intentá de nuevo.</div>
+    <button onclick="abrirModalCliente('${cuit}','${(nombre||'').replace(/'/g,"\\'")}');this.closest('.card').innerHTML='<div style=padding:16px>Reintentando…</div>'"
+      style="background:var(--azul);color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer">
+      🔄 Forzar Recálculo
+    </button>
+  </div>`;
 }
 
 function parseFecha(s) {
