@@ -428,7 +428,7 @@ function normNombre(s) {
 }
 
 async function cargarSaldosCartera(forzar = false) {
-  // Verificar si hay una actualización nueva — ts=0 significa server reiniciado (forzar reload)
+  // Verificar si hay actualización — ts=0 = server reiniciado → forzar reload
   try {
     const tsR = await fetch(API + '/saldos-timestamp?v=' + Date.now());
     if (tsR.ok) {
@@ -440,48 +440,20 @@ async function cargarSaldosCartera(forzar = false) {
 
   SALDOS_MAP = {};  // wipe — nunca acumular datos fantasma
 
-  // Buscar saldos con prioridad CUIT > nombre
+  // Un solo fetch por cliente a /api/facturas/<cuit> — O(1) en el backend
   const clientes = CARTERA_LOCAL.filter((c,i,a) =>
-    a.findIndex(x => (x.cuit && x.cuit === c.cuit) || normNombre(x.nombre) === normNombre(c.nombre)) === i
+    c.cuit && a.findIndex(x => x.cuit === c.cuit) === i
   );
-  for (let i = 0; i < clientes.length; i += 8) {
-    const lote = clientes.slice(i, i+8);
-    await Promise.all(lote.map(async c => {
+  for (let i = 0; i < clientes.length; i += 20) {
+    await Promise.all(clientes.slice(i, i+20).map(async c => {
       try {
-        let data = null;
-        // Prioridad 1: buscar por CUIT
-        const _v = '?v=' + SALDOS_TIMESTAMP;
-        if (c.cuit) {
-          const r = await fetch(API + '/saldos-cuit/' + encodeURIComponent(c.cuit) + _v);
-          if (r.ok) {
-            const d = await r.json();
-            if (d.facturas && d.facturas.length > 0) data = d;
-          }
-        }
-        // Prioridad 2: nombre completo
-        if (!data) {
-          const r = await fetch(API + '/saldos-cliente/' + encodeURIComponent(c.nombre) + _v);
-          if (r.ok) {
-            const d = await r.json();
-            if (d.facturas && d.facturas.length > 0) data = d;
-          }
-        }
-        // Prioridad 3: primeras 2 palabras (caso Odoo sin CUIT)
-        if (!data) {
-          const prim2 = normPrim(c.nombre);
-          if (prim2 && prim2 !== normNombre(c.nombre)) {
-            const r = await fetch(API + '/saldos-cliente/' + encodeURIComponent(prim2) + _v);
-            if (r.ok) {
-              const d = await r.json();
-              if (d.facturas && d.facturas.length > 0) data = d;
-            }
-          }
-        }
-        if (data) SALDOS_MAP[normNombre(c.nombre)] = data;
+        const r = await fetch(API + '/api/facturas/' + encodeURIComponent(c.cuit));
+        if (!r.ok) return;
+        const d = await r.json();
+        if (d.facturas && d.facturas.length) SALDOS_MAP[normNombre(c.nombre)] = d;
       } catch(e) {}
     }));
   }
-  // Re-render con saldos cargados
   const filtroActivo = document.querySelector('.filter-chip.active');
   const filtro = filtroActivo ? (
     filtroActivo.textContent.includes('saldo') ? 'saldo' :
@@ -822,63 +794,51 @@ async function abrirModalCliente(cuit, nombre) {
       <div class="modal-tab active" onclick="switchModalTab('facturas',this)">💰 Cuenta corriente</div>
       <div class="modal-tab" onclick="switchModalTab('bcra',this)">🏦 BCRA</div>
     </div>
-    <div id="mtab-facturas"><div class="ia-loading"><div class="spinner"></div><span>Cargando facturas...</span></div></div>
+    <div id="mtab-facturas"><div class="ia-loading"><div class="spinner"></div><span>Cargando...</span></div></div>
     <div id="mtab-bcra" style="display:none"><div class="ia-loading"><div class="spinner"></div><span>Consultando BCRA...</span></div></div>`;
   document.getElementById('detail-modal').style.display = 'flex';
   document.getElementById('detail-modal').style.flexDirection = 'column';
 
-  const [br, chr, hr] = await Promise.all([
-    fetch(API + '/deudas/' + cuit).catch(() => null),
-    fetch(API + '/deudas/' + cuit + '/cheques').catch(() => null),
-    fetch(API + '/deudas/' + cuit + '/historial').catch(() => null)
-  ]);
+  // Lanzar TODAS las solicitudes en paralelo — facturas no espera BCRA ni viceversa
+  const brP   = fetch(API + '/deudas/' + cuit).catch(() => null);
+  const chrP  = fetch(API + '/deudas/' + cuit + '/cheques').catch(() => null);
+  const hrP   = fetch(API + '/deudas/' + cuit + '/historial').catch(() => null);
+  const facP  = fetch(API + '/api/facturas/' + encodeURIComponent(cuit)
+                      + '?nombre=' + encodeURIComponent(nombre)).catch(() => null);
+  // Score: capturar JSON una sola vez y compartir
+  let _scoreData = null;
+  const scrP = fetch(API + '/calcular-score/' + cuit).catch(() => null)
+    .then(async r => { try { if (r && r.ok) _scoreData = await r.json(); } catch(e) {} });
 
-  // Facturas — prioridad CUIT, fallback nombre
-  const factEl = document.getElementById('mtab-facturas');
-  let sd = null;
-  try {
-    const srCuit = await fetch(API + '/saldos-cuit/' + encodeURIComponent(cuit));
-    if (srCuit && srCuit.ok) {
-      const d = await srCuit.json();
-      if (d.facturas && d.facturas.length > 0) sd = d;
-    }
-  } catch(e) {}
-  if (!sd) {
-    try {
-      const srNombre = await fetch(API + '/saldos-cliente/' + encodeURIComponent(nombre));
-      if (srNombre && srNombre.ok) sd = await srNombre.json();
-    } catch(e) {}
-  }
-  if (sd && sd.facturas && sd.facturas.length > 0) SALDOS_MAP[normNombre(nombre)] = sd;
-  factEl.innerHTML = sd ? renderFacturas(sd) : '<div class="empty"><div class="empty-icon">✅</div><div class="empty-text">Sin facturas pendientes</div></div>';
+  // ── Facturas: renderiza en cuanto llegan (sin esperar BCRA) ──
+  facP.then(async r => {
+    const factEl = document.getElementById('mtab-facturas');
+    if (!factEl) return;
+    let sd = null;
+    try { if (r && r.ok) sd = await r.json(); } catch(e) {}
+    if (sd && sd.facturas && sd.facturas.length) SALDOS_MAP[normNombre(nombre)] = sd;
+    factEl.innerHTML = (sd && sd.facturas && sd.facturas.length)
+      ? renderFacturas(sd)
+      : '<div class="empty"><div class="empty-icon">✅</div><div class="empty-text">Sin facturas pendientes</div></div>';
+  });
 
-  // BCRA
-  const bcraEl = document.getElementById('mtab-bcra');
-  const bcraData = (br && br.ok) ? await br.json() : null;
+  // ── BCRA + Score: esperar las 3 respuestas BCRA + score, luego renderizar ──
+  const [br, chr, hr] = await Promise.all([brP, chrP, hrP, scrP]);
+  const bcraEl   = document.getElementById('mtab-bcra');
+  const bcraData = (br  && br.ok)  ? await br.json()  : null;
   const chData   = (chr && chr.ok) ? await chr.json() : null;
-  const histData = (hr && hr.ok)   ? await hr.json()  : null;
-  // SSoT: score del servidor v9.0 (misma lógica que el batch)
-  const clienteLocal = CARTERA_LOCAL.find(function(c){return c.cuit===cuit;});
-  let scoreServidor = (clienteLocal && clienteLocal.score) ? clienteLocal.score : null;
-  if (!scoreServidor) {
-    try {
-      const scr = await fetch(API + '/calcular-score/' + cuit);
-      if (scr.ok) {
-        const scData = await scr.json();
-        if (scData.score) {
-          scoreServidor = scData.score;
-          if (clienteLocal) {
-            clienteLocal.score                = scData.score;
-            clienteLocal.scoreRango           = scData.rango;
-            clienteLocal.scoreColor           = scData.color;
-            clienteLocal.alerta_temprana      = scData.alerta_temprana;
-            clienteLocal.bloquear_oportunidad = scData.bloquear_oportunidad;
-          }
-        }
-      }
-    } catch(e) {}
+  const histData = (hr  && hr.ok)  ? await hr.json()  : null;
+  // Actualizar CARTERA_LOCAL con score fresco
+  const clienteLocal = CARTERA_LOCAL.find(c => c.cuit === cuit);
+  if (_scoreData?.score && clienteLocal) {
+    clienteLocal.score                = _scoreData.score;
+    clienteLocal.scoreRango           = _scoreData.rango;
+    clienteLocal.scoreColor           = _scoreData.color;
+    clienteLocal.alerta_temprana      = _scoreData.alerta_temprana;
+    clienteLocal.bloquear_oportunidad = _scoreData.bloquear_oportunidad;
   }
-  bcraEl.innerHTML = renderBcraModal(bcraData, chData, histData, scoreServidor);
+  const scoreServidor = clienteLocal?.score || _scoreData?.score || null;
+  if (bcraEl) bcraEl.innerHTML = renderBcraModal(bcraData, chData, histData, scoreServidor);
 }
 
 function switchModalTab(tab, btn) {

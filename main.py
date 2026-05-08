@@ -2590,6 +2590,57 @@ except Exception as e:
     _saldos_gestion = list(_saldos_facturas)
     print(f"[gestion] Error cargando gestión: {e}", flush=True)
 
+# ── Índices en memoria (O(1) lookup por CUIT y nombre) ──────────────────────
+_saldos_idx_cuit:   dict = {}   # cuit_limpio   → [facturas]
+_saldos_idx_nombre: dict = {}   # norm_nombre   → [facturas]
+
+def _rebuild_saldos_index():
+    """Reconstruye ambos índices desde la fuente vigente. Llamar tras cada carga/upload."""
+    global _saldos_idx_cuit, _saldos_idx_nombre
+    fuente = _saldos_gestion if _saldos_gestion else _saldos_facturas
+    idx_c: dict = {}
+    idx_n: dict = {}
+    for f in fuente:
+        c = str(f.get('cuit', '')).replace('-', '').replace(' ', '').strip()
+        if c:
+            idx_c.setdefault(c, []).append(f)
+        n = _norm_nombre(f.get('cliente', ''))
+        if n:
+            idx_n.setdefault(n, []).append(f)
+    _saldos_idx_cuit   = idx_c
+    _saldos_idx_nombre = idx_n
+    print(f"[idx] {len(idx_c)} CUITs · {len(idx_n)} nombres indexados "
+          f"({len(fuente)} registros)", flush=True)
+
+def _buscar_por_nombre_en_idx(nombre: str) -> list:
+    """3-nivel de matching sobre el índice de nombres (ya no itera la lista completa)."""
+    cn = _norm_nombre(nombre)
+    r = _saldos_idx_nombre.get(cn)
+    if r:
+        return r
+    cu = _norm_ultra(nombre)
+    prim2 = ' '.join(cu.split()[:2])
+    if len(prim2) > 3:
+        r = _saldos_idx_nombre.get(prim2)
+        if r:
+            return r
+        # prim2 sobre claves del índice (k clientes únicos, no todos los registros)
+        for k, v in _saldos_idx_nombre.items():
+            if ' '.join(_norm_ultra(k).split()[:2]) == prim2:
+                return v
+    # Parcial: ≥2 palabras en común (solo itera ~200 claves, no 700 registros)
+    palabras = [w for w in cn.split() if len(w) > 2]
+    if palabras:
+        merged: list = []
+        for k, v in _saldos_idx_nombre.items():
+            if sum(1 for p in palabras if p in k) >= min(2, len(palabras)):
+                merged.extend(v)
+        if merged:
+            return merged
+    return []
+
+_rebuild_saldos_index()
+
 def _norm_nombre(s):
     import unicodedata, re
     s = str(s or '').strip().upper()
@@ -2688,6 +2739,41 @@ def get_saldos_cuit(cuit):
         return jsonify({"facturas": result, "total_saldo": total_saldo, "cantidad": len(result), "metodo": "nombre"})
     return jsonify({"facturas": [], "total_saldo": 0, "cantidad": 0, "metodo": "nulo"})
 
+@app.route("/api/facturas/<cuit>")
+def api_facturas_por_cuit(cuit):
+    """
+    Consulta atómica O(1): devuelve solo las facturas del CUIT solicitado.
+    Cadena: índice CUIT → cartera+índice nombre → hint nombre en query string.
+    Reemplaza /saldos-cuit + /saldos-cliente en el flujo del modal comercial.
+    """
+    from urllib.parse import unquote
+    cuit_limpio = str(unquote(cuit)).replace('-', '').replace(' ', '').strip()
+    nombre_hint = request.args.get('nombre', '').strip()
+
+    # 1. O(1) por CUIT
+    result = _saldos_idx_cuit.get(cuit_limpio, [])
+    if result:
+        return jsonify({"facturas": result,
+                        "total_saldo": sum(f.get('saldo', 0) for f in result),
+                        "cantidad": len(result), "metodo": "cuit"})
+
+    # 2. Nombre desde cartera comercial
+    nombre = next(
+        (str(c.get('nombre', '')).strip() for c in _cartera_comercial
+         if str(c.get('cuit', '')).replace('-', '').replace(' ', '').strip() == cuit_limpio),
+        None
+    ) or nombre_hint
+
+    if nombre:
+        result = _buscar_por_nombre_en_idx(nombre)
+        if result:
+            return jsonify({"facturas": result,
+                            "total_saldo": sum(f.get('saldo', 0) for f in result),
+                            "cantidad": len(result), "metodo": "nombre"})
+
+    return jsonify({"facturas": [], "total_saldo": 0, "cantidad": 0, "metodo": "nulo"})
+
+
 @app.route("/upload-saldos-gestion", methods=["POST"])
 def upload_saldos_gestion():
     """Saldos semanales de gestión — actualiza la vista comercial sin tocar el DSO de cierre de mes."""
@@ -2736,6 +2822,7 @@ def upload_saldos_gestion():
         with open(ts_path, 'w') as f:
             json.dump({'ts': time.time(), 'fecha': time.strftime('%d/%m/%Y %H:%M'), 'tipo': 'gestion'}, f)
         _saldos_gestion = saldos
+        _rebuild_saldos_index()
         print(f"[gestion] {len(saldos)} facturas de gestión importadas (wipe & write)", flush=True)
         return jsonify({"ok": True, "total": len(saldos)})
     except Exception as e:
@@ -2843,6 +2930,7 @@ def upload_saldos_facturas():
         with open(ts_path, 'w') as f:
             json.dump({'ts': time.time(), 'fecha': time.strftime('%d/%m/%Y %H:%M')}, f)
         _saldos_facturas = saldos
+        _rebuild_saldos_index()
         print(f"[saldos] {len(saldos)} facturas importadas (Odoo positional)", flush=True)
         return jsonify({"ok": True, "total": len(saldos)})
     except Exception as e:
