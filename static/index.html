@@ -865,6 +865,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <script>
 let wspIndex = null;
 let morasIndex = null;
@@ -2006,33 +2007,60 @@ function calcularScore(datos) {
 function renderVendeScore(scoreObj) {
   if (!scoreObj) return '';
   var barWidth = Math.round(scoreObj.score / 999 * 100);
-  var filas = scoreObj.detalle.map(function(d) {
-    var pct = Math.round(d.puntos / d.max * 100);
-    var c = pct >= 80 ? '#166534' : pct >= 50 ? '#92400e' : '#991b1b';
-    return '<tr>' +
-      '<td style="font-size:12px;color:#334155;padding:3px 6px;">' + d.label + '</td>' +
-      '<td style="font-size:12px;color:#64748b;padding:3px 6px;">' + d.valor + '</td>' +
-      '<td style="font-size:12px;font-weight:600;color:'+c+';padding:3px 6px;text-align:right;">' +
-        d.puntos + '/' + d.max + '</td></tr>';
-  }).join('');
-  return '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px;margin-bottom:8px;">' +
-    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">' +
-      '<div style="font-size:13px;font-weight:700;color:#334155;">Score Vende Seguro</div>' +
-      '<div style="font-size:32px;font-weight:800;color:'+scoreObj.color+';">' + scoreObj.score + '</div>' +
-      '<div style="font-size:13px;font-weight:600;color:'+scoreObj.color+';">' + scoreObj.emoji + ' ' + scoreObj.rango + '</div>' +
-      '<div style="font-size:11px;color:#94a3b8;margin-left:auto;">máx. 999</div>' +
+  return '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;margin-bottom:8px;">' +
+    '<div style="font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:6px;">Score Vende Seguro</div>' +
+    '<div style="display:flex;align-items:flex-end;gap:14px;margin-bottom:10px;">' +
+      '<div style="font-size:52px;font-weight:800;line-height:1;color:' + scoreObj.color + ';font-family:\'Syne\',sans-serif;">' + scoreObj.score + '</div>' +
+      '<div style="padding-bottom:6px;">' +
+        '<div style="font-size:15px;font-weight:700;color:' + scoreObj.color + ';">' + scoreObj.emoji + ' ' + scoreObj.rango + '</div>' +
+        '<div style="font-size:11px;color:#94a3b8;">escala 1–999</div>' +
+      '</div>' +
     '</div>' +
-    '<div style="background:#f1f5f9;border-radius:6px;height:8px;margin-bottom:10px;">' +
-      '<div style="background:'+scoreObj.color+';height:8px;border-radius:6px;width:'+barWidth+'%;transition:width 0.6s;"></div>' +
+    '<div style="background:#f1f5f9;border-radius:6px;height:8px;margin-bottom:14px;">' +
+      '<div style="background:' + scoreObj.color + ';height:8px;border-radius:6px;width:' + barWidth + '%;transition:width 0.6s;"></div>' +
     '</div>' +
-    '<details><summary style="font-size:11px;color:#94a3b8;cursor:pointer;margin-bottom:4px;">Ver desglose del score</summary>' +
-      '<table style="width:100%;border-collapse:collapse;margin-top:4px;">' + filas + '</table>' +
-    '</details>' +
+    '<div style="font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:0.6px;text-transform:uppercase;margin-bottom:6px;">Historial BCRA — 24 meses</div>' +
+    '<canvas id="bcra-history-chart" style="width:100%;max-height:100px;display:block;"></canvas>' +
   '</div>' +
   '<div id="solvencia-card" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;margin-bottom:8px;">' +
     '<div style="font-size:12px;font-weight:700;color:#334155;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px;">Capacidad de Pago</div>' +
     '<div id="solvencia-body" style="font-size:13px;color:#64748b;">Consultando solvencia...</div>' +
   '</div>';
+}
+
+function renderBcraHistoryChart(periodos) {
+  var canvas = document.getElementById('bcra-history-chart');
+  if (!canvas || typeof Chart === 'undefined') return;
+  if (!periodos || !periodos.length) { canvas.style.display = 'none'; return; }
+  var data24 = periodos.slice(0, 24).reverse();
+  var labels = data24.map(function(p) {
+    var per = String(p.periodo || '');
+    return per.length === 6 ? per.slice(4,6) + '/' + per.slice(2,4) : per;
+  });
+  var values = data24.map(function(p) {
+    var ents = p.entidades || [];
+    return ents.length ? Math.max.apply(null, ents.map(function(e){ return e.situacion || 1; })) : 1;
+  });
+  var colors = values.map(function(v) {
+    return v === 1 ? '#16a34a' : v === 2 ? '#ca8a04' : v === 3 ? '#ea580c' : '#dc2626';
+  });
+  var existing = Chart.getChart(canvas);
+  if (existing) existing.destroy();
+  new Chart(canvas, {
+    type: 'bar',
+    data: { labels: labels, datasets: [{ data: values, backgroundColor: colors, borderRadius: 3, borderSkipped: false }] },
+    options: {
+      plugins: { legend: { display: false }, tooltip: {
+        callbacks: { label: function(ctx) { return sitNombre(ctx.raw); } }
+      }},
+      scales: {
+        y: { min: 0, max: 5, ticks: { stepSize: 1,
+          callback: function(v) { return v > 0 ? 'Sit.'+v : ''; },
+          font: { size: 9 } }, grid: { color: '#f1f5f9' } },
+        x: { ticks: { font: { size: 8 }, maxRotation: 45 }, grid: { display: false } }
+      }
+    }
+  });
 }
 
 async function cargarSolvencia(cuit, contenedor) {
@@ -2594,9 +2622,9 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
   document.getElementById('cliente-header').innerHTML = headerHtml;
   let v = '';
   if (esTimeout) v = '';
-  else if (maxSit === 1) v = `<div class="verdict-box aprobar"><div class="verdict-title aprobar">✓ Situación normal en BCRA</div><div class="verdict-detail">El cliente está en situación 1. Sin alertas financieras.</div></div>`;
-  else if (maxSit === 2) v = `<div class="verdict-box revisar"><div class="verdict-title revisar">⚠ Revisar — Seguimiento especial</div><div class="verdict-detail">Situación 2 en al menos una entidad. Recomendable solicitar Veraz completo.</div></div>`;
-  else v = `<div class="verdict-box rechazar"><div class="verdict-title rechazar">✗ Alerta — Situación crítica</div><div class="verdict-detail">Situación ${maxSit} (${sitNombre(maxSit)}) en el sistema financiero. Alto riesgo.</div></div>`;
+  else if (maxSit === 1) v = `<div class="verdict-box aprobar"><div class="verdict-title aprobar">✓ Situación normal en el sistema financiero</div><div class="verdict-detail">El cliente registra situación 1 en todas las entidades bancarias. Sin alertas crediticias activas.</div></div>`;
+  else if (maxSit === 2) v = `<div class="verdict-box revisar"><div class="verdict-title revisar">⚠ Atraso detectado — Operación condicionada</div><div class="verdict-detail">El cliente registra atrasos en al menos una entidad bancaria. Evaluar historial completo y condiciones de pago antes de operar.</div></div>`;
+  else v = `<div class="verdict-box rechazar"><div class="verdict-title rechazar">✗ Mora bancaria activa — Operación de alto riesgo</div><div class="verdict-detail">El cliente registra ${sitNombre(maxSit).toLowerCase()} (situación ${maxSit}) en el sistema financiero. Riesgo crediticio elevado.</div></div>`;
   document.getElementById('verdict-container').innerHTML = v;
 
   // ── SCORE VENDE SEGURO ──
@@ -2620,8 +2648,14 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
     var scoreElF = document.getElementById('vende-score-container');
     if (scoreElF) {
       scoreElF.innerHTML = renderVendeScore(scoreObjFinal);
+      window._ultimoScoreVende = scoreObjFinal;
       // Cargar solvencia de forma asíncrona (no bloquea el score)
       cargarSolvencia(cuit, scoreElF);
+      // Renderizar gráfico BCRA histórico
+      var _periHist = [];
+      if (historial && historial.results && historial.results.periodos) _periHist = historial.results.periodos;
+      else if (window._ultimoBcraData && window._ultimoBcraData.results && window._ultimoBcraData.results.periodos) _periHist = window._ultimoBcraData.results.periodos;
+      renderBcraHistoryChart(_periHist);
     }
     // Guardar score correcto — tanto en alertas como en cartera local
     var alertaIdx = alertas.findIndex(function(a){ return a.cuit === cuit; });
@@ -2735,7 +2769,7 @@ function getBadge(s) {
   if (s===2) return `<span class="badge badge-warning">Sit. 2 — Seguimiento</span>`;
   return `<span class="badge badge-danger">Sit. ${s} — Crítico</span>`;
 }
-function sitNombre(s) { return {1:'Normal',2:'Seguimiento especial',3:'Con problemas',4:'Alto riesgo',5:'Irrecuperable',6:'Irrecuperable'}[s]||'-'; }
+function sitNombre(s) { return {1:'Normal',2:'Con atrasos menores',3:'Mora bancaria',4:'Alto riesgo crediticio',5:'Insolvente',6:'Insolvente'}[s]||'-'; }
 
 function renderSocios(socios) {
   if (!socios || !socios.length) return '';
@@ -2918,7 +2952,8 @@ try {
     });
     const data = await r.json();
     if (data.error) throw new Error(data.error);
-    ultimoAnalisis = { cuit, texto: data.texto, fecha: new Date().toLocaleDateString('es-AR') };
+    var _sv = window._ultimoScoreVende;
+    ultimoAnalisis = { cuit, texto: data.texto, fecha: new Date().toLocaleDateString('es-AR'), score: _sv ? _sv.score : 0, rango: _sv ? _sv.rango : '', color: _sv ? _sv.color : '' };
     resEl.style.display = 'block';
     resEl.innerHTML = `<div style="font-size:12px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Análisis de riesgo</div><div style="font-size:13px;line-height:1.7;white-space:pre-wrap;color:#333;">${data.texto}</div>`;
     document.getElementById('btn-export').style.display = 'inline-block';
@@ -2929,123 +2964,173 @@ try {
   btn.disabled = false; btn.textContent = 'Analizar riesgo crediticio →';
 }
 
-function exportarReporte() {
+async function buildBcraChartImage() {
+  if (typeof Chart === 'undefined') return null;
+  var periodos = [];
+  var hist = window._ultimoHistorial;
+  if (hist && hist.results && hist.results.periodos) periodos = hist.results.periodos;
+  else if (window._ultimoBcraData && window._ultimoBcraData.results && window._ultimoBcraData.results.periodos) periodos = window._ultimoBcraData.results.periodos;
+  if (!periodos.length) return null;
+
+  var data24 = periodos.slice(0, 24).reverse();
+  var labels = data24.map(function(p) {
+    var per = String(p.periodo || '');
+    return per.length === 6 ? per.slice(4,6) + '/' + per.slice(2,4) : per;
+  });
+  var values = data24.map(function(p) {
+    var ents = p.entidades || [];
+    return ents.length ? Math.max.apply(null, ents.map(function(e){ return e.situacion || 1; })) : 1;
+  });
+  var bgColors = values.map(function(v) {
+    return v === 1 ? '#16a34a' : v === 2 ? '#ca8a04' : v === 3 ? '#ea580c' : '#dc2626';
+  });
+
+  return new Promise(function(resolve) {
+    var canvas = document.createElement('canvas');
+    canvas.width = 800; canvas.height = 200;
+    canvas.style.cssText = 'position:absolute;left:-9999px;top:-9999px;';
+    document.body.appendChild(canvas);
+    var chart = new Chart(canvas.getContext('2d'), {
+      type: 'bar',
+      data: { labels: labels, datasets: [{ data: values, backgroundColor: bgColors, borderRadius: 4, borderSkipped: false }] },
+      options: {
+        responsive: false, animation: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { min: 0, max: 5, ticks: { stepSize: 1,
+            callback: function(v) { return v > 0 ? 'Sit.'+v : ''; }, font: { size: 12 } },
+            grid: { color: '#e2e8f0' } },
+          x: { ticks: { font: { size: 10 }, maxRotation: 45 }, grid: { display: false } }
+        }
+      }
+    });
+    setTimeout(function() {
+      var img = canvas.toDataURL('image/png');
+      chart.destroy();
+      document.body.removeChild(canvas);
+      resolve(img);
+    }, 350);
+  });
+}
+
+async function exportarReporte() {
   if (!ultimoAnalisis) return;
+  const btn = document.getElementById('btn-export');
+  if (btn) { btn.disabled = true; btn.textContent = 'Generando…'; }
+
+  const chartImg = await buildBcraChartImage();
+
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const W = 210, H = 297;
-  const SIDEBAR = 58;   // ancho columna derecha (score)
-  const MAIN_W = W - SIDEBAR - 10; // ancho columna izquierda
-  const cuit = document.getElementById('cuit-input').value.trim();
-  const raw = cuit.replace(/-/g,'');
-  const mora = buscarEnMoras(raw);
-  var cuitFmt = raw.length === 11 ? raw.slice(0,2)+'-'+raw.slice(2,10)+'-'+raw.slice(10) : cuit;
 
-  // Nombre
+  const raw  = document.getElementById('cuit-input').value.trim().replace(/\D/g,'');
+  const cuitFmt = raw.length === 11 ? raw.slice(0,2)+'-'+raw.slice(2,10)+'-'+raw.slice(10) : raw;
+  const mora = buscarEnMoras ? buscarEnMoras(raw) : null;
+  const bodega = getNombreBodega();
+
   var nombre = '';
   if (verazData && verazData.nombre) nombre = verazData.nombre;
   if (!nombre) { var nomEl = document.querySelector('#cliente-header .nombre-cliente'); if (nomEl) nombre = nomEl.textContent.trim(); }
-  if (!nombre || nombre === cuit) { var enCar = cartera.find(function(c){ return c.cuit === raw; }); if (enCar) nombre = enCar.nombre; }
-  if (!nombre) nombre = cuit;
+  if (!nombre) { var enCar = cartera.find(function(c){ return c.cuit.replace(/-/g,'') === raw; }); if (enCar) nombre = enCar.nombre; }
+  if (!nombre) nombre = raw;
 
-  // Score actual
-  var scoreEl = document.querySelector('#vende-score-container [style*="font-size:32px"]');
-  var scoreVal = scoreEl ? parseInt(scoreEl.textContent) || 0 : 0;
-  var scoreRango = 'Sin datos', scoreColor = [100,116,139];
-  if (scoreVal >= 700)      { scoreRango = 'Excelente';   scoreColor = [22,101,52]; }
-  else if (scoreVal >= 400) { scoreRango = 'Bueno';       scoreColor = [146,64,14]; }
-  else if (scoreVal >= 200) { scoreRango = 'Revisar';     scoreColor = [154,52,18]; }
-  else if (scoreVal >= 100) { scoreRango = 'Alto riesgo'; scoreColor = [153,27,27]; }
-  else if (scoreVal > 0)    { scoreRango = 'Rechazar';    scoreColor = [127,29,29]; }
+  var scoreVal = ultimoAnalisis.score || 0;
+  if (!scoreVal && window._ultimoScoreVende) scoreVal = window._ultimoScoreVende.score || 0;
+  var scoreRango = ultimoAnalisis.rango || '';
+  var scoreRGB = [100,116,139];
+  if (!scoreRango) {
+    if      (scoreVal >= 750) { scoreRango = 'Excelente';   scoreRGB = [22,101,52]; }
+    else if (scoreVal >= 600) { scoreRango = 'Bueno';       scoreRGB = [161,98,7]; }
+    else if (scoreVal >= 400) { scoreRango = 'Revisar';     scoreRGB = [154,52,18]; }
+    else if (scoreVal >= 200) { scoreRango = 'Alto riesgo'; scoreRGB = [185,28,28]; }
+    else if (scoreVal > 0)    { scoreRango = 'Rechazar';    scoreRGB = [127,29,29]; }
+  } else {
+    if      (scoreRango === 'Excelente')   scoreRGB = [22,101,52];
+    else if (scoreRango === 'Bueno')       scoreRGB = [161,98,7];
+    else if (scoreRango === 'Revisar')     scoreRGB = [154,52,18];
+    else if (scoreRango === 'Alto riesgo') scoreRGB = [185,28,28];
+    else if (scoreRango === 'Rechazar')    scoreRGB = [127,29,29];
+  }
 
-  // ── FONDO SIDEBAR (columna derecha) ─────────────────────────────────────
-  doc.setFillColor(...scoreColor);
-  doc.rect(W - SIDEBAR, 0, SIDEBAR, H, 'F');
-
-  // ── HEADER AZUL (ancho total) ────────────────────────────────────────────
+  // ── HEADER ────────────────────────────────────────────────────────────────
   doc.setFillColor(15, 45, 82);
-  doc.rect(0, 0, W - SIDEBAR, 28, 'F');
-  doc.setFontSize(14); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold');
-  doc.text('Vende Seguro', 10, 12);
-  doc.setFontSize(8); doc.setFont('helvetica','italic'); doc.setTextColor(147,197,253);
-  doc.text('Análisis crediticio — ' + ultimoAnalisis.fecha, 10, 20);
-  doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(200,220,255);
-  doc.text(getNombreBodega(), 10, 26);
+  doc.rect(0, 0, W, 24, 'F');
+  doc.setFontSize(16); doc.setFont('helvetica','bold'); doc.setTextColor(255,255,255);
+  doc.text(bodega, 10, 11);
+  doc.setFontSize(9); doc.setFont('helvetica','italic'); doc.setTextColor(147,197,253);
+  doc.text('Análisis de Riesgo Crediticio — ' + ultimoAnalisis.fecha, 10, 19);
+  doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(180,210,255);
+  doc.text('CONFIDENCIAL', W-10, 19, {align:'right'});
 
-  // ── SCORE EN SIDEBAR ─────────────────────────────────────────────────────
-  var sx = W - SIDEBAR + 4;
+  // ── NOMBRE CLIENTE + SCORE HERO ───────────────────────────────────────────
+  var y = 34;
+  doc.setFontSize(15); doc.setFont('helvetica','bold'); doc.setTextColor(15,45,82);
+  doc.text(nombre.substring(0, 38), 10, y);
+  doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(100,116,139);
+  doc.text('CUIT ' + cuitFmt, 10, y+7);
+
+  // Score hero — caja derecha
+  doc.setFillColor(...scoreRGB);
+  doc.roundedRect(142, 28, 58, 22, 3, 3, 'F');
   doc.setTextColor(255,255,255);
-  doc.setFontSize(8); doc.setFont('helvetica','bold');
-  doc.text('SCORE', sx, 14, {align:'left'});
-  doc.setFontSize(34); doc.setFont('helvetica','bold');
-  doc.text(scoreVal > 0 ? String(scoreVal) : '—', sx + SIDEBAR/2 - 4, 38, {align:'center'});
-  doc.setFontSize(10);
-  doc.text(scoreRango.toUpperCase(), sx + SIDEBAR/2 - 4, 46, {align:'center'});
-  doc.setFontSize(7.5); doc.setFont('helvetica','normal');
-  doc.text('Vende Seguro', sx + SIDEBAR/2 - 4, 52, {align:'center'});
-  doc.setFontSize(7); doc.setTextColor(220,220,220);
-  doc.text('escala 1-999', sx + SIDEBAR/2 - 4, 57, {align:'center'});
+  doc.setFontSize(26); doc.setFont('helvetica','bold');
+  doc.text(scoreVal > 0 ? String(scoreVal) : '—', 171, 41, {align:'center'});
+  doc.setFontSize(8); doc.setFont('helvetica','normal');
+  doc.text(scoreRango.toUpperCase(), 171, 48, {align:'center'});
 
-  // Barra de score en sidebar
-  var barY = 62, barH = 4;
-  doc.setFillColor(255,255,255,60);
-  doc.roundedRect(sx, barY, SIDEBAR-8, barH, 2, 2, 'F');
-  doc.setFillColor(255,255,255);
-  doc.roundedRect(sx, barY, Math.max(2,(SIDEBAR-8)*scoreVal/999), barH, 2, 2, 'F');
+  y = 58;
+  doc.setDrawColor(210,220,240); doc.setLineWidth(0.4); doc.line(10, y, W-10, y);
+  y += 6;
 
-  // Metadatos en sidebar
-  var sy = 74;
-  var metaItems = [
-    ['CUIT', cuitFmt],
-    ['Fecha', ultimoAnalisis.fecha],
-    ['Bodega', getNombreBodega()],
-    ['Rango', scoreRango],
-  ];
-  metaItems.forEach(function(m) {
-    doc.setFontSize(6.5); doc.setFont('helvetica','bold'); doc.setTextColor(200,230,255);
-    doc.text(m[0].toUpperCase(), sx, sy);
-    doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(255,255,255);
-    doc.text(String(m[1]).substring(0,14), sx, sy+5);
-    sy += 13;
-  });
-
-  // ── CONTENIDO PRINCIPAL (columna izquierda) ───────────────────────────────
-  var y = 36;
-  doc.setFontSize(13); doc.setTextColor(15,45,82); doc.setFont('helvetica','bold');
-  doc.text(nombre.substring(0, 35), 10, y); y += 6;
-  doc.setFontSize(9); doc.setTextColor(100,116,139); doc.setFont('helvetica','normal');
-  doc.text('CUIT: ' + cuitFmt, 10, y); y += 8;
-  doc.setDrawColor(200,215,255); doc.line(10, y, W - SIDEBAR - 4, y); y += 6;
-
+  // ── MORA INTERNA PIATTELLI ────────────────────────────────────────────────
   if (mora) {
-    doc.setFillColor(254,242,242); doc.roundedRect(10, y-2, MAIN_W, 10, 2, 2, 'F');
-    doc.setTextColor(153,27,27); doc.setFontSize(8.5); doc.setFont('helvetica','bold');
-    doc.text('MORA: $' + (mora.saldo||0).toLocaleString('es-AR') + ' desde ' + mora.fecha_mora, 13, y+5);
-    y += 14;
+    doc.setFillColor(254,242,242);
+    doc.roundedRect(10, y, W-20, 11, 2, 2, 'F');
+    doc.setFillColor(220,38,38); doc.rect(10, y, 3, 11, 'F');
+    doc.setTextColor(153,27,27); doc.setFontSize(9); doc.setFont('helvetica','bold');
+    doc.text('MORA INTERNA ' + bodega.split(' ')[0].toUpperCase() + ': $' +
+      (mora.saldo||0).toLocaleString('es-AR') + ' — desde ' + (mora.fecha_mora||''), 16, y+7.5);
+    y += 16;
   }
 
-  if (verazData) {
-    doc.setFontSize(9); doc.setTextColor(30); doc.setFont('helvetica','bold');
-    doc.text('Datos Veraz/Nosis', 10, y); y += 6;
-    doc.setFontSize(8); doc.setTextColor(60); doc.setFont('helvetica','normal');
-    doc.text('Score: ' + verazData.score + '/9  |  Cheques: ' + verazData.cheques_rechazados, 10, y); y += 5;
-    doc.text('Situación: ' + verazData.situacion_bcra + '  |  Vencido: ' + verazData.saldo_vencido, 10, y); y += 5;
-    doc.text('Deuda SF: ' + verazData.deuda_sistema_financiero, 10, y); y += 9;
-    doc.setDrawColor(220,230,240); doc.line(10, y, W-SIDEBAR-4, y); y += 6;
+  // ── HISTORIAL BCRA ────────────────────────────────────────────────────────
+  doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(30,41,59);
+  doc.text('Historial BCRA — últimos 24 meses', 10, y); y += 4;
+  if (chartImg) {
+    doc.addImage(chartImg, 'PNG', 10, y, W-20, 42);
+    y += 46;
+  } else {
+    doc.setFontSize(9); doc.setFont('helvetica','italic'); doc.setTextColor(148,163,184);
+    doc.text('Historial no disponible para este período.', 10, y+8);
+    y += 16;
   }
 
-  doc.setFontSize(9.5); doc.setTextColor(15,45,82); doc.setFont('helvetica','bold');
-  doc.text('Análisis de riesgo', 10, y); y += 7;
-  doc.setFontSize(8.5); doc.setTextColor(40); doc.setFont('helvetica','normal');
-  var lines = doc.splitTextToSize(ultimoAnalisis.texto, MAIN_W);
-  doc.text(lines, 10, y);
+  // ── ANÁLISIS DE RIESGO ────────────────────────────────────────────────────
+  doc.setDrawColor(210,220,240); doc.line(10, y, W-10, y); y += 7;
+  doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(15,45,82);
+  doc.text('Análisis de Riesgo — ' + bodega, 10, y); y += 7;
+  doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(51,65,85);
 
-  // Pie de página
-  doc.setFontSize(7); doc.setTextColor(150); doc.setFont('helvetica','italic');
-  doc.text('Generado por Vende Seguro · ' + ultimoAnalisis.fecha + ' · Confidencial', 10, H-8);
-  doc.setDrawColor(220,230,240); doc.line(10, H-11, W-SIDEBAR-4, H-11);
+  // Limpiar texto: reemplazar referencias a Veraz y frases de seguimiento especial
+  var textoLimpio = (ultimoAnalisis.texto || '')
+    .replace(/\bsolicitar\s+Veraz\s+completo\b/gi, 'analizar el historial completo del sistema financiero')
+    .replace(/\bpedir\s+Veraz\b/gi, 'consultar el historial del sistema financiero')
+    .replace(/\bVeraz\s*(\/\s*Nosis)?\b/gi, 'informe del sistema financiero')
+    .replace(/\bseguimiento\s+especial\b/gi, 'monitoreo del riesgo')
+    .replace(/\bSeguimiento\s+Especial\b/g, 'Monitoreo de Riesgo');
 
-  doc.save('VendeSeguro_' + raw + '_' + ultimoAnalisis.fecha.replace(/\//g,'-') + '.pdf');
+  var lines = doc.splitTextToSize(textoLimpio, W-20);
+  var maxLines = Math.floor((H - y - 20) / 5);
+  lines.slice(0, maxLines).forEach(function(l) { doc.text(l, 10, y); y += 5; });
+
+  // ── PIE ────────────────────────────────────────────────────────────────────
+  doc.setDrawColor(210,220,240); doc.line(10, H-13, W-10, H-13);
+  doc.setFontSize(7); doc.setFont('helvetica','italic'); doc.setTextColor(148,163,184);
+  doc.text(bodega + ' · Vende Seguro · ' + ultimoAnalisis.fecha + ' · Confidencial — Uso interno', W/2, H-7, {align:'center'});
+
+  doc.save('VendeSeguro_' + bodega.replace(/\s+/g,'_') + '_' + raw + '_' + ultimoAnalisis.fecha.replace(/\//g,'-') + '.pdf');
+  if (btn) { btn.disabled = false; btn.textContent = 'Exportar PDF'; }
 }
 
 
@@ -3691,7 +3776,7 @@ function renderAlertas() {
     var html = '<div class="client-row" style="cursor:pointer;' + borderStyle + bgStyle + '" onclick="verCliente(\'' + c.cuit + '\')">';
     html += '<div>';
     if (esCritico) html += '<div style="font-size:10px;color:#991b1b;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;">⚠ Situación crítica BCRA</div>';
-    if (esAtencion && !esCritico) html += '<div style="font-size:10px;color:#9a3412;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;">⚠ Seguimiento especial</div>';
+    if (esAtencion && !esCritico) html += '<div style="font-size:10px;color:#9a3412;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;">⚠ Atraso bancario detectado</div>';
     html += '<div class="client-name">' + c.nombre + '</div>';
     html += '<div class="client-meta">CUIT: ' + c.cuit + verificadoTxt + '</div>';
     html += '</div>';
@@ -3736,7 +3821,7 @@ function mostrarVeredicto(sinLevantar, totalCheques, tieneNegativo, maxSit) {
     veredicto = '✗ RECHAZAR — Tiene cheques sin levantar';
     color = '#991b1b'; bg = '#fee2e2';
   } else if (maxSit === 2) {
-    veredicto = '⚠ REVISAR — Seguimiento especial en BCRA';
+    veredicto = '⚠ REVISAR — Atraso en sistema bancario';
     color = '#854d0e'; bg = '#fefce8';
   } else if (totalCheques > 0 || tieneNegativo) {
     veredicto = '⚠ REVISAR — Tiene antecedentes, evaluar con cuidado';
