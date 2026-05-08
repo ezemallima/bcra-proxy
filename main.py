@@ -905,12 +905,18 @@ def calcular_rating_predictivo(
             for e in _ents_curr
         ) / _raw_total_m
     pct_mora = monto_mora_k / _raw_total_m if _raw_total_m > 0 else (0.0 if max_sit == 1 else 1.0)
-    # Mora técnica: importe problemático < $150k (150 miles) O < 5 % del total
-    _MORA_TEC_K   = 150.0    # $150.000 ARS en miles de pesos
+    # Mora técnica: monto en mora < $300k ARS (300 miles) O < 5% del total
+    _MORA_TEC_K   = 300.0    # $300.000 ARS en miles de pesos
     _MORA_TEC_PCT = 0.05
     es_mora_tecnica = (
         max_sit > 1 and _raw_total_m > 0 and
         (monto_mora_k <= _MORA_TEC_K or pct_mora <= _MORA_TEC_PCT)
+    )
+    print(
+        f"DEBUG RIAL: CUIT={cuit_limpio} Monto Mora: {monto_mora_k:.1f}k "
+        f"Porcentaje: {pct_mora:.4f} Es Técnica: {es_mora_tecnica} "
+        f"max_sit={max_sit} sit_pond={sit_ponderada:.3f}",
+        flush=True
     )
 
     # ── Historial 24m ─────────────────────────────────────────────────────
@@ -1030,6 +1036,10 @@ def calcular_rating_predictivo(
     if es_monotrib_bajo:
         puntos = min(puntos, 600)
 
+    # ── Piso absoluto mora técnica: ningún castigo de situación baja el score de 620 ──
+    if es_mora_tecnica:
+        puntos = max(puntos, 620)
+
     score = max(1, min(999, round(puntos)))
 
     if   score >= 750: rango, color, emoji = 'Excelente',   '#16a34a', '🟢'
@@ -1069,6 +1079,12 @@ def calcular_rating_predictivo(
         'mora_tecnica':         es_mora_tecnica,
         'sit_ponderada':        round(sit_ponderada, 3),
         'pct_mora':             round(pct_mora, 4),
+        'nota_mora_tecnica': (
+            f"Atención: Se detecta una mora técnica por monto menor que no afecta "
+            f"la solvencia general. Deuda en mora: ${round(monto_mora_k):,} miles ARS "
+            f"({round(pct_mora*100, 1)}% del total), situación ponderada {sit_ponderada:.2f}. "
+            f"El {round((1-pct_mora)*100, 1)}% de la cartera bancaria se encuentra en Situación 1."
+        ) if es_mora_tecnica else None,
     }
     _score_session_cache[cuit_limpio] = resultado
     return resultado
@@ -2081,6 +2097,7 @@ def calcular_score_individual(cuit):
             "mora_tecnica":         score_data.get('mora_tecnica', False),
             "sit_ponderada":        score_data.get('sit_ponderada'),
             "pct_mora":             score_data.get('pct_mora'),
+            "nota_mora_tecnica":    score_data.get('nota_mora_tecnica'),
             "inferencia_ingresos":  (solvency or {}).get('ingresos_anuales'),
             "fuente_ingresos":      (solvency or {}).get('fuente_ingresos'),
             "actividad_principal":  (solvency or {}).get('actividad_principal'),

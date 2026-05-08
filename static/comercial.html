@@ -1019,16 +1019,21 @@ function renderConsulta(cuit, dd, cd, hd, serverScore) {
   const ingColor   = _ingValido ? 'var(--azul)' : 'var(--texto2)';
   const ingSize    = _ingValido ? '14px' : '11px';
 
-  const _moraTecnica = serverScore?.mora_tecnica === true;
-  const _pctMora     = serverScore?.pct_mora ?? null;
-  let moraTecHtml    = '';
-  if (_moraTecnica && maxSit >= 3) {
-    const moraK    = (_pctMora != null && montoTotal > 0) ? Math.round(_pctMora * montoTotal) : 0;
-    const pctBuena = _pctMora != null ? Math.round((1 - _pctMora) * 100) : null;
-    const moraStr  = moraK > 0 ? ` ($${fmtM(moraK * 1000)} en Sit.${maxSit})` : '';
-    const buenaStr = pctBuena != null ? ` — ${pctBuena}% de la cartera en situación normal` : '';
-    moraTecHtml    = `<div style="margin-top:8px;background:#fef9c3;border:1px solid #ca8a04;border-radius:6px;padding:8px 12px;font-size:12px;color:#92400e;text-align:left">
-      ⚠ Mora técnica/menor detectada${moraStr}${buenaStr}, riesgo moderado.
+  const _moraTecnica   = serverScore?.mora_tecnica === true;
+  const _pctMora       = serverScore?.pct_mora ?? null;
+  const _notaServidor  = serverScore?.nota_mora_tecnica || null;
+  let moraTecHtml      = '';
+  if (_moraTecnica) {
+    const notaTxt = _notaServidor
+      || (() => {
+           const moraK    = (_pctMora != null && montoTotal > 0) ? Math.round(_pctMora * montoTotal) : 0;
+           const pctBuena = _pctMora != null ? Math.round((1 - _pctMora) * 100) : null;
+           const moraStr  = moraK > 0 ? ` Deuda en mora: $${fmtM(moraK * 1000)} en Sit.${maxSit}.` : '';
+           const buenaStr = pctBuena != null ? ` ${pctBuena}% de la cartera en situación normal.` : '';
+           return `Atención: Se detecta una mora técnica por monto menor que no afecta la solvencia general.${moraStr}${buenaStr}`;
+         })();
+    moraTecHtml = `<div style="margin-top:8px;background:#fef9c3;border:1px solid #ca8a04;border-radius:6px;padding:8px 12px;font-size:12px;color:#92400e;text-align:left">
+      ⚠ ${esc(notaTxt)}
     </div>`;
   }
 
