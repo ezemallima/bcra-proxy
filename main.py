@@ -1098,11 +1098,6 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
     """
     cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
 
-    # ── Bypass mora técnica: retorno instantáneo antes de cualquier consulta ──
-    if cuit_limpio in _MORA_TECNICA_BYPASS:
-        print(f"[bypass] {cuit_limpio} → mora técnica (desde calcular_score_servidor)", flush=True)
-        return {**_MORA_TECNICA_BYPASS[cuit_limpio], 'fuente': 'bypass_manual', 'version': _SCORE_VERSION}
-
     def _cache_load(fname):
         p = os.path.join(DATA_DIR, fname)
         try:
@@ -2066,23 +2061,6 @@ def limpiar_solvency():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
-# CUITs con mora técnica confirmada — respuesta instantánea sin consultas externas
-_MORA_TECNICA_BYPASS: dict = {
-    '20312899699': {   # Rial Leandro — Sit.4 $89k sobre cartera de $3.5M
-        'score': 620, 'rango': 'Bueno', 'color': '#ca8a04', 'emoji': '🟡',
-        'mora_tecnica': True, 'bloquear_oportunidad': False,
-        'sit_ponderada': 1.074, 'pct_mora': 0.025,
-        'nota_mora_tecnica': (
-            'Atención: Se detecta una mora técnica por monto menor que no afecta '
-            'la solvencia general. Deuda en mora: $89.000 ARS en Sit.4 '
-            '(2.5% del total). 97.5% de la cartera bancaria en Situación 1.'
-        ),
-        'alerta_temprana': False, 'tendencia': 'estable',
-        'es_empleador': False, 'indice_solvencia': 0.4,
-    },
-}
-
-
 def _score_response(score_data: dict, solvency: dict = None) -> dict:
     """Arma el dict JSON de respuesta desde un score_data calculado o bypass."""
     sol = solvency or {}
@@ -2115,11 +2093,6 @@ def _calcular_score_handler(cuit: str):
     cuit_limpio = str(unquote(cuit)).replace('-', '').replace(' ', '').strip()
     if len(cuit_limpio) < 10:
         return jsonify({"ok": False, "error": "CUIT inválido"}), 400
-
-    # ── Bypass: primero de todo, antes de caché, BCRA y solvencia ──────────
-    if cuit_limpio in _MORA_TECNICA_BYPASS:
-        print(f"[bypass] {cuit_limpio} → mora técnica manual", flush=True)
-        return jsonify({**_score_response(_MORA_TECNICA_BYPASS[cuit_limpio]), 'fuente': 'bypass_manual'})
 
     if request.args.get('fresh') == '1':
         _fp = os.path.join(DATA_DIR, f'solvency_{cuit_limpio}.json')
