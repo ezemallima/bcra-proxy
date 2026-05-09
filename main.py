@@ -6,6 +6,7 @@ import os
 import json
 import time
 import threading
+from datetime import datetime, timedelta
 import random
 import traceback
 import gc
@@ -655,12 +656,27 @@ def get_solvency_data(cuit):
 
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
-# ║  MODELO NACIONAL DE RIESGO VENDE SEGURO v9.0                            ║
-# ║  Capa 1 (40%): Estabilidad Bancaria  | Capa 2 (30%): Solvencia Federal  ║
-# ║  Capa 3 (30%): Comportamiento Interno | Liquidez: bonus cheques          ║
+# ║  MODELO NACIONAL DE RIESGO VENDE SEGURO v10.0  (Anti-Videla)            ║
+# ║  Capa A (40%): Estabilidad Bancaria BCRA  | Capa B (40%): Conducta Odoo ║
+# ║  Capa C (20%): Comunidad Chat             | Liquidez: bonus cheques      ║
+# ║  Prospectos: BCRA+AFIP(80%) / Comunidad(20%) — sin historial Odoo        ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
 
-_SCORE_VERSION = "9.0"
+_SCORE_VERSION = "10.0"
+
+# Keywords para NLP de chat de bodegas (Capa C — Comunidad)
+_KW_NEG = [
+    "atraso", "atrasado", "atrasada", "moroso", "morosa",
+    "cheque rechazado", "cheque rebotado", "reboto", "rebotó",
+    "devolvio", "devolvió", "deuda", "impago", "no paga",
+    "mal pagador", "incobrable", "incobrable", "pésimo", "pesimo",
+    "problema", "cuidado", "precaucion", "precaución",
+]
+_KW_POS = [
+    "contado", "paga bien", "cumple", "buen cliente", "puntual",
+    "sin problemas", "recomendado", "excelente", "confiable",
+    "siempre paga", "buen pagador", "cliente confiable",
+]
 
 # Session-level cache — se limpia al inicio de cada verificación
 _score_session_cache: dict = {}
@@ -785,7 +801,6 @@ def _layer2_solvencia_federal(solvency_data: dict) -> tuple:
 def _layer3_comportamiento_interno(
     cuit_limpio: str,
     en_mora: bool,
-    moras_norm: dict,
     wsp_index: dict,
     en_cartera: bool,
 ) -> tuple:
@@ -812,6 +827,251 @@ def _layer3_comportamiento_interno(
 
     pts_rel = 50 if en_cartera else 0
     return (pts_mora + pts_wsp + pts_rel, hard_block)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  NUEVAS CAPAS v10.0
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _evaluar_intencionalidad_mora(
+    periodos_hist: list,
+    periodos_curr: list,
+) -> tuple:
+    """
+    Clasifica mora BCRA como Administrativa vs Default Real.
+    Administrativa: la entidad NUNCA reportó Sit.1 previo → −15%, sin Hard Block.
+    Default Real: ≥3 meses en Sit.1 y luego cayó → Hard Block D2 ($0).
+    Returns: (tipo, pct_adm, aviso)
+    """
+    curr_ents = periodos_curr[0].get('entidades', []) if periodos_curr else []
+    ents_mora = [
+        (str(e.get('entidad') or '').strip().upper(),
+         int(e.get('situacion') or 1),
+         float(e.get('monto') or 0))
+        for e in curr_ents if (e.get('situacion') or 1) >= 2
+    ]
+    if not ents_mora:
+        return ('limpio', 0.0, '')
+
+    # Construir historial de situaciones por entidad (todos los períodos)
+    hist_sit: dict = {}
+    todos = periodos_hist if periodos_hist else periodos_curr
+    for p in todos:
+        for e in p.get('entidades', []):
+            n = str(e.get('entidad') or '').strip().upper()
+            if n:
+                hist_sit.setdefault(n, []).append(int(e.get('situacion') or 1))
+
+    monto_total_mora = sum(m for _, _, m in ents_mora)
+    monto_adm = 0.0
+    tipo_final = 'mora_administrativa'
+
+    for nombre, _sit, monto in ents_mora:
+        hist = hist_sit.get(nombre, [])
+        meses_sit1 = sum(1 for s in hist if s == 1)
+        if meses_sit1 >= 3:
+            tipo_final = 'default_real'
+            break
+        monto_adm += monto
+
+    pct_adm = round(monto_adm / monto_total_mora, 3) if monto_total_mora > 0 else 0.0
+    if tipo_final == 'mora_administrativa':
+        aviso = 'Mora administrativa: banco reporta atraso sin historial previo de incumplimiento.'
+    else:
+        aviso = 'Default real: el cliente tenía historial limpio y cayó en mora.'
+    return (tipo_final, pct_adm, aviso)
+
+
+def _layer_conducta_interna(
+    cuit_limpio: str,
+    saldos_data: list,
+    en_mora: bool,
+) -> tuple:
+    """
+    Capa B: Conducta Interna Odoo — 40% del score (0-400 pts).
+    Regularidad pago (0-200) + Volumen relación (0-100) +
+    Mora interna (0-100) − Penalidad DSO (−80 si DSO↑>15% en 60d).
+    Returns: (pts, dso_individual, dso_deteriorando, sin_historial,
+              promedio_mensual, hard_block_mora)
+    """
+    _FMTS = ('%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y')
+
+    def _parse(s):
+        if not s:
+            return None
+        s = str(s)[:10]
+        for fmt in _FMTS:
+            try:
+                return datetime.strptime(s, fmt)
+            except ValueError:
+                pass
+        return None
+
+    # ── Filtrar facturas: CUIT directo → nombre vía _cartera_comercial ──
+    facturas = [
+        f for f in saldos_data
+        if str(f.get('cuit', '')).replace('-', '').replace(' ', '').strip() == cuit_limpio
+    ]
+    if not facturas:
+        nombre_cliente = next(
+            (str(c.get('nombre', '')).strip().upper()
+             for c in _cartera_comercial
+             if str(c.get('cuit', '')).replace('-', '').replace(' ', '').strip() == cuit_limpio),
+            None
+        )
+        if nombre_cliente:
+            facturas = [
+                f for f in saldos_data
+                if str(f.get('cliente', '')).strip().upper() == nombre_cliente
+                or nombre_cliente in str(f.get('cliente', '')).strip().upper()
+            ]
+
+    if not facturas:
+        return (120, 0.0, False, True, 0.0, False)
+
+    hoy = datetime.now()
+
+    # ── DSO individual: media 60d reciente vs 60d anterior ───────────────
+    cutoff_rec = hoy - timedelta(days=60)
+    cutoff_ant = hoy - timedelta(days=120)
+    dsos_rec, dsos_ant = [], []
+    for f in facturas:
+        ff = _parse(f.get('fechaFactura'))
+        fp = _parse(f.get('fechaPago'))
+        if not ff or not fp:
+            continue
+        dso = (fp - ff).days
+        if not (0 <= dso <= 365):
+            continue
+        if ff >= cutoff_rec:
+            dsos_rec.append(dso)
+        elif ff >= cutoff_ant:
+            dsos_ant.append(dso)
+
+    dso_individual  = round(sum(dsos_rec) / len(dsos_rec), 1) if dsos_rec else 0.0
+    dso_deteriorando = False
+    if dsos_rec and dsos_ant:
+        dso_ant_avg = sum(dsos_ant) / len(dsos_ant)
+        if dso_ant_avg > 0 and dso_individual / dso_ant_avg > 1.15:
+            dso_deteriorando = True
+
+    # ── Regularidad de pago (0-200 pts) ──────────────────────────────────
+    total_f  = len(facturas)
+    pagadas  = sum(1 for f in facturas if (f.get('saldo') or 0) == 0)
+    vencidas = 0
+    for f in facturas:
+        if float(f.get('saldo') or 0) > 0:
+            ff = _parse(f.get('fechaFactura'))
+            if ff and (hoy - ff).days > 30:
+                vencidas += 1
+
+    ratio = pagadas / total_f if total_f > 0 else 0.0
+    if   ratio >= 0.95: pts_reg = 200
+    elif ratio >= 0.85: pts_reg = 160
+    elif ratio >= 0.70: pts_reg = 120
+    elif ratio >= 0.50: pts_reg = 80
+    elif ratio >= 0.30: pts_reg = 40
+    else:               pts_reg = 10
+
+    if vencidas > 3:
+        pts_reg = max(0, pts_reg - 40)
+
+    # ── Volumen relación (0-100 pts) ──────────────────────────────────────
+    vol_total = sum(float(f.get('totalFactura') or 0) for f in facturas)
+    if   vol_total >= 5_000_000: pts_vol = 100
+    elif vol_total >= 2_000_000: pts_vol = 80
+    elif vol_total >= 500_000:   pts_vol = 60
+    elif vol_total >= 100_000:   pts_vol = 40
+    elif vol_total > 0:          pts_vol = 20
+    else:                        pts_vol = 10
+
+    # ── Mora interna (0-100 pts) + Hard block ────────────────────────────
+    if en_mora:
+        pts_mora_int    = 0
+        hard_block_mora = True
+    else:
+        pts_mora_int    = 100
+        hard_block_mora = False
+
+    # ── Penalidad DSO (−80 si deterioró >15%) ────────────────────────────
+    pen_dso = -80 if dso_deteriorando else 0
+
+    # ── Promedio mensual de compras (para límite dinámico — Tarea 2) ─────
+    fechas = [_parse(f.get('fechaFactura')) for f in facturas]
+    fechas = [d for d in fechas if d]
+    promedio_mensual = 0.0
+    if fechas:
+        meses = max(1, (hoy - min(fechas)).days / 30)
+        promedio_mensual = round(vol_total / meses, 2)
+
+    pts = max(0, min(400, pts_reg + pts_vol + pts_mora_int + pen_dso))
+    return (pts, dso_individual, dso_deteriorando, False, promedio_mensual, hard_block_mora)
+
+
+def _evaluar_comunidad(cuit_limpio: str, wsp_index: dict) -> tuple:
+    """
+    Capa C: Comunidad Chat Bodegas — 20% del score (0-200 pts).
+    NLP sobre menciones en WhatsApp indexadas por CUIT.
+    Returns: (pts, es_negativo, menciones_neg, menciones_pos)
+    """
+    entry = wsp_index.get(cuit_limpio) or {}
+    if not entry:
+        return (100, False, 0, 0)
+
+    texto = str(entry.get('texto') or entry.get('mensajes') or '').lower()
+    if not texto:
+        return (100, False, 0, 0)
+
+    neg = sum(1 for kw in _KW_NEG if kw in texto)
+    pos = sum(1 for kw in _KW_POS if kw in texto)
+    es_negativo = neg > pos or (neg > 0 and pos == 0)
+
+    if   neg == 0 and pos == 0: pts = 100
+    elif neg > 0  and pos == 0: pts = max(0,   100 - neg * 25)
+    elif pos > 0  and neg == 0: pts = min(200, 100 + pos * 25)
+    else:
+        balance = pos - neg
+        pts = max(0, min(200, 100 + balance * 20))
+
+    return (pts, es_negativo, neg, pos)
+
+
+def _detectar_degradacion(score_history: list) -> tuple:
+    """
+    Anti-Videla: detecta caída sostenida en el historial de scores (ventana 12 meses).
+    Umbral: ≥15% de caída vs promedio últimos 30d → 'degradacion_moderada'.
+             ≥20% o ≥150 pts absolutas → 'degradacion_severa'.
+    Returns: (tipo, delta, mensaje)
+    """
+    if not score_history or len(score_history) < 2:
+        return ('', 0, '')
+
+    try:
+        hist = sorted(score_history, key=lambda x: x.get('fecha', ''), reverse=True)
+    except Exception:
+        hist = list(reversed(score_history))
+
+    score_actual = int(hist[0].get('score') or 0)
+    if not score_actual:
+        return ('', 0, '')
+
+    corte_30d = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+    recientes  = [h for h in hist[1:] if (h.get('fecha') or '') >= corte_30d]
+    comparar   = recientes[:4] if recientes else hist[1:5]
+    if not comparar:
+        return ('', 0, '')
+
+    promedio   = sum(int(h.get('score') or 0) for h in comparar) / len(comparar)
+    delta      = round(promedio - score_actual)
+    pct_caida  = delta / promedio if promedio > 0 else 0.0
+
+    if delta >= 150 or pct_caida >= 0.20:
+        return ('degradacion_severa', delta,
+                f'Caída severa de {delta} pts ({round(pct_caida*100)}%) vs promedio histórico.')
+    elif delta >= 80 or pct_caida >= 0.15:
+        return ('degradacion_moderada', delta,
+                f'Deterioro de {delta} pts ({round(pct_caida*100)}%) vs promedio últimos 30 días.')
+    return ('', 0, '')
 
 
 def _layer_liquidez(cheq_data: dict, max_sit: int, n_periodos_h: int) -> tuple:
@@ -858,16 +1118,17 @@ def calcular_rating_predictivo(
     ciudad: str         = '',
 ) -> dict:
     """
-    Modelo Nacional de Riesgo Vende Seguro v9.0
+    Modelo Nacional de Riesgo Vende Seguro v10.0 (Anti-Videla)
 
-    Capa 1 — Estabilidad Bancaria   40%  (0-400 pts): BCRA + Tendencia 24m
-    Capa 2 — Solvencia Federal      30%  (0-300 pts): AFIP tipo/categoría
-    Capa 3 — Comportamiento Interno 30%  (0-300 pts): Mora + Chat + Relación
+    Capa A — Estabilidad Bancaria   40%  (0-400 pts): BCRA + Tendencia 24m
+    Capa B — Conducta Interna       40%  (0-400 pts): Odoo DSO/regularidad/volumen
+    Capa C — Comunidad              20%  (0-200 pts): NLP Chat Bodegas
     Liquidez                              (0-100 pts): Cheques bonus
 
-    Caps: Sit5+→1 | Sit4→250 | Sit3→400 | Mora interna→400 | Monotrib A/B→600
-    Alerta Temprana: deuda +30% último mes | Monotrib bajo | solvencia < 40%
-    Alerta Logística: cliente en zona de riesgo geográfico
+    Prospectos (sin historial Odoo): AFIP proxy llena Capa B (80% BCRA+AFIP / 20% Com.)
+    Intencionalidad: mora administrativa (nunca Sit.1 previo) → −15%, sin Hard Block.
+    Default real (≥3m en Sit.1 luego Sit.2+) → Hard Block D2 ($0).
+    Anti-Videla: scoreHistory[] 12 meses; degradación ≥15% → alerta.
     """
     cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
 
@@ -944,11 +1205,6 @@ def calcular_rating_predictivo(
     if en_mora is None:
         en_mora = cuit_limpio in moras_norm
 
-    en_cartera = any(
-        str(c.get('cuit', '')).replace('-', '').replace(' ', '').strip() == cuit_limpio
-        for c in _cartera_comercial
-    )
-
     # ── WhatsApp Bodegas ──────────────────────────────────────────────────
     wsp_index: dict = {}
     try:
@@ -956,21 +1212,49 @@ def calcular_rating_predictivo(
             wsp_index = json.load(_wf)
     except: pass
 
-    # ── Solvencia AFIP (graceful degradation via get_solvency_data) ───────
+    # ── Solvencia AFIP (graceful degradation) ────────────────────────────
     if solvency_data is None:
         solvency_data = get_solvency_data(cuit_limpio)
 
-    # ═══ CAPA 1: Estabilidad Bancaria (0-400 pts) ════════════════════════
+    # ═══ CAPA A: Estabilidad Bancaria (0-400 pts) ════════════════════════
     pts_c1, tendencia, alerta_creciente = _layer1_estabilidad_bancaria(
         max_sit, n_periodos_h, monto_real, periodos_hist, periodos_curr, sit_ponderada
     )
 
-    # ═══ CAPA 2: Solvencia Federal (0-300 pts) ═══════════════════════════
+    # ── Intencionalidad de mora BCRA ──────────────────────────────────────
+    tipo_mora_bcra, pct_mora_adm, aviso_mora = _evaluar_intencionalidad_mora(
+        periodos_hist, periodos_curr
+    )
+    # Proporcionalidad: < 15% mora Y entidad principal en Sit.1 → no bloquear
+    banco_principal_limpio = False
+    if _ents_curr and pct_mora < 0.15:
+        banco_principal_limpio = int(_ents_curr[0].get('situacion') or 1) == 1
+
+    if tipo_mora_bcra == 'mora_administrativa' and not banco_principal_limpio:
+        pts_c1 = round(pts_c1 * 0.85)   # −15% en Capa A, sin Hard Block
+
+    # Default Real + Sit.2+ + no mora técnica + no proporcional → Hard Block D2
+    hard_block_bcra = (
+        max_sit >= 2 and
+        tipo_mora_bcra == 'default_real' and
+        not es_mora_tecnica and
+        not banco_principal_limpio
+    )
+
+    # ═══ CAPA B: Conducta Interna Odoo (0-400 pts) ═══════════════════════
     pts_c2, es_empleador, es_monotrib_bajo, indice_solv = _layer2_solvencia_federal(solvency_data)
 
-    # ═══ CAPA 3: Comportamiento Interno (0-300 pts) ══════════════════════
-    pts_c3, hard_block_mora = _layer3_comportamiento_interno(
-        cuit_limpio, en_mora, moras_norm, wsp_index, en_cartera
+    (pts_cb, dso_individual, dso_deteriorando,
+     sin_historial_interno, promedio_mensual, hard_block_mora) = \
+        _layer_conducta_interna(cuit_limpio, _saldos_facturas, en_mora)
+
+    if sin_historial_interno:
+        # Score de Prospección: AFIP solvencia como proxy de Capa B (0-400)
+        pts_cb = min(400, round(pts_c2 * 400 / 300))
+
+    # ═══ CAPA C: Comunidad Chat Bodegas (0-200 pts) ══════════════════════
+    pts_cc, comunidad_negativa, _neg_count, _pos_count = _evaluar_comunidad(
+        cuit_limpio, wsp_index
     )
 
     # ═══ LIQUIDEZ: Cheques (0-100 pts) ═══════════════════════════════════
@@ -980,16 +1264,17 @@ def calcular_rating_predictivo(
             'score': 1, 'rango': 'Rechazar', 'color': '#7f1d1d', 'emoji': '⛔',
             'alerta_temprana': False, 'bloquear_oportunidad': True,
             'alerta_logistica': _alerta_logistica(ciudad),
-            'componentes': {'capa1': pts_c1, 'capa2': pts_c2, 'capa3': pts_c3, 'liquidez': 0},
+            'componentes': {'capaA': pts_c1, 'capaB': pts_cb, 'capaC': pts_cc, 'liquidez': 0},
             'tendencia': tendencia, 'es_empleador': es_empleador,
             'indice_solvencia': indice_solv, 'version': _SCORE_VERSION,
+            'max_sit': max_sit,
         }
         _score_session_cache[cuit_limpio] = resultado
         print(f"[score v{_SCORE_VERSION}] {cuit_limpio} RECHAZAR — cheques críticos", flush=True)
         return resultado
 
-    # ── Suma bruta ────────────────────────────────────────────────────────
-    puntos = pts_c1 + pts_c2 + pts_c3 + pts_liq
+    # ── Suma bruta (A + B + C + Liquidez) ────────────────────────────────
+    puntos = pts_c1 + pts_cb + pts_cc + pts_liq
 
     # ── Ajuste: concentración de deuda ────────────────────────────────────
     if   nro_entidades == 0 or sin_deudas_real:     puntos += 25
@@ -998,7 +1283,6 @@ def calcular_rating_predictivo(
 
     # ── Ajuste: ratio de apalancamiento BCRA/AFIP ─────────────────────────
     if solvency_data:
-        # Piso de emergencia: deuda bancaria implica ingresos mínimos (×3)
         if not solvency_data.get('ingresos_anuales') and monto_total_m > 0:
             solvency_data = dict(solvency_data)
             solvency_data['ingresos_anuales'] = round(monto_total_m * 1_000 * 3)
@@ -1016,7 +1300,11 @@ def calcular_rating_predictivo(
     elif sit_grave_6m and es_mora_tecnica:
         puntos = min(puntos, 350)
 
-    # ── Techos duros por situación BCRA (mora técnica → caps más suaves) ──
+    # ── Hard Block D2: Default Real BCRA → score forzado a 1 ─────────────
+    if hard_block_bcra:
+        puntos = 0
+
+    # ── Techos duros por situación BCRA ──────────────────────────────────
     if max_sit >= 5:
         puntos = min(puntos, 400 if es_mora_tecnica else 1)
     elif max_sit >= 4:
@@ -1024,7 +1312,7 @@ def calcular_rating_predictivo(
     elif max_sit == 3:
         puntos = min(puntos, 650 if es_mora_tecnica else 400)
 
-    # ── Hard Block: mora interna → score ≤ 400 ────────────────────────────
+    # ── Hard Block: mora interna Odoo → score ≤ 400 ──────────────────────
     if hard_block_mora:
         puntos = min(puntos, 400)
 
@@ -1032,8 +1320,8 @@ def calcular_rating_predictivo(
     if es_monotrib_bajo:
         puntos = min(puntos, 600)
 
-    # ── Piso absoluto mora técnica: ningún castigo de situación baja el score de 620 ──
-    if es_mora_tecnica:
+    # ── Piso mora técnica (no aplica si hay Default Real) ────────────────
+    if es_mora_tecnica and not hard_block_bcra:
         puntos = max(puntos, 620)
 
     score = max(1, min(999, round(puntos)))
@@ -1045,40 +1333,53 @@ def calcular_rating_predictivo(
     else:              rango, color, emoji = 'Rechazar',    '#7f1d1d', '⛔'
 
     alerta_temprana      = alerta_creciente or es_monotrib_bajo or indice_solv < 0.40
-    bloquear_oportunidad = (hard_block_mora or (en_mora and score > 700)) and not es_mora_tecnica
-    alerta_log           = _alerta_logistica(ciudad)
-    # Mora técnica: color siempre naranja para distinguirlo de un perfil limpio
+    bloquear_oportunidad = (
+        (hard_block_mora or hard_block_bcra or (en_mora and score > 700)) and
+        not es_mora_tecnica
+    )
+    alerta_log = _alerta_logistica(ciudad)
+
     if es_mora_tecnica:
         color = '#ca8a04'
-        rango = rango if score >= 750 else ('Revisar' if rango == 'Rechazar' or rango == 'Alto riesgo' else rango)
+        rango = rango if score >= 750 else ('Revisar' if rango in ('Rechazar', 'Alto riesgo') else rango)
 
     print(
         f"[score v{_SCORE_VERSION}] {cuit_limpio} sit={max_sit} sp={sit_ponderada:.2f} "
-        f"mt={es_mora_tecnica} tend={tendencia} "
-        f"c1={pts_c1} c2={pts_c2} c3={pts_c3} liq={pts_liq} "
+        f"mt={es_mora_tecnica} tend={tendencia} prosp={sin_historial_interno} "
+        f"cA={pts_c1} cB={pts_cb} cC={pts_cc} liq={pts_liq} mora_bcra={tipo_mora_bcra} "
         f"→ {score} {rango} | at={alerta_temprana} bloq={bloquear_oportunidad} geo={alerta_log or '-'}",
         flush=True
     )
 
     resultado = {
-        'score':                score,
-        'rango':                rango,
-        'color':                color,
-        'emoji':                emoji,
-        'alerta_temprana':      alerta_temprana,
-        'bloquear_oportunidad': bloquear_oportunidad,
-        'alerta_logistica':     alerta_log,
+        'score':                    score,
+        'rango':                    rango,
+        'color':                    color,
+        'emoji':                    emoji,
+        'alerta_temprana':          alerta_temprana,
+        'bloquear_oportunidad':     bloquear_oportunidad,
+        'alerta_logistica':         alerta_log,
         'componentes': {
-            'capa1': pts_c1, 'capa2': pts_c2,
-            'capa3': pts_c3, 'liquidez': pts_liq,
+            'capaA': pts_c1, 'capaB': pts_cb,
+            'capaC': pts_cc, 'liquidez': pts_liq,
         },
-        'tendencia':            tendencia,
-        'es_empleador':         es_empleador,
-        'indice_solvencia':     indice_solv,
-        'version':              _SCORE_VERSION,
-        'mora_tecnica':         es_mora_tecnica,
-        'sit_ponderada':        round(sit_ponderada, 3),
-        'pct_mora':             round(pct_mora, 4),
+        'tendencia':                tendencia,
+        'es_empleador':             es_empleador,
+        'indice_solvencia':         indice_solv,
+        'version':                  _SCORE_VERSION,
+        'mora_tecnica':             es_mora_tecnica,
+        'sit_ponderada':            round(sit_ponderada, 3),
+        'pct_mora':                 round(pct_mora, 4),
+        'max_sit':                  max_sit,
+        # Campos v10.0
+        'sin_historial_interno':    sin_historial_interno,
+        'dso_individual':           dso_individual,
+        'dso_deteriorando':         dso_deteriorando,
+        'promedio_mensual':         promedio_mensual,
+        'comunidad_negativa':       comunidad_negativa,
+        'tipo_mora_bcra':           tipo_mora_bcra,
+        'degradacion_bcra_reciente':hard_block_bcra,
+        'aviso_mora':               aviso_mora or None,
         'nota_mora_tecnica': (
             f"Atención: Se detecta una mora técnica por monto menor que no afecta "
             f"la solvencia general. Deuda en mora: ${round(monto_mora_k):,} miles ARS "
@@ -1162,7 +1463,7 @@ _calcular_score = calcular_score_servidor
 
 def _actualizar_score_en_cartera(cuit_limpio: str, score_data: dict, solvency: dict = None):
     """Merge atómico: actualiza / inserta el score de un CUIT en alertas_cartera.json.
-    Llamada tanto desde /calcular-score como desde el batch, para garantizar SSoT."""
+    Persiste scoreHistory[] (ventana 12 meses) y detecta degradación Anti-Videla."""
     try:
         try:
             with open(ALERTAS_FILE, 'r', encoding='utf-8') as _f:
@@ -1171,6 +1472,26 @@ def _actualizar_score_en_cartera(cuit_limpio: str, score_data: dict, solvency: d
             existente = {"alertas": [], "ultima_verif": "", "cartera": []}
         cartera = existente.get('cartera', [])
         nc = str(cuit_limpio).replace('-', '').replace(' ', '').strip()
+
+        # Recuperar historial previo del cliente
+        entrada_prev = next(
+            (c for c in cartera
+             if str(c.get('cuit', '')).replace('-', '').replace(' ', '').strip() == nc),
+            {}
+        )
+        hist_prev = list(entrada_prev.get('scoreHistory') or [])
+
+        # Agregar punto actual y recortar a 12 entradas (ventana 12 meses)
+        hist_prev.append({
+            'score':    score_data.get('score'),
+            'fecha':    datetime.now().strftime('%Y-%m-%d'),
+            'sit_bcra': score_data.get('max_sit', 1),
+        })
+        score_history = hist_prev[-12:]
+
+        # Detección de degradación Anti-Videla
+        deg_tipo, deg_delta, deg_msg = _detectar_degradacion(score_history)
+
         patch = {
             'scoreCompleto':        score_data.get('score'),
             'scoreRango':           score_data.get('rango'),
@@ -1185,6 +1506,10 @@ def _actualizar_score_en_cartera(cuit_limpio: str, score_data: dict, solvency: d
             'ultimaVerif':          time.strftime('%d/%m/%Y'),
             'score_ts':             time.time(),
             'pendiente':            False,
+            'scoreHistory':         score_history,
+            'degradacion_tipo':     deg_tipo,
+            'degradacion_delta':    deg_delta,
+            'degradacion_msg':      deg_msg or None,
         }
         found = False
         for i, c in enumerate(cartera):
@@ -1197,6 +1522,8 @@ def _actualizar_score_en_cartera(cuit_limpio: str, score_data: dict, solvency: d
         existente['cartera'] = cartera
         with open(ALERTAS_FILE, 'w', encoding='utf-8') as _f:
             json.dump(existente, _f, ensure_ascii=False)
+        if deg_tipo:
+            print(f"[anti-videla] {cuit_limpio} → {deg_tipo} (−{deg_delta} pts)", flush=True)
     except Exception as _e:
         print(f"[score-update] Error persistiendo {cuit_limpio}: {_e}", flush=True)
 
