@@ -127,11 +127,15 @@ def cache_set(cuit, data, error=None):
 
 def consultar_bcra_cached(cuit):
     print(f"[bcra] {cuit} consultando BCRA...", flush=True)
-    cached_data, cached_error = cache_get(cuit)
-    if cached_data is not None:
-        origen = "cache-error" if cached_error else "caché"
-        print(f"[bcra] {cuit} desde {origen}", flush=True)
-        return cached_data, cached_error
+    _cuit_diag = str(cuit).replace('-', '').replace(' ', '').strip() == '20393831821'
+    if _cuit_diag:
+        print(f"[bcra] {cuit} BYPASS caché DIAG — consulta BCRA fresca", flush=True)
+    else:
+        cached_data, cached_error = cache_get(cuit)
+        if cached_data is not None:
+            origen = "cache-error" if cached_error else "caché"
+            print(f"[bcra] {cuit} desde {origen}", flush=True)
+            return cached_data, cached_error
     data, error = consultar_bcra(cuit)
     if error or not data:
         data_cache = {"results": None, "sin_deudas": None, "error_bcra": str(error or "sin_respuesta")}
@@ -960,7 +964,7 @@ def _layer_conducta_interna(
             ]
 
     if not facturas:
-        return (120, 0.0, False, True, 0.0, False)
+        return (120, 0.0, False, True, 0.0, False, False, 0.0)
 
     hoy = datetime.now()
 
@@ -1038,7 +1042,22 @@ def _layer_conducta_interna(
         promedio_mensual = round(vol_total / meses, 2)
 
     pts = max(0, min(400, pts_reg + pts_vol + pts_mora_int + pen_dso))
-    return (pts, dso_individual, dso_deteriorando, False, promedio_mensual, hard_block_mora)
+
+    # ── Deuda interna +90 días ─────────────────────────────────────────────
+    deuda_90d      = False
+    monto_deuda_90d = 0.0
+    for f in facturas:
+        saldo = float(f.get('saldo') or 0)
+        if saldo > 0:
+            ff = _parse(f.get('fechaFactura'))
+            if ff and (hoy - ff).days > 90:
+                deuda_90d       = True
+                monto_deuda_90d += saldo
+    if deuda_90d:
+        print(f"[conducta] {cuit_limpio} deuda_90d monto={monto_deuda_90d:.0f}", flush=True)
+
+    return (pts, dso_individual, dso_deteriorando, False, promedio_mensual, hard_block_mora,
+            deuda_90d, monto_deuda_90d)
 
 
 def _evaluar_comunidad(cuit_limpio: str, wsp_index: dict) -> tuple:
@@ -1316,7 +1335,8 @@ def calcular_rating_predictivo(
     pts_c2, es_empleador, es_monotrib_bajo, indice_solv = _layer2_solvencia_federal(solvency_data)
 
     (pts_cb, dso_individual, dso_deteriorando,
-     sin_historial_interno, promedio_mensual, hard_block_mora) = \
+     sin_historial_interno, promedio_mensual, hard_block_mora,
+     deuda_90d_interna, monto_deuda_90d_interna) = \
         _layer_conducta_interna(cuit_limpio, _saldos_facturas, en_mora)
 
     if sin_historial_interno:
@@ -1386,6 +1406,11 @@ def calcular_rating_predictivo(
         if _ing > 0 and _deu_chk / _ing > 0.5:
             puntos -= 200
             print(f"[score v{_SCORE_VERSION}] {cuit_limpio} apalancamiento alto → -200", flush=True)
+
+    # ── Deuda interna +90 días: penaliza aunque BCRA no lo vea aún ──────────
+    if deuda_90d_interna:
+        puntos -= 200
+        print(f"[score v{_SCORE_VERSION}] {cuit_limpio} deuda_90d_interna → -200", flush=True)
 
     # ── Penalidades históricas ────────────────────────────────────────────
     if 2 <= meses_malos <= 5 and not es_mora_tecnica and not es_mora_administrativa:
@@ -1483,6 +1508,8 @@ def calcular_rating_predictivo(
         'dso_deteriorando':         dso_deteriorando,
         'promedio_mensual':         promedio_mensual,
         'comunidad_negativa':       comunidad_negativa,
+        'deuda_90d_interna':        deuda_90d_interna,
+        'monto_deuda_90d':          round(monto_deuda_90d_interna, 2),
         'tipo_mora_bcra':           tipo_mora_bcra,
         'degradacion_bcra_reciente':hard_block_bcra,
         'aviso_mora':               aviso_mora or None,
