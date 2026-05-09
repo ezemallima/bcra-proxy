@@ -447,7 +447,8 @@ async function cargarSaldosCartera(forzar = false) {
   for (let i = 0; i < clientes.length; i += 20) {
     await Promise.all(clientes.slice(i, i+20).map(async c => {
       try {
-        const r = await fetch(API + '/api/facturas/' + encodeURIComponent(c.cuit));
+        const r = await fetch(API + '/api/facturas/' + encodeURIComponent(c.cuit) +
+                              '?nombre=' + encodeURIComponent(c.nombre || ''));
         if (!r.ok) return;
         const d = await r.json();
         if (d.facturas && d.facturas.length) SALDOS_MAP[normNombre(c.nombre)] = d;

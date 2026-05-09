@@ -2639,29 +2639,28 @@ def test_modelos():
 
 
 # ── Saldos / Facturas por cliente ──
-_saldos_facturas = []
-try:
-    _sf_path = os.path.join(DATA_DIR, 'saldos_facturas.json')
-    with open(_sf_path, encoding='utf-8') as f:
-        _saldos_facturas = json.load(f)
-    print(f"[saldos] {len(_saldos_facturas)} facturas cargadas", flush=True)
-except Exception as e:
-    print(f"[saldos] Error cargando facturas: {e}", flush=True)
+def _load_json_with_fallback(filename: str) -> list:
+    """Busca filename en DATA_DIR primero, luego en cwd (para Render donde DATA_DIR=/data)."""
+    for base in [DATA_DIR, os.getcwd()]:
+        path = os.path.join(base, filename)
+        if os.path.exists(path):
+            try:
+                with open(path, encoding='utf-8') as _f:
+                    data = json.load(_f)
+                print(f"[saldos] {len(data)} registros cargados desde {path}", flush=True)
+                return data
+            except Exception as e:
+                print(f"[saldos] Error leyendo {path}: {e}", flush=True)
+    print(f"[saldos] {filename} no encontrado en DATA_DIR ni en cwd", flush=True)
+    return []
+
+_saldos_facturas = _load_json_with_fallback('saldos_facturas.json')
 
 # ── Saldos de Gestión (vista semanal para vendedores — separado del DSO) ──
-_saldos_gestion = []
-try:
-    _sg_path = os.path.join(DATA_DIR, 'saldos_gestion_vendedores.json')
-    if os.path.exists(_sg_path):
-        with open(_sg_path, encoding='utf-8') as f:
-            _saldos_gestion = json.load(f)
-        print(f"[gestion] {len(_saldos_gestion)} facturas de gestión cargadas", flush=True)
-    else:
-        _saldos_gestion = list(_saldos_facturas)
-        print("[gestion] Usando saldos_facturas como fallback inicial para gestión", flush=True)
-except Exception as e:
-    _saldos_gestion = list(_saldos_facturas)
-    print(f"[gestion] Error cargando gestión: {e}", flush=True)
+_saldos_gestion_loaded = _load_json_with_fallback('saldos_gestion_vendedores.json')
+_saldos_gestion = _saldos_gestion_loaded if _saldos_gestion_loaded else list(_saldos_facturas)
+if not _saldos_gestion_loaded:
+    print("[gestion] Usando saldos_facturas como fallback inicial para gestión", flush=True)
 
 # ── Índices en memoria (O(1) lookup por CUIT y nombre) ──────────────────────
 _saldos_idx_cuit:   dict = {}   # cuit_limpio   → [facturas]
@@ -2740,6 +2739,10 @@ def _norm_ultra(s):
 
 try:
     _rebuild_saldos_index()
+    # Validación de integridad del índice al inicio
+    _test = _buscar_por_nombre_en_idx('Tavella')
+    _test_saldo = sum(f.get('saldo', 0) for f in _test)
+    print(f"[idx] VALIDACION 'Tavella': {len(_test)} registros, saldo=${_test_saldo:,.2f}", flush=True)
 except Exception as e:
     print(f"[idx] Error en indexación inicial: {e}", flush=True)
 
@@ -2820,35 +2823,41 @@ def get_saldos_cuit(cuit):
 @app.route("/api/facturas/<cuit>")
 def api_facturas_por_cuit(cuit):
     """
-    Consulta atómica O(1): devuelve solo las facturas del CUIT solicitado.
-    Cadena: índice CUIT → cartera+índice nombre → hint nombre en query string.
-    Reemplaza /saldos-cuit + /saldos-cliente en el flujo del modal comercial.
+    Consulta de facturas: CUIT → nombre en cartera → nombre en query string → fuzzy.
+    Todos los registros de saldos_facturas tienen cuit='', por lo que el flujo
+    normal es siempre por nombre. El CUIT se usa como llave para encontrar el
+    nombre canónico en cartera_comercial.
     """
     from urllib.parse import unquote
     cuit_limpio = str(unquote(cuit)).replace('-', '').replace(' ', '').strip()
     nombre_hint = request.args.get('nombre', '').strip()
 
-    # 1. O(1) por CUIT
+    # 1. Por CUIT (aplica cuando los registros de gestión incluyen campo cuit)
     result = _saldos_idx_cuit.get(cuit_limpio, [])
     if result:
-        return jsonify({"facturas": result,
-                        "total_saldo": sum(f.get('saldo', 0) for f in result),
-                        "cantidad": len(result), "metodo": "cuit"})
+        total = sum(f.get('saldo', 0) for f in result)
+        print(f"[facturas] CUIT {cuit_limpio}: {len(result)} facturas ${total:,.0f} (método: cuit)", flush=True)
+        return jsonify({"facturas": result, "total_saldo": total, "cantidad": len(result), "metodo": "cuit"})
 
-    # 2. Nombre desde cartera comercial
-    nombre = next(
+    # 2. Nombre canónico desde cartera_comercial (garantiza string exacto del archivo fuente)
+    nombre_cartera = next(
         (str(c.get('nombre', '')).strip() for c in _cartera_comercial
          if str(c.get('cuit', '')).replace('-', '').replace(' ', '').strip() == cuit_limpio),
         None
-    ) or nombre_hint
+    )
+    # 3. Fallback al hint enviado por el frontend (?nombre=)
+    nombre = nombre_cartera or nombre_hint
 
     if nombre:
         result = _buscar_por_nombre_en_idx(nombre)
         if result:
-            return jsonify({"facturas": result,
-                            "total_saldo": sum(f.get('saldo', 0) for f in result),
-                            "cantidad": len(result), "metodo": "nombre"})
+            total = sum(f.get('saldo', 0) for f in result)
+            metodo = "nombre_cartera" if nombre_cartera else "nombre_hint"
+            print(f"[facturas] '{nombre}': {len(result)} facturas ${total:,.0f} (método: {metodo})", flush=True)
+            return jsonify({"facturas": result, "total_saldo": total, "cantidad": len(result), "metodo": metodo})
 
+    print(f"[facturas] CUIT {cuit_limpio} nombre='{nombre}': sin resultados "
+          f"(idx_cuit={len(_saldos_idx_cuit)} entradas, idx_nombre={len(_saldos_idx_nombre)} entradas)", flush=True)
     return jsonify({"facturas": [], "total_saldo": 0, "cantidad": 0, "metodo": "nulo"})
 
 
