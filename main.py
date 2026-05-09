@@ -2210,25 +2210,54 @@ def analizar_bodegas():
 
 @app.route("/afip/<cuit>")
 def get_afip(cuit):
-    cuit_fmt = cuit[:2] + '-' + cuit[2:10] + '-' + cuit[10:] if len(cuit) == 11 else cuit
+    cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
+    cuit_fmt = cuit_limpio[:2] + '-' + cuit_limpio[2:10] + '-' + cuit_limpio[10:] if len(cuit_limpio) == 11 else cuit
+
+    # 1. Caché BCRA local (O(1), sin red)
     try:
-        data, error = consultar_bcra_cached(cuit)
-        if data.get('results') and data['results'].get('denominacion'):
-            return jsonify({"nombre": data['results']['denominacion']})
+        data, _ = consultar_bcra_cached(cuit_limpio)
+        den = (data.get('results') or {}).get('denominacion', '').strip()
+        if den:
+            return jsonify({"nombre": den, "fuente": "bcra_cache"})
     except Exception: pass
+
+    # 2. API BCRA — historial (suele tener denominacion aunque no haya deuda vigente)
     try:
-        r = requests.get("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit, timeout=25, verify=False)
+        r = requests.get("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit_limpio, timeout=10, verify=False)
         if r.status_code == 200:
-            nombre2 = r.json().get('results', {}).get('denominacion', '')
-            if nombre2: return jsonify({"nombre": nombre2})
+            den2 = r.json().get('results', {}).get('denominacion', '').strip()
+            if den2: return jsonify({"nombre": den2, "fuente": "bcra_hist"})
     except Exception: pass
+
+    # 3. API BCRA — deudas vigentes
     try:
-        r = requests.get("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit, timeout=25, verify=False)
+        r = requests.get("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit_limpio, timeout=10, verify=False)
         if r.status_code == 200:
-            nombre3 = r.json().get('results', {}).get('denominacion', '')
-            if nombre3: return jsonify({"nombre": nombre3})
+            den3 = r.json().get('results', {}).get('denominacion', '').strip()
+            if den3: return jsonify({"nombre": den3, "fuente": "bcra_live"})
     except Exception: pass
-    return jsonify({"nombre": cuit_fmt})
+
+    # 4. Cartera comercial Piattelli (interno)
+    nombre_cc = next(
+        (str(c.get('nombre', '')).strip() for c in _cartera_comercial
+         if str(c.get('cuit', '')).replace('-', '').replace(' ', '').strip() == cuit_limpio),
+        None
+    )
+    if nombre_cc:
+        return jsonify({"nombre": nombre_cc, "fuente": "cartera"})
+
+    # 5. Saldos / Facturas (Odoo export)
+    fuente_sf = _saldos_gestion if _saldos_gestion else _saldos_facturas
+    nombre_sf = next(
+        (str(f.get('cliente', '')).strip() for f in fuente_sf
+         if str(f.get('cuit', '')).replace('-', '').replace(' ', '').strip() == cuit_limpio),
+        None
+    )
+    if nombre_sf:
+        return jsonify({"nombre": nombre_sf, "fuente": "saldos"})
+
+    print(f"[afip] Sin nombre para CUIT {cuit_limpio} — devolviendo formato", flush=True)
+    return jsonify({"nombre": cuit_fmt, "fuente": "fallback"})
 
 @app.route("/deudas/<cuit>")
 def get_deudas(cuit):

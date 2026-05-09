@@ -993,6 +993,26 @@ async function consultarCuit() {
       </div>`;
       return;
     }
+
+    // Resolución bloqueante de Razón Social: BCRA no siempre devuelve denominacion
+    // (cliente sin deuda vigente, CUIT nuevo, etc.) → fallback a /afip/ que busca
+    // en BCRA historial → cartera comercial → saldos/facturas.
+    if (!dd?.results?.denominacion?.trim()) {
+      showLoading('Obteniendo razón social…');
+      try {
+        const afipData = await safeFetch(API + '/afip/' + cuit);
+        if (afipData?.nombre && afipData.nombre !== cuit) {
+          if (!dd.results) dd.results = {};
+          dd.results.denominacion = afipData.nombre;
+          console.log('[consulta] Razón social desde', afipData.fuente + ':', afipData.nombre);
+        }
+      } catch(e) { console.warn('[consulta] /afip/ falló:', e); }
+      hideLoading();
+    }
+
+    // Guardar estado para generarPDF()
+    window._ultimaConsulta = { cuit, dd, cd: cd || {}, hd, serverScore };
+
     console.log('[consulta] score=', serverScore?.score, 'mt=', serverScore?.mora_tecnica);
     renderConsulta(cuit, dd, cd || {}, hd, serverScore);
     lanzarAnalisisIA(cuit, dd, cd || {});
@@ -1046,9 +1066,12 @@ function renderConsulta(cuit, dd, cd, hd, serverScore) {
     };
   }
 
-  let html = `<div class="card" style="padding:12px 14px">
-    <div style="font-size:15px;font-weight:700;color:var(--azul)">${esc(results.denominacion||'Sin nombre')}</div>
-    <div style="font-size:11px;color:var(--texto2);font-family:monospace">${cuit}</div>
+  let html = `<div class="card" style="padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+    <div style="min-width:0">
+      <div id="consulta-nombre" style="font-size:15px;font-weight:700;color:var(--azul);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(results.denominacion||'Sin nombre')}</div>
+      <div style="font-size:11px;color:var(--texto2);font-family:monospace">${cuit}</div>
+    </div>
+    <button onclick="generarPDF('${cuit}')" style="flex-shrink:0;background:var(--azul);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer">📄 PDF</button>
   </div>`;
 
   // ── 1. VEREDICTO RÁPIDO — decisión en 10 segundos ──
@@ -1138,6 +1161,36 @@ function renderConsulta(cuit, dd, cd, hd, serverScore) {
       </div>`;
     });
     if (dchq.length>8) html+=`<div style="font-size:11px;color:var(--texto2);text-align:center;margin-top:6px">+${dchq.length-8} más</div>`;
+
+    // Gráfico de barras: evolución mensual de cheques rechazados (últimos 12 meses)
+    const _chqMeses = {};
+    dchq.forEach(d => {
+      const parts = (d.fechaRechazo||'').split('/');
+      if (parts.length >= 3) {
+        const key = parts[2] + '-' + String(parts[1]).padStart(2,'0');
+        if (!_chqMeses[key]) _chqMeses[key] = { total:0, impagos:0 };
+        _chqMeses[key].total++;
+        if (!d.fechaPago || d.estadoMulta==='IMPAGA') _chqMeses[key].impagos++;
+      }
+    });
+    const _mesKeys = Object.keys(_chqMeses).sort().slice(-12);
+    if (_mesKeys.length > 1) {
+      const _maxBar = Math.max(..._mesKeys.map(m => _chqMeses[m].total), 1);
+      html += `<div style="margin-top:14px;border-top:1px solid var(--border);padding-top:10px">
+        <div style="font-size:10px;font-weight:600;color:var(--texto2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Evolución mensual</div>
+        <div style="display:flex;align-items:flex-end;gap:3px;height:56px">`;
+      _mesKeys.forEach(m => {
+        const d2 = _chqMeses[m];
+        const barH = Math.max(Math.round((d2.total/_maxBar)*46), 4);
+        const col  = d2.impagos > 0 ? '#ef4444' : '#86efac';
+        const lbl  = m.slice(5) + '/' + m.slice(2,4);
+        html += `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px" title="${lbl}: ${d2.total} cheques${d2.impagos>0?' ('+d2.impagos+' imp.)':''}">
+          <div style="width:100%;max-width:22px;height:${barH}px;background:${col};border-radius:2px 2px 0 0"></div>
+          <div style="font-size:7px;color:var(--texto2);writing-mode:vertical-lr;transform:rotate(180deg);line-height:1">${lbl}</div>
+        </div>`;
+      });
+      html += `</div></div>`;
+    }
   }
   html += `</div>`;
 
@@ -1178,6 +1231,107 @@ async function lanzarAnalisisIA(cuit, dd, cd) {
     const iaEl=document.getElementById('ia-texto'),loadEl=document.getElementById('ia-loading');
     if(iaEl&&loadEl){loadEl.style.display='none';iaEl.style.display='block';iaEl.textContent=data.texto||'No se pudo generar el análisis.';if(!data.texto)iaEl.style.color='var(--text2)';}
   } catch(e){const l=document.getElementById('ia-loading');if(l)l.innerHTML='<span style="color:var(--text2);font-size:12px">Error generando análisis</span>';}
+}
+
+function generarPDF(cuit) {
+  const c = window._ultimaConsulta;
+  if (!c) { alert('Realizá una consulta primero.'); return; }
+  const { dd, cd, serverScore } = c;
+  const nombre   = dd?.results?.denominacion || document.getElementById('consulta-nombre')?.textContent || cuit;
+  const fecha    = new Date().toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'});
+  const scoreNum = serverScore?.score ?? '—';
+  const rango    = (serverScore?.score != null) ? scoreToRango(serverScore.score) : '—';
+  const credito  = calcularCredito(serverScore?.score);
+  const scColor  = (serverScore?.mora_tecnica) ? '#d97706' : scoreToColor(serverScore?.score);
+
+  // Extraer cheques
+  const causales = cd?.results?.causales || [];
+  const dchq = []; causales.forEach(ca => ca.entidades?.forEach(en => dchq.push(...(en.detalle||[]))));
+  const activos = dchq.filter(d => !d.fechaPago || d.estadoMulta==='IMPAGA');
+  const montoImp = activos.reduce((s,d) => s+(d.monto||0), 0);
+
+  // Extraer situación BCRA
+  const results   = dd?.results || {};
+  const periodos  = results.periodos || [];
+  let maxSit=1, entidades=[], montoTotal=0;
+  if (periodos.length) {
+    entidades = periodos[0].entidades || [];
+    if (entidades.length) {
+      maxSit = Math.max(...entidades.map(e=>e.situacion||1));
+      montoTotal = entidades.reduce((s,e)=>s+(e.monto||0),0);
+    }
+  }
+
+  const _e = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const sitColor = maxSit>=4?'#dc2626':maxSit===3?'#d97706':maxSit===2?'#ca8a04':'#16a34a';
+
+  const chqRows = dchq.length === 0
+    ? `<tr><td colspan="4" style="color:#16a34a;font-weight:600;padding:10px 8px">✓ Sin cheques rechazados</td></tr>`
+    : dchq.slice(0,25).map(d => {
+        const imp = !d.fechaPago || d.estadoMulta==='IMPAGA';
+        return `<tr><td>$${fmtM(d.monto||0)}</td><td>${_e(d.nroCheque||'—')}</td><td>${d.fechaRechazo||'—'}</td>
+          <td><span style="display:inline-block;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:700;background:${imp?'#fee2e2':'#dcfce7'};color:${imp?'#dc2626':'#16a34a'}">${imp?'IMPAGO':'PAGADO'}</span></td></tr>`;
+      }).join('') + (dchq.length>25 ? `<tr><td colspan="4" style="color:#6b7280;font-style:italic;padding:6px 8px">… y ${dchq.length-25} cheques más</td></tr>` : '');
+
+  const sitRows = entidades.length
+    ? entidades.map(e=>`<tr><td>${_e(e.entidad||'')}</td><td style="text-align:center;font-weight:700;color:${sitColor}">Sit. ${e.situacion||1}</td><td style="text-align:right">$${fmtM((e.monto||0)*1000)}</td></tr>`).join('')
+    : `<tr><td colspan="3" style="color:#16a34a;font-weight:600;padding:10px 8px">✓ Sin deudas en el sistema financiero</td></tr>`;
+
+  const pw = window.open('','_blank','width=820,height=900');
+  pw.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<title>Informe — ${_e(nombre)}</title>
+<style>
+  *{box-sizing:border-box}body{font-family:Arial,sans-serif;margin:36px;color:#111;font-size:13px;line-height:1.5}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #1d4ed8;padding-bottom:12px;margin-bottom:22px}
+  .logo{font-weight:900;font-size:15px;color:#1d4ed8;letter-spacing:-.3px}
+  .sub{font-size:11px;color:#6b7280;margin-top:2px}
+  h2{margin:0 0 3px;font-size:22px;font-weight:900;color:#1d4ed8}
+  .mono{font-family:monospace;color:#6b7280;font-size:11px}
+  .section{margin-bottom:22px}
+  .stitle{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:#6b7280;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #f3f4f6}
+  .stats{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:4px}
+  .stat{background:#f9fafb;border-radius:8px;padding:10px 14px;flex:1;min-width:90px;text-align:center}
+  .sval{font-size:24px;font-weight:900;line-height:1}
+  .slbl{font-size:10px;color:#6b7280;margin-top:3px}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{background:#f9fafb;font-weight:700;padding:7px 8px;border-bottom:2px solid #e5e7eb;text-align:left}
+  td{padding:5px 8px;border-bottom:1px solid #f3f4f6;vertical-align:middle}
+  tr:last-child td{border:none}
+  .footer{margin-top:36px;font-size:10px;color:#9ca3af;text-align:center;border-top:1px solid #f3f4f6;padding-top:12px}
+  @media print{body{margin:18px}button{display:none}}
+</style></head><body>
+<div class="header">
+  <div><div class="logo">Vende Seguro — Bodega Piattelli</div><div class="sub">Informe de Riesgo Crediticio</div></div>
+  <div style="text-align:right"><div style="font-size:12px;font-weight:600">${fecha}</div><button onclick="window.print()" style="margin-top:6px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer">🖨 Imprimir</button></div>
+</div>
+<div class="section">
+  <h2>${_e(nombre)}</h2>
+  <div class="mono">CUIT: ${cuit}</div>
+</div>
+<div class="section">
+  <div class="stitle">Score crediticio</div>
+  <div class="stats">
+    <div class="stat"><div class="sval" style="color:${scColor}">${scoreNum}</div><div class="slbl">${rango}</div></div>
+    <div class="stat"><div class="sval" style="color:#1d4ed8;font-size:16px">${credito}</div><div class="slbl">Crédito sugerido</div></div>
+    <div class="stat"><div class="sval" style="color:${sitColor}">${maxSit}</div><div class="slbl">Peor sit. BCRA</div></div>
+    <div class="stat"><div class="sval" style="color:${activos.length>0?'#dc2626':'#16a34a'}">${activos.length}</div><div class="slbl">Cheques impagos</div></div>
+  </div>
+</div>
+<div class="section">
+  <div class="stitle">Situación BCRA${periodos.length?' — '+periodos[0].periodo:''}</div>
+  <table><thead><tr><th>Entidad</th><th style="text-align:center">Situación</th><th style="text-align:right">Monto</th></tr></thead>
+  <tbody>${sitRows}</tbody></table>
+</div>
+<div class="section">
+  <div class="stitle">Cheques rechazados BCRA — ${dchq.length} total · ${activos.length} impagos${montoImp>0?' · $'+fmtM(montoImp)+' impago':''}</div>
+  <table><thead><tr><th>Monto</th><th>Nro. Cheque</th><th>Fecha rechazo</th><th>Estado</th></tr></thead>
+  <tbody>${chqRows}</tbody></table>
+</div>
+<div class="footer">Vende Seguro · Sistema de Riesgo Crediticio · Bodega Piattelli · ${fecha}</div>
+</body></html>`);
+  pw.document.close();
+  pw.focus();
+  setTimeout(() => pw.print(), 600);
 }
 
 function closeModal() { document.getElementById('detail-modal').style.display='none'; }
