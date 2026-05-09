@@ -1178,11 +1178,16 @@ def calcular_rating_predictivo(
     _ents_curr    = periodos_curr[0].get('entidades', []) if periodos_curr else []
     _raw_total_m  = monto_total_m * 1000           # miles de pesos (raw BCRA)
     monto_mora_k  = 0.0                            # miles de pesos en Sit.>1
+    monto_sit1_k  = 0.0                            # miles de pesos en Sit.1 (limpio)
     sit_ponderada = float(max_sit)
     if _ents_curr and _raw_total_m > 0:
         monto_mora_k = sum(
             (e.get('monto', 0) or 0) for e in _ents_curr
             if (e.get('situacion', 1) or 1) > 1
+        )
+        monto_sit1_k = sum(
+            (e.get('monto', 0) or 0) for e in _ents_curr
+            if (e.get('situacion', 1) or 1) == 1
         )
         sit_ponderada = sum(
             (e.get('situacion', 1) or 1) * (e.get('monto', 0) or 0)
@@ -1314,12 +1319,20 @@ def calcular_rating_predictivo(
 
     # ── Ajuste: ratio de apalancamiento BCRA/AFIP ─────────────────────────
     if solvency_data:
-        if not solvency_data.get('ingresos_anuales') and monto_total_m > 0:
-            solvency_data = dict(solvency_data)
-            solvency_data['ingresos_anuales'] = round(monto_total_m * 1_000 * 3)
-            solvency_data['fuente_ingresos']  = 'bcra_floor_scorer'
-        _ing = float(solvency_data.get('ingresos_anuales') or 0)
-        if _ing > 0 and (monto_total_m * 1000) / _ing > 0.5:
+        _ing_afip = float(solvency_data.get('ingresos_anuales') or 0)
+        if es_mora_administrativa and monto_sit1_k > 0:
+            # Criterio Humano: ingreso presunto = deuda Sit.1 × 3 (bancos limpios).
+            # Solo evaluar la deuda limpia contra ese ingreso — el outlier no cuenta.
+            _ing     = max(_ing_afip, int(monto_sit1_k * 3))
+            _deu_chk = monto_sit1_k
+        else:
+            if not _ing_afip and monto_total_m > 0:
+                solvency_data = dict(solvency_data)
+                solvency_data['ingresos_anuales'] = round(monto_total_m * 1_000 * 3)
+                solvency_data['fuente_ingresos']  = 'bcra_floor_scorer'
+            _ing     = float(solvency_data.get('ingresos_anuales') or 0)
+            _deu_chk = monto_total_m * 1000
+        if _ing > 0 and _deu_chk / _ing > 0.5:
             puntos -= 200
             print(f"[score v{_SCORE_VERSION}] {cuit_limpio} apalancamiento alto → -200", flush=True)
 
@@ -1367,13 +1380,20 @@ def calcular_rating_predictivo(
     alerta_temprana      = alerta_creciente or es_monotrib_bajo or indice_solv < 0.40
     bloquear_oportunidad = (
         (hard_block_mora or hard_block_bcra or (en_mora and score > 700)) and
-        not es_mora_tecnica
+        not es_mora_tecnica and
+        not es_mora_administrativa   # belt-and-suspenders: administrativa ≠ bloqueo
     )
     alerta_log = _alerta_logistica(ciudad)
 
     if es_mora_tecnica:
         color = '#ca8a04'
         rango = rango if score >= 750 else ('Revisar' if rango in ('Rechazar', 'Alto riesgo') else rango)
+
+    # Criterio Humano final: mora administrativa no puede salir como 'Rechazar'
+    if es_mora_administrativa and rango in ('Rechazar', 'Alto riesgo'):
+        rango = 'VENTA RESTRINGIDA'
+        color = '#7c3aed'    # violeta = requiere revisión humana
+        emoji = '⚠️'
 
     print(
         f"[score v{_SCORE_VERSION}] {cuit_limpio} sit={max_sit} sp={sit_ponderada:.2f} "
@@ -1415,6 +1435,7 @@ def calcular_rating_predictivo(
         'tipo_mora_bcra':           tipo_mora_bcra,
         'degradacion_bcra_reciente':hard_block_bcra,
         'aviso_mora':               aviso_mora or None,
+        'limite_dinamico_sugerido': round(monto_sit1_k * 1000 * 0.30) if (es_mora_administrativa and monto_sit1_k > 0) else None,
         'nota_mora_tecnica': (
             f"Atención: Se detecta una mora técnica por monto menor que no afecta "
             f"la solvencia general. Deuda en mora: ${round(monto_mora_k):,} miles ARS "

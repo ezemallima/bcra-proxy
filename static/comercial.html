@@ -1086,6 +1086,10 @@ function renderConsulta(cuit, dd, cd, hd, serverScore) {
   const _moraTecnica   = serverScore?.mora_tecnica === true;
   const _pctMora       = serverScore?.pct_mora ?? null;
   const _notaServidor  = serverScore?.nota_mora_tecnica || null;
+  const _moraAdm       = serverScore?.mora_administrativa === true;
+  const _limDin        = serverScore?.limite_dinamico_sugerido ?? null;
+  const _avisoMora     = serverScore?.aviso_mora || null;
+
   let moraTecHtml      = '';
   if (_moraTecnica) {
     const notaTxt = _notaServidor
@@ -1101,14 +1105,32 @@ function renderConsulta(cuit, dd, cd, hd, serverScore) {
     </div>`;
   }
 
+  // Badge Mora Administrativa (criterio humano)
+  let moraAdmHtml = '';
+  if (_moraAdm) {
+    const limHtml = _limDin
+      ? `<br><span style="font-size:12px">💳 Límite dinámico sugerido: <strong>$${fmtM(_limDin)}</strong> (30 % de la deuda en Sit. 1)</span>`
+      : '';
+    const notaAdm = _avisoMora || 'Una entidad reporta atraso sin historial previo de incumplimiento. El banco principal está en Situación 1.';
+    moraAdmHtml = `<div style="margin-top:8px;background:#dbeafe;border:2px solid #2563eb;border-radius:8px;padding:10px 14px;font-size:12px;color:#1e40af;text-align:left">
+      <div style="font-weight:700;font-size:13px;margin-bottom:4px">🔵 MORA ADMINISTRATIVA — REVISIÓN HUMANA</div>
+      <div style="font-weight:400">${esc(notaAdm)}${limHtml}</div>
+    </div>`;
+  }
+
+  // Mostrar 'VENTA RESTRINGIDA' como etiqueta de semáforo para mora administrativa
+  const _rangoDisplay = _moraAdm && (serverScore?.rango === 'Rechazar' || serverScore?.rango === 'VENTA RESTRINGIDA')
+    ? '<span style="color:#7c3aed;font-weight:700">⚠ VENTA RESTRINGIDA / ANALIZAR</span>'
+    : `<span style="color:${cc}">${scoreToRango(scoreEst)}</span>`;
+
   html += `<div style="background:${verd.bg};border:2px solid ${verd.borde};border-radius:var(--radius);padding:16px;margin-bottom:10px;text-align:center">
     <div style="font-size:20px;font-weight:800;color:${verd.color};font-family:'Syne',sans-serif">${verd.texto}</div>
-    ${moraTecHtml}
+    ${moraTecHtml}${moraAdmHtml}
     <div style="display:flex;justify-content:center;gap:20px;margin-top:10px;flex-wrap:wrap">
       <div style="text-align:center">
         <div style="font-size:28px;font-weight:800;color:${cc};font-family:'Syne',sans-serif">${scoreEst}</div>
-        <div style="font-size:10px;color:var(--texto2)">Score</div>
-        <div style="font-size:9px;font-family:monospace;color:#9ca3af">[SVR=${serverScore?.score ?? 'null'} MT=${serverScore?.mora_tecnica ?? '?'}]</div>
+        <div style="font-size:12px;margin-top:2px">${_rangoDisplay}</div>
+        <div style="font-size:9px;font-family:monospace;color:#9ca3af">[SVR=${serverScore?.score ?? 'null'} sit_ef=${serverScore?.sit_efectivo ?? '?'}]</div>
       </div>
       <div style="text-align:center">
         <div style="font-size:28px;font-weight:800;color:${activos.length>0?'var(--rojo)':'var(--verde)'};font-family:'Syne',sans-serif">${activos.length}</div>
