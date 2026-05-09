@@ -2677,9 +2677,8 @@ def _rebuild_saldos_index():
         if not isinstance(f, dict):
             continue
         c = str(f.get('cuit', '') or '').replace('-', '').replace(' ', '').strip()
-        if not c or len(c) < 7:
-            continue
-        idx_c.setdefault(c, []).append(f)
+        if c and len(c) >= 7:
+            idx_c.setdefault(c, []).append(f)
         n = _norm_nombre(f.get('cliente', ''))
         if n:
             idx_n.setdefault(n, []).append(f)
