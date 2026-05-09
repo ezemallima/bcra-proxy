@@ -708,15 +708,23 @@ def _layer1_estabilidad_bancaria(
     periodos_hist: list,
     periodos_curr: list,
     sit_pond: float = None,
+    mora_administrativa: bool = False,
 ) -> tuple:
     """
-    Capa 1: Estabilidad Bancaria — 40% del score (0-400 pts).
+    Capa A: Estabilidad Bancaria — 40% del score (0-400 pts).
     Situación BCRA (0-280) + Tendencia 24m (0-120).
     sit_pond: situación ponderada por monto; None → usa max_sit binario.
+    mora_administrativa: True → scoring como sit_efectivo=round(sp), sin
+      double-penalty, tendencia forzada a neutral (criterio humano).
     Returns (pts: int, tendencia: str, alerta_deuda_creciente: bool)
     """
     sp = sit_pond if sit_pond is not None else float(max_sit)
-    if sp < 1.15:
+
+    # Criterio Humano: para mora administrativa, el tier se calcula sobre
+    # la situación ponderada redondeada — no sobre el peor outlier.
+    sp_tier = float(round(sp)) if mora_administrativa else sp
+
+    if sp_tier < 1.15:
         # Cartera virtualmente íntegra en Sit.1 → tratar como Sit.1 pura
         if   monto_real == 0:         pts_sit = 160
         elif monto_real < 500_000:    pts_sit = 200
@@ -725,31 +733,46 @@ def _layer1_estabilidad_bancaria(
         elif n_periodos_h >= 6:       pts_sit = 260
         elif n_periodos_h >= 2:       pts_sit = 240
         else:                         pts_sit = 210
-    elif sp < 1.5:  pts_sit = 180
-    elif sp < 2.0:  pts_sit = 130
-    elif sp < 2.1:  pts_sit = 100   # ≈ Sit.2 puro
-    elif sp < 2.5:  pts_sit = 70
-    elif sp < 3.0:  pts_sit = 40
-    elif sp < 4.0:  pts_sit = 15
-    else:           pts_sit = 5
+    elif sp_tier < 1.5:  pts_sit = 180
+    elif sp_tier < 2.0:  pts_sit = 130
+    elif sp_tier < 2.1:  pts_sit = 100   # ≈ Sit.2 puro
+    elif sp_tier < 2.5:  pts_sit = 70
+    elif sp_tier < 3.0:  pts_sit = 40
+    elif sp_tier < 4.0:  pts_sit = 15
+    else:                pts_sit = 5
 
     pts_tend = 55
     tendencia = 'neutral'
-    pool = periodos_hist if periodos_hist else periodos_curr
-    if pool and len(pool) >= 4:
-        def _ms(p):
-            return max(((e.get('situacion') or 1) for e in p.get('entidades', [])), default=1)
-        r3 = [_ms(p) for p in pool[:3]]
-        a9 = [_ms(p) for p in pool[3:12]]
-        pr = sum(r3) / len(r3)
-        pa = sum(a9) / len(a9) if a9 else pr
-        if   pr < pa - 0.3:  pts_tend = 120; tendencia = 'mejorando'
-        elif pr <= pa + 0.1: pts_tend = 65;  tendencia = 'estable'
-        elif pr <= pa + 0.5: pts_tend = 10;  tendencia = 'deteriorando_leve'
-        else:                pts_tend = 0;   tendencia = 'deteriorando'
 
-    if tendencia in ('deteriorando_leve', 'deteriorando') and sp <= 2.1:
-        pts_sit = pts_sit // 2   # penalización doble
+    if mora_administrativa:
+        # La "deterioración" viene de la entidad administrativa, no del cliente.
+        # Forzar tendencia neutral para no destruir el score por un outlier.
+        pts_tend = 65
+        tendencia = 'estable'
+    else:
+        pool = periodos_hist if periodos_hist else periodos_curr
+        if pool and len(pool) >= 4:
+            def _ms(p):
+                ents = p.get('entidades', [])
+                montos = [float(e.get('monto') or 0) for e in ents]
+                sits   = [float(e.get('situacion') or 1) for e in ents]
+                total  = sum(montos)
+                # Usar media ponderada por monto para que una entidad pequeña
+                # no destruya la tendencia (igual lógica que sit_ponderada)
+                if total > 0:
+                    return sum(s * m for s, m in zip(sits, montos)) / total
+                return max(sits, default=1.0)
+            r3 = [_ms(p) for p in pool[:3]]
+            a9 = [_ms(p) for p in pool[3:12]]
+            pr = sum(r3) / len(r3)
+            pa = sum(a9) / len(a9) if a9 else pr
+            if   pr < pa - 0.3:  pts_tend = 120; tendencia = 'mejorando'
+            elif pr <= pa + 0.1: pts_tend = 65;  tendencia = 'estable'
+            elif pr <= pa + 0.5: pts_tend = 10;  tendencia = 'deteriorando_leve'
+            else:                pts_tend = 0;   tendencia = 'deteriorando'
+
+        if tendencia in ('deteriorando_leve', 'deteriorando') and sp <= 2.1:
+            pts_sit = pts_sit // 2   # penalización doble solo para deterioro real
 
     alerta_creciente = False
     pool_a = periodos_curr if periodos_curr else periodos_hist
@@ -1216,12 +1239,7 @@ def calcular_rating_predictivo(
     if solvency_data is None:
         solvency_data = get_solvency_data(cuit_limpio)
 
-    # ═══ CAPA A: Estabilidad Bancaria (0-400 pts) ════════════════════════
-    pts_c1, tendencia, alerta_creciente = _layer1_estabilidad_bancaria(
-        max_sit, n_periodos_h, monto_real, periodos_hist, periodos_curr, sit_ponderada
-    )
-
-    # ── Intencionalidad de mora BCRA ──────────────────────────────────────
+    # ── Intencionalidad de mora BCRA (debe ir ANTES de _layer1) ──────────
     tipo_mora_bcra, pct_mora_adm, aviso_mora = _evaluar_intencionalidad_mora(
         periodos_hist, periodos_curr
     )
@@ -1230,8 +1248,12 @@ def calcular_rating_predictivo(
     if _ents_curr and pct_mora < 0.15:
         banco_principal_limpio = int(_ents_curr[0].get('situacion') or 1) == 1
 
-    if tipo_mora_bcra == 'mora_administrativa' and not banco_principal_limpio:
-        pts_c1 = round(pts_c1 * 0.85)   # −15% en Capa A, sin Hard Block
+    # Criterio Humano: para mora administrativa, toda la lógica de caps usa
+    # sit_efectivo = round(sit_ponderada) en lugar del max_sit del outlier.
+    es_mora_administrativa = (
+        tipo_mora_bcra == 'mora_administrativa' or banco_principal_limpio
+    )
+    sit_efectivo = max(1, round(sit_ponderada)) if es_mora_administrativa else max_sit
 
     # Default Real + Sit.2+ + no mora técnica + no proporcional → Hard Block D2
     hard_block_bcra = (
@@ -1239,6 +1261,14 @@ def calcular_rating_predictivo(
         tipo_mora_bcra == 'default_real' and
         not es_mora_tecnica and
         not banco_principal_limpio
+    )
+
+    # ═══ CAPA A: Estabilidad Bancaria (0-400 pts) ════════════════════════
+    # Para mora administrativa: pts_sit usa sp_tier=round(sp), tendencia=estable,
+    # sin double-penalty (criterio humano — el banco principal manda).
+    pts_c1, tendencia, alerta_creciente = _layer1_estabilidad_bancaria(
+        sit_efectivo, n_periodos_h, monto_real, periodos_hist, periodos_curr,
+        sit_ponderada, mora_administrativa=es_mora_administrativa
     )
 
     # ═══ CAPA B: Conducta Interna Odoo (0-400 pts) ═══════════════════════
@@ -1258,7 +1288,8 @@ def calcular_rating_predictivo(
     )
 
     # ═══ LIQUIDEZ: Cheques (0-100 pts) ═══════════════════════════════════
-    pts_liq, rechazar = _layer_liquidez(cheq_data or {}, max_sit, n_periodos_h)
+    # Para mora administrativa: sit_efectivo (no max_sit) para no zerear el bonus
+    pts_liq, rechazar = _layer_liquidez(cheq_data or {}, sit_efectivo, n_periodos_h)
     if rechazar:
         resultado = {
             'score': 1, 'rango': 'Rechazar', 'color': '#7f1d1d', 'emoji': '⛔',
@@ -1293,23 +1324,24 @@ def calcular_rating_predictivo(
             print(f"[score v{_SCORE_VERSION}] {cuit_limpio} apalancamiento alto → -200", flush=True)
 
     # ── Penalidades históricas ────────────────────────────────────────────
-    if 2 <= meses_malos <= 5 and not es_mora_tecnica:
+    if 2 <= meses_malos <= 5 and not es_mora_tecnica and not es_mora_administrativa:
         puntos = round(puntos * 0.75)
-    if sit_grave_6m and not es_mora_tecnica:
+    # sit_grave_6m: solo aplica si la situación EFECTIVA (no el outlier) es grave
+    if sit_grave_6m and not es_mora_tecnica and sit_efectivo >= 3:
         puntos = min(puntos, 150)
-    elif sit_grave_6m and es_mora_tecnica:
+    elif sit_grave_6m and es_mora_tecnica and sit_efectivo >= 3:
         puntos = min(puntos, 350)
 
     # ── Hard Block D2: Default Real BCRA → score forzado a 1 ─────────────
     if hard_block_bcra:
         puntos = 0
 
-    # ── Techos duros por situación BCRA ──────────────────────────────────
-    if max_sit >= 5:
+    # ── Techos duros por situación BCRA (sobre sit_efectivo, no max_sit) ─
+    if sit_efectivo >= 5:
         puntos = min(puntos, 400 if es_mora_tecnica else 1)
-    elif max_sit >= 4:
+    elif sit_efectivo >= 4:
         puntos = min(puntos, 650 if es_mora_tecnica else 250)
-    elif max_sit == 3:
+    elif sit_efectivo == 3:
         puntos = min(puntos, 650 if es_mora_tecnica else 400)
 
     # ── Hard Block: mora interna Odoo → score ≤ 400 ──────────────────────
@@ -1346,7 +1378,8 @@ def calcular_rating_predictivo(
     print(
         f"[score v{_SCORE_VERSION}] {cuit_limpio} sit={max_sit} sp={sit_ponderada:.2f} "
         f"mt={es_mora_tecnica} tend={tendencia} prosp={sin_historial_interno} "
-        f"cA={pts_c1} cB={pts_cb} cC={pts_cc} liq={pts_liq} mora_bcra={tipo_mora_bcra} "
+        f"cA={pts_c1} cB={pts_cb} cC={pts_cc} liq={pts_liq} "
+        f"mora_bcra={tipo_mora_bcra} sit_ef={sit_efectivo} "
         f"→ {score} {rango} | at={alerta_temprana} bloq={bloquear_oportunidad} geo={alerta_log or '-'}",
         flush=True
     )
@@ -1371,6 +1404,8 @@ def calcular_rating_predictivo(
         'sit_ponderada':            round(sit_ponderada, 3),
         'pct_mora':                 round(pct_mora, 4),
         'max_sit':                  max_sit,
+        'sit_efectivo':             sit_efectivo,
+        'mora_administrativa':      es_mora_administrativa,
         # Campos v10.0
         'sin_historial_interno':    sin_historial_interno,
         'dso_individual':           dso_individual,
