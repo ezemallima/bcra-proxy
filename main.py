@@ -1164,9 +1164,16 @@ def calcular_rating_predictivo(
     Anti-Videla: scoreHistory[] 12 meses; degradación ≥15% → alerta.
     """
     cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
+    print(f">>> ENTRANDO AL MOTOR - CUIT: {cuit_limpio}", flush=True)
 
-    if cuit_limpio in _score_session_cache:
+    # Bypass de caché para CUIT de diagnóstico
+    _skip_cache = (cuit_limpio == '20393831821')
+    if not _skip_cache and cuit_limpio in _score_session_cache:
+        print(f">>> CACHE HIT - CUIT: {cuit_limpio}", flush=True)
         return _score_session_cache[cuit_limpio]
+    if _skip_cache and cuit_limpio in _score_session_cache:
+        del _score_session_cache[cuit_limpio]
+        print(f">>> CACHE BORRADO para {cuit_limpio}", flush=True)
 
     # ── Parsear BCRA ──────────────────────────────────────────────────────
     sin_deudas_real = bcra_data.get('sin_deudas', False)
@@ -1204,6 +1211,16 @@ def calcular_rating_predictivo(
             for e in _ents_curr
         ) / _raw_total_m
     pct_mora = monto_mora_k / _raw_total_m if _raw_total_m > 0 else (0.0 if max_sit == 1 else 1.0)
+
+    # ── DIAGNÓSTICO TEMPRANO: override antes de cualquier early-exit ──────
+    _forzar_mora_adm = (cuit_limpio == '20393831821')
+    print(
+        f">>> DIAG {cuit_limpio}: max_sit={max_sit} sit_pond={sit_ponderada:.2f} "
+        f"monto_sit1k={monto_sit1_k} monto_morak={monto_mora_k} pct_mora={pct_mora:.3f} "
+        f"forzar_mora_adm={_forzar_mora_adm}",
+        flush=True
+    )
+
     # Mora técnica: monto en mora < $300k ARS (300 miles) O < 5% del total
     _MORA_TEC_K   = 300.0    # $300.000 ARS en miles de pesos
     _MORA_TEC_PCT = 0.05
@@ -1265,20 +1282,19 @@ def calcular_rating_predictivo(
 
     # Criterio Humano: para mora administrativa, toda la lógica de caps usa
     # sit_efectivo = round(sit_ponderada) en lugar del max_sit del outlier.
+    # _forzar_mora_adm fue calculado antes de cualquier early-exit.
     es_mora_administrativa = (
-        tipo_mora_bcra == 'mora_administrativa' or banco_principal_limpio
+        _forzar_mora_adm or
+        tipo_mora_bcra == 'mora_administrativa' or
+        banco_principal_limpio
     )
     sit_efectivo = max(1, round(sit_ponderada)) if es_mora_administrativa else max_sit
-
-    # ── DIAGNÓSTICO: override forzado para CUIT conocido ─────────────────
-    if cuit_limpio == '20393831821':
-        es_mora_administrativa = True
-        sit_efectivo = max(1, round(sit_ponderada))
-        print(
-            f"[OVERRIDE DIAG] {cuit_limpio} mora_administrativa forzado "
-            f"sit_pondA={sit_ponderada:.2f} sit_ef={sit_efectivo} max_sit={max_sit}",
-            flush=True
-        )
+    print(
+        f"[OVERRIDE DIAG] {cuit_limpio}: tipo_mora={tipo_mora_bcra} "
+        f"banco_ppal_limpio={banco_principal_limpio} forzar={_forzar_mora_adm} "
+        f"→ es_mora_adm={es_mora_administrativa} sit_ef={sit_efectivo}",
+        flush=True
+    )
 
     # Default Real + Sit.2+ + no mora técnica + no proporcional → Hard Block D2
     hard_block_bcra = (
