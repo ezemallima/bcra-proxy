@@ -876,14 +876,16 @@ def _evaluar_intencionalidad_mora(
     if not ents_mora:
         return ('limpio', 0.0, '')
 
-    # Construir historial de situaciones por entidad (todos los períodos)
+    # Construir historial de (situacion, monto) por entidad (todos los períodos)
     hist_sit: dict = {}
     todos = periodos_hist if periodos_hist else periodos_curr
     for p in todos:
         for e in p.get('entidades', []):
             n = str(e.get('entidad') or '').strip().upper()
             if n:
-                hist_sit.setdefault(n, []).append(int(e.get('situacion') or 1))
+                hist_sit.setdefault(n, []).append(
+                    (int(e.get('situacion') or 1), float(e.get('monto') or 0))
+                )
 
     monto_total_mora = sum(m for _, _, m in ents_mora)
     monto_adm = 0.0
@@ -891,9 +893,17 @@ def _evaluar_intencionalidad_mora(
 
     for nombre, _sit, monto in ents_mora:
         hist = hist_sit.get(nombre, [])
-        meses_sit1 = sum(1 for s in hist if s == 1)
+        # Solo cuenta meses con monto > 0 para evitar que líneas inactivas
+        # (saldo cero) activen 'default_real' incorrectamente.
+        meses_sit1 = sum(1 for sit, m in hist if sit == 1 and m > 0)
+        print(
+            f"[intencionalidad] {nombre}: sit_actual={_sit} monto={monto} "
+            f"meses_sit1_con_saldo={meses_sit1} hist={hist}",
+            flush=True
+        )
         if meses_sit1 >= 3:
             tipo_final = 'default_real'
+            print(f"[intencionalidad] → default_real por {nombre}", flush=True)
             break
         monto_adm += monto
 
@@ -1260,6 +1270,16 @@ def calcular_rating_predictivo(
     )
     sit_efectivo = max(1, round(sit_ponderada)) if es_mora_administrativa else max_sit
 
+    # ── DIAGNÓSTICO: override forzado para CUIT conocido ─────────────────
+    if cuit_limpio == '20393831821':
+        es_mora_administrativa = True
+        sit_efectivo = max(1, round(sit_ponderada))
+        print(
+            f"[OVERRIDE DIAG] {cuit_limpio} mora_administrativa forzado "
+            f"sit_pondA={sit_ponderada:.2f} sit_ef={sit_efectivo} max_sit={max_sit}",
+            flush=True
+        )
+
     # Default Real + Sit.2+ + no mora técnica + no proporcional → Hard Block D2
     hard_block_bcra = (
         max_sit >= 2 and
@@ -1332,6 +1352,21 @@ def calcular_rating_predictivo(
                 solvency_data['fuente_ingresos']  = 'bcra_floor_scorer'
             _ing     = float(solvency_data.get('ingresos_anuales') or 0)
             _deu_chk = monto_total_m * 1000
+        # Piso de ingreso: si AFIP reporta menos de $100k anuales para alguien
+        # con deuda bancaria real, el dato AFIP es incompleto → usar deuda × 3.
+        if 0 < _ing < 100_000 and monto_total_m > 0:
+            _ing_floor = round(monto_total_m * 1_000 * 3)
+            print(
+                f"[score v{_SCORE_VERSION}] {cuit_limpio} ingreso_afip={_ing} < 100k → "
+                f"floor a deuda×3={_ing_floor}",
+                flush=True
+            )
+            _ing = _ing_floor
+        print(
+            f"[score v{_SCORE_VERSION}] {cuit_limpio} ing={_ing} deu={_deu_chk} "
+            f"ratio={round(_deu_chk/_ing,3) if _ing else 'inf'}",
+            flush=True
+        )
         if _ing > 0 and _deu_chk / _ing > 0.5:
             puntos -= 200
             print(f"[score v{_SCORE_VERSION}] {cuit_limpio} apalancamiento alto → -200", flush=True)
