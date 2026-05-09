@@ -13,7 +13,14 @@
       "Bash(Find c:\\\\Users\\\\matin\\\\bcra-proxy -name \"saldos_facturas.json\" -o -name \"cartera_comercial.json\")",
       "Bash(xargs -I {} sh -c 'echo \"File: {}\"; wc -l < \"{}\"')",
       "PowerShell(\\(Get-Content \"C:\\\\Users\\\\matin\\\\bcra-proxy\\\\saldos_facturas.json\" | Measure-Object -Line\\).Lines; \\(Get-Content \"C:\\\\Users\\\\matin\\\\bcra-proxy\\\\cartera_comercial.json\" | Measure-Object -Line\\).Lines)",
-      "PowerShell(cd \"C:\\\\Users\\\\matin\\\\bcra-proxy\"; $content = Get-Content 'saldos_facturas.json' | ConvertFrom-Json; if \\($content.Length -gt 0\\) { Write-Host 'Fields in saldos_facturas.json:'; $content[0].PSObject.Properties | ForEach-Object { Write-Host '  - ' $_.Name ': ' $_.Value } })"
+      "PowerShell(cd \"C:\\\\Users\\\\matin\\\\bcra-proxy\"; $content = Get-Content 'saldos_facturas.json' | ConvertFrom-Json; if \\($content.Length -gt 0\\) { Write-Host 'Fields in saldos_facturas.json:'; $content[0].PSObject.Properties | ForEach-Object { Write-Host '  - ' $_.Name ': ' $_.Value } })",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\matin\\\\bcra-proxy\" -Recurse -File)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(ls -la /mnt/c/Users/matin/bcra-proxy/*.json 2>/dev/null | head -20)",
+      "Read(//mnt/c/Users/matin/**)",
+      "Bash(python3 -c ' *)"
     ]
   }
 }
