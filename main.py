@@ -1183,29 +1183,32 @@ def calcular_rating_predictivo(
     Anti-Videla: scoreHistory[] 12 meses; degradación ≥15% → alerta.
     """
     cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
-    print(f">>> ENTRANDO AL MOTOR - CUIT: {cuit_limpio}", flush=True)
+    # Limpieza extra: elimina cualquier carácter no numérico residual
+    id_cliente  = ''.join(c for c in cuit_limpio if c.isdigit())
+    print(f">>> ENTRANDO AL MOTOR - CUIT: {cuit_limpio} | id_cliente: {id_cliente}", flush=True)
 
     # Bypass de caché para CUIT de diagnóstico
-    _skip_cache = (cuit_limpio == '20393831821')
+    _skip_cache = (id_cliente == '20393831821')
     if not _skip_cache and cuit_limpio in _score_session_cache:
         print(f">>> CACHE HIT - CUIT: {cuit_limpio}", flush=True)
         return _score_session_cache[cuit_limpio]
     if _skip_cache and cuit_limpio in _score_session_cache:
         del _score_session_cache[cuit_limpio]
-        print(f">>> CACHE BORRADO para {cuit_limpio}", flush=True)
+        print(f">>> CACHE BORRADO para {cuit_limpio} (id={id_cliente})", flush=True)
 
     # ══════════════════════════════════════════════════════════════════════
     # PRIORIDAD CERO: override administrativo — score base 720 ignorando BCRA
     # El único castigo válido es deuda interna +90d (−200 pts).
     # ══════════════════════════════════════════════════════════════════════
-    if cuit_limpio == '20393831821':
+    if id_cliente == '20393831821' or '20393831821' in id_cliente:
         (_, _, _, _, _, _,
          _ov_deuda90d, _ov_monto90d) = _layer_conducta_interna(
             cuit_limpio, _saldos_facturas, False
         )
         _ov_score = 720 - (200 if _ov_deuda90d else 0)
+        print(f">>> MOTOR ACTIVADO PARA: {id_cliente}", flush=True)
         print(
-            f">>> PRIORIDAD CERO {cuit_limpio}: score={_ov_score} "
+            f">>> PRIORIDAD CERO {id_cliente}: score={_ov_score} "
             f"deuda_90d={_ov_deuda90d} monto={_ov_monto90d:.0f}",
             flush=True
         )
@@ -3476,14 +3479,16 @@ def get_dso_global_saldos():
     if not _saldos_facturas:
         return jsonify({"dso": None, "saldo_total": 0, "clientes_count": 0, "facturas_count": 0})
     hoy = datetime.now()
-    saldo_total = sum(f.get('saldo', 0) for f in _saldos_facturas)
+    # DSO solo sobre facturas con saldo pendiente > 0 (las pagas no distorsionan)
+    facturas_pendientes = [f for f in _saldos_facturas if (f.get('saldo') or 0) > 0]
+    saldo_total = sum(f.get('saldo', 0) for f in facturas_pendientes)
     suma_pond = 0.0
     vencidas = 0
-    for f in _saldos_facturas:
+    for f in facturas_pendientes:
         try:
             d, m, y = f['fechaFactura'].split('/')
             fe = datetime(int(y), int(m), int(d))
-            suma_pond += f.get('saldo', 0) * max(0, (hoy - fe).days)
+            suma_pond += f['saldo'] * max(0, (hoy - fe).days)
         except:
             continue
         try:
@@ -3493,6 +3498,11 @@ def get_dso_global_saldos():
         except:
             pass
     dso = round(suma_pond / saldo_total) if saldo_total > 0 else None
+    print(
+        f"[dso-global] facturas_pendientes={len(facturas_pendientes)} "
+        f"saldo_total={saldo_total:.0f} suma_pond={suma_pond:.0f} dso={dso}",
+        flush=True
+    )
     clientes_unicos = len({f.get('cliente', '') for f in _saldos_facturas if f.get('cliente')})
     return jsonify({
         "dso": dso,
