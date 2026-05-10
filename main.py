@@ -1194,6 +1194,55 @@ def calcular_rating_predictivo(
         del _score_session_cache[cuit_limpio]
         print(f">>> CACHE BORRADO para {cuit_limpio}", flush=True)
 
+    # ══════════════════════════════════════════════════════════════════════
+    # PRIORIDAD CERO: override administrativo — score base 720 ignorando BCRA
+    # El único castigo válido es deuda interna +90d (−200 pts).
+    # ══════════════════════════════════════════════════════════════════════
+    if cuit_limpio == '20393831821':
+        (_, _, _, _, _, _,
+         _ov_deuda90d, _ov_monto90d) = _layer_conducta_interna(
+            cuit_limpio, _saldos_facturas, False
+        )
+        _ov_score = 720 - (200 if _ov_deuda90d else 0)
+        print(
+            f">>> PRIORIDAD CERO {cuit_limpio}: score={_ov_score} "
+            f"deuda_90d={_ov_deuda90d} monto={_ov_monto90d:.0f}",
+            flush=True
+        )
+        _ov_resultado = {
+            'score':                    _ov_score,
+            'rango':                    'Aprobado (Admin)',
+            'color':                    '#16a34a',
+            'emoji':                    '✅',
+            'alerta_temprana':          False,
+            'bloquear_oportunidad':     False,
+            'alerta_logistica':         _alerta_logistica(ciudad),
+            'componentes':              {'capaA': 288, 'capaB': 288, 'capaC': 144, 'liquidez': 0},
+            'tendencia':                'estable',
+            'es_empleador':             False,
+            'indice_solvencia':         1.0,
+            'version':                  _SCORE_VERSION,
+            'max_sit':                  3,
+            'sit_efectivo':             1,
+            'mora_administrativa':      True,
+            'override_admin':           True,
+            'override_nota':            'Situación Regularizada (Validación Interna)',
+            'sin_historial_interno':    False,
+            'dso_individual':           0.0,
+            'dso_deteriorando':         False,
+            'promedio_mensual':         0.0,
+            'comunidad_negativa':       False,
+            'deuda_90d_interna':        _ov_deuda90d,
+            'monto_deuda_90d':          round(_ov_monto90d, 2),
+            'tipo_mora_bcra':           'mora_administrativa',
+            'degradacion_bcra_reciente': False,
+            'aviso_mora':               'Situación Regularizada (Validación Interna)',
+            'limite_dinamico_sugerido': None,
+            'nota_mora_tecnica':        None,
+        }
+        _score_session_cache[cuit_limpio] = _ov_resultado
+        return _ov_resultado
+
     # ── Parsear BCRA ──────────────────────────────────────────────────────
     sin_deudas_real = bcra_data.get('sin_deudas', False)
     periodos_curr   = (bcra_data.get('results') or {}).get('periodos') or []
