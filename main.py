@@ -1160,6 +1160,11 @@ def _layer_liquidez(cheq_data: dict, max_sit: int, n_periodos_h: int) -> tuple:
     return pts, False
 
 
+_ADMIN_OVERRIDES = {
+    '20393831821': {'score': 720, 'rango': 'Aprobado (Admin)',
+                    'nota': 'Situación Regularizada', 'override': True},
+}
+
 def calcular_rating_predictivo(
     cuit: str,
     bcra_data: dict,
@@ -1169,6 +1174,33 @@ def calcular_rating_predictivo(
     solvency_data: dict = None,
     ciudad: str         = '',
 ) -> dict:
+    # ── HARD OVERRIDE: primera línea, sin evaluación de BCRA ─────────────
+    _cuit_raw = str(cuit).strip().replace('-', '').replace(' ', '')
+    if _cuit_raw in _ADMIN_OVERRIDES:
+        (_, _, _, _, _, _,
+         _ov90d, _ov90m) = _layer_conducta_interna(_cuit_raw, _saldos_facturas, False)
+        _base = _ADMIN_OVERRIDES[_cuit_raw].copy()
+        _base['score'] = _base['score'] - (200 if _ov90d else 0)
+        _base.update({
+            'color': '#16a34a', 'emoji': '✅',
+            'alerta_temprana': False, 'bloquear_oportunidad': False,
+            'alerta_logistica': _alerta_logistica(ciudad),
+            'componentes': {'capaA': 288, 'capaB': 288, 'capaC': 144, 'liquidez': 0},
+            'tendencia': 'estable', 'es_empleador': False, 'indice_solvencia': 1.0,
+            'version': _SCORE_VERSION, 'max_sit': 3, 'sit_efectivo': 1,
+            'mora_administrativa': True, 'override_admin': True,
+            'override_nota': 'Situación Regularizada (Validación Interna)',
+            'sin_historial_interno': False, 'dso_individual': 0.0,
+            'dso_deteriorando': False, 'promedio_mensual': 0.0,
+            'comunidad_negativa': False, 'deuda_90d_interna': _ov90d,
+            'monto_deuda_90d': round(_ov90m, 2), 'tipo_mora_bcra': 'mora_administrativa',
+            'degradacion_bcra_reciente': False,
+            'aviso_mora': 'Situación Regularizada (Validación Interna)',
+            'limite_dinamico_sugerido': None, 'nota_mora_tecnica': None,
+        })
+        print(f">>> MOTOR ACTIVADO PARA: {_cuit_raw} score={_base['score']} override=True", flush=True)
+        _score_session_cache[_cuit_raw] = _base
+        return _base
     """
     Modelo Nacional de Riesgo Vende Seguro v10.0 (Anti-Videla)
 
@@ -2318,6 +2350,16 @@ def get_scores_cartera():
         except Exception as e:
             print(f"[scores-cartera] Error {_ruta}: {e}", flush=True)
 
+    # Aplicar overrides administrativos (sobreescriben cualquier valor del archivo)
+    for _ov_cuit, _ov_base in _ADMIN_OVERRIDES.items():
+        if _ov_cuit in scores_out:
+            scores_out[_ov_cuit]['scoreCompleto'] = _ov_base['score']
+            scores_out[_ov_cuit]['scoreRango']    = _ov_base['rango']
+            scores_out[_ov_cuit]['scoreColor']    = '#16a34a'
+            scores_out[_ov_cuit]['scoreEmoji']    = '✅'
+            scores_out[_ov_cuit]['bloquear_oportunidad'] = False
+            print(f"[scores-cartera] OVERRIDE {_ov_cuit} → {_ov_base['score']}", flush=True)
+
     print(f"[scores-cartera] {len(scores_out)} scores totales — {archivos_log}", flush=True)
     if scores_out:
         return jsonify({"ok": True, "scores": scores_out, "total": len(scores_out)})
@@ -2606,6 +2648,11 @@ def _calcular_score_handler(cuit: str):
     cuit_limpio = str(unquote(cuit)).replace('-', '').replace(' ', '').strip()
     if len(cuit_limpio) < 10:
         return jsonify({"ok": False, "error": "CUIT inválido"}), 400
+
+    # Siempre limpiar caché para CUITs con override administrativo
+    if cuit_limpio in _ADMIN_OVERRIDES:
+        _score_session_cache.pop(cuit_limpio, None)
+        print(f"[handler] ADMIN OVERRIDE activo para {cuit_limpio} — caché limpiado", flush=True)
 
     if request.args.get('fresh') == '1':
         _fp = os.path.join(DATA_DIR, f'solvency_{cuit_limpio}.json')
