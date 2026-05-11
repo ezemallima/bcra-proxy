@@ -2647,24 +2647,26 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
   else v = `<div class="verdict-box rechazar"><div class="verdict-title rechazar">✗ Mora bancaria activa — Operación de alto riesgo</div><div class="verdict-detail">El cliente registra ${sitNombre(maxSit).toLowerCase()} (situación ${maxSit}) en el sistema financiero. Riesgo crediticio elevado.</div></div>`;
   document.getElementById('verdict-container').innerHTML = v;
 
-  // ── SCORE VENDE SEGURO ──
-  var _scoreMora = buscarEnMoras ? buscarEnMoras(cuit) : null;
-  var _scoreWsp = buscarEnWSP ? filtrarWSPReciente(buscarEnWSP(cuit)) : [];
-  // Mostrar score provisional
+  // ── SCORE VENDE SEGURO — motor unificado v17.1 ──
   var scoreEl = document.getElementById('vende-score-container');
   if (scoreEl) scoreEl.innerHTML = '<div style="padding:12px;color:#94a3b8;font-size:13px;">Calculando score...</div>';
-  // Cargar historial 24m y cheques en paralelo
+  // Historial 24m (para gráfico) + score servidor en paralelo
   Promise.all([
     fetch('/deudas/' + cuit + '/historial', {signal: AbortSignal.timeout(30000)}).then(function(r){ return r.json(); }).catch(function(){ return null; }),
-    // Usar cheques ya consultados si están disponibles — evita segunda consulta fallida
-    window._chequesUltimaConsulta
-      ? Promise.resolve(window._chequesUltimaConsulta)
-      : fetch('/deudas/' + cuit + '/cheques', {signal: AbortSignal.timeout(30000)}).then(function(r){ return r.json(); }).catch(function(){ return null; })
+    fetch('/fetch-score/' + cuit + '?fresh=1', {signal: AbortSignal.timeout(40000)}).then(function(r){ return r.json(); }).catch(function(){ return null; })
   ]).then(function(resultados) {
-    var historial = resultados[0];
+    var historial     = resultados[0];
+    var scoreServidor = resultados[1];
     if (historial) window._ultimoHistorial = historial;
-    var cheques = resultados[1];
-    var scoreObjFinal = calcularVendeScore(cuit, data, _scoreMora, _scoreWsp, historial, cheques);
+    // Fallback local si el servidor no responde
+    var scoreObjFinal;
+    if (scoreServidor && scoreServidor.score) {
+      scoreObjFinal = scoreServidor;
+    } else {
+      var _scoreMora = buscarEnMoras ? buscarEnMoras(cuit) : null;
+      var _scoreWsp  = buscarEnWSP ? filtrarWSPReciente(buscarEnWSP(cuit)) : [];
+      scoreObjFinal  = calcularVendeScore(cuit, data, _scoreMora, _scoreWsp, historial, window._chequesUltimaConsulta || null);
+    }
     var scoreElF = document.getElementById('vende-score-container');
     if (scoreElF) {
       scoreElF.innerHTML = renderVendeScore(scoreObjFinal);
