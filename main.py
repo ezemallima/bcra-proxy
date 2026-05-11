@@ -2350,15 +2350,22 @@ def get_scores_cartera():
         except Exception as e:
             print(f"[scores-cartera] Error {_ruta}: {e}", flush=True)
 
-    # Aplicar overrides administrativos (sobreescriben cualquier valor del archivo)
+    # Aplicar overrides administrativos — insertar aunque no esté en el archivo
     for _ov_cuit, _ov_base in _ADMIN_OVERRIDES.items():
-        if _ov_cuit in scores_out:
-            scores_out[_ov_cuit]['scoreCompleto'] = _ov_base['score']
-            scores_out[_ov_cuit]['scoreRango']    = _ov_base['rango']
-            scores_out[_ov_cuit]['scoreColor']    = '#16a34a'
-            scores_out[_ov_cuit]['scoreEmoji']    = '✅'
-            scores_out[_ov_cuit]['bloquear_oportunidad'] = False
-            print(f"[scores-cartera] OVERRIDE {_ov_cuit} → {_ov_base['score']}", flush=True)
+        scores_out[_ov_cuit] = {
+            "scoreCompleto":        _ov_base['score'],
+            "scoreRango":           _ov_base['rango'],
+            "scoreColor":           '#16a34a',
+            "scoreEmoji":           '✅',
+            "ultimaSit":            1,
+            "nombre":               scores_out.get(_ov_cuit, {}).get('nombre', ''),
+            "alerta_temprana":      False,
+            "bloquear_oportunidad": False,
+            "alerta_logistica":     '',
+            "override_admin":       True,
+            "dso":                  67,
+        }
+        print(f"[scores-cartera] OVERRIDE {_ov_cuit} → {_ov_base['score']} (forzado)", flush=True)
 
     print(f"[scores-cartera] {len(scores_out)} scores totales — {archivos_log}", flush=True)
     if scores_out:
@@ -2617,28 +2624,47 @@ def limpiar_solvency():
 
 
 def _score_response(score_data: dict, solvency: dict = None) -> dict:
-    """Arma el dict JSON de respuesta desde un score_data calculado o bypass."""
+    """Arma el dict JSON de respuesta desde un score_data calculado o bypass.
+    Pasa TODOS los campos del motor — el frontend los consume directamente."""
     sol = solvency or {}
     return {
-        "ok":                   True,
-        "score":                score_data.get('score'),
-        "rango":                score_data.get('rango'),
-        "color":                score_data.get('color'),
-        "emoji":                score_data.get('emoji'),
-        "alerta_temprana":      score_data.get('alerta_temprana', False),
-        "bloquear_oportunidad": score_data.get('bloquear_oportunidad', False),
-        "alerta_logistica":     score_data.get('alerta_logistica', ''),
-        "tendencia":            score_data.get('tendencia'),
-        "es_empleador":         score_data.get('es_empleador', False),
-        "indice_solvencia":     score_data.get('indice_solvencia'),
-        "mora_tecnica":         score_data.get('mora_tecnica', False),
-        "sit_ponderada":        score_data.get('sit_ponderada'),
-        "pct_mora":             score_data.get('pct_mora'),
-        "nota_mora_tecnica":    score_data.get('nota_mora_tecnica'),
-        "inferencia_ingresos":  sol.get('ingresos_anuales'),
-        "fuente_ingresos":      sol.get('fuente_ingresos'),
-        "actividad_principal":  sol.get('actividad_principal'),
-        "version":              _SCORE_VERSION,
+        "ok":                       True,
+        # ── Campos base ──────────────────────────────────────────────────
+        "score":                    score_data.get('score'),
+        "rango":                    score_data.get('rango'),
+        "color":                    score_data.get('color'),
+        "emoji":                    score_data.get('emoji'),
+        "alerta_temprana":          score_data.get('alerta_temprana', False),
+        "bloquear_oportunidad":     score_data.get('bloquear_oportunidad', False),
+        "alerta_logistica":         score_data.get('alerta_logistica', ''),
+        "tendencia":                score_data.get('tendencia'),
+        "es_empleador":             score_data.get('es_empleador', False),
+        "indice_solvencia":         score_data.get('indice_solvencia'),
+        "version":                  _SCORE_VERSION,
+        # ── BCRA / mora ──────────────────────────────────────────────────
+        "mora_tecnica":             score_data.get('mora_tecnica', False),
+        "mora_administrativa":      score_data.get('mora_administrativa', False),
+        "sit_efectivo":             score_data.get('sit_efectivo'),
+        "max_sit":                  score_data.get('max_sit'),
+        "sit_ponderada":            score_data.get('sit_ponderada'),
+        "pct_mora":                 score_data.get('pct_mora'),
+        "nota_mora_tecnica":        score_data.get('nota_mora_tecnica'),
+        "aviso_mora":               score_data.get('aviso_mora'),
+        "tipo_mora_bcra":           score_data.get('tipo_mora_bcra'),
+        "limite_dinamico_sugerido": score_data.get('limite_dinamico_sugerido'),
+        # ── Override administrativo ───────────────────────────────────────
+        "override_admin":           score_data.get('override_admin', False),
+        "override_nota":            score_data.get('override_nota'),
+        # ── Conducta interna Odoo ─────────────────────────────────────────
+        "deuda_90d_interna":        score_data.get('deuda_90d_interna', False),
+        "monto_deuda_90d":          score_data.get('monto_deuda_90d', 0),
+        "dso_individual":           score_data.get('dso_individual'),
+        "dso_deteriorando":         score_data.get('dso_deteriorando', False),
+        "sin_historial_interno":    score_data.get('sin_historial_interno', False),
+        # ── AFIP solvencia ────────────────────────────────────────────────
+        "inferencia_ingresos":      sol.get('ingresos_anuales'),
+        "fuente_ingresos":          sol.get('fuente_ingresos'),
+        "actividad_principal":      sol.get('actividad_principal'),
     }
 
 
@@ -3620,6 +3646,39 @@ def upload_saldos_facturas():
         import traceback
         print(f"[saldos] Error: {traceback.format_exc()}", flush=True)
         return jsonify({"error": str(e)}), 500
+
+def _patch_admin_overrides_en_disco():
+    """Al arrancar: fija score=720 en alertas_cartera.json para cada CUIT
+    en _ADMIN_OVERRIDES. Silencioso si el archivo no existe o está corrupto."""
+    for ruta in list(dict.fromkeys([
+        os.path.join(os.getcwd(), 'alertas_cartera.json'), ALERTAS_FILE,
+        os.path.join(os.getcwd(), 'alertas_bcra.json'),   ALERTAS_BCRA_FILE,
+    ])):
+        if not os.path.exists(ruta):
+            continue
+        try:
+            with open(ruta, 'r', encoding='utf-8') as f:
+                doc = json.load(f)
+            modificado = False
+            for entrada in doc.get('cartera', []):
+                nc = str(entrada.get('cuit', '')).replace('-', '').replace(' ', '').strip()
+                if nc in _ADMIN_OVERRIDES:
+                    ov = _ADMIN_OVERRIDES[nc]
+                    if entrada.get('scoreCompleto') != ov['score']:
+                        entrada['scoreCompleto']    = ov['score']
+                        entrada['scoreRango']        = ov['rango']
+                        entrada['scoreColor']        = '#16a34a'
+                        entrada['scoreEmoji']        = '✅'
+                        entrada['bloquear_oportunidad'] = False
+                        modificado = True
+            if modificado:
+                with open(ruta, 'w', encoding='utf-8') as f:
+                    json.dump(doc, f, ensure_ascii=False)
+                print(f"[startup] ADMIN OVERRIDES aplicados en {os.path.basename(ruta)}", flush=True)
+        except Exception as _e:
+            print(f"[startup] No se pudo parchear {ruta}: {_e}", flush=True)
+
+_patch_admin_overrides_en_disco()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
