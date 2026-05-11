@@ -74,7 +74,7 @@ _ACTIVIDAD_INGRESOS_RI = [
 
 GEMINI_MODEL = "gemini-1.5-flash"
 DATA_DIR = '/data' if os.path.exists('/data') else os.getcwd()
-ALERTAS_FILE      = os.path.join(DATA_DIR, 'alertas_cartera.json')
+ALERTAS_FILE      = os.path.join(DATA_DIR, 'alertas_cartera_v16_9.json')
 ALERTAS_BCRA_FILE = os.path.join(DATA_DIR, 'alertas_bcra.json')
 DATOS_FILE        = os.path.join(DATA_DIR, 'datos_bodega.json')
 print(f"[init] Almacenamiento en: {DATA_DIR}", flush=True)
@@ -1502,14 +1502,15 @@ def calcular_rating_predictivo(
         puntos -= 200
         print(f"[score v{_SCORE_VERSION}] {cuit_limpio} deuda_90d_interna → -200", flush=True)
 
-    # ── Time Decay: si hoy está en Sit.1, el pasado >6m pesa solo un 20% ──
-    # Un cliente que hoy cumple no puede ser penalizado eternamente por el pasado.
+    # ── Time Decay BINARIO: si hoy está en Sit.1, penalidad histórica >6m = CERO ──
+    # "Un cliente que hoy cumple no puede ser castigado eternamente por el pasado."
+    # Regla: meses malos ocurridos hace >6 meses se eliminan completamente cuando
+    # la situación efectiva actual es 1. Los meses recientes (0-6m) siguen contando.
     if sit_efectivo == 1 and _mm_antiguos > 0:
-        _mm_antiguos_td = round(_mm_antiguos * 0.20)
-        meses_malos_td  = _mm_recientes + _mm_antiguos_td
+        meses_malos_td = _mm_recientes   # antiguo contribuye CERO
         print(
             f"[time-decay] {cuit_limpio}: sit_ef=1 "
-            f"mm_rec={_mm_recientes} mm_ant={_mm_antiguos}→{_mm_antiguos_td} "
+            f"mm_rec={_mm_recientes} mm_ant={_mm_antiguos}→0 (eliminado) "
             f"meses_malos {meses_malos}→{meses_malos_td}",
             flush=True
         )
@@ -2672,21 +2673,37 @@ def limpiar_solvency():
 
 def _score_response(score_data: dict, solvency: dict = None) -> dict:
     """Pasamanos transparente: devuelve score_data completo + campos de solvencia.
-    No filtra campos — todo lo que el motor produce llega al frontend."""
+    Usa json.dumps(default=str) para serializar sin excepciones de tipo."""
     sol = solvency or {}
-    result = {**score_data}          # copia completa del dict del motor
-    result["ok"]                  = True
-    result["version"]             = _SCORE_VERSION
-    result["inferencia_ingresos"] = sol.get('ingresos_anuales')
-    result["fuente_ingresos"]     = sol.get('fuente_ingresos')
-    result["actividad_principal"] = sol.get('actividad_principal')
-    # Garantías de tipo para campos críticos (no None en el frontend)
-    result.setdefault("override_admin",    False)
-    result.setdefault("mora_administrativa", False)
-    result.setdefault("deuda_90d_interna", False)
-    result.setdefault("monto_deuda_90d",   0)
-    result.setdefault("bloquear_oportunidad", False)
-    return result
+    # Serializar y deserializar con default=str para eliminar cualquier tipo
+    # Python no serializable (datetime, Decimal, etc.) antes de enviar al frontend.
+    try:
+        _safe = json.loads(json.dumps(score_data, default=str))
+    except Exception as _se:
+        print(f"[score_response] Error serializando score_data: {_se}", flush=True)
+        _safe = {"score": score_data.get("score"), "rango": score_data.get("rango")}
+
+    _safe["ok"]                   = True
+    _safe["version"]              = _SCORE_VERSION
+    _safe["inferencia_ingresos"]  = sol.get('ingresos_anuales')
+    _safe["fuente_ingresos"]      = sol.get('fuente_ingresos')
+    _safe["actividad_principal"]  = sol.get('actividad_principal')
+    _safe.setdefault("override_admin",       False)
+    _safe.setdefault("mora_administrativa",  False)
+    _safe.setdefault("deuda_90d_interna",    False)
+    _safe.setdefault("monto_deuda_90d",      0)
+    _safe.setdefault("bloquear_oportunidad", False)
+
+    # LOG DE CONTROL: campos críticos que el frontend necesita
+    print(
+        f"[score_response] score={_safe.get('score')} rango={_safe.get('rango')} "
+        f"override_admin={_safe.get('override_admin')} "
+        f"mora_administrativa={_safe.get('mora_administrativa')} "
+        f"deuda_90d={_safe.get('deuda_90d_interna')} "
+        f"bloquear={_safe.get('bloquear_oportunidad')}",
+        flush=True
+    )
+    return _safe
 
 
 def _calcular_score_handler(cuit: str):
