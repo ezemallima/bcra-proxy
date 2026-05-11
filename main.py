@@ -666,7 +666,8 @@ def get_solvency_data(cuit):
 # ║  Prospectos: BCRA+AFIP(80%) / Comunidad(20%) — sin historial Odoo        ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
 
-_SCORE_VERSION = "10.0"
+_SCORE_VERSION          = "10.0"
+_MOTOR_VERSION_CARTERA  = "v16.8"   # bump aquí cada vez que cambie la lógica del motor
 
 # Keywords para NLP de chat de bodegas (Capa C — Comunidad)
 _KW_NEG = [
@@ -1340,13 +1341,18 @@ def calcular_rating_predictivo(
         periodos_hist = periodos_curr
     n_periodos_h = n_periodos_recientes = meses_malos = 0
     sit_grave_6m = False
+    _mm_recientes = 0   # meses malos en ventana 0-6 (usados por Time Decay)
+    _mm_antiguos  = 0   # meses malos en ventana 7-24
     for idx_p, p in enumerate(periodos_hist[:24]):
         smax        = max(((e.get('situacion') or 1) for e in p.get('entidades', [])), default=1)
         tiene_deuda = any((e.get('monto') or 0) > 0 for e in p.get('entidades', []))
         if tiene_deuda:
             n_periodos_h += 1
             if idx_p < 6: n_periodos_recientes += 1
-        if smax > 1: meses_malos += 1
+        if smax > 1:
+            meses_malos += 1
+            if idx_p < 6: _mm_recientes += 1
+            else:          _mm_antiguos  += 1
         if idx_p < 6 and smax >= 3: sit_grave_6m = True
     n_periodos_h = min(n_periodos_h, n_periodos_recientes * 4)
 
@@ -1495,6 +1501,19 @@ def calcular_rating_predictivo(
     if deuda_90d_interna:
         puntos -= 200
         print(f"[score v{_SCORE_VERSION}] {cuit_limpio} deuda_90d_interna → -200", flush=True)
+
+    # ── Time Decay: si hoy está en Sit.1, el pasado >6m pesa solo un 20% ──
+    # Un cliente que hoy cumple no puede ser penalizado eternamente por el pasado.
+    if sit_efectivo == 1 and _mm_antiguos > 0:
+        _mm_antiguos_td = round(_mm_antiguos * 0.20)
+        meses_malos_td  = _mm_recientes + _mm_antiguos_td
+        print(
+            f"[time-decay] {cuit_limpio}: sit_ef=1 "
+            f"mm_rec={_mm_recientes} mm_ant={_mm_antiguos}→{_mm_antiguos_td} "
+            f"meses_malos {meses_malos}→{meses_malos_td}",
+            flush=True
+        )
+        meses_malos = meses_malos_td
 
     # ── Penalidades históricas ────────────────────────────────────────────
     if 2 <= meses_malos <= 5 and not es_mora_tecnica and not es_mora_administrativa:
@@ -1859,7 +1878,35 @@ def ejecutar_verificacion(cartera_data):
         else:
             cartera_final = [_entry(c) for c in cartera_actualizada]
 
+        # Garantizar que los overrides administrativos siempre estén en la cartera final
+        _ov_presentes = {
+            str(c.get('cuit', '')).replace('-', '').replace(' ', '').strip()
+            for c in cartera_final
+        }
+        for _ov_cuit, _ov_base in _ADMIN_OVERRIDES.items():
+            if _ov_cuit not in _ov_presentes:
+                cartera_final.insert(0, {
+                    'cuit': _ov_cuit, 'nombre': '', 'ciudad': '',
+                    'scoreCompleto': _ov_base['score'], 'scoreRango': _ov_base['rango'],
+                    'scoreColor': '#16a34a', 'scoreEmoji': '✅',
+                    'bloquear_oportunidad': False, 'pendiente': False,
+                    'motor_version': _MOTOR_VERSION_CARTERA,
+                    'ultimaVerif': time.strftime('%d/%m/%Y %H:%M'),
+                })
+            else:
+                # Parchear el score aunque ya esté en la lista
+                for _e in cartera_final:
+                    if str(_e.get('cuit', '')).replace('-', '').replace(' ', '').strip() == _ov_cuit:
+                        _e['scoreCompleto']        = _ov_base['score']
+                        _e['scoreRango']           = _ov_base['rango']
+                        _e['scoreColor']           = '#16a34a'
+                        _e['scoreEmoji']           = '✅'
+                        _e['bloquear_oportunidad'] = False
+                        _e['pendiente']            = False
+                        break
+
         datos = {
+            "motor_version": _MOTOR_VERSION_CARTERA,
             "alertas": nuevas_alertas,
             "ultima_verif": time.strftime('%d/%m/%Y %H:%M') + sufijo,
             "cartera": cartera_final,
@@ -2624,48 +2671,22 @@ def limpiar_solvency():
 
 
 def _score_response(score_data: dict, solvency: dict = None) -> dict:
-    """Arma el dict JSON de respuesta desde un score_data calculado o bypass.
-    Pasa TODOS los campos del motor — el frontend los consume directamente."""
+    """Pasamanos transparente: devuelve score_data completo + campos de solvencia.
+    No filtra campos — todo lo que el motor produce llega al frontend."""
     sol = solvency or {}
-    return {
-        "ok":                       True,
-        # ── Campos base ──────────────────────────────────────────────────
-        "score":                    score_data.get('score'),
-        "rango":                    score_data.get('rango'),
-        "color":                    score_data.get('color'),
-        "emoji":                    score_data.get('emoji'),
-        "alerta_temprana":          score_data.get('alerta_temprana', False),
-        "bloquear_oportunidad":     score_data.get('bloquear_oportunidad', False),
-        "alerta_logistica":         score_data.get('alerta_logistica', ''),
-        "tendencia":                score_data.get('tendencia'),
-        "es_empleador":             score_data.get('es_empleador', False),
-        "indice_solvencia":         score_data.get('indice_solvencia'),
-        "version":                  _SCORE_VERSION,
-        # ── BCRA / mora ──────────────────────────────────────────────────
-        "mora_tecnica":             score_data.get('mora_tecnica', False),
-        "mora_administrativa":      score_data.get('mora_administrativa', False),
-        "sit_efectivo":             score_data.get('sit_efectivo'),
-        "max_sit":                  score_data.get('max_sit'),
-        "sit_ponderada":            score_data.get('sit_ponderada'),
-        "pct_mora":                 score_data.get('pct_mora'),
-        "nota_mora_tecnica":        score_data.get('nota_mora_tecnica'),
-        "aviso_mora":               score_data.get('aviso_mora'),
-        "tipo_mora_bcra":           score_data.get('tipo_mora_bcra'),
-        "limite_dinamico_sugerido": score_data.get('limite_dinamico_sugerido'),
-        # ── Override administrativo ───────────────────────────────────────
-        "override_admin":           score_data.get('override_admin', False),
-        "override_nota":            score_data.get('override_nota'),
-        # ── Conducta interna Odoo ─────────────────────────────────────────
-        "deuda_90d_interna":        score_data.get('deuda_90d_interna', False),
-        "monto_deuda_90d":          score_data.get('monto_deuda_90d', 0),
-        "dso_individual":           score_data.get('dso_individual'),
-        "dso_deteriorando":         score_data.get('dso_deteriorando', False),
-        "sin_historial_interno":    score_data.get('sin_historial_interno', False),
-        # ── AFIP solvencia ────────────────────────────────────────────────
-        "inferencia_ingresos":      sol.get('ingresos_anuales'),
-        "fuente_ingresos":          sol.get('fuente_ingresos'),
-        "actividad_principal":      sol.get('actividad_principal'),
-    }
+    result = {**score_data}          # copia completa del dict del motor
+    result["ok"]                  = True
+    result["version"]             = _SCORE_VERSION
+    result["inferencia_ingresos"] = sol.get('ingresos_anuales')
+    result["fuente_ingresos"]     = sol.get('fuente_ingresos')
+    result["actividad_principal"] = sol.get('actividad_principal')
+    # Garantías de tipo para campos críticos (no None en el frontend)
+    result.setdefault("override_admin",    False)
+    result.setdefault("mora_administrativa", False)
+    result.setdefault("deuda_90d_interna", False)
+    result.setdefault("monto_deuda_90d",   0)
+    result.setdefault("bloquear_oportunidad", False)
+    return result
 
 
 def _calcular_score_handler(cuit: str):
@@ -3647,38 +3668,69 @@ def upload_saldos_facturas():
         print(f"[saldos] Error: {traceback.format_exc()}", flush=True)
         return jsonify({"error": str(e)}), 500
 
-def _patch_admin_overrides_en_disco():
-    """Al arrancar: fija score=720 en alertas_cartera.json para cada CUIT
-    en _ADMIN_OVERRIDES. Silencioso si el archivo no existe o está corrupto."""
-    for ruta in list(dict.fromkeys([
-        os.path.join(os.getcwd(), 'alertas_cartera.json'), ALERTAS_FILE,
-        os.path.join(os.getcwd(), 'alertas_bcra.json'),   ALERTAS_BCRA_FILE,
-    ])):
-        if not os.path.exists(ruta):
-            continue
-        try:
-            with open(ruta, 'r', encoding='utf-8') as f:
-                doc = json.load(f)
-            modificado = False
-            for entrada in doc.get('cartera', []):
-                nc = str(entrada.get('cuit', '')).replace('-', '').replace(' ', '').strip()
-                if nc in _ADMIN_OVERRIDES:
-                    ov = _ADMIN_OVERRIDES[nc]
-                    if entrada.get('scoreCompleto') != ov['score']:
-                        entrada['scoreCompleto']    = ov['score']
-                        entrada['scoreRango']        = ov['rango']
-                        entrada['scoreColor']        = '#16a34a'
-                        entrada['scoreEmoji']        = '✅'
-                        entrada['bloquear_oportunidad'] = False
-                        modificado = True
-            if modificado:
-                with open(ruta, 'w', encoding='utf-8') as f:
-                    json.dump(doc, f, ensure_ascii=False)
-                print(f"[startup] ADMIN OVERRIDES aplicados en {os.path.basename(ruta)}", flush=True)
-        except Exception as _e:
-            print(f"[startup] No se pudo parchear {ruta}: {_e}", flush=True)
+def _startup_v168():
+    """Hard reset de integridad referencial para v16.8.
+    Si alertas_cartera.json no tiene motor_version=v16.8, lo borra y siembra
+    los overrides administrativos inmediatamente. El resto de la cartera se
+    regenera en el background cuando el usuario lanza /verificar-cartera."""
+    try:
+        reset_needed = True
+        if os.path.exists(ALERTAS_FILE):
+            try:
+                with open(ALERTAS_FILE, 'r', encoding='utf-8') as f:
+                    doc = json.load(f)
+                if doc.get('motor_version') == _MOTOR_VERSION_CARTERA:
+                    reset_needed = False
+                    # Aunque no hay reset, garantizar que los overrides estén correctos
+                    for entrada in doc.get('cartera', []):
+                        nc = str(entrada.get('cuit', '')).replace('-', '').replace(' ', '').strip()
+                        if nc in _ADMIN_OVERRIDES:
+                            ov = _ADMIN_OVERRIDES[nc]
+                            entrada['scoreCompleto']        = ov['score']
+                            entrada['scoreRango']           = ov['rango']
+                            entrada['scoreColor']           = '#16a34a'
+                            entrada['scoreEmoji']           = '✅'
+                            entrada['bloquear_oportunidad'] = False
+                            entrada['pendiente']            = False
+                    with open(ALERTAS_FILE, 'w', encoding='utf-8') as f:
+                        json.dump(doc, f, ensure_ascii=False)
+            except Exception:
+                reset_needed = True
 
-_patch_admin_overrides_en_disco()
+        if reset_needed:
+            # Semilla: solo los overrides administrativos + stubs vacíos del resto
+            cartera_seed = []
+            for ov_cuit, ov_base in _ADMIN_OVERRIDES.items():
+                cartera_seed.append({
+                    'cuit':                 ov_cuit,
+                    'nombre':               '',
+                    'ciudad':               '',
+                    'scoreCompleto':        ov_base['score'],
+                    'scoreRango':           ov_base['rango'],
+                    'scoreColor':           '#16a34a',
+                    'scoreEmoji':           '✅',
+                    'bloquear_oportunidad': False,
+                    'pendiente':            False,
+                    'motor_version':        _MOTOR_VERSION_CARTERA,
+                    'ultimaVerif':          time.strftime('%d/%m/%Y %H:%M'),
+                })
+            with open(ALERTAS_FILE, 'w', encoding='utf-8') as f:
+                json.dump({
+                    'motor_version': _MOTOR_VERSION_CARTERA,
+                    'alertas':       [],
+                    'ultima_verif':  f'Hard-reset {_MOTOR_VERSION_CARTERA} — {time.strftime("%d/%m/%Y %H:%M")}',
+                    'cartera':       cartera_seed,
+                }, f, ensure_ascii=False)
+            print(
+                f"[v16.8] Hard reset completado: alertas_cartera.json regenerado. "
+                f"{len(cartera_seed)} override(s) pre-insertado(s). "
+                f"Lanzar /verificar-cartera para regenerar los {514 - len(cartera_seed)} restantes.",
+                flush=True
+            )
+    except Exception as e:
+        print(f"[v16.8] Error en startup: {e}", flush=True)
+
+_startup_v168()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))

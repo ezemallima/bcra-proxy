@@ -1092,9 +1092,10 @@ function renderConsulta(cuit, dd, cd, hd, serverScore) {
   const _limDin        = serverScore?.limite_dinamico_sugerido ?? null;
   const _avisoMora     = serverScore?.aviso_mora || null;
 
-  // Badge Override Administrativo — reemplaza cualquier texto negativo
+  // Badge Override Administrativo — visible para override O score ≥ 700 aprobado
+  const _showWaButton = _overrideAdmin || (serverScore?.score >= 700 && !serverScore?.bloquear_oportunidad);
   let overrideAdminHtml = '';
-  if (_overrideAdmin) {
+  if (_overrideAdmin || _showWaButton) {
     const notaOv  = _overrideNota || 'Situación Regularizada (Validación Interna)';
     const waMsg   = encodeURIComponent(
       'Estimado cliente, adjuntamos datos de pago de Bodega Piattelli:\n' +
