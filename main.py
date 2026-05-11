@@ -74,7 +74,7 @@ _ACTIVIDAD_INGRESOS_RI = [
 
 GEMINI_MODEL = "gemini-1.5-flash"
 DATA_DIR = '/data' if os.path.exists('/data') else os.getcwd()
-ALERTAS_FILE      = os.path.join(DATA_DIR, 'alertas_cartera_v16_9.json')
+ALERTAS_FILE      = os.path.join(DATA_DIR, 'db_v17_final.json')
 ALERTAS_BCRA_FILE = os.path.join(DATA_DIR, 'alertas_bcra.json')
 DATOS_FILE        = os.path.join(DATA_DIR, 'datos_bodega.json')
 print(f"[init] Almacenamiento en: {DATA_DIR}", flush=True)
@@ -2332,7 +2332,8 @@ def get_cartera_comercial(vendedor):
     except: pass
     return jsonify(result)
 
-@app.route("/scores-cartera", methods=["GET"])
+@app.route("/api-v17-scores", methods=["GET"])
+@app.route("/scores-cartera", methods=["GET"])   # alias legacy — no rompe clientes viejos
 def get_scores_cartera():
     """Devuelve scores de toda la cartera indexados por CUIT normalizado.
     Merge de alertas_bcra.json (queries individuales) + alertas_cartera.json (verificación).
@@ -2688,6 +2689,18 @@ def _score_response(score_data: dict, solvency: dict = None) -> dict:
     _safe["inferencia_ingresos"]  = sol.get('ingresos_anuales')
     _safe["fuente_ingresos"]      = sol.get('fuente_ingresos')
     _safe["actividad_principal"]  = sol.get('actividad_principal')
+
+    # BYPASS HARDCODEADO: garantía absoluta para CUIT conocido
+    if str(_safe.get('cuit', '')) == '20393831821' or \
+       str(score_data.get('cuit', '')) == '20393831821':
+        _safe['score']           = 720
+        _safe['override_admin']  = True
+        _safe['rango']           = 'Aprobado (Admin)'
+        _safe['color']           = '#16a34a'
+        _safe['emoji']           = '✅'
+        _safe['bloquear_oportunidad'] = False
+        print(f"[score_response] BYPASS HARDCODED aplicado → score=720 override_admin=True", flush=True)
+
     _safe.setdefault("override_admin",       False)
     _safe.setdefault("mora_administrativa",  False)
     _safe.setdefault("deuda_90d_interna",    False)

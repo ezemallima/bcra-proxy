@@ -152,6 +152,11 @@
 </head>
 <body>
 
+<!-- BANNER V17.0 — si no ves esto el deploy no entró -->
+<div id="banner-v17" style="background:#dc2626;color:#fff;text-align:center;font-weight:800;font-size:15px;padding:8px;letter-spacing:1px;position:sticky;top:0;z-index:9999">
+  ⚡ SISTEMA V17.0 ACTIVO — MOTOR UNIFICADO ⚡
+</div>
+
 <!-- LOGIN -->
 <div id="login-screen">
   <div class="login-logo">🍷</div>
@@ -354,7 +359,7 @@ async function iniciarApp() {
       }
     }
     // Precargar scores para consultas individuales (keyed by CUIT normalizado)
-    const scR = await fetch(API + '/scores-cartera?v=' + Date.now()).catch(() => null);
+    const scR = await fetch(API + '/api-v17-scores?v=' + Date.now()).catch(() => null);
     if (scR && scR.ok) {
       const scD = await scR.json();
       const _sc = scD.scores || {};
@@ -492,7 +497,7 @@ async function actualizarScores(btn) {
     if (!d.ok) throw new Error(d.error || 'error');
     btn.textContent = '✓ ' + d.recalculados;
     // Refrescar scores en CARTERA_LOCAL y re-renderizar
-    const scR = await fetch(API + '/scores-cartera?v=' + Date.now()).catch(()=>null);
+    const scR = await fetch(API + '/api-v17-scores?v=' + Date.now()).catch(()=>null);
     if (scR && scR.ok) {
       const _sc = (await scR.json()).scores || {};
       window._scoresCartera = _sc;
@@ -1096,7 +1101,7 @@ function renderConsulta(cuit, dd, cd, hd, serverScore) {
   // Number() garantiza comparación numérica aunque el JSON llegue como string
   const _scoreNum    = Number(serverScore?.score ?? 0);
   const _showWaButton = (serverScore?.override_admin === true) || (_scoreNum >= 700 && !serverScore?.bloquear_oportunidad);
-  console.log('[wa-debug] score=', _scoreNum, 'override_admin=', serverScore?.override_admin, 'showWa=', _showWaButton);
+  console.log('BOTON WA CHECK:', {score: serverScore?.score, override: serverScore?.override_admin, scoreNum: _scoreNum, showWa: _showWaButton});
 
   let overrideAdminHtml = '';
   if (_overrideAdmin) {
