@@ -266,13 +266,14 @@ def consultar_bcra_lambda(cuit):
         return None
 
 def consultar_bcra(cuit, reintentos=3):
-    # Rotar entre los 5 workers + BCRA directo
+    # Máximo 3 endpoints para no superar el timeout de Render (30s)
+    # Workers primero (más rápidos), BCRA directo como último recurso
     endpoints = [(w + "/deudas/" + cuit, f"Worker{i+1}") for i, w in enumerate(BCRA_WORKERS)]
     endpoints.append(("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit, "directo"))
-    for ep_url, via in endpoints:
+    for ep_url, via in endpoints[:3]:
         try:
             print(f"[bcra] {cuit} consultando via {via}...", flush=True)
-            r = requests.get(ep_url, timeout=15, verify=False)
+            r = requests.get(ep_url, timeout=8, verify=False)
             if r.status_code == 200:
                 text = r.text.strip()
                 if not text or len(text) < 10:
@@ -1564,9 +1565,9 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
     if not hist_data:
         urls_h = ([w + "/deudas/" + cuit_limpio + "/historial" for w in BCRA_WORKERS]
                   + ["https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit_limpio])
-        for u in urls_h[:3]:
+        for u in urls_h[:2]:
             try:
-                r = requests.get(u, timeout=10, verify=False)
+                r = requests.get(u, timeout=5, verify=False)
                 if r.status_code == 200 and len(r.text.strip()) > 10:
                     hist_data = r.json()
                     try:
@@ -1574,17 +1575,15 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
                             json.dump({'payload': hist_data, 'ts': time.time()}, f)
                     except: pass
                     break
-                time.sleep(2)
             except Exception as eh:
                 print(f"[score wrapper] hist {cuit_limpio}: {eh}", flush=True)
-                time.sleep(2)
 
     if not cheq_data:
         urls_c = ([w + "/deudas/" + cuit_limpio + "/cheques" for w in BCRA_WORKERS]
                   + ["https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/" + cuit_limpio])
-        for u in urls_c[:3]:
+        for u in urls_c[:2]:
             try:
-                r = requests.get(u, timeout=10, verify=False)
+                r = requests.get(u, timeout=5, verify=False)
                 if r.status_code == 200 and len(r.text.strip()) > 10:
                     cheq_data = r.json()
                     try:
@@ -1595,10 +1594,8 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
                 elif r.status_code == 404:
                     cheq_data = {"results": {"causales": []}, "sin_deudas": True}
                     break
-                time.sleep(2)
             except Exception as ec:
                 print(f"[score wrapper] cheq {cuit_limpio}: {ec}", flush=True)
-                time.sleep(2)
 
     return calcular_rating_predictivo(
         cuit=cuit_limpio, bcra_data=bcra_data,
@@ -2563,6 +2560,9 @@ def _score_response(score_data: dict, solvency: dict = None) -> dict:
     _safe.setdefault("deuda_90d_interna",    False)
     _safe.setdefault("monto_deuda_90d",      0)
     _safe.setdefault("bloquear_oportunidad", False)
+    _safe.setdefault("razonamiento_score",   None)
+    _safe.setdefault("mora_tecnica",         False)
+    _safe.setdefault("nota_mora_tecnica",    None)
 
     # LOG DE CONTROL: campos críticos que el frontend necesita
     print(
@@ -2595,8 +2595,15 @@ def _calcular_score_handler(cuit: str):
         _actualizar_score_en_cartera(cuit_limpio, score_data, solvency)
         return jsonify(_score_response(score_data, solvency))
     except Exception as e:
-        print(f"[score] Error {cuit_limpio}: {e}", flush=True)
-        return jsonify({"ok": False, "error": str(e)}), 500
+        import traceback
+        print(f"[score] ERROR {cuit_limpio}: {e}\n{traceback.format_exc()}", flush=True)
+        return jsonify({
+            "ok": False, "error": str(e),
+            "score": 0, "rango": "Error", "color": "#6b7280", "emoji": "⚠️",
+            "razonamiento_score": None, "mora_administrativa": False,
+            "override_admin": False, "bloquear_oportunidad": False,
+            "mora_tecnica": False, "nota_mora_tecnica": None,
+        }), 500
 
 
 @app.route("/calcular-score/<cuit>")
