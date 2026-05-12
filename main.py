@@ -1530,7 +1530,7 @@ def calcular_rating_predictivo(
             f"({round(pct_mora*100, 1)}% del total), situación ponderada {sit_ponderada:.2f}. "
             f"El {round((1-pct_mora)*100, 1)}% de la cartera bancaria se encuentra en Situación 1."
         ) if es_mora_tecnica else None,
-        'razonamiento': (
+        'razonamiento_score': (
             f"Score preservado: mora técnica de baja materialidad "
             f"(${round(monto_mora_k * 1000):,} ARS, {round(pct_mora*100, 1)}% del total)"
         ) if es_mora_tecnica else (
