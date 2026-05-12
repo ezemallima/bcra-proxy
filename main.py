@@ -127,15 +127,11 @@ def cache_set(cuit, data, error=None):
 
 def consultar_bcra_cached(cuit):
     print(f"[bcra] {cuit} consultando BCRA...", flush=True)
-    _cuit_diag = str(cuit).replace('-', '').replace(' ', '').strip() == '20393831821'
-    if _cuit_diag:
-        print(f"[bcra] {cuit} BYPASS caché DIAG — consulta BCRA fresca", flush=True)
-    else:
-        cached_data, cached_error = cache_get(cuit)
-        if cached_data is not None:
-            origen = "cache-error" if cached_error else "caché"
-            print(f"[bcra] {cuit} desde {origen}", flush=True)
-            return cached_data, cached_error
+    cached_data, cached_error = cache_get(cuit)
+    if cached_data is not None:
+        origen = "cache-error" if cached_error else "caché"
+        print(f"[bcra] {cuit} desde {origen}", flush=True)
+        return cached_data, cached_error
     data, error = consultar_bcra(cuit)
     if error or not data:
         data_cache = {"results": None, "sin_deudas": None, "error_bcra": str(error or "sin_respuesta")}
@@ -1161,11 +1157,6 @@ def _layer_liquidez(cheq_data: dict, max_sit: int, n_periodos_h: int) -> tuple:
     return pts, False
 
 
-_ADMIN_OVERRIDES = {
-    '20393831821': {'score': 720, 'rango': 'Aprobado (Admin)',
-                    'nota': 'Situación Regularizada', 'override': True},
-}
-
 def calcular_rating_predictivo(
     cuit: str,
     bcra_data: dict,
@@ -1175,33 +1166,6 @@ def calcular_rating_predictivo(
     solvency_data: dict = None,
     ciudad: str         = '',
 ) -> dict:
-    # ── HARD OVERRIDE: primera línea, sin evaluación de BCRA ─────────────
-    _cuit_raw = str(cuit).strip().replace('-', '').replace(' ', '')
-    if _cuit_raw in _ADMIN_OVERRIDES:
-        (_, _, _, _, _, _,
-         _ov90d, _ov90m) = _layer_conducta_interna(_cuit_raw, _saldos_facturas, False)
-        _base = _ADMIN_OVERRIDES[_cuit_raw].copy()
-        _base['score'] = _base['score'] - (200 if _ov90d else 0)
-        _base.update({
-            'color': '#16a34a', 'emoji': '✅',
-            'alerta_temprana': False, 'bloquear_oportunidad': False,
-            'alerta_logistica': _alerta_logistica(ciudad),
-            'componentes': {'capaA': 288, 'capaB': 288, 'capaC': 144, 'liquidez': 0},
-            'tendencia': 'estable', 'es_empleador': False, 'indice_solvencia': 1.0,
-            'version': _SCORE_VERSION, 'max_sit': 3, 'sit_efectivo': 1,
-            'mora_administrativa': True, 'override_admin': True,
-            'override_nota': 'Situación Regularizada (Validación Interna)',
-            'sin_historial_interno': False, 'dso_individual': 0.0,
-            'dso_deteriorando': False, 'promedio_mensual': 0.0,
-            'comunidad_negativa': False, 'deuda_90d_interna': _ov90d,
-            'monto_deuda_90d': round(_ov90m, 2), 'tipo_mora_bcra': 'mora_administrativa',
-            'degradacion_bcra_reciente': False,
-            'aviso_mora': 'Situación Regularizada (Validación Interna)',
-            'limite_dinamico_sugerido': None, 'nota_mora_tecnica': None,
-        })
-        print(f">>> MOTOR ACTIVADO PARA: {_cuit_raw} score={_base['score']} override=True", flush=True)
-        _score_session_cache[_cuit_raw] = _base
-        return _base
     """
     Modelo Nacional de Riesgo Vende Seguro v10.0 (Anti-Videla)
 
@@ -1220,64 +1184,9 @@ def calcular_rating_predictivo(
     id_cliente  = ''.join(c for c in cuit_limpio if c.isdigit())
     print(f">>> ENTRANDO AL MOTOR - CUIT: {cuit_limpio} | id_cliente: {id_cliente}", flush=True)
 
-    # Bypass de caché para CUIT de diagnóstico
-    _skip_cache = (id_cliente == '20393831821')
-    if not _skip_cache and cuit_limpio in _score_session_cache:
+    if cuit_limpio in _score_session_cache:
         print(f">>> CACHE HIT - CUIT: {cuit_limpio}", flush=True)
         return _score_session_cache[cuit_limpio]
-    if _skip_cache and cuit_limpio in _score_session_cache:
-        del _score_session_cache[cuit_limpio]
-        print(f">>> CACHE BORRADO para {cuit_limpio} (id={id_cliente})", flush=True)
-
-    # ══════════════════════════════════════════════════════════════════════
-    # PRIORIDAD CERO: override administrativo — score base 720 ignorando BCRA
-    # El único castigo válido es deuda interna +90d (−200 pts).
-    # ══════════════════════════════════════════════════════════════════════
-    if id_cliente == '20393831821' or '20393831821' in id_cliente:
-        (_, _, _, _, _, _,
-         _ov_deuda90d, _ov_monto90d) = _layer_conducta_interna(
-            cuit_limpio, _saldos_facturas, False
-        )
-        _ov_score = 720 - (200 if _ov_deuda90d else 0)
-        print(f">>> MOTOR ACTIVADO PARA: {id_cliente}", flush=True)
-        print(
-            f">>> PRIORIDAD CERO {id_cliente}: score={_ov_score} "
-            f"deuda_90d={_ov_deuda90d} monto={_ov_monto90d:.0f}",
-            flush=True
-        )
-        _ov_resultado = {
-            'score':                    _ov_score,
-            'rango':                    'Aprobado (Admin)',
-            'color':                    '#16a34a',
-            'emoji':                    '✅',
-            'alerta_temprana':          False,
-            'bloquear_oportunidad':     False,
-            'alerta_logistica':         _alerta_logistica(ciudad),
-            'componentes':              {'capaA': 288, 'capaB': 288, 'capaC': 144, 'liquidez': 0},
-            'tendencia':                'estable',
-            'es_empleador':             False,
-            'indice_solvencia':         1.0,
-            'version':                  _SCORE_VERSION,
-            'max_sit':                  3,
-            'sit_efectivo':             1,
-            'mora_administrativa':      True,
-            'override_admin':           True,
-            'override_nota':            'Situación Regularizada (Validación Interna)',
-            'sin_historial_interno':    False,
-            'dso_individual':           0.0,
-            'dso_deteriorando':         False,
-            'promedio_mensual':         0.0,
-            'comunidad_negativa':       False,
-            'deuda_90d_interna':        _ov_deuda90d,
-            'monto_deuda_90d':          round(_ov_monto90d, 2),
-            'tipo_mora_bcra':           'mora_administrativa',
-            'degradacion_bcra_reciente': False,
-            'aviso_mora':               'Situación Regularizada (Validación Interna)',
-            'limite_dinamico_sugerido': None,
-            'nota_mora_tecnica':        None,
-        }
-        _score_session_cache[cuit_limpio] = _ov_resultado
-        return _ov_resultado
 
     # ── Parsear BCRA ──────────────────────────────────────────────────────
     sin_deudas_real = bcra_data.get('sin_deudas', False)
@@ -1316,17 +1225,14 @@ def calcular_rating_predictivo(
         ) / _raw_total_m
     pct_mora = monto_mora_k / _raw_total_m if _raw_total_m > 0 else (0.0 if max_sit == 1 else 1.0)
 
-    # ── DIAGNÓSTICO TEMPRANO: override antes de cualquier early-exit ──────
-    _forzar_mora_adm = (cuit_limpio == '20393831821')
     print(
         f">>> DIAG {cuit_limpio}: max_sit={max_sit} sit_pond={sit_ponderada:.2f} "
-        f"monto_sit1k={monto_sit1_k} monto_morak={monto_mora_k} pct_mora={pct_mora:.3f} "
-        f"forzar_mora_adm={_forzar_mora_adm}",
+        f"monto_sit1k={monto_sit1_k} monto_morak={monto_mora_k} pct_mora={pct_mora:.3f}",
         flush=True
     )
 
-    # Mora técnica: monto en mora < $300k ARS (300 miles) O < 5% del total
-    _MORA_TEC_K   = 300.0    # $300.000 ARS en miles de pesos
+    # Regla de Materialidad: mora < $50.000 ARS (50 miles) o < 5% del total → mora administrativa
+    _MORA_TEC_K   = 50.0     # $50.000 ARS en miles de pesos
     _MORA_TEC_PCT = 0.05
     es_mora_tecnica = (
         max_sit > 1 and _raw_total_m > 0 and
@@ -1391,16 +1297,16 @@ def calcular_rating_predictivo(
 
     # Criterio Humano: para mora administrativa, toda la lógica de caps usa
     # sit_efectivo = round(sit_ponderada) en lugar del max_sit del outlier.
-    # _forzar_mora_adm fue calculado antes de cualquier early-exit.
+    # La materialidad ($50k ARS o <5%) también clasifica como administrativa.
     es_mora_administrativa = (
-        _forzar_mora_adm or
         tipo_mora_bcra == 'mora_administrativa' or
-        banco_principal_limpio
+        banco_principal_limpio or
+        es_mora_tecnica   # materialidad: deuda baja no refleja insolvencia
     )
     sit_efectivo = max(1, round(sit_ponderada)) if es_mora_administrativa else max_sit
     print(
         f"[OVERRIDE DIAG] {cuit_limpio}: tipo_mora={tipo_mora_bcra} "
-        f"banco_ppal_limpio={banco_principal_limpio} forzar={_forzar_mora_adm} "
+        f"banco_ppal_limpio={banco_principal_limpio} mora_tec={es_mora_tecnica} "
         f"→ es_mora_adm={es_mora_administrativa} sit_ef={sit_efectivo}",
         flush=True
     )
@@ -1547,7 +1453,7 @@ def calcular_rating_predictivo(
 
     # ── Piso mora técnica (no aplica si hay Default Real) ────────────────
     if es_mora_tecnica and not hard_block_bcra:
-        puntos = max(puntos, 620)
+        puntos = max(puntos, 700)
 
     score = max(1, min(999, round(puntos)))
 
@@ -1624,6 +1530,12 @@ def calcular_rating_predictivo(
             f"({round(pct_mora*100, 1)}% del total), situación ponderada {sit_ponderada:.2f}. "
             f"El {round((1-pct_mora)*100, 1)}% de la cartera bancaria se encuentra en Situación 1."
         ) if es_mora_tecnica else None,
+        'razonamiento': (
+            f"Score preservado: mora técnica de baja materialidad "
+            f"(${round(monto_mora_k * 1000):,} ARS, {round(pct_mora*100, 1)}% del total)"
+        ) if es_mora_tecnica else (
+            "Score preservado: mora clasificada como administrativa (patrón crediticio limpio)"
+        ) if es_mora_administrativa else None,
     }
     _score_session_cache[cuit_limpio] = resultado
     return resultado
@@ -1878,33 +1790,6 @@ def ejecutar_verificacion(cartera_data):
                 cartera_final = [_entry(c) for c in cartera_actualizada]
         else:
             cartera_final = [_entry(c) for c in cartera_actualizada]
-
-        # Garantizar que los overrides administrativos siempre estén en la cartera final
-        _ov_presentes = {
-            str(c.get('cuit', '')).replace('-', '').replace(' ', '').strip()
-            for c in cartera_final
-        }
-        for _ov_cuit, _ov_base in _ADMIN_OVERRIDES.items():
-            if _ov_cuit not in _ov_presentes:
-                cartera_final.insert(0, {
-                    'cuit': _ov_cuit, 'nombre': '', 'ciudad': '',
-                    'scoreCompleto': _ov_base['score'], 'scoreRango': _ov_base['rango'],
-                    'scoreColor': '#16a34a', 'scoreEmoji': '✅',
-                    'bloquear_oportunidad': False, 'pendiente': False,
-                    'motor_version': _MOTOR_VERSION_CARTERA,
-                    'ultimaVerif': time.strftime('%d/%m/%Y %H:%M'),
-                })
-            else:
-                # Parchear el score aunque ya esté en la lista
-                for _e in cartera_final:
-                    if str(_e.get('cuit', '')).replace('-', '').replace(' ', '').strip() == _ov_cuit:
-                        _e['scoreCompleto']        = _ov_base['score']
-                        _e['scoreRango']           = _ov_base['rango']
-                        _e['scoreColor']           = '#16a34a'
-                        _e['scoreEmoji']           = '✅'
-                        _e['bloquear_oportunidad'] = False
-                        _e['pendiente']            = False
-                        break
 
         datos = {
             "motor_version": _MOTOR_VERSION_CARTERA,
@@ -2399,23 +2284,6 @@ def get_scores_cartera():
         except Exception as e:
             print(f"[scores-cartera] Error {_ruta}: {e}", flush=True)
 
-    # Aplicar overrides administrativos — insertar aunque no esté en el archivo
-    for _ov_cuit, _ov_base in _ADMIN_OVERRIDES.items():
-        scores_out[_ov_cuit] = {
-            "scoreCompleto":        _ov_base['score'],
-            "scoreRango":           _ov_base['rango'],
-            "scoreColor":           '#16a34a',
-            "scoreEmoji":           '✅',
-            "ultimaSit":            1,
-            "nombre":               scores_out.get(_ov_cuit, {}).get('nombre', ''),
-            "alerta_temprana":      False,
-            "bloquear_oportunidad": False,
-            "alerta_logistica":     '',
-            "override_admin":       True,
-            "dso":                  67,
-        }
-        print(f"[scores-cartera] OVERRIDE {_ov_cuit} → {_ov_base['score']} (forzado)", flush=True)
-
     print(f"[scores-cartera] {len(scores_out)} scores totales — {archivos_log}", flush=True)
     if scores_out:
         return jsonify({"ok": True, "scores": scores_out, "total": len(scores_out)})
@@ -2690,17 +2558,6 @@ def _score_response(score_data: dict, solvency: dict = None) -> dict:
     _safe["fuente_ingresos"]      = sol.get('fuente_ingresos')
     _safe["actividad_principal"]  = sol.get('actividad_principal')
 
-    # BYPASS HARDCODEADO: garantía absoluta para CUIT conocido
-    if str(_safe.get('cuit', '')) == '20393831821' or \
-       str(score_data.get('cuit', '')) == '20393831821':
-        _safe['score']           = 720
-        _safe['override_admin']  = True
-        _safe['rango']           = 'Aprobado (Admin)'
-        _safe['color']           = '#16a34a'
-        _safe['emoji']           = '✅'
-        _safe['bloquear_oportunidad'] = False
-        print(f"[score_response] BYPASS HARDCODED aplicado → score=720 override_admin=True", flush=True)
-
     _safe.setdefault("override_admin",       False)
     _safe.setdefault("mora_administrativa",  False)
     _safe.setdefault("deuda_90d_interna",    False)
@@ -2725,11 +2582,6 @@ def _calcular_score_handler(cuit: str):
     cuit_limpio = str(unquote(cuit)).replace('-', '').replace(' ', '').strip()
     if len(cuit_limpio) < 10:
         return jsonify({"ok": False, "error": "CUIT inválido"}), 400
-
-    # Siempre limpiar caché para CUITs con override administrativo
-    if cuit_limpio in _ADMIN_OVERRIDES:
-        _score_session_cache.pop(cuit_limpio, None)
-        print(f"[handler] ADMIN OVERRIDE activo para {cuit_limpio} — caché limpiado", flush=True)
 
     if request.args.get('fresh') == '1':
         _fp = os.path.join(DATA_DIR, f'solvency_{cuit_limpio}.json')
@@ -3699,66 +3551,27 @@ def upload_saldos_facturas():
         return jsonify({"error": str(e)}), 500
 
 def _startup_v168():
-    """Hard reset de integridad referencial para v16.8.
-    Si alertas_cartera.json no tiene motor_version=v16.8, lo borra y siembra
-    los overrides administrativos inmediatamente. El resto de la cartera se
-    regenera en el background cuando el usuario lanza /verificar-cartera."""
+    """Garantiza que db_v17_final.json existe con motor_version correcto al arrancar."""
     try:
-        reset_needed = True
         if os.path.exists(ALERTAS_FILE):
             try:
                 with open(ALERTAS_FILE, 'r', encoding='utf-8') as f:
                     doc = json.load(f)
                 if doc.get('motor_version') == _MOTOR_VERSION_CARTERA:
-                    reset_needed = False
-                    # Aunque no hay reset, garantizar que los overrides estén correctos
-                    for entrada in doc.get('cartera', []):
-                        nc = str(entrada.get('cuit', '')).replace('-', '').replace(' ', '').strip()
-                        if nc in _ADMIN_OVERRIDES:
-                            ov = _ADMIN_OVERRIDES[nc]
-                            entrada['scoreCompleto']        = ov['score']
-                            entrada['scoreRango']           = ov['rango']
-                            entrada['scoreColor']           = '#16a34a'
-                            entrada['scoreEmoji']           = '✅'
-                            entrada['bloquear_oportunidad'] = False
-                            entrada['pendiente']            = False
-                    with open(ALERTAS_FILE, 'w', encoding='utf-8') as f:
-                        json.dump(doc, f, ensure_ascii=False)
+                    print(f"[startup] {os.path.basename(ALERTAS_FILE)} OK ({_MOTOR_VERSION_CARTERA})", flush=True)
+                    return
             except Exception:
-                reset_needed = True
-
-        if reset_needed:
-            # Semilla: solo los overrides administrativos + stubs vacíos del resto
-            cartera_seed = []
-            for ov_cuit, ov_base in _ADMIN_OVERRIDES.items():
-                cartera_seed.append({
-                    'cuit':                 ov_cuit,
-                    'nombre':               '',
-                    'ciudad':               '',
-                    'scoreCompleto':        ov_base['score'],
-                    'scoreRango':           ov_base['rango'],
-                    'scoreColor':           '#16a34a',
-                    'scoreEmoji':           '✅',
-                    'bloquear_oportunidad': False,
-                    'pendiente':            False,
-                    'motor_version':        _MOTOR_VERSION_CARTERA,
-                    'ultimaVerif':          time.strftime('%d/%m/%Y %H:%M'),
-                })
-            with open(ALERTAS_FILE, 'w', encoding='utf-8') as f:
-                json.dump({
-                    'motor_version': _MOTOR_VERSION_CARTERA,
-                    'alertas':       [],
-                    'ultima_verif':  f'Hard-reset {_MOTOR_VERSION_CARTERA} — {time.strftime("%d/%m/%Y %H:%M")}',
-                    'cartera':       cartera_seed,
-                }, f, ensure_ascii=False)
-            print(
-                f"[v16.8] Hard reset completado: alertas_cartera.json regenerado. "
-                f"{len(cartera_seed)} override(s) pre-insertado(s). "
-                f"Lanzar /verificar-cartera para regenerar los {514 - len(cartera_seed)} restantes.",
-                flush=True
-            )
+                pass
+        with open(ALERTAS_FILE, 'w', encoding='utf-8') as f:
+            json.dump({
+                'motor_version': _MOTOR_VERSION_CARTERA,
+                'alertas':       [],
+                'ultima_verif':  f'Init {_MOTOR_VERSION_CARTERA} — {time.strftime("%d/%m/%Y %H:%M")}',
+                'cartera':       [],
+            }, f, ensure_ascii=False)
+        print(f"[startup] {os.path.basename(ALERTAS_FILE)} creado/reseteado ({_MOTOR_VERSION_CARTERA})", flush=True)
     except Exception as e:
-        print(f"[v16.8] Error en startup: {e}", flush=True)
+        print(f"[startup] Error: {e}", flush=True)
 
 _startup_v168()
 
