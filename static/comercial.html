@@ -152,10 +152,6 @@
 </head>
 <body>
 
-<!-- BANNER V17.0 — si no ves esto el deploy no entró -->
-<div id="banner-v17" style="background:#dc2626;color:#fff;text-align:center;font-weight:800;font-size:15px;padding:8px;letter-spacing:1px;position:sticky;top:0;z-index:9999">
-  ⚡ SISTEMA V17.0 ACTIVO — MOTOR UNIFICADO ⚡
-</div>
 
 <!-- LOGIN -->
 <div id="login-screen">
@@ -809,6 +805,7 @@ async function abrirModalCliente(cuit, nombre) {
     <div id="mtab-bcra" style="display:none"><div class="ia-loading"><div class="spinner"></div><span>Consultando BCRA...</span></div></div>`;
   document.getElementById('detail-modal').style.display = 'flex';
   document.getElementById('detail-modal').style.flexDirection = 'column';
+  history.pushState({ modalOpen: true }, '', '#detalle');
 
   // Lanzar TODAS las solicitudes en paralelo con safeFetch
   const facP  = safeFetch(API + '/api/facturas/' + encodeURIComponent(cuit) + '?nombre=' + encodeURIComponent(nombre));
@@ -1387,7 +1384,15 @@ function generarPDF(cuit) {
 function closeModal() {
   const m = document.getElementById('detail-modal');
   if (m) { m.style.display = 'none'; m.classList.add('hidden'); }
+  if (location.hash === '#detalle') history.back();
 }
+window.onpopstate = function(event) {
+  const m = document.getElementById('detail-modal');
+  if (m && m.style.display !== 'none') {
+    m.style.display = 'none';
+    m.classList.add('hidden');
+  }
+};
 function showLoading(txt){document.getElementById('loading-text').textContent=txt||'Cargando...';document.getElementById('loading-overlay').style.display='flex';}
 function hideLoading(){document.getElementById('loading-overlay').style.display='none';}
 
