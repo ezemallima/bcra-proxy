@@ -1168,7 +1168,7 @@ def calcular_rating_predictivo(
     ciudad: str         = '',
 ) -> dict:
     """
-    Modelo Nacional de Riesgo Vende Seguro v10.0 (Anti-Videla)
+    Modelo Nacional de Riesgo Vende Seguro v20.0 (Anti-Videla)
 
     Capa A — Estabilidad Bancaria   40%  (0-400 pts): BCRA + Tendencia 24m
     Capa B — Conducta Interna       40%  (0-400 pts): Odoo DSO/regularidad/volumen
@@ -1232,15 +1232,23 @@ def calcular_rating_predictivo(
         flush=True
     )
 
-    # Regla de Materialidad: mora < $50.000 ARS (50 miles) o < 5% del total → mora administrativa
-    _MORA_TEC_K   = 50.0     # $50.000 ARS en miles de pesos
+    # Regla de Materialidad v20.0: mora < $100.000 ARS (100 miles) o < 5% del total → mora técnica
+    _MORA_TEC_K   = 100.0    # $100.000 ARS en miles de pesos (ajustado por inflación)
     _MORA_TEC_PCT = 0.05
     es_mora_tecnica = (
         max_sit > 1 and _raw_total_m > 0 and
         (monto_mora_k <= _MORA_TEC_K or pct_mora <= _MORA_TEC_PCT)
     )
+    # Regla de Consistencia v20.0: >= 4 entidades y solo 1 outlier → error operativo, no insolvencia
+    _entidades_en_mora = sum(1 for e in _ents_curr if (e.get('situacion', 1) or 1) > 1)
+    if max_sit > 1 and nro_entidades >= 4 and _entidades_en_mora == 1:
+        es_mora_tecnica = True
     if es_mora_tecnica:
-        print(f"[mora_tec] {cuit_limpio} mora={monto_mora_k:.0f}k pct={pct_mora:.3f} sp={sit_ponderada:.2f}", flush=True)
+        print(
+            f"[mora_tec] {cuit_limpio} mora={monto_mora_k:.0f}k pct={pct_mora:.3f} "
+            f"sp={sit_ponderada:.2f} ents={nro_entidades} outliers={_entidades_en_mora}",
+            flush=True
+        )
 
     # ── Historial 24m ─────────────────────────────────────────────────────
     periodos_hist = (hist_data.get('results') or {}).get('periodos') or [] if hist_data else []
@@ -1409,6 +1417,15 @@ def calcular_rating_predictivo(
         puntos -= 200
         print(f"[score v{_SCORE_VERSION}] {cuit_limpio} deuda_90d_interna → -200", flush=True)
 
+    # ── DSO v20.0: bono pago rápido / penalidad pago lento ───────────────────
+    if dso_individual > 0:
+        if dso_individual < 45:
+            puntos += 50
+            print(f"[score v{_SCORE_VERSION}] {cuit_limpio} DSO={dso_individual:.0f}d<45 → +50", flush=True)
+        elif dso_individual > 90:
+            puntos -= 100
+            print(f"[score v{_SCORE_VERSION}] {cuit_limpio} DSO={dso_individual:.0f}d>90 → -100", flush=True)
+
     # ── Time Decay BINARIO: si hoy está en Sit.1, penalidad histórica >6m = CERO ──
     # "Un cliente que hoy cumple no puede ser castigado eternamente por el pasado."
     # Regla: meses malos ocurridos hace >6 meses se eliminan completamente cuando
@@ -1451,6 +1468,11 @@ def calcular_rating_predictivo(
     # ── Cap: Monotrib A/B → score ≤ 600 ──────────────────────────────────
     if es_monotrib_bajo:
         puntos = min(puntos, 600)
+
+    # ── Cap v20.0: comunidad negativa → score ≤ 600 (salvo mora técnica) ────
+    if comunidad_negativa and not es_mora_tecnica:
+        puntos = min(puntos, 600)
+        print(f"[score v{_SCORE_VERSION}] {cuit_limpio} comunidad_negativa → cap 600", flush=True)
 
     # ── Piso mora técnica (no aplica si hay Default Real) ────────────────
     if es_mora_tecnica and not hard_block_bcra:
@@ -1513,7 +1535,7 @@ def calcular_rating_predictivo(
         'max_sit':                  max_sit,
         'sit_efectivo':             sit_efectivo,
         'mora_administrativa':      es_mora_administrativa,
-        # Campos v10.0
+        # Campos v10.0 / v20.0
         'sin_historial_interno':    sin_historial_interno,
         'dso_individual':           dso_individual,
         'dso_deteriorando':         dso_deteriorando,
@@ -1537,9 +1559,15 @@ def calcular_rating_predictivo(
         ) if es_mora_tecnica else (
             "Score preservado: mora clasificada como administrativa (patrón crediticio limpio)"
         ) if es_mora_administrativa else None,
+        # Campos v20.0
+        'semaforo': 'verde' if score >= 700 else ('amarillo' if score >= 400 else 'rojo'),
     }
     _score_session_cache[cuit_limpio] = resultado
     return resultado
+
+
+# v20.0 alias para compatibilidad con callers externos
+calcular_vende_score_pro = calcular_rating_predictivo
 
 
 def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: str = '') -> dict:
@@ -2563,6 +2591,7 @@ def _score_response(score_data: dict, solvency: dict = None) -> dict:
     _safe.setdefault("razonamiento_score",   None)
     _safe.setdefault("mora_tecnica",         False)
     _safe.setdefault("nota_mora_tecnica",    None)
+    _safe.setdefault("semaforo",             'verde' if (_safe.get('score') or 0) >= 700 else ('amarillo' if (_safe.get('score') or 0) >= 400 else 'rojo'))
 
     # LOG DE CONTROL: campos críticos que el frontend necesita
     print(

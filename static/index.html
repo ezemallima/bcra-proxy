@@ -2135,11 +2135,8 @@ async function actualizarScoresAlertas() {
     var cuit = c.cuit.replace(/-/g,'');
     btn.textContent = 'Actualizando ' + (i+1) + '/' + total + '...';
     try {
-      var r = await fetch('/deudas/' + cuit, {signal: AbortSignal.timeout(30000)});
-      var bcraData = await r.json();
-      var mora = buscarEnMoras(cuit);
-      var wsp = buscarEnWSP(cuit) || [];
-      var scoreObj = calcularVendeScore(cuit, bcraData, mora, wsp);
+      var r = await fetch('/fetch-score/' + cuit + '?fresh=1', {signal: AbortSignal.timeout(30000)});
+      var scoreObj = await r.json();
       // Actualizar cartera local
       cartera[i].scoreCompleto = scoreObj.score;
       cartera[i].scoreRango = scoreObj.rango;
