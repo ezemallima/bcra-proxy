@@ -77,6 +77,7 @@ DATA_DIR = '/data' if os.path.exists('/data') else os.getcwd()
 ALERTAS_FILE      = os.path.join(DATA_DIR, 'db_v17_final.json')
 ALERTAS_BCRA_FILE = os.path.join(DATA_DIR, 'alertas_bcra.json')
 DATOS_FILE        = os.path.join(DATA_DIR, 'datos_bodega.json')
+SCORE_CACHE_FILE  = os.path.join(DATA_DIR, 'score_cache.json')
 print(f"[init] Almacenamiento en: {DATA_DIR}", flush=True)
 WSP_FILE = os.path.join(os.getcwd(), 'whatsapp_index.json')
 
@@ -1373,6 +1374,16 @@ def calcular_rating_predictivo(
     # ── Suma bruta (A + B + C + Liquidez) ────────────────────────────────
     puntos = pts_c1 + pts_cb + pts_cc + pts_liq
 
+    # ── Piso v25.0: Sit.1 + deuda BCRA $0 = sin historial, no insolvencia ──
+    # No penalizar al cliente que nunca tomó crédito bancario: Score Base 650.
+    _cliente_sin_deuda = (
+        max_sit == 1 and monto_real == 0
+        and not en_mora and not hard_block_mora
+    )
+    if _cliente_sin_deuda:
+        puntos = max(puntos, 650)
+        print(f"[score v{_SCORE_VERSION}] {cuit_limpio} sin_deuda_sit1 → piso 650", flush=True)
+
     # ── Ajuste: concentración de deuda ────────────────────────────────────
     if   nro_entidades == 0 or sin_deudas_real:     puntos += 25
     elif nro_entidades == 1 and monto_total_m < 50: puntos += 18
@@ -1554,6 +1565,8 @@ def calcular_rating_predictivo(
             f"El {round((1-pct_mora)*100, 1)}% de la cartera bancaria se encuentra en Situación 1."
         ) if es_mora_tecnica else None,
         'razonamiento_score': (
+            'Score preventivo: El cliente mantiene situación normal sin registros de deuda bancaria activa.'
+        ) if _cliente_sin_deuda else (
             f"Score preservado: mora técnica de baja materialidad "
             f"(${round(monto_mora_k * 1000):,} ARS, {round(pct_mora*100, 1)}% del total)"
         ) if es_mora_tecnica else (
@@ -2605,6 +2618,47 @@ def _score_response(score_data: dict, solvency: dict = None) -> dict:
     return _safe
 
 
+def _score_cache_read() -> dict:
+    """Lee score_cache.json; devuelve {} en cualquier error."""
+    try:
+        with open(SCORE_CACHE_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _score_cache_write(data: dict):
+    try:
+        with open(SCORE_CACHE_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, default=str)
+    except Exception as e:
+        print(f"[score_cache] write error: {e}", flush=True)
+
+
+@app.route("/save-score-cache", methods=["POST"])
+def save_score_cache():
+    """Persiste score(s) en score_cache.json. Payload: {cuit: score_data, ...}"""
+    try:
+        data = request.get_json(force=True) or {}
+        if not data:
+            return jsonify({"ok": False, "error": "Payload vacío"}), 400
+        nc = lambda x: str(x).replace('-', '').replace(' ', '').strip()
+        cache = _score_cache_read()
+        for cuit_k, score_v in data.items():
+            cache[nc(cuit_k)] = score_v
+        _score_cache_write(cache)
+        print(f"[score_cache] guardados {len(data)} CUITs", flush=True)
+        return jsonify({"ok": True, "guardados": len(data)})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/score-cache-all", methods=["GET"])
+def score_cache_all():
+    """Devuelve todo el contenido de score_cache.json."""
+    return jsonify(_score_cache_read())
+
+
 def _calcular_score_handler(cuit: str):
     """Lógica compartida por /calcular-score/ y /fetch-score/."""
     from urllib.parse import unquote
@@ -2617,6 +2671,12 @@ def _calcular_score_handler(cuit: str):
         if os.path.exists(_fp):
             os.remove(_fp)
         _score_session_cache.pop(cuit_limpio, None)
+    else:
+        # ── Cache persistente en disco (sobrevive reinicios) ──────────────
+        _cached = _score_cache_read().get(cuit_limpio)
+        if _cached and _cached.get('score'):
+            print(f"[fetch-score] {cuit_limpio} → score_cache.json hit ({_cached['score']})", flush=True)
+            return jsonify(_cached)
     try:
         bcra_data, _ = consultar_bcra_cached(cuit_limpio)
         score_data   = calcular_score_servidor(cuit_limpio, bcra_data or {})

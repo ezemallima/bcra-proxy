@@ -2138,9 +2138,18 @@ async function actualizarScoresAlertas() {
     var scoreCell = document.getElementById('score-cell-' + cuit);
     if (scoreCell) scoreCell.innerHTML = '<span style="font-size:11px;color:#94a3b8;display:inline-block;animation:spin .8s linear infinite">↻</span>';
 
+    // Reintento automático: hasta 3 intentos con 2s de espera entre fallos
+    var scoreObj = null;
+    for (var attempt = 0; attempt <= 2; attempt++) {
+      try {
+        var _r = await fetch('/fetch-score/' + cuit + '?fresh=1', {signal: AbortSignal.timeout(30000)});
+        var _obj = await _r.json();
+        if (_obj && _obj.score) { scoreObj = _obj; break; }
+      } catch(_e) {}
+      if (attempt < 2) await new Promise(function(res){ setTimeout(res, 2000); });
+    }
     try {
-      var r = await fetch('/fetch-score/' + cuit + '?fresh=1', {signal: AbortSignal.timeout(30000)});
-      var scoreObj = await r.json();
+      if (!scoreObj) throw new Error('Sin respuesta');
 
       // Actualizar cartera local con todos los campos v22.0
       cartera[i].scoreCompleto      = scoreObj.score;
@@ -2429,7 +2438,38 @@ function switchTab(tab, el) {
   if (tab === 'cheques') { document.getElementById('cheque-resultado').style.display='none'; }
   if (tab === 'historial') renderHistorial();
   if (tab === 'cartera') renderCartera();
-  if (tab === 'alertas') renderAlertas();
+  if (tab === 'alertas') { renderAlertas(); autoCargarScoresServidor(); }
+}
+
+var _alertasLastLoad = 0;
+async function autoCargarScoresServidor() {
+  var now = Date.now();
+  if (now - _alertasLastLoad < 30000) return; // debounce: máximo 1 vez cada 30s
+  _alertasLastLoad = now;
+  try {
+    var r = await fetch('/api-v17-scores?v=' + now);
+    if (!r.ok) return;
+    var d = await r.json();
+    var _sc = d.scores || {};
+    var nc = function(x) { return String(x||'').replace(/-/g,'').replace(/\s/g,'').trim(); };
+    var updated = 0;
+    cartera.forEach(function(c, i) {
+      var sc = _sc[nc(c.cuit)];
+      if (sc && sc.scoreCompleto) {
+        cartera[i].scoreCompleto      = sc.scoreCompleto;
+        cartera[i].scoreRango         = sc.scoreRango;
+        cartera[i].scoreColor         = sc.scoreColor;
+        cartera[i].scoreEmoji         = sc.scoreEmoji;
+        cartera[i].alerta_temprana      = sc.alerta_temprana || false;
+        cartera[i].bloquear_oportunidad = sc.bloquear_oportunidad || false;
+        updated++;
+      }
+    });
+    if (updated > 0) {
+      localStorage.setItem('piat_cartera', JSON.stringify(cartera));
+      renderAlertas();
+    }
+  } catch(e) { /* graceful degradation */ }
 }
 
 async function consultarCliente() {
