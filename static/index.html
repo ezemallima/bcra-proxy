@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="google" content="notranslate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Vende Seguro v17.0 - TOTAL REWRITE</title>
+<title>Vende Seguro v22.0 - Motor de Scoring Inteligente</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap');
 
@@ -2126,7 +2126,6 @@ async function actualizarScoresAlertas() {
   var total = cartera.length;
   var actualizadas = 0;
 
-  // Mapeo cuit -> alerta para actualizar también las alertas
   var alertaMap = {};
   alertas.forEach(function(a, i) { alertaMap[a.cuit] = i; });
 
@@ -2134,28 +2133,56 @@ async function actualizarScoresAlertas() {
     var c = cartera[i];
     var cuit = c.cuit.replace(/-/g,'');
     btn.textContent = 'Actualizando ' + (i+1) + '/' + total + '...';
+
+    // Spinner en la celda de score de esta fila
+    var scoreCell = document.getElementById('score-cell-' + cuit);
+    if (scoreCell) scoreCell.innerHTML = '<span style="font-size:11px;color:#94a3b8;display:inline-block;animation:spin .8s linear infinite">↻</span>';
+
     try {
       var r = await fetch('/fetch-score/' + cuit + '?fresh=1', {signal: AbortSignal.timeout(30000)});
       var scoreObj = await r.json();
-      // Actualizar cartera local
-      cartera[i].scoreCompleto = scoreObj.score;
-      cartera[i].scoreRango = scoreObj.rango;
-      cartera[i].scoreColor = scoreObj.color;
-      cartera[i].scoreEmoji = scoreObj.emoji;
+
+      // Actualizar cartera local con todos los campos v22.0
+      cartera[i].scoreCompleto      = scoreObj.score;
+      cartera[i].scoreRango         = scoreObj.rango;
+      cartera[i].scoreColor         = scoreObj.color;
+      cartera[i].scoreEmoji         = scoreObj.emoji;
+      cartera[i].semaforo           = scoreObj.semaforo;
+      cartera[i].razonamiento_score = scoreObj.razonamiento_score;
+
       // Actualizar alerta si existe
       if (alertaMap[cuit] !== undefined) {
         var ai = alertaMap[cuit];
         alertas[ai].scoreCompleto = scoreObj.score;
-        alertas[ai].scoreRango = scoreObj.rango;
-        alertas[ai].scoreColor = scoreObj.color;
-        alertas[ai].scoreEmoji = scoreObj.emoji;
+        alertas[ai].scoreRango    = scoreObj.rango;
+        alertas[ai].scoreColor    = scoreObj.color;
+        alertas[ai].scoreEmoji    = scoreObj.emoji;
+      }
+
+      // Actualizar DOM en tiempo real: score + semáforo + razonamiento
+      if (scoreCell && scoreObj.score) {
+        var smColor = scoreObj.semaforo === 'verde'    ? '#16a34a'
+                    : scoreObj.semaforo === 'amarillo' ? '#ca8a04' : '#dc2626';
+        var smEmoji = scoreObj.semaforo === 'verde'    ? '🟢'
+                    : scoreObj.semaforo === 'amarillo' ? '🟡'      : '🔴';
+        var razonHtml = scoreObj.razonamiento_score
+          ? '<div style="font-size:10px;color:#64748b;margin-top:2px;max-width:130px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+scoreObj.razonamiento_score+'">'+scoreObj.razonamiento_score+'</div>'
+          : '';
+        scoreCell.innerHTML =
+          '<div style="font-size:13px;font-weight:700;color:'+smColor+';">'+scoreObj.score+'</div>' +
+          '<div style="font-size:10px;color:'+smColor+';">'+smEmoji+' '+scoreObj.rango+'</div>' +
+          razonHtml;
+      } else if (scoreCell) {
+        scoreCell.innerHTML = '<span style="font-size:11px;color:#dc2626;">Sin respuesta</span>';
       }
       actualizadas++;
-    } catch(e) {}
+    } catch(e) {
+      if (scoreCell) scoreCell.innerHTML = '<span style="font-size:11px;color:#dc2626;">Error</span>';
+    }
     await new Promise(r => setTimeout(r, 800));
   }
 
-  // Guardar todo
+  // Persistir todo
   localStorage.setItem('piat_cartera', JSON.stringify(cartera));
   localStorage.setItem('piat_alertas', JSON.stringify(alertas));
   try {
@@ -2884,16 +2911,8 @@ async function analizarCliente() {
   const bcra = bcraEl ? bcraEl.innerText : '';
   const wspThreads = filtrarWSPReciente(buscarEnWSP(cuit));
   const mora = buscarEnMoras(cuit);
-  // Calcular score para incluir en análisis
-  var scorePreAnalisis = null;
-  try {
-    var bcraDataAI = window._ultimoBcraData || null;
-    var histAI = window._ultimoHistorial || null;
-    var chAI = window._chequesUltimaConsulta || null;
-    if (bcraDataAI) {
-      scorePreAnalisis = calcularVendeScore(cuit, bcraDataAI, mora, wspThreads||[], histAI, chAI);
-    }
-  } catch(e) {}
+  // Score para contexto IA — siempre usar el del servidor (ya calculado en consultarCliente)
+  var scorePreAnalisis = window._ultimoScoreVende || null;
   const btn = document.getElementById('btn-analizar');
   const resEl = document.getElementById('analisis-resultado');
   btn.disabled = true; btn.textContent = 'Analizando...'; resEl.style.display = 'none';
@@ -3883,13 +3902,17 @@ function renderAlertas() {
       scoreEmoji = c.scoreEmoji;
       scoreRango = c.scoreRango;
     } else {
-      var bcraDataC = {results: {periodos:[]}, sin_deudas: c.ultimaSit === 1};
-      if (c.ultimaSit) bcraDataC = {results: {periodos: [{entidades: [{situacion: c.ultimaSit, entidad: 'BCRA', monto:0}]}]}};
-      var scoreC = calcularVendeScore(c.cuit, bcraDataC, mora, buscarEnWSP(c.cuit)||[]);
-      scoreNum = scoreC.score; scoreColor = scoreC.color; scoreEmoji = scoreC.emoji; scoreRango = scoreC.rango;
+      scoreNum = null; scoreColor = '#94a3b8'; scoreEmoji = ''; scoreRango = '';
     }
-    html += '<div style="font-size:13px;font-weight:700;color:'+scoreColor+';">'+scoreNum+'</div>';
-    html += '<div style="font-size:10px;color:'+scoreColor+';">'+scoreEmoji+' '+scoreRango+'</div>';
+    var _cuitRow = c.cuit.replace(/-/g,'');
+    html += '<div id="score-cell-' + _cuitRow + '" style="text-align:right;">';
+    if (scoreNum) {
+      html += '<div style="font-size:13px;font-weight:700;color:'+scoreColor+';">'+scoreNum+'</div>';
+      html += '<div style="font-size:10px;color:'+scoreColor+';">'+scoreEmoji+' '+scoreRango+'</div>';
+    } else {
+      html += '<span style="font-size:11px;color:#94a3b8;">Sin score</span>';
+    }
+    html += '</div>';
     if (mora) html += '<span class="badge badge-mora">Mora</span>';
     if (buscarEnWSP(c.cuit)) html += '<span class="badge badge-wsp">En bodegas</span>';
     html += c.ultimaSit ? getBadge(c.ultimaSit) : '<span style="font-size:11px;color:#aaa;">Pendiente</span>';
