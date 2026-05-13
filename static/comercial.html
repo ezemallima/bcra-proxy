@@ -148,7 +148,26 @@
   .section-sub { font-size: 13px; color: var(--text2); margin-bottom: 16px; }
   #loading-overlay { position: fixed; inset: 0; background: rgba(15,15,15,0.85); display: none; align-items: center; justify-content: center; z-index: 999; flex-direction: column; gap: 16px; }
   .loading-text { font-size: 14px; color: var(--text2); }
+  .chq-panel { background:#0a1628; border-radius:12px; padding:16px; margin-top:4px; }
+  .chq-risk-banner { border-radius:8px; padding:10px 14px; font-size:12px; font-weight:700; letter-spacing:.5px; margin-bottom:12px; }
+  .chq-risk-banner.alto { background:rgba(239,68,68,.15); color:#fca5a5; border:1px solid rgba(239,68,68,.3); }
+  .chq-risk-banner.medio { background:rgba(251,191,36,.12); color:#fde68a; border:1px solid rgba(251,191,36,.25); }
+  .chq-risk-banner.bajo { background:rgba(34,197,94,.12); color:#86efac; border:1px solid rgba(34,197,94,.25); }
+  .chq-chart-row { display:flex; align-items:center; gap:16px; margin-bottom:12px; }
+  .chq-chart-row canvas { flex-shrink:0; }
+  .chq-legend { display:flex; flex-direction:column; gap:6px; }
+  .chq-legend-item { display:flex; align-items:center; gap:8px; font-size:12px; color:#cbd5e1; }
+  .chq-legend-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+  .chq-summary { font-size:12px; color:#94a3b8; margin-bottom:10px; }
+  .chq-ia { background:rgba(99,102,241,.1); border:1px solid rgba(99,102,241,.25); border-radius:8px; padding:10px 12px; font-size:11px; color:#a5b4fc; margin-bottom:10px; line-height:1.5; }
+  .chq-clean { color:#4ade80; font-size:13px; }
+  .chq-detail { margin-top:8px; }
+  .chq-row { display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid rgba(255,255,255,.06); font-size:11px; color:#cbd5e1; }
+  .chq-row:last-child { border-bottom:none; }
+  .chq-badge-impago { background:rgba(239,68,68,.2); color:#fca5a5; padding:2px 7px; border-radius:4px; font-size:10px; font-weight:700; }
+  .chq-badge-pagado { background:rgba(34,197,94,.15); color:#86efac; padding:2px 7px; border-radius:4px; font-size:10px; font-weight:700; }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -849,7 +868,19 @@ async function abrirModalCliente(cuit, nombre) {
               "| cache anterior:", clienteLocal?.score,
               "| scoreData:", _scoreData);
   // Pasar el objeto completo — renderBcraModal usará _scoreData.score, no el caché de CARTERA_LOCAL
-  if (bcraEl) bcraEl.innerHTML = renderBcraModal(bcraData, chData, histData, _scoreData, clienteLocal);
+  if (bcraEl) {
+    bcraEl.innerHTML = renderBcraModal(bcraData, chData, histData, _scoreData, clienteLocal);
+    const _chqCanvasEl = bcraEl.querySelector('canvas[id^="chq-modal-"]');
+    if (_chqCanvasEl) {
+      const _chqCid = _chqCanvasEl.id;
+      const _chqCausales = (chData?.results?.causales)||[];
+      let _chqAll = [];
+      _chqCausales.forEach(function(ca){ (ca.entidades||[]).forEach(function(en){ (en.detalle||[]).forEach(function(d){ _chqAll.push(d); }); }); });
+      const _rescC = _chqAll.filter(function(d){ return !(!d.fechaPago||d.estadoMulta==='IMPAGA'); }).length;
+      const _nopC  = _chqAll.filter(function(d){ return !d.fechaPago||d.estadoMulta==='IMPAGA'; }).length;
+      setTimeout(function(){ initChequesDonut(_chqCid, _rescC, _nopC); }, 60);
+    }
+  }
 }
 
 function switchModalTab(tab, btn) {
@@ -901,6 +932,84 @@ function renderFacturas(data, nombre) {
   </button>`;
 
   return html;
+}
+
+function _chqIsLevantado(item) {
+  if (typeof item.levantado === 'boolean') return item.levantado;
+  if (typeof item.fechaPago !== 'undefined') return !!item.fechaPago;
+  return !!(item.fechaPago && item.estadoMulta !== 'IMPAGA');
+}
+
+function _chqParseFecha(f) {
+  if (!f) return null;
+  var m = f.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (m) return new Date(+m[3], +m[2]-1, +m[1]);
+  m = f.match(/^(\d{4})-(\d{2})$/);
+  if (m) return new Date(+m[1], +m[2]-1, 1);
+  return null;
+}
+
+function buildChequesRiesgoHtml(cheques, canvasId) {
+  var rescN = cheques.filter(_chqIsLevantado).length;
+  var nopagN = cheques.filter(function(c){ return !_chqIsLevantado(c); }).length;
+  var pct = cheques.length ? Math.round(nopagN / cheques.length * 100) : 0;
+  var nivel = nopagN === 0 ? 'bajo' : (pct >= 50 ? 'alto' : 'medio');
+  var bannerTxt = nivel === 'bajo' ? '✓ RIESGO BAJO — Sin cheques impagos activos'
+    : nivel === 'alto' ? '⚠ RIESGO ALTO — Mayoría de cheques sin levantar'
+    : '⚡ RIESGO MEDIO — Cheques parcialmente regularizados';
+  var montoImpago = cheques.filter(function(c){ return !_chqIsLevantado(c); }).reduce(function(a,c){ return a+(c.monto||0); }, 0);
+  var montoTotal  = cheques.reduce(function(a,c){ return a+(c.monto||0); }, 0);
+  var sorted = cheques.slice().sort(function(a,b){
+    var da = _chqParseFecha(a.fecha||a.fechaRechazo), db = _chqParseFecha(b.fecha||b.fechaRechazo);
+    return (db?db.getTime():0) - (da?da.getTime():0);
+  });
+  var iaTxt;
+  if (nopagN === 0) {
+    iaTxt = 'Todos los cheques han sido regularizados. Historial negativo presente pero sin exposición activa.';
+  } else if (nivel === 'alto') {
+    iaTxt = 'Alto porcentaje de cheques impagos (' + pct + '%). Se recomienda solicitar garantías o reducir exposición crediticia.';
+  } else {
+    iaTxt = pct + '% de cheques sin levantar ($' + (montoImpago/1000).toLocaleString('es-AR',{maximumFractionDigits:0}) + 'K). Evaluar tendencia antes de extender crédito.';
+  }
+  var html = '<div class="chq-panel">';
+  html += '<div class="chq-risk-banner ' + nivel + '">' + bannerTxt + '</div>';
+  html += '<div class="chq-chart-row">';
+  html += '<canvas id="' + canvasId + '" width="90" height="90"></canvas>';
+  html += '<div class="chq-legend">';
+  html += '<div class="chq-legend-item"><span class="chq-legend-dot" style="background:#ef4444"></span>' + nopagN + ' Impago' + (nopagN!==1?'s':'') + '</div>';
+  html += '<div class="chq-legend-item"><span class="chq-legend-dot" style="background:#22c55e"></span>' + rescN + ' Levantado' + (rescN!==1?'s':'') + '</div>';
+  html += '</div></div>';
+  html += '<div class="chq-summary">Total: <strong>' + cheques.length + '</strong> cheques · Monto impago: <strong>$' + (montoImpago/1000).toLocaleString('es-AR',{maximumFractionDigits:0}) + 'K</strong> / Total: $' + (montoTotal/1000).toLocaleString('es-AR',{maximumFractionDigits:0}) + 'K</div>';
+  html += '<div class="chq-ia">🤖 ' + iaTxt + '</div>';
+  html += '<div class="chq-detail">';
+  sorted.slice(0,8).forEach(function(ch){
+    var imp = !_chqIsLevantado(ch);
+    html += '<div class="chq-row"><span>' + (ch.fecha||ch.fechaRechazo||'-') + ' · ' + (ch.motivo||ch.causal||'-') + '</span>';
+    html += '<span style="display:flex;align-items:center;gap:8px;"><span style="color:#94a3b8">$' + ((ch.monto||0)/1000).toLocaleString('es-AR',{maximumFractionDigits:0}) + 'K</span>';
+    html += '<span class="' + (imp?'chq-badge-impago':'chq-badge-pagado') + '">' + (imp?'IMPAGO':'PAGADO') + '</span></span></div>';
+  });
+  if (cheques.length > 8) html += '<div style="font-size:11px;color:#64748b;text-align:center;padding-top:6px">+' + (cheques.length-8) + ' más</div>';
+  html += '</div></div>';
+  return html;
+}
+
+function initChequesDonut(canvasId, rescN, nopagN) {
+  var el = document.getElementById(canvasId);
+  if (!el || !window.Chart) return;
+  new Chart(el, {
+    type: 'doughnut',
+    data: {
+      datasets: [{
+        data: nopagN + rescN === 0 ? [1] : [nopagN, rescN],
+        backgroundColor: nopagN + rescN === 0 ? ['#334155'] : ['#ef4444','#22c55e'],
+        borderWidth: 0, hoverOffset: 4
+      }]
+    },
+    options: {
+      cutout: '72%', responsive: false, animation: { duration: 600 },
+      plugins: { legend: { display: false }, tooltip: { enabled: false } }
+    }
+  });
 }
 
 function renderBcraModal(bcraData, chData, histData, scoreData, clienteLocal) {
@@ -962,18 +1071,14 @@ function renderBcraModal(bcraData, chData, histData, scoreData, clienteLocal) {
     </div>`;
   }
 
+  const _chqId = 'chq-modal-' + Date.now();
+  const _chqItems = dchq.map(function(d) {
+    return { fecha: d.fechaRechazo, motivo: d.causal||d.motivo||'', monto: d.monto||0,
+             levantado: !(!d.fechaPago||d.estadoMulta==='IMPAGA'), fechaPago: d.fechaPago, estadoMulta: d.estadoMulta };
+  });
   html += `<div class="card"><div class="card-title">Cheques rechazados</div>`;
-  if (!dchq.length) { html += `<div style="color:var(--green);font-size:13px">✓ Sin cheques rechazados</div>`; }
-  else {
-    html += `<div style="font-size:12px;color:var(--text2);margin-bottom:10px">${dchq.length} total · ${activos.length} impagos</div>`;
-    dchq.slice(0,5).forEach(d => {
-      const imp = !d.fechaPago||d.estadoMulta==='IMPAGA';
-      html += `<div class="cheque-item"><div><div class="cheque-monto">$${fmtM(d.monto||0)}</div>
-      <div style="font-size:10px;color:var(--text2)">${d.nroCheque||''} · ${d.fechaRechazo||''}</div></div>
-      <span class="cheque-estado ${imp?'estado-impago':'estado-pagado'}">${imp?'IMPAGO':'PAGADO'}</span></div>`;
-    });
-    if (dchq.length>5) html += `<div style="font-size:11px;color:var(--text2);text-align:center;margin-top:8px">+${dchq.length-5} más</div>`;
-  }
+  if (!dchq.length) { html += `<div class="chq-clean">✓ Sin cheques rechazados</div>`; }
+  else { html += buildChequesRiesgoHtml(_chqItems, _chqId); }
   html += '</div>';
   return html;
 }

@@ -240,6 +240,28 @@
   .loading-spinner { display: inline-block; width: 32px; height: 32px; border: 3px solid var(--azul-borde); border-top-color: var(--azul-claro); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 12px; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
+  /* ── Cheques Risk Panel v26.0 ─────────────────────────────────────────── */
+  .chq-panel { background: #0a1628; border-radius: 10px; padding: 14px; margin: 4px 0; }
+  .chq-risk-banner { display: flex; justify-content: space-between; align-items: center; background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.4); border-radius: 7px; padding: 9px 13px; margin-bottom: 12px; }
+  .chq-risk-label { font-size: 9px; font-weight: 700; color: #ef4444; letter-spacing: 1.8px; text-transform: uppercase; }
+  .chq-risk-monto { font-family: 'DM Mono', monospace; font-size: 16px; font-weight: 700; color: #ef4444; }
+  .chq-chart-row { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
+  .chq-legend { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+  .chq-leg-item { display: flex; align-items: center; gap: 8px; }
+  .chq-leg-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .chq-leg-label { font-size: 10px; color: #64748b; flex: 1; text-transform: uppercase; letter-spacing: 0.8px; }
+  .chq-leg-val { font-family: 'DM Mono', monospace; font-size: 14px; font-weight: 700; color: #e2e8f0; }
+  .chq-summary { border-top: 1px solid #1e293b; padding-top: 10px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 5px; }
+  .chq-sum-row { display: flex; justify-content: space-between; align-items: center; padding: 3px 0; }
+  .chq-sum-key { font-size: 10px; color: #475569; text-transform: uppercase; letter-spacing: 0.8px; font-variant: small-caps; }
+  .chq-sum-val { font-family: 'DM Mono', monospace; font-size: 12px; font-weight: 600; color: #cbd5e1; }
+  .chq-sum-val.danger { color: #ef4444 !important; font-weight: 700; }
+  .chq-ia { background: rgba(37,99,235,0.08); border-left: 2px solid #2563eb; padding: 8px 11px; border-radius: 0 6px 6px 0; }
+  .chq-ia-label { font-size: 9px; font-weight: 700; color: #3b82f6; letter-spacing: 1.5px; text-transform: uppercase; display: block; margin-bottom: 4px; }
+  .chq-ia-text { font-size: 11px; color: #94a3b8; line-height: 1.55; }
+  .chq-clean { padding: 12px 0; text-align: center; }
+  .chq-clean-label { font-size: 10px; font-weight: 700; color: #10b981; letter-spacing: 1.8px; text-transform: uppercase; }
+
   /* AVATAR */
   .avatar {
     width: 44px; height: 44px; border-radius: 12px;
@@ -2614,21 +2636,17 @@ async function consultarCliente() {
           });
         });
       }
-      if (todosChq.length && chequesCard && chequesEl) {
-        chequesCard.style.display = 'block';
-        chequesCard.style.borderLeft = '4px solid #f97316';
-        chequesCard.style.background = '#fff8f0';
-        var sinLevantar = todosChq.filter(function(c) { return !c.levantado; }).length;
-        var resumen = '<div style="font-size:13px;margin-bottom:8px;"><strong style="color:#991b1b;">' + todosChq.length + ' cheque(s) rechazado(s)</strong>';
-        if (sinLevantar) resumen += ' · <span style="color:#991b1b;font-weight:600;">' + sinLevantar + ' sin levantar ⚠️</span>';
-        resumen += '</div>';
-        var tabla = '<table class="bcra-table"><thead><tr><th>Fecha</th><th>Motivo</th><th>Monto</th><th>Estado</th></tr></thead><tbody>';
-        todosChq.slice(0,10).forEach(function(ch) {
-          tabla += '<tr><td>' + (ch.fecha||'-') + '</td><td>' + (ch.motivo||'-') + '</td><td>$' + ((ch.monto||0).toLocaleString('es-AR')) + '</td><td>' + (ch.levantado ? '<span style="color:#166534;">✓ Levantado</span>' : '<span style="color:#991b1b;font-weight:600;">Sin levantar</span>') + '</td></tr>';
-        });
-        if (todosChq.length > 10) tabla += '<tr><td colspan="4" style="font-size:12px;color:#64748b;text-align:center;">... y ' + (todosChq.length-10) + ' más</td></tr>';
-        tabla += '</tbody></table>';
-        chequesEl.innerHTML = resumen + tabla;
+      if (chequesCard && chequesEl) {
+        if (todosChq.length) {
+          chequesCard.style.display = 'block';
+          chequesCard.style.borderLeft = '4px solid #ef4444';
+          chequesCard.style.background = 'transparent';
+          var _cid = 'chq-main-' + Date.now();
+          var _resc  = todosChq.filter(_chqIsLevantado).length;
+          var _nopag = todosChq.filter(function(c){ return !_chqIsLevantado(c); }).length;
+          chequesEl.innerHTML = buildChequesRiesgoHtml(todosChq, _cid);
+          setTimeout(function(){ initChequesDonut(_cid, _resc, _nopag); }, 60);
+        }
       }
     }
   } catch(e) {}
@@ -3988,6 +4006,79 @@ function mostrarVeredicto(sinLevantar, totalCheques, tieneNegativo, maxSit) {
   document.getElementById('cheque-veredicto').innerHTML = html;
 }
 
+// ── Cheques Risk Panel v26.0 ─────────────────────────────────────────────
+function _chqIsLevantado(item) {
+  if (typeof item.levantado === 'boolean') return item.levantado;
+  return !!(item.fechaPago && item.estadoMulta !== 'IMPAGA');
+}
+function _chqParseFecha(f) {
+  if (!f) return null;
+  try {
+    if (f.includes('/')) { var p=f.split('/'); return new Date(+p[2],+p[1]-1,+p[0]); }
+    if (/^\d{4}-\d{2}$/.test(f)) return new Date(f+'-01');
+    return new Date(f);
+  } catch(e) { return null; }
+}
+function buildChequesRiesgoHtml(cheques, canvasId) {
+  if (!cheques || !cheques.length)
+    return '<div class="chq-clean"><span class="chq-clean-label">SIN CHEQUES RECHAZADOS</span></div>';
+  var rescatados = cheques.filter(_chqIsLevantado);
+  var sinPagar   = cheques.filter(function(c){ return !_chqIsLevantado(c); });
+  var fmt = function(n){ return (n||0).toLocaleString('es-AR'); };
+  var montoTotal    = cheques.reduce(function(s,c){ return s+(c.monto||0); },0);
+  var montoResc     = rescatados.reduce(function(s,c){ return s+(c.monto||0); },0);
+  var montoNoPag    = sinPagar.reduce(function(s,c){ return s+(c.monto||0); },0);
+  var hace6m = new Date(); hace6m.setMonth(hace6m.getMonth()-6);
+  var recientes = sinPagar.filter(function(c){
+    var f = _chqParseFecha(c.fecha||c.fechaRechazo); return f && f > hace6m;
+  });
+  var iaText = sinPagar.length === 0
+    ? (rescatados.length + ' cheque(s) con antecedente, todos regularizados. Sin exposición vigente.')
+    : recientes.length > 0
+      ? 'ALERTA ACTIVA: ' + recientes.length + ' rechazo(s) en los últimos 6 meses. No extender crédito sin garantías.'
+      : sinPagar.length + ' cheque(s) impago(s), antigüedad > 6 meses. Monitorear antes de operar.';
+  var banner = montoNoPag > 0
+    ? '<div class="chq-risk-banner"><span class="chq-risk-label">MONTO EN RIESGO</span><span class="chq-risk-monto">$' + fmt(montoNoPag) + '</span></div>'
+    : '';
+  return '<div class="chq-panel">' + banner +
+    '<div class="chq-chart-row">' +
+      '<canvas id="' + canvasId + '" width="120" height="120" style="flex-shrink:0"></canvas>' +
+      '<div class="chq-legend">' +
+        '<div class="chq-leg-item"><span class="chq-leg-dot" style="background:#10b981"></span><span class="chq-leg-label">Rescatados</span><span class="chq-leg-val">' + rescatados.length + '</span></div>' +
+        '<div class="chq-leg-item"><span class="chq-leg-dot" style="background:#ef4444"></span><span class="chq-leg-label">Sin pagar</span><span class="chq-leg-val">' + sinPagar.length + '</span></div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="chq-summary">' +
+      '<div class="chq-sum-row"><span class="chq-sum-key">Total histórico</span><span class="chq-sum-val">$' + fmt(montoTotal) + '</span></div>' +
+      '<div class="chq-sum-row"><span class="chq-sum-key">Total recuperado</span><span class="chq-sum-val" style="color:#10b981">$' + fmt(montoResc) + '</span></div>' +
+      '<div class="chq-sum-row"><span class="chq-sum-key">Deuda pendiente</span><span class="chq-sum-val' + (montoNoPag>0?' danger':'') + '">$' + fmt(montoNoPag) + '</span></div>' +
+    '</div>' +
+    '<div class="chq-ia"><span class="chq-ia-label">Análisis de Tendencia</span><span class="chq-ia-text">' + iaText + '</span></div>' +
+  '</div>';
+}
+function initChequesDonut(canvasId, rescN, nopagN) {
+  var ctx = document.getElementById(canvasId);
+  if (!ctx || typeof Chart === 'undefined') return;
+  var total = rescN + nopagN;
+  var hasData = total > 0;
+  new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: hasData ? ['Rescatados','Sin Pagar'] : ['Sin problemas'],
+      datasets: [{ data: hasData ? [rescN, nopagN] : [1],
+        backgroundColor: hasData ? ['#10b981','#ef4444'] : ['#10b981'],
+        borderWidth: 0, hoverOffset: 3 }]
+    },
+    options: { responsive: false, cutout: '65%',
+      plugins: { legend: { display: false },
+        tooltip: { callbacks: { label: function(c){
+          var pct = hasData ? ((c.parsed/total)*100).toFixed(1) : 100;
+          return ' '+c.label+': '+c.parsed+' ('+pct+'%)';
+        }}}},
+      animation: { duration: 500 } }
+  });
+}
+
 async function consultarCheque() {
   var raw = document.getElementById('cuit-cheque').value.replace(/-/g,'').trim();
   if (!raw || raw.length < 10) { alert('Ingresá un CUIT válido'); return; }
@@ -4060,16 +4151,11 @@ async function consultarCheque() {
     if (!cheques.length) {
       chEl.innerHTML = '<div class="empty-state" style="color:#166534;">✓ Sin cheques rechazados en el BCRA.</div>';
     } else {
-      var resumen = '<div style="font-size:13px;margin-bottom:8px;"><strong style="color:#991b1b;">' + cheques.length + ' cheque(s) rechazado(s)</strong>';
-      if (sinLevantar.length) resumen += ' · <span style="color:#991b1b;font-weight:600;">' + sinLevantar.length + ' sin levantar ⚠️</span>';
-      resumen += '</div>';
-      var tabla = '<table class="bcra-table"><thead><tr><th>Fecha</th><th>Motivo</th><th>Monto</th><th>Estado</th></tr></thead><tbody>';
-      cheques.slice(0, 15).forEach(function(ch) {
-        tabla += '<tr><td>' + (ch.fecha||'-') + '</td><td>' + (ch.motivo||'-') + '</td><td>$' + ((ch.monto||0).toLocaleString('es-AR')) + '</td><td>' + (ch.levantado ? '<span style="color:#166534;">✓ Levantado</span>' : '<span style="color:#991b1b;font-weight:600;">Sin levantar</span>') + '</td></tr>';
-      });
-      if (cheques.length > 15) tabla += '<tr><td colspan="4" style="font-size:12px;color:#64748b;text-align:center;">... y ' + (cheques.length-15) + ' más</td></tr>';
-      tabla += '</tbody></table>';
-      chEl.innerHTML = resumen + tabla;
+      var _cid2 = 'chq-tab-' + Date.now();
+      var _resc2 = cheques.filter(_chqIsLevantado).length;
+      var _nopag2 = cheques.filter(function(c){ return !_chqIsLevantado(c); }).length;
+      chEl.innerHTML = buildChequesRiesgoHtml(cheques, _cid2);
+      setTimeout(function(){ initChequesDonut(_cid2, _resc2, _nopag2); }, 60);
     }
   }
 
