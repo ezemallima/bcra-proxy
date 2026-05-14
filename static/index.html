@@ -248,6 +248,31 @@
   .cli-meta-tag { font-size: 11px; color: #64748b; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 9999px; padding: 3px 10px; }
   .cli-btn-detalle { margin-left: auto; font-size: 12px !important; padding: 7px 16px !important; }
 
+  /* ── DECISION GRID v31 ── */
+  #decision-grid { display: grid; grid-template-columns: 3fr 2fr; gap: 12px; margin-bottom: 8px; align-items: start; }
+
+  /* ── COMPACT VERDICT ── */
+  .verdict-compact { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-radius: 10px; border: 1px solid; margin-bottom: 0; }
+  .verdict-compact.aprobar { background: #f0fdf4; border-color: #86efac; }
+  .verdict-compact.revisar { background: #fefce8; border-color: #fde047; }
+  .verdict-compact.rechazar { background: #fff1f2; border-color: #fca5a5; }
+  .vc-icon { font-size: 18px; flex-shrink: 0; line-height: 1; }
+  .vc-text { font-size: 13px; font-weight: 700; }
+  .verdict-compact.aprobar .vc-text { color: #166534; }
+  .verdict-compact.revisar .vc-text { color: #92400e; }
+  .verdict-compact.rechazar .vc-text { color: #991b1b; }
+
+  /* ── MORA BANNER ── */
+  .mora-alert { background: #fef2f2; border: 1px solid #fca5a5; border-left: 4px solid #dc2626; border-radius: 12px; padding: 13px 16px; margin-bottom: 8px; }
+  .mora-alert-title { font-size: 13px; font-weight: 800; color: #991b1b; margin-bottom: 4px; letter-spacing: -0.2px; }
+  .mora-alert-detail { font-size: 13px; color: #7f1d1d; line-height: 1.55; }
+
+  /* ── ALERTAS PROMPT ── */
+  .alertas-prompt { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 3rem 1rem; text-align: center; }
+  .alertas-prompt-icon { font-size: 32px; margin-bottom: 10px; line-height: 1; }
+  .alertas-prompt-text { font-size: 14px; font-weight: 600; color: #64748b; }
+  .alertas-prompt-sub { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+
   /* ── DECISION HEADER v30 ── */
   .decision-header { display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
   .decision-avatar { width: 54px; height: 54px; border-radius: 14px; color: #fff; font-size: 22px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; letter-spacing: -1px; }
@@ -383,6 +408,7 @@
     .info-grid, .afip-grid { grid-template-columns: 1fr; }
     .cli-data-grid { grid-template-columns: 1fr 1fr; }
     .buscador-input { font-size: 14px; padding: 12px 14px 12px 42px; }
+    #decision-grid { grid-template-columns: 1fr; }
   }
 </style>
 </head>
@@ -466,7 +492,7 @@
       </div>
       <div class="sb-brand-text">
         <div class="sb-name">Vende Seguro</div>
-        <div class="sb-ver">v30.0 · Risk Intelligence</div>
+        <div class="sb-ver">v31.0 · Risk Intelligence</div>
       </div>
     </div>
     <nav class="sb-nav">
@@ -568,12 +594,16 @@
     <div id="resultado" style="display:none;">
       <div id="mora-alert-container"></div>
       <div id="cliente-header" class="card" style="margin-bottom:8px;"></div>
-      <div id="verdict-container"></div>
-      <div id="vende-score-container"></div>
 
-      <!-- BCRA card with visual indicator injected by JS before table -->
-      <div class="card" style="margin-bottom:8px;">
-        <div id="bcra-data"><div class="empty-state" style="color:#64748b;">Consultando BCRA...</div></div>
+      <!-- Decision Grid: Score (left 3/5) | Verdict + BCRA (right 2/5) -->
+      <div id="decision-grid">
+        <div id="vende-score-container"></div>
+        <div>
+          <div id="verdict-container" style="margin-bottom:8px;"></div>
+          <div class="card" style="margin:0;">
+            <div id="bcra-data"><div class="empty-state" style="color:#64748b;">Consultando BCRA...</div></div>
+          </div>
+        </div>
       </div>
 
       <div id="cheques-rechazados-card" class="card" style="margin-bottom:8px;display:none;">
@@ -854,11 +884,6 @@
       <div class="progress-msg" id="verificar-progress"></div>
     </div>
 
-    <div id="alertas-nuevas" style="display:none;margin-bottom:1rem;">
-      <div style="font-size:12px;color:#991b1b;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">⚠ Cambios detectados</div>
-      <div id="alertas-lista"></div>
-    </div>
-
     <div id="alertas-counters" class="alr-counters">
       <div class="alr-counter critico" onclick="toggleAlertaFilter('critico')" id="filter-critico">
         <div class="alr-ico-wrap critico"><svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
@@ -883,11 +908,12 @@
       </div>
     </div>
 
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px;">
-      <div style="font-size:13px;font-weight:600;color:var(--texto);">Estado de cartera</div>
-      <div style="font-size:11px;color:#888;" id="ultima-verificacion"></div>
+    <div id="alertas-nuevas" style="display:none;margin-bottom:12px;margin-top:4px;">
+      <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;padding-left:2px;">Cambios recientes</div>
+      <div id="alertas-lista"></div>
     </div>
-    <div id="cartera-bcra-lista"><div class="empty-state">No hay clientes en la cartera.<br>Agregá clientes en la pestaña Cartera.</div></div>
+
+    <div id="cartera-bcra-lista"></div>
   </div>
 
   <div id="buscador" class="section">
@@ -2900,10 +2926,11 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
   headerHtml += '</div></div>';
   document.getElementById('cliente-header').innerHTML = headerHtml;
   let v = '';
-  if (esTimeout) v = '';
-  else if (maxSit === 1) v = `<div class="verdict-box aprobar"><div class="verdict-title aprobar">✓ Situación normal en el sistema financiero</div><div class="verdict-detail">El cliente registra situación 1 en todas las entidades bancarias. Sin alertas crediticias activas.</div></div>`;
-  else if (maxSit === 2) v = `<div class="verdict-box revisar"><div class="verdict-title revisar">⚠ Atraso detectado — Operación condicionada</div><div class="verdict-detail">El cliente registra atrasos en al menos una entidad bancaria. Evaluar historial completo y condiciones de pago antes de operar.</div></div>`;
-  else v = `<div class="verdict-box rechazar"><div class="verdict-title rechazar">✗ Mora bancaria activa — Operación de alto riesgo</div><div class="verdict-detail">El cliente registra ${sitNombre(maxSit).toLowerCase()} (situación ${maxSit}) en el sistema financiero. Riesgo crediticio elevado.</div></div>`;
+  if (!esTimeout) {
+    if (maxSit === 1) v = '<div class="verdict-compact aprobar"><span class="vc-icon">✅</span><span class="vc-text">Situación Normal — Sin alertas bancarias</span></div>';
+    else if (maxSit === 2) v = '<div class="verdict-compact revisar"><span class="vc-icon">⚠️</span><span class="vc-text">Situación 2 — Atrasos detectados</span></div>';
+    else v = '<div class="verdict-compact rechazar"><span class="vc-icon">⛔</span><span class="vc-text">Situación ' + maxSit + ' — ' + sitNombre(maxSit) + '</span></div>';
+  }
   document.getElementById('verdict-container').innerHTML = v;
 
   // ── SCORE VENDE SEGURO — motor unificado v17.1 ──
@@ -4148,23 +4175,24 @@ function renderAlertas() {
     alertasNuevasDiv.style.display = 'none';
   }
 
-  const ultimaVerif = localStorage.getItem('piat_ultima_verif');
-  if (ultimaVerif) { var uvEl = document.getElementById('ultima-verificacion'); if(uvEl) uvEl.textContent = 'Última verificación: ' + ultimaVerif; }
-
-  // Update counters
+  // Update counters (list re-renders via _renderAlertasList only when filter is active)
   var nCrit = cartera.filter(function(c){ return c.ultimaSit && c.ultimaSit >= 3; }).length;
   var nAdv  = cartera.filter(function(c){ return c.ultimaSit === 2; }).length;
   var nExc  = cartera.filter(function(c){ return c.saldoActual && c.limiteCreditoARS && Number(c.saldoActual) > Number(c.limiteCreditoARS); }).length;
   var cntC = document.getElementById('cnt-criticos'); if(cntC) cntC.textContent = nCrit;
   var cntA = document.getElementById('cnt-advertencias'); if(cntA) cntA.textContent = nAdv;
   var cntE = document.getElementById('cnt-excesos'); if(cntE) cntE.textContent = nExc;
-
   _renderAlertasList();
 }
 
 function _renderAlertasList() {
   const listaEl = document.getElementById('cartera-bcra-lista');
   if (!listaEl) return;
+
+  if (_alertasFilter === null) {
+    listaEl.innerHTML = '<div class="alertas-prompt"><div class="alertas-prompt-icon">🔎</div><div class="alertas-prompt-text">Seleccioná un filtro para ver los clientes</div><div class="alertas-prompt-sub">Hacé clic en Críticos, Advertencias o Excesos de Límite</div></div>';
+    return;
+  }
 
   if (!cartera.length) {
     listaEl.innerHTML = '<div class="empty-state">No hay clientes en la cartera.<br>Agregá clientes en la pestaña Cartera.</div>';
