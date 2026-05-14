@@ -2462,6 +2462,7 @@ async function init() {
 }
 
 var _kpiCache = { total: '—', criticos: '0', mora: '0', dso: '—' };
+var _bcraVerifiedMap = {}; // cuit → {ultimaSit, ultimaVerif} — fuente de verdad para contadores alertas
 
 function actualizarMetricas() {
   if (document.getElementById('consulta') && document.getElementById('consulta').classList.contains('active')) return;
@@ -2487,6 +2488,13 @@ async function cargarCarteraServidor() {
         localStorage.setItem('piat_ultima_verif', data.ultima_verif);
       }
       if (data.cartera && data.cartera.length > 0) {
+        // Poblar _bcraVerifiedMap antes del merge (fuente de verdad para contadores)
+        _bcraVerifiedMap = {};
+        data.cartera.forEach(function(c) {
+          if (c.cuit && (c.ultimaSit || c.ultimaVerif)) {
+            _bcraVerifiedMap[c.cuit] = {ultimaSit: c.ultimaSit, ultimaVerif: c.ultimaVerif};
+          }
+        });
         // Fusionar situaciones verificadas con cartera local
         data.cartera.forEach(function(c) {
           var idx = cartera.findIndex(function(lc) { return lc.cuit === c.cuit; });
@@ -2827,13 +2835,24 @@ async function consultarCliente() {
   }
 
   // Saldos internos Piattelli — cuenta corriente + DSO del cliente
+  console.log('[saldos] Iniciando fetch para CUIT:', raw);
   try {
     var saldosR = await fetch('/saldos-cuit/' + raw, {signal: AbortSignal.timeout(15000)});
+    console.log('[saldos] Respuesta HTTP:', saldosR.status, saldosR.ok ? 'OK' : 'ERROR');
     if (saldosR.ok) {
       var saldosData = await saldosR.json();
+      console.log('[saldos] Datos:', saldosData.facturas ? saldosData.facturas.length + ' facturas' : 'sin facturas', '| saldo total:', saldosData.total_saldo, '| nombre match:', saldosData.nombre_match || '—');
+      window._saldosCliente = saldosData;
       renderSaldosInterno(saldosData, raw);
+    } else {
+      console.warn('[saldos] HTTP error:', saldosR.status);
+      window._saldosCliente = null;
+      var saldosEl = document.getElementById('saldos-interno-card');
+      if (saldosEl) saldosEl.style.display = 'none';
     }
   } catch(e) {
+    console.warn('[saldos] Fetch error:', e.message);
+    window._saldosCliente = null;
     var saldosEl = document.getElementById('saldos-interno-card');
     if (saldosEl) saldosEl.style.display = 'none';
   }
@@ -2844,7 +2863,13 @@ function renderSaldosInterno(data, cuit) {
   if (!el) return;
   var facturas = data.facturas || [];
   var totalSaldo = data.total_saldo || 0;
-  if (!facturas.length) { el.style.display = 'none'; return; }
+  if (!facturas.length) {
+    el.style.display = 'block';
+    el.innerHTML = '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">' +
+      '<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#2563eb;">Cuenta Corriente Piattelli</span>' +
+      '</div><div style="font-size:13px;color:#64748b;">Sin deuda registrada en Bodega Piattelli</div>';
+    return;
+  }
   el.style.display = 'block';
   // DSO: promedio días entre fechaFactura y fechaPago para facturas abonadas
   var fmt = function(n){ return (n||0).toLocaleString('es-AR'); };
@@ -4299,9 +4324,14 @@ function renderAlertas() {
     alertasNuevasDiv.style.display = 'none';
   }
 
-  // Update counters (list re-renders via _renderAlertasList only when filter is active)
-  var nCrit = cartera.filter(function(c){ return c.ultimaSit && c.ultimaSit >= 3; }).length;
-  var nAdv  = cartera.filter(function(c){ return c.ultimaSit === 2; }).length;
+  // Update counters — usar _bcraVerifiedMap si disponible (evita race condition del merge)
+  var _vmVals = Object.values(_bcraVerifiedMap);
+  var nCrit = _vmVals.length > 0
+    ? _vmVals.filter(function(v){ return v.ultimaSit && v.ultimaSit >= 3; }).length
+    : cartera.filter(function(c){ return c.ultimaSit && c.ultimaSit >= 3; }).length;
+  var nAdv = _vmVals.length > 0
+    ? _vmVals.filter(function(v){ return v.ultimaSit === 2; }).length
+    : cartera.filter(function(c){ return c.ultimaSit === 2; }).length;
   var nExc  = cartera.filter(function(c){ return c.saldoActual && c.limiteCreditoARS && Number(c.saldoActual) > Number(c.limiteCreditoARS); }).length;
   var cntC = document.getElementById('cnt-criticos'); if(cntC) cntC.textContent = nCrit;
   var cntA = document.getElementById('cnt-advertencias'); if(cntA) cntA.textContent = nAdv;

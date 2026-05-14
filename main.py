@@ -3110,11 +3110,24 @@ def get_dso_saldos():
         modo = request.args.get('modo', 'actual')
         f_path = os.path.join(DATA_DIR, 'dso_saldos_historico.json' if modo == 'historico' else 'dso_saldos_actual.json')
         if os.path.exists(f_path):
-            with open(f_path, 'r', encoding='utf-8') as f:
-                return jsonify(json.load(f))
+            try:
+                with open(f_path, 'r', encoding='utf-8') as f:
+                    return jsonify(json.load(f))
+            except Exception:
+                pass
+        # Fallback: build from _saldos_facturas in memory (314 records — SSoT on Render)
+        if _saldos_facturas:
+            saldos = [
+                {"cliente": f.get("cliente", ""), "fecha_factura": f.get("fechaFactura", ""),
+                 "fecha_pago": f.get("fechaPago", ""), "saldo": f.get("saldo", 0)}
+                for f in _saldos_facturas if (f.get("saldo") or 0) > 0
+            ]
+            print(f"[dso-saldos] Fallback: {len(saldos)} registros desde saldos_facturas.json", flush=True)
+            return jsonify({"saldos": saldos, "ultima_actualizacion": "", "fuente": "facturas"})
         return jsonify({"saldos": [], "ultima_actualizacion": ""})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        print(f"[dso-saldos] Error: {e}", flush=True)
+        return jsonify({"saldos": [], "ultima_actualizacion": ""})
 
 @app.route("/dso-saldos", methods=["POST"])
 def save_dso_saldos():
