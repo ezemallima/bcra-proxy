@@ -75,8 +75,6 @@
   .canvas-body::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 3px; }
   .container { max-width: 900px; margin: 0 auto; }
 
-  /* ── DASHBOARD METRICS ── */
-  #dashboard-metricas { display: none !important; }
 
   /* ── TABS (hidden — nav in sidebar) ── */
   .tabs { display: none !important; }
@@ -398,7 +396,6 @@
     .sb-footer .proxy-status span { display: none; }
     .canvas-body { padding: 14px 12px; }
     .page-header { padding: 10px 14px; }
-    #dashboard-metricas { grid-template-columns: repeat(2,1fr) !important; }
     .info-grid, .afip-grid { grid-template-columns: 1fr; }
     .cli-data-grid { grid-template-columns: 1fr 1fr; }
     .buscador-input { font-size: 14px; padding: 12px 14px 12px 42px; }
@@ -549,8 +546,6 @@
     </div>
     <div class="canvas-body">
       <div class="container">
-  <!-- KPI data store — hidden, used only by JS/PDF export -->
-  <div id="dashboard-metricas" style="display:none;position:absolute;pointer-events:none;"><span id="met-total">—</span><span id="met-criticos">0</span><span id="met-mora">0</span><span id="met-dso">—</span></div>
 
 
   <div id="consulta" class="section active">
@@ -569,8 +564,8 @@
     <div id="loading-state" class="loading-msg" style="display:none;">Consultando...</div>
 
     <div id="resultado" style="display:none;">
-      <div id="mora-alert-container"></div>
       <div id="cliente-header" class="card" style="margin-bottom:8px;"></div>
+      <div id="mora-alert-container"></div>
 
       <!-- Decision Grid: Score (left 3/5) | Verdict + BCRA (right 2/5) -->
       <div id="decision-grid">
@@ -1538,8 +1533,7 @@ async function procesarDSO() {
     document.getElementById('dso-numero').style.color = colDSO.color;
     document.getElementById('dso-saldo-total').textContent = '$' + Math.round(saldoTotalKPI).toLocaleString('es-AR');
     document.getElementById('dso-clientes-total').textContent = dsoDatos.length;
-    var metDso = document.getElementById('met-dso');
-    if (metDso) { metDso.textContent = dsoGlobal; metDso.style.color = colDSO.color; }
+    _kpiCache.dso = String(dsoGlobal);
 
     // Benchmark
     var badge = estaCompleto
@@ -2434,23 +2428,15 @@ async function init() {
   // DSO autoritativo desde saldos_facturas.json (SSoT del servidor)
   fetch('/dso-global-saldos').then(function(r){ return r.ok ? r.json() : null; }).then(function(d) {
     if (d && d.dso) {
-      var metDso = document.getElementById('met-dso');
-      if (metDso) { metDso.textContent = d.dso; metDso.style.color = colorDSO(d.dso).color; }
+      _kpiCache.dso = String(d.dso);
       localStorage.setItem('piat_dso_global', d.dso);
     } else {
-      // Fallback: restaurar DSO guardado en localStorage
       var dsoGuardado = localStorage.getItem('piat_dso_global');
-      if (dsoGuardado) {
-        var metDso2 = document.getElementById('met-dso');
-        if (metDso2) { metDso2.textContent = dsoGuardado; metDso2.style.color = colorDSO(parseInt(dsoGuardado)).color; }
-      }
+      if (dsoGuardado) _kpiCache.dso = dsoGuardado;
     }
   }).catch(function() {
     var dsoGuardado = localStorage.getItem('piat_dso_global');
-    if (dsoGuardado) {
-      var metDso3 = document.getElementById('met-dso');
-      if (metDso3) { metDso3.textContent = dsoGuardado; metDso3.style.color = colorDSO(parseInt(dsoGuardado)).color; }
-    }
+    if (dsoGuardado) _kpiCache.dso = dsoGuardado;
   });
 
   // Restaurar última pestaña visitada
@@ -2473,14 +2459,16 @@ async function init() {
   if (contEl) contEl.textContent = localStorage.getItem('piat_red_contador') || '1';
 }
 
+var _kpiCache = { total: '—', criticos: '0', mora: '0', dso: '—' };
+
 function actualizarMetricas() {
+  if (document.getElementById('consulta') && document.getElementById('consulta').classList.contains('active')) return;
   var total = cartera.length;
   var criticos = cartera.filter(function(c) { return c.ultimaSit && c.ultimaSit >= 3; }).length;
   var enMora = cartera.filter(function(c) { return buscarEnMoras(c.cuit); }).length;
-  document.getElementById('met-total').textContent = total || '—';
-  document.getElementById('met-criticos').textContent = criticos || '0';
-  document.getElementById('met-mora').textContent = enMora || '0';
-  // met-dso se actualiza desde procesarDSO()
+  _kpiCache.total = String(total || '—');
+  _kpiCache.criticos = String(criticos || '0');
+  _kpiCache.mora = String(enMora || '0');
 }
 
 async function cargarCarteraServidor() {
@@ -2621,9 +2609,6 @@ function switchTab(tab, el) {
   localStorage.setItem('piat_tab', tab);
   var _ptEl = document.getElementById('page-title-el');
   if (_ptEl) _ptEl.textContent = _pageTitles[tab] || tab;
-  // Dashboard de métricas: solo visible en tabs de gestión
-  var dm = document.getElementById('dashboard-metricas');
-  if (dm) dm.style.display = (tab === 'consulta' || tab === 'cheques' || tab === 'historial' || tab === 'buscador') ? 'none' : 'grid';
   if (tab === 'cheques') { document.getElementById('cheque-resultado').style.display='none'; }
   if (tab === 'historial') renderHistorial();
   if (tab === 'cartera') renderCartera();
@@ -2751,24 +2736,14 @@ async function consultarCliente() {
       estadoAfip = afipData.estado_afip || '';
       estadoAfipGlobal = estadoAfip;
       domicilioAfip = afipData.domicilio || '';
-      // Autocompletar campo dirección si está vacío
-      var dirEl = document.getElementById('input-direccion-cliente');
-      if (dirEl && !dirEl.value && domicilioAfip) {
-        dirEl.value = domicilioAfip;
-      }
     } catch(e) {}
   } else {
-    // También llamar para obtener domicilio aunque tengamos nombre de cartera
     try {
       var afipR2 = await fetch('/afip/' + raw, {signal: AbortSignal.timeout(30000)});
       var afipData2 = await afipR2.json();
       estadoAfip = afipData2.estado_afip || '';
       estadoAfipGlobal = estadoAfip;
       domicilioAfip = afipData2.domicilio || '';
-      var dirEl2 = document.getElementById('input-direccion-cliente');
-      if (dirEl2 && !dirEl2.value && domicilioAfip) {
-        dirEl2.value = domicilioAfip;
-      }
     } catch(e) {}
   }
   if (!nombreFinal) nombreFinal = cuitFmtLocal;
@@ -2798,20 +2773,22 @@ async function consultarCliente() {
   // mostrarResultado ya maneja el header completo con nombre, badge y botón cartera
   // No reescribir el header acá
 
-  // Limpiar cache de cheques al inicio de cada consulta
+  // Cheques rechazados BCRA — siempre mostrar el módulo
   window._chequesUltimaConsulta = null;
-  // Mostrar cheques rechazados — guardar resultado para el score
+  var chequesCard = document.getElementById('cheques-rechazados-card');
+  var chequesEl = document.getElementById('cheques-rechazados-data');
+  if (chequesCard && chequesEl) {
+    chequesCard.style.display = 'block';
+    chequesCard.style.borderLeft = '4px solid #94a3b8';
+    chequesEl.innerHTML = '<div style="font-size:13px;color:#64748b;padding:8px 0;">Consultando cheques BCRA...</div>';
+  }
   try {
     var chR = await fetch('/deudas/' + raw + '/cheques', {signal: AbortSignal.timeout(30000)});
-    if (chR.ok) {
-      var chData = await chR.json();
-      window._chequesUltimaConsulta = chData; // guardar para el score
-      // Normalizar — el servidor devuelve {results: [...]}
-      // Normalizar respuesta del servidor
-      if (chData && chData.results !== undefined) chData = chData.results || {};
-      var chequesCard = document.getElementById('cheques-rechazados-card');
-      var chequesEl = document.getElementById('cheques-rechazados-data');
-      var todosChq = [];
+    var chData = chR.ok ? await chR.json() : null;
+    window._chequesUltimaConsulta = chData;
+    var todosChq = [];
+    if (chData) {
+      if (chData.results !== undefined) chData = chData.results || {};
       var causalesData = (chData && chData.causales) || [];
       causalesData.forEach(function(causal) {
         (causal.entidades || []).forEach(function(ent) {
@@ -2828,23 +2805,22 @@ async function consultarCliente() {
           });
         });
       });
-      if (chequesCard && chequesEl) {
-        chequesCard.style.display = 'block';
-        if (todosChq.length) {
-          chequesCard.style.borderLeft = '4px solid #ef4444';
-          chequesCard.style.background = 'transparent';
-        } else {
-          chequesCard.style.borderLeft = '4px solid #10b981';
-          chequesCard.style.background = 'transparent';
-        }
-        var _cid = 'chq-main-' + Date.now();
-        var _resc  = todosChq.filter(_chqIsLevantado).length;
-        var _nopag = todosChq.filter(function(c){ return !_chqIsLevantado(c); }).length;
-        chequesEl.innerHTML = buildChequesRiesgoHtml(todosChq, _cid);
-        setTimeout(function(){ initChequesDonut(_cid, _resc, _nopag); }, 60);
-      }
     }
-  } catch(e) {}
+    if (chequesCard && chequesEl) {
+      chequesCard.style.borderLeft = todosChq.length ? '4px solid #ef4444' : '4px solid #10b981';
+      chequesCard.style.background = 'transparent';
+      var _cid = 'chq-main-' + Date.now();
+      var _resc  = todosChq.filter(_chqIsLevantado).length;
+      var _nopag = todosChq.filter(function(c){ return !_chqIsLevantado(c); }).length;
+      chequesEl.innerHTML = buildChequesRiesgoHtml(todosChq, _cid);
+      setTimeout(function(){ initChequesDonut(_cid, _resc, _nopag); }, 60);
+    }
+  } catch(e) {
+    if (chequesCard && chequesEl) {
+      chequesCard.style.borderLeft = '4px solid #94a3b8';
+      chequesEl.innerHTML = '<div class="chq-clean"><span class="chq-clean-label">Sin antecedentes de cheques rechazados en los últimos 24 meses</span></div>';
+    }
+  }
 }
 
 function agregarDesdConsulta(cuit, nombre) {
@@ -3143,28 +3119,7 @@ async function procesarVeraz(input) {
   reader.readAsDataURL(file);
 }
 
-function obtenerPromptUbicacion() {
-  // Prioridad 1: dirección ingresada manualmente
-  var dirManual = (document.getElementById('input-direccion-cliente') || {}).value || '';
-  dirManual = dirManual.trim();
-  if (dirManual) {
-    return 'ANÁLISIS GEOGRÁFICO:\nDirección confirmada: ' + dirManual + '\n' +
-      'Con esta ubicación evaluá:\n' +
-      '- Zonas de riesgo de contrabando (Salta, Jujuy, Formosa, Misiones)\n' +
-      '- Coherencia volumen/mercado local\n' +
-      '- Zonas económicamente complejas (NOA, NEA, Patagonia lejana)';
-  }
-  // Prioridad 2: dirección extraída del PDF Veraz
-  if (verazData && verazData.domicilio) {
-    return 'ANÁLISIS GEOGRÁFICO:\nDirección extraída del informe crediticio: ' + verazData.domicilio + '\n' +
-      'Con esta ubicación evaluá las zonas de riesgo geográfico.';
-  }
-  // Prioridad 3: sin datos — prohibido inventar
-  return 'ANÁLISIS GEOGRÁFICO:\nUbicación: [NO DISPONIBLE]\n' +
-    'RESTRICCIÓN ESTRICTA: No tenés datos de ubicación confirmados. ' +
-    'NO inferir, adivinar ni asumir ninguna zona geográfica basándote en el nombre del cliente, su CUIT u otros datos. ' +
-    'Indicá explícitamente "Ubicación no disponible" y omitir el análisis de riesgo geográfico.';
-}
+function obtenerPromptUbicacion() { return ''; }
 
 async function analizarCliente() {
   const cuit = document.getElementById('cuit-input').value.replace(/-/g,'').trim();
@@ -3552,9 +3507,9 @@ function generarResumenEjecutivo() {
   doc.line(20, y, 190, y);
   y += 10;
 
-  var metTotal = document.getElementById('met-total').textContent || '—';
-  var metCriticos = document.getElementById('met-criticos').textContent || '0';
-  var metMora = document.getElementById('met-mora').textContent || '0';
+  var metTotal = _kpiCache.total || '—';
+  var metCriticos = _kpiCache.criticos || '0';
+  var metMora = _kpiCache.mora || '0';
   var metBodegas = document.getElementById('met-bodegas').textContent || '0';
 
   var metricas = [
@@ -4396,7 +4351,7 @@ function _chqParseFecha(f) {
 function buildChequesRiesgoHtml(cheques, canvasId) {
   var fmt = function(n){ return (n||0).toLocaleString('es-AR'); };
   if (!cheques || !cheques.length)
-    return '<div class="chq-clean"><span class="chq-clean-label">✓ SIN CHEQUES RECHAZADOS</span></div>';
+    return '<div class="chq-clean"><span class="chq-clean-label">Sin antecedentes de cheques rechazados en los últimos 24 meses</span></div>';
   var rescatados = cheques.filter(_chqIsLevantado);
   var sinPagar   = cheques.filter(function(c){ return !_chqIsLevantado(c); });
   var montoTotal = cheques.reduce(function(s,c){ return s+(c.monto||0); },0);
