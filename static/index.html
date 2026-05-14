@@ -76,9 +76,7 @@
   .container { max-width: 900px; margin: 0 auto; }
 
   /* ── DASHBOARD METRICS ── */
-  #dashboard-metricas { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 20px; }
-  #dashboard-metricas > div { background: var(--blanco); border: 1px solid rgba(226,232,240,0.7); border-radius: 16px; padding: 1.25rem 1rem; text-align: center; box-shadow: var(--card-shadow); transition: box-shadow 0.2s, transform 0.2s; }
-  #dashboard-metricas > div:hover { box-shadow: var(--card-shadow-hover); transform: translateY(-2px); }
+  #dashboard-metricas { display: none !important; }
 
   /* ── TABS (hidden — nav in sidebar) ── */
   .tabs { display: none !important; }
@@ -133,9 +131,9 @@
   .verdict-detail { font-size: 13px; color: #555; line-height: 1.6; }
 
   /* ── MORA ALERT ── */
-  .mora-alert { background: #fff1f2; border: 1px solid #fca5a5; border-left: 4px solid var(--rojo); border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
-  .mora-alert-title { font-size: 14px; font-weight: 700; color: var(--rojo); margin-bottom: 6px; }
-  .mora-alert-detail { font-size: 13px; color: #555; line-height: 1.6; }
+  .mora-alert { background: #dc2626; border-radius: 14px; padding: 20px 24px; margin-bottom: 12px; box-shadow: 0 4px 20px rgba(220,38,38,0.35); }
+  .mora-alert-title { font-size: 17px; font-weight: 900; color: #fff; margin-bottom: 7px; letter-spacing: -0.2px; display: flex; align-items: center; gap: 8px; }
+  .mora-alert-detail { font-size: 14px; color: rgba(255,255,255,0.92); line-height: 1.6; }
 
   /* ── BCRA TABLE ── */
   .bcra-table { width: 100%; font-size: 13px; border-collapse: separate; border-spacing: 0 5px; }
@@ -262,10 +260,6 @@
   .verdict-compact.revisar .vc-text { color: #92400e; }
   .verdict-compact.rechazar .vc-text { color: #991b1b; }
 
-  /* ── MORA BANNER ── */
-  .mora-alert { background: #fef2f2; border: 1px solid #fca5a5; border-left: 4px solid #dc2626; border-radius: 12px; padding: 13px 16px; margin-bottom: 8px; }
-  .mora-alert-title { font-size: 13px; font-weight: 800; color: #991b1b; margin-bottom: 4px; letter-spacing: -0.2px; }
-  .mora-alert-detail { font-size: 13px; color: #7f1d1d; line-height: 1.55; }
 
   /* ── ALERTAS PROMPT ── */
   .alertas-prompt { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 3rem 1rem; text-align: center; }
@@ -555,28 +549,8 @@
     </div>
     <div class="canvas-body">
       <div class="container">
-  <div id="dashboard-metricas" style="display:none;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:1.5rem;">
-    <div style="background:var(--blanco);border:1px solid var(--azul-borde);border-radius:14px;padding:1.25rem;text-align:center;box-shadow:0 1px 4px rgba(37,99,235,0.06);">
-      <div style="font-size:11px;color:var(--azul-claro);font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">Cartera</div>
-      <div id="met-total" style="font-family:'Syne',sans-serif;font-size:36px;font-weight:800;color:var(--azul-oscuro);line-height:1;">—</div>
-      <div style="font-size:11px;color:var(--texto-suave);margin-top:4px;">clientes activos</div>
-    </div>
-    <div style="background:var(--blanco);border:1px solid var(--azul-borde);border-radius:14px;padding:1.25rem;text-align:center;box-shadow:0 1px 4px rgba(37,99,235,0.06);">
-      <div style="font-size:11px;color:#991b1b;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">Alertas BCRA</div>
-      <div id="met-criticos" style="font-family:'Syne',sans-serif;font-size:36px;font-weight:800;color:#991b1b;line-height:1;">—</div>
-      <div style="font-size:11px;color:var(--texto-suave);margin-top:4px;">situación crítica</div>
-    </div>
-    <div style="background:var(--blanco);border:1px solid var(--azul-borde);border-radius:14px;padding:1.25rem;text-align:center;box-shadow:0 1px 4px rgba(37,99,235,0.06);">
-      <div style="font-size:11px;color:#9a3412;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">En Mora</div>
-      <div id="met-mora" style="font-family:'Syne',sans-serif;font-size:36px;font-weight:800;color:#9a3412;line-height:1;">—</div>
-      <div style="font-size:11px;color:var(--texto-suave);margin-top:4px;">mora registrada</div>
-    </div>
-    <div style="background:var(--blanco);border:1px solid var(--azul-borde);border-radius:14px;padding:1.25rem;text-align:center;box-shadow:0 1px 4px rgba(37,99,235,0.06);">
-      <div style="font-size:11px;color:var(--azul-claro);font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">DSO</div>
-      <div id="met-dso" style="font-family:'Syne',sans-serif;font-size:36px;font-weight:800;color:var(--azul-oscuro);line-height:1;">—</div>
-      <div style="font-size:11px;color:var(--texto-suave);margin-top:4px;">días promedio de cobro</div>
-    </div>
-  </div>
+  <!-- KPI data store — hidden, used only by JS/PDF export -->
+  <div id="dashboard-metricas" style="display:none;position:absolute;pointer-events:none;"><span id="met-total">—</span><span id="met-criticos">0</span><span id="met-mora">0</span><span id="met-dso">—</span></div>
 
 
   <div id="consulta" class="section active">
@@ -610,7 +584,7 @@
       </div>
 
       <div id="cheques-rechazados-card" class="card" style="margin-bottom:8px;display:none;">
-        <div class="card-title" style="color:#991b1b;">Cheques rechazados</div>
+        <div class="card-title" style="color:#991b1b;">Cheques en el BCRA</div>
         <div id="cheques-rechazados-data"></div>
       </div>
 
@@ -664,10 +638,6 @@
 
       <div id="analisis-resultado" style="display:none;margin-bottom:1rem;padding:1.25rem;background:#fff;border-radius:12px;border:1px solid #e0e0d8;"></div>
 
-      <div style="margin-bottom:10px;">
-        <input type="text" id="input-direccion-cliente" placeholder="Dirección del cliente (opcional) — ciudad, provincia" style="width:100%;font-size:13px;padding:8px 12px;border:1px solid var(--azul-borde);border-radius:8px;color:#334155;" />
-        <div style="font-size:11px;color:#94a3b8;margin-top:4px;">Si la ingresás, el análisis geográfico será preciso. Sin este dato, la IA indicará "Ubicación no disponible".</div>
-      </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="primary" onclick="analizarCliente()" id="btn-analizar" style="flex:1;">Analizar riesgo crediticio →</button>
         <button onclick="exportarReporte()" id="btn-export" style="display:none;">Exportar PDF</button>
@@ -2733,8 +2703,6 @@ async function consultarCliente() {
   if (chCard) chCard.style.display = 'none';
   document.getElementById('veraz-status').style.display = 'none';
   document.getElementById('veraz-datos').style.display = 'none';
-  var dirEl = document.getElementById('input-direccion-cliente');
-  if (dirEl) dirEl.value = '';
   document.getElementById('veraz-area').className = 'upload-area';
   document.getElementById('veraz-area').innerHTML = '<div style="font-size:13px;color:#888;">Hacé clic para subir el PDF de Veraz o Nosis</div><div style="font-size:12px;color:#aaa;margin-top:4px;">Extrae automáticamente score, cheques, deudas y más</div>';
   document.getElementById('veraz-datos').style.display = 'none';
@@ -2743,8 +2711,8 @@ async function consultarCliente() {
   const mora = buscarEnMoras(raw);
   document.getElementById('mora-alert-container').innerHTML = mora ? `
     <div class="mora-alert">
-      <div class="mora-alert-title">⚠ Cliente con mora registrada</div>
-      <div class="mora-alert-detail"><strong>${mora.nombre||''}</strong> tiene facturas impagas desde <strong>${mora.fechaMora||mora.fecha_mora||'fecha desconocida'}</strong>.<br>Saldo adeudado: <strong>$${((mora.saldoAdeudado||mora.saldo||0)).toLocaleString('es-AR')}</strong></div>
+      <div class="mora-alert-title">🚨 MORA REGISTRADA — RIESGO ALTO</div>
+      <div class="mora-alert-detail"><strong style="color:#fff;">${mora.nombre||''}</strong> tiene facturas impagas desde <strong style="color:#fff;">${mora.fechaMora||mora.fecha_mora||'fecha desconocida'}</strong>.<br>Saldo adeudado: <strong style="font-size:18px;color:#fff;font-family:'Syne',sans-serif;">$${((mora.saldoAdeudado||mora.saldo||0)).toLocaleString('es-AR')}</strong></div>
     </div>` : '';
 
   document.getElementById('loading-state').style.display = 'none';
@@ -2839,30 +2807,41 @@ async function consultarCliente() {
       var chData = await chR.json();
       window._chequesUltimaConsulta = chData; // guardar para el score
       // Normalizar — el servidor devuelve {results: [...]}
-      if (chData.results !== undefined) chData = chData.results || [];
+      // Normalizar respuesta del servidor
+      if (chData && chData.results !== undefined) chData = chData.results || {};
       var chequesCard = document.getElementById('cheques-rechazados-card');
       var chequesEl = document.getElementById('cheques-rechazados-data');
       var todosChq = [];
-      if (chData.results && chData.results.causales) {
-        chData.results.causales.forEach(function(causal) {
-          (causal.entidades || []).forEach(function(ent) {
-            (ent.detalle || []).forEach(function(ch) {
-              todosChq.push({fecha: ch.fechaRechazo, motivo: causal.causal, monto: ch.monto, levantado: !!ch.fechaPago});
+      var causalesData = (chData && chData.causales) || [];
+      causalesData.forEach(function(causal) {
+        (causal.entidades || []).forEach(function(ent) {
+          (ent.detalle || []).forEach(function(ch) {
+            todosChq.push({
+              fecha: ch.fechaRechazo,
+              motivo: causal.causal || '-',
+              monto: ch.monto || 0,
+              levantado: !!ch.fechaPago,
+              entidad: ent.entidad || ent.nombre || '-',
+              nroCheque: ch.nroCheque || ch.numero || '-',
+              fechaPago: ch.fechaPago || null
             });
           });
         });
-      }
+      });
       if (chequesCard && chequesEl) {
+        chequesCard.style.display = 'block';
         if (todosChq.length) {
-          chequesCard.style.display = 'block';
           chequesCard.style.borderLeft = '4px solid #ef4444';
           chequesCard.style.background = 'transparent';
-          var _cid = 'chq-main-' + Date.now();
-          var _resc  = todosChq.filter(_chqIsLevantado).length;
-          var _nopag = todosChq.filter(function(c){ return !_chqIsLevantado(c); }).length;
-          chequesEl.innerHTML = buildChequesRiesgoHtml(todosChq, _cid);
-          setTimeout(function(){ initChequesDonut(_cid, _resc, _nopag); }, 60);
+        } else {
+          chequesCard.style.borderLeft = '4px solid #10b981';
+          chequesCard.style.background = 'transparent';
         }
+        var _cid = 'chq-main-' + Date.now();
+        var _resc  = todosChq.filter(_chqIsLevantado).length;
+        var _nopag = todosChq.filter(function(c){ return !_chqIsLevantado(c); }).length;
+        chequesEl.innerHTML = buildChequesRiesgoHtml(todosChq, _cid);
+        setTimeout(function(){ initChequesDonut(_cid, _resc, _nopag); }, 60);
       }
     }
   } catch(e) {}
@@ -4415,14 +4394,14 @@ function _chqParseFecha(f) {
   } catch(e) { return null; }
 }
 function buildChequesRiesgoHtml(cheques, canvasId) {
+  var fmt = function(n){ return (n||0).toLocaleString('es-AR'); };
   if (!cheques || !cheques.length)
-    return '<div class="chq-clean"><span class="chq-clean-label">SIN CHEQUES RECHAZADOS</span></div>';
+    return '<div class="chq-clean"><span class="chq-clean-label">✓ SIN CHEQUES RECHAZADOS</span></div>';
   var rescatados = cheques.filter(_chqIsLevantado);
   var sinPagar   = cheques.filter(function(c){ return !_chqIsLevantado(c); });
-  var fmt = function(n){ return (n||0).toLocaleString('es-AR'); };
-  var montoTotal    = cheques.reduce(function(s,c){ return s+(c.monto||0); },0);
-  var montoResc     = rescatados.reduce(function(s,c){ return s+(c.monto||0); },0);
-  var montoNoPag    = sinPagar.reduce(function(s,c){ return s+(c.monto||0); },0);
+  var montoTotal = cheques.reduce(function(s,c){ return s+(c.monto||0); },0);
+  var montoResc  = rescatados.reduce(function(s,c){ return s+(c.monto||0); },0);
+  var montoNoPag = sinPagar.reduce(function(s,c){ return s+(c.monto||0); },0);
   var hace6m = new Date(); hace6m.setMonth(hace6m.getMonth()-6);
   var recientes = sinPagar.filter(function(c){
     var f = _chqParseFecha(c.fecha||c.fechaRechazo); return f && f > hace6m;
@@ -4435,6 +4414,37 @@ function buildChequesRiesgoHtml(cheques, canvasId) {
   var banner = montoNoPag > 0
     ? '<div class="chq-risk-banner"><span class="chq-risk-label">MONTO EN RIESGO</span><span class="chq-risk-monto">$' + fmt(montoNoPag) + '</span></div>'
     : '';
+  // Detailed table
+  var hoy = new Date();
+  var tableRows = cheques.map(function(c) {
+    var estado = c.levantado
+      ? '<span style="color:#10b981;font-weight:700;">Abonado</span>'
+      : '<span style="color:#ef4444;font-weight:700;">Rechazado</span>';
+    var fechaD = _chqParseFecha(c.fecha||c.fechaRechazo);
+    var refDate = c.fechaPago ? _chqParseFecha(c.fechaPago) : (c.levantado ? null : hoy);
+    var diasAtraso = (fechaD && refDate) ? Math.max(0, Math.round((refDate - fechaD) / 86400000)) : '-';
+    return '<tr>' +
+      '<td>' + (c.entidad||'-') + '</td>' +
+      '<td style="font-variant-numeric:tabular-nums;">' + (c.nroCheque||'-') + '</td>' +
+      '<td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:600;">$' + fmt(c.monto) + '</td>' +
+      '<td>' + estado + '</td>' +
+      '<td>' + (c.motivo||'-') + '</td>' +
+      '<td style="text-align:right;font-variant-numeric:tabular-nums;">' + diasAtraso + '</td>' +
+    '</tr>';
+  }).join('');
+  var tabla = '<div style="overflow-x:auto;margin-top:14px;">' +
+    '<table class="bcra-table">' +
+      '<thead><tr>' +
+        '<th>Banco / Entidad</th>' +
+        '<th>N° Cheque</th>' +
+        '<th style="text-align:right;">Monto</th>' +
+        '<th>Estado</th>' +
+        '<th>Motivo</th>' +
+        '<th style="text-align:right;">Días atraso</th>' +
+      '</tr></thead>' +
+      '<tbody>' + tableRows + '</tbody>' +
+    '</table>' +
+  '</div>';
   return '<div class="chq-panel">' + banner +
     '<div class="chq-chart-row">' +
       '<canvas id="' + canvasId + '" width="120" height="120" style="flex-shrink:0"></canvas>' +
@@ -4442,13 +4452,14 @@ function buildChequesRiesgoHtml(cheques, canvasId) {
         '<div class="chq-leg-item"><span class="chq-leg-dot" style="background:#10b981"></span><span class="chq-leg-label">Rescatados</span><span class="chq-leg-val">' + rescatados.length + '</span></div>' +
         '<div class="chq-leg-item"><span class="chq-leg-dot" style="background:#ef4444"></span><span class="chq-leg-label">Sin pagar</span><span class="chq-leg-val">' + sinPagar.length + '</span></div>' +
       '</div>' +
-    '</div>' +
-    '<div class="chq-summary">' +
-      '<div class="chq-sum-row"><span class="chq-sum-key">Total histórico</span><span class="chq-sum-val">$' + fmt(montoTotal) + '</span></div>' +
-      '<div class="chq-sum-row"><span class="chq-sum-key">Total recuperado</span><span class="chq-sum-val" style="color:#10b981">$' + fmt(montoResc) + '</span></div>' +
-      '<div class="chq-sum-row"><span class="chq-sum-key">Deuda pendiente</span><span class="chq-sum-val' + (montoNoPag>0?' danger':'') + '">$' + fmt(montoNoPag) + '</span></div>' +
+      '<div class="chq-summary">' +
+        '<div class="chq-sum-row"><span class="chq-sum-key">Total histórico</span><span class="chq-sum-val">$' + fmt(montoTotal) + '</span></div>' +
+        '<div class="chq-sum-row"><span class="chq-sum-key">Recuperado</span><span class="chq-sum-val" style="color:#10b981">$' + fmt(montoResc) + '</span></div>' +
+        '<div class="chq-sum-row"><span class="chq-sum-key">Pendiente</span><span class="chq-sum-val' + (montoNoPag>0?' danger':'') + '">$' + fmt(montoNoPag) + '</span></div>' +
+      '</div>' +
     '</div>' +
     '<div class="chq-ia"><span class="chq-ia-label">Análisis de Tendencia</span><span class="chq-ia-text">' + iaText + '</span></div>' +
+    tabla +
   '</div>';
 }
 function initChequesDonut(canvasId, rescN, nopagN) {
