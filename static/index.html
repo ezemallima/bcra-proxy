@@ -568,6 +568,8 @@
       <div id="mora-alert-container"></div>
 
       <!-- Decision Grid: Score (left 3/5) | Verdict + BCRA (right 2/5) -->
+      <div id="saldos-interno-card" class="card" style="margin-bottom:8px;display:none;border-left:4px solid #2563eb;"></div>
+
       <div id="decision-grid">
         <div id="vende-score-container"></div>
         <div>
@@ -2678,8 +2680,10 @@ async function consultarCliente() {
   var resetIds = [
     'cliente-header','verdict-container','bcra-data',
     'cheques-rechazados-data','afip-container','wsp-data',
-    'veraz-datos','mora-alert-container'
+    'veraz-datos','mora-alert-container','saldos-interno-card'
   ];
+  var saldosCard = document.getElementById('saldos-interno-card');
+  if (saldosCard) saldosCard.style.display = 'none';
   resetIds.forEach(function(id) {
     var el = document.getElementById(id);
     if (el) el.innerHTML = '';
@@ -2821,6 +2825,64 @@ async function consultarCliente() {
       chequesEl.innerHTML = '<div class="chq-clean"><span class="chq-clean-label">Sin antecedentes de cheques rechazados en los últimos 24 meses</span></div>';
     }
   }
+
+  // Saldos internos Piattelli — cuenta corriente + DSO del cliente
+  try {
+    var saldosR = await fetch('/saldos-cuit/' + raw, {signal: AbortSignal.timeout(15000)});
+    if (saldosR.ok) {
+      var saldosData = await saldosR.json();
+      renderSaldosInterno(saldosData, raw);
+    }
+  } catch(e) {
+    var saldosEl = document.getElementById('saldos-interno-card');
+    if (saldosEl) saldosEl.style.display = 'none';
+  }
+}
+
+function renderSaldosInterno(data, cuit) {
+  var el = document.getElementById('saldos-interno-card');
+  if (!el) return;
+  var facturas = data.facturas || [];
+  var totalSaldo = data.total_saldo || 0;
+  if (!facturas.length) { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  // DSO: promedio días entre fechaFactura y fechaPago para facturas abonadas
+  var fmt = function(n){ return (n||0).toLocaleString('es-AR'); };
+  var parseFecha = function(f) {
+    if (!f) return null;
+    var p = String(f).split('/');
+    return p.length === 3 ? new Date(+p[2], +p[1]-1, +p[0]) : new Date(f);
+  };
+  var pagadas = facturas.filter(function(f){ return f.fechaPago && f.totalFactura > 0; });
+  var dsoCliente = null;
+  if (pagadas.length) {
+    var dias = pagadas.map(function(f){
+      var d1 = parseFecha(f.fechaFactura), d2 = parseFecha(f.fechaPago);
+      return (d1 && d2) ? Math.max(0, Math.round((d2-d1)/86400000)) : null;
+    }).filter(function(d){ return d !== null && d < 365; });
+    if (dias.length) dsoCliente = Math.round(dias.reduce(function(s,d){return s+d;},0)/dias.length);
+  }
+  var pendientes = facturas.filter(function(f){ return (f.saldo||0) > 0; });
+  var colorSaldo = totalSaldo > 0 ? '#dc2626' : '#16a34a';
+  var dsoColor = dsoCliente === null ? '#94a3b8' : dsoCliente > 60 ? '#dc2626' : dsoCliente > 30 ? '#ca8a04' : '#16a34a';
+  el.innerHTML =
+    '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">' +
+      '<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#2563eb;">Cuenta Corriente Piattelli</span>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">' +
+      '<div style="text-align:center;">' +
+        '<div style="font-family:\'Syne\',sans-serif;font-size:22px;font-weight:800;color:'+colorSaldo+';line-height:1;">' + (totalSaldo > 0 ? '$'+fmt(Math.round(totalSaldo)) : '—') + '</div>' +
+        '<div style="font-size:11px;color:#64748b;margin-top:3px;">Saldo pendiente</div>' +
+      '</div>' +
+      '<div style="text-align:center;">' +
+        '<div style="font-family:\'Syne\',sans-serif;font-size:22px;font-weight:800;color:'+dsoColor+';line-height:1;">' + (dsoCliente !== null ? dsoCliente+'d' : '—') + '</div>' +
+        '<div style="font-size:11px;color:#64748b;margin-top:3px;">DSO del cliente</div>' +
+      '</div>' +
+      '<div style="text-align:center;">' +
+        '<div style="font-family:\'Syne\',sans-serif;font-size:22px;font-weight:800;color:#334155;line-height:1;">' + pendientes.length + '</div>' +
+        '<div style="font-size:11px;color:#64748b;margin-top:3px;">Facturas abiertas</div>' +
+      '</div>' +
+    '</div>';
 }
 
 function agregarDesdConsulta(cuit, nombre) {
@@ -2916,16 +2978,19 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
     if (historial) window._ultimoHistorial = historial;
     // Fallback local si el servidor no responde
     var scoreObjFinal;
+    var _usandoFallback = false;
     if (scoreServidor && scoreServidor.score) {
       scoreObjFinal = scoreServidor;
     } else {
+      _usandoFallback = true;
       var _scoreMora = buscarEnMoras ? buscarEnMoras(cuit) : null;
       var _scoreWsp  = buscarEnWSP ? filtrarWSPReciente(buscarEnWSP(cuit)) : [];
       scoreObjFinal  = calcularVendeScore(cuit, data, _scoreMora, _scoreWsp, historial, window._chequesUltimaConsulta || null);
     }
     var scoreElF = document.getElementById('vende-score-container');
     if (scoreElF) {
-      scoreElF.innerHTML = renderVendeScore(scoreObjFinal);
+      scoreElF.innerHTML = renderVendeScore(scoreObjFinal) +
+        (_usandoFallback ? '<div style="font-size:10px;color:#ca8a04;margin-top:6px;padding:4px 8px;background:#fefce8;border-radius:6px;border:1px solid #fde047;">⚠ Usando datos locales — servidor BCRA no disponible</div>' : '');
       window._ultimoScoreVende = scoreObjFinal;
       // Cargar solvencia de forma asíncrona (no bloquea el score)
       cargarSolvencia(cuit, scoreElF);
@@ -3415,7 +3480,7 @@ async function exportarReporte() {
     doc.text('MORA REGISTRADA — RIESGO ALTO', 15, y+8);
     doc.setFontSize(9); doc.setFont('helvetica','normal');
     var moraLinea = (mora.nombre||nombre) + ' · Saldo: $' + (mora.saldo||mora.saldoAdeudado||0).toLocaleString('es-AR') + '  desde ' + (mora.fecha_mora||mora.fechaMora||'');
-    doc.text(moraLinea.substring(0, 80), 15, y+15);
+    doc.text(String(moraLinea).substring(0, 80), 15, y+15);
     y += 23;
   }
 
@@ -3465,7 +3530,7 @@ async function exportarReporte() {
         var sit = e.situacion || 1;
         var sitColor = sit === 1 ? [22,101,52] : sit === 2 ? [133,77,14] : [185,28,28];
         doc.setTextColor(51,65,85);
-        doc.text((e.entidad||'-').substring(0,28), 12, y+3.5);
+        doc.text(String(e.entidad||'-').substring(0,28), 12, y+3.5);
         doc.text(String(e.periodo||'-'), 90, y+3.5);
         doc.setTextColor(...sitColor); doc.setFont('helvetica','bold');
         doc.text(monto, 120, y+3.5, {align:'right'});
@@ -3520,13 +3585,13 @@ async function exportarReporte() {
         if (y > 272) { doc.addPage(); y = 15; }
         if (i%2===0) { doc.setFillColor(248,250,252); doc.rect(10,y-1,W-20,6,'F'); }
         doc.setTextColor(51,65,85);
-        doc.text((c.entidad||'-').substring(0,20), 12, y+3.5);
+        doc.text(String(c.entidad||'-').substring(0,20), 12, y+3.5);
         doc.text(String(c.fecha||'-').substring(0,10), 80, y+3.5);
         doc.text('$' + (c.monto||0).toLocaleString('es-AR'), 120, y+3.5, {align:'right'});
         if (c.levantado) { doc.setTextColor(22,101,52); doc.setFont('helvetica','bold'); doc.text('Abonado', 130, y+3.5); }
         else             { doc.setTextColor(185,28,28); doc.setFont('helvetica','bold'); doc.text('Rechazado', 130, y+3.5); }
         doc.setTextColor(71,85,105); doc.setFont('helvetica','normal');
-        doc.text((c.motivo||'-').substring(0,20), 165, y+3.5);
+        doc.text(String(c.motivo||'-').substring(0,20), 165, y+3.5);
         y += 6;
       });
       y += 4;
