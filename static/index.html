@@ -76,9 +76,9 @@
   .container { max-width: 900px; margin: 0 auto; }
 
   /* ── DASHBOARD METRICS ── */
-  #dashboard-metricas { display: grid !important; grid-template-columns: repeat(4,1fr) !important; gap: 14px !important; margin-bottom: 20px !important; }
-  #dashboard-metricas > div { background: var(--blanco) !important; border: 1px solid rgba(226,232,240,0.7) !important; border-radius: 16px !important; padding: 1.25rem 1rem !important; text-align: center !important; box-shadow: var(--card-shadow) !important; transition: box-shadow 0.2s, transform 0.2s !important; }
-  #dashboard-metricas > div:hover { box-shadow: var(--card-shadow-hover) !important; transform: translateY(-2px) !important; }
+  #dashboard-metricas { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 20px; }
+  #dashboard-metricas > div { background: var(--blanco); border: 1px solid rgba(226,232,240,0.7); border-radius: 16px; padding: 1.25rem 1rem; text-align: center; box-shadow: var(--card-shadow); transition: box-shadow 0.2s, transform 0.2s; }
+  #dashboard-metricas > div:hover { box-shadow: var(--card-shadow-hover); transform: translateY(-2px); }
 
   /* ── TABS (hidden — nav in sidebar) ── */
   .tabs { display: none !important; }
@@ -580,13 +580,16 @@
 
 
   <div id="consulta" class="section active">
-    <div class="card">
-      <div class="card-title">Consulta por CUIT</div>
-      <div class="input-row">
-        <input type="text" id="cuit-input" placeholder="Ej: 20-21310600-8" maxlength="13" onkeydown="if(event.key==='Enter') consultarCliente()" />
-        <button class="primary" onclick="consultarCliente()">Consultar →</button>
+    <div id="consulta-search-hero" style="display:flex;flex-direction:column;align-items:center;padding:3rem 1rem 2rem;text-align:center;">
+      <div style="width:56px;height:56px;background:linear-gradient(135deg,#2563eb,#1d4ed8);border-radius:18px;display:flex;align-items:center;justify-content:center;margin-bottom:1.25rem;box-shadow:0 4px 16px rgba(37,99,235,0.25);">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       </div>
-      <div class="hint">BCRA en tiempo real + AFIP + historial de bodegas + moras registradas.</div>
+      <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--azul-oscuro);margin-bottom:6px;letter-spacing:-0.3px;">Consultar cliente</div>
+      <div style="font-size:13px;color:var(--texto-suave);margin-bottom:1.75rem;max-width:340px;line-height:1.5;">BCRA en tiempo real · AFIP · Historial bodegas · Moras</div>
+      <div style="display:flex;gap:8px;width:100%;max-width:480px;">
+        <input type="text" id="cuit-input" placeholder="CUIT — Ej: 20-21310600-8" maxlength="13" onkeydown="if(event.key==='Enter') consultarCliente()" style="flex:1;font-size:15px;padding:13px 18px;border-radius:12px;border:2px solid #e2e8f0;background:#fff;box-shadow:0 2px 8px rgba(37,99,235,0.06);transition:border-color 0.15s,box-shadow 0.15s;" onfocus="this.style.borderColor='#2563eb';this.style.boxShadow='0 0 0 3px rgba(37,99,235,0.12)'" onblur="this.style.borderColor='#e2e8f0';this.style.boxShadow='0 2px 8px rgba(37,99,235,0.06)'" />
+        <button class="primary" onclick="consultarCliente()" style="padding:13px 22px;font-size:14px;border-radius:12px;white-space:nowrap;">Consultar →</button>
+      </div>
     </div>
 
     <div id="loading-state" class="loading-msg" style="display:none;">Consultando...</div>
@@ -2656,6 +2659,16 @@ function switchTab(tab, el) {
   if (tab === 'cartera') renderCartera();
   if (tab === 'buscador') renderBuscador('');
   if (tab === 'alertas') { _alertasFilter = null; renderAlertas(); autoCargarScoresServidor(); }
+  if (tab === 'consulta') {
+    var _hero = document.getElementById('consulta-search-hero');
+    var _res = document.getElementById('resultado');
+    var _ld = document.getElementById('loading-state');
+    if (_hero && _res && _ld) {
+      var resVisible = _res.style.display !== 'none';
+      var ldVisible = _ld.style.display !== 'none';
+      _hero.style.display = (resVisible || ldVisible) ? 'none' : 'flex';
+    }
+  }
 }
 
 function scoreBarHtml(score) {
@@ -2702,6 +2715,8 @@ async function consultarCliente() {
   estadoAfipGlobal = '';
   document.getElementById('resultado').style.display = 'none';
   document.getElementById('loading-state').style.display = 'block';
+  var _hero = document.getElementById('consulta-search-hero');
+  if (_hero) _hero.style.display = 'none';
   document.getElementById('analisis-resultado').style.display = 'none';
   document.getElementById('btn-export').style.display = 'none';
   // Limpiar todos los contenedores de resultados
@@ -3011,10 +3026,10 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
         ? '<div class="bcra-indicator warn"><span class="bcra-ind-icon">⚠️</span><div><div class="bcra-ind-text">Situación 2 — Atrasos detectados</div><div class="bcra-ind-sub">El cliente registra atrasos en al menos una entidad bancaria.</div></div></div>'
         : '<div class="bcra-indicator ok"><span class="bcra-ind-icon">✅</span><div><div class="bcra-ind-text">Situación normal</div><div class="bcra-ind-sub">Situación 1 en todas las entidades del sistema financiero.</div></div></div>';
     var conMonto = entidades.filter(function(e) { return e.monto > 0; });
-    let t = `<table class="bcra-table"><thead><tr><th>Entidad</th><th>Período</th><th>Monto (miles $)</th><th>Situación</th><th>Días atraso</th></tr></thead><tbody>`;
+    let t = `<table class="bcra-table"><thead><tr><th>Entidad</th><th>Período</th><th style="text-align:right;">Monto (miles $)</th><th>Situación</th><th style="text-align:right;">Días atraso</th></tr></thead><tbody>`;
     entidades.forEach(function(e) {
       var monto = e.monto > 0 ? '$' + (e.monto).toLocaleString('es-AR') : '-';
-      t += `<tr><td>${e.entidad||'-'}</td><td>${e.periodo||'-'}</td><td>${monto}</td><td class="sit-${e.situacion}">${e.situacion} — ${sitNombre(e.situacion)}</td><td>${e.diasAtrasoPago||0}</td></tr>`;
+      t += `<tr><td>${e.entidad||'-'}</td><td>${e.periodo||'-'}</td><td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:600;">${monto}</td><td class="sit-${e.situacion}">${e.situacion} — ${sitNombre(e.situacion)}</td><td style="text-align:right;font-variant-numeric:tabular-nums;">${e.diasAtrasoPago||0}</td></tr>`;
     });
     t += `</tbody></table>`;
     if (conMonto.length) {
