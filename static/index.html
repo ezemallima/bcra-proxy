@@ -3362,17 +3362,15 @@ async function exportarReporte() {
   doc.setFillColor(...scoreRGB);
   doc.rect(0, 0, 4, 30, 'F');
 
-  // Nombre de la bodega — principal
-  doc.setFontSize(17); doc.setFont('helvetica','bold'); doc.setTextColor(255,255,255);
-  doc.text(bodega, 10, 12);
-  // Subline: tecnología + fecha
-  doc.setFontSize(8); doc.setFont('helvetica','italic'); doc.setTextColor(147,197,253);
-  doc.text('Vende Seguro — vende sin riesgo', 10, 21);
-  doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(180,200,240);
-  doc.text('Análisis de Riesgo Crediticio · ' + ultimoAnalisis.fecha, 10, 27);
-  // Sello confidencial — derecha
+  // Header — título principal
+  doc.setFontSize(13); doc.setFont('helvetica','bold'); doc.setTextColor(255,255,255);
+  doc.text('Informe de Riesgo Financiero', 10, 11);
+  doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(147,197,253);
+  doc.text(bodega, 10, 19);
+  doc.setFontSize(7.5); doc.setFont('helvetica','italic'); doc.setTextColor(180,200,240);
+  doc.text('Vende Seguro · ' + ultimoAnalisis.fecha, 10, 27);
   doc.setFontSize(7.5); doc.setFont('helvetica','bold'); doc.setTextColor(220,60,60);
-  doc.text('CONFIDENCIAL — ' + bodega.toUpperCase(), W-10, 27, {align:'right'});
+  doc.text('CONFIDENCIAL — USO INTERNO', W-10, 27, {align:'right'});
 
   // ── NOMBRE CLIENTE + SCORE HERO ───────────────────────────────────────────
   var y = 40;
@@ -3408,51 +3406,163 @@ async function exportarReporte() {
   doc.setDrawColor(210,220,240); doc.setLineWidth(0.4); doc.line(10, y, W-10, y);
   y += 6;
 
-  // ── MORA INTERNA PIATTELLI ────────────────────────────────────────────────
+  // ── MORA — BLOQUE ROJO CRÍTICO ───────────────────────────────────────────
   if (mora) {
-    doc.setFillColor(254,242,242);
-    doc.roundedRect(10, y, W-20, 11, 2, 2, 'F');
-    doc.setFillColor(220,38,38); doc.rect(10, y, 3, 11, 'F');
-    doc.setTextColor(153,27,27); doc.setFontSize(9); doc.setFont('helvetica','bold');
-    doc.text('MORA INTERNA ' + bodega.toUpperCase() + ': $' +
-      (mora.saldo||0).toLocaleString('es-AR') + ' — desde ' + (mora.fecha_mora||''), 16, y+7.5);
-    y += 16;
+    doc.setFillColor(220,38,38);
+    doc.rect(10, y, W-20, 18, 'F');
+    doc.setTextColor(255,255,255);
+    doc.setFontSize(11); doc.setFont('helvetica','bold');
+    doc.text('MORA REGISTRADA — RIESGO ALTO', 15, y+8);
+    doc.setFontSize(9); doc.setFont('helvetica','normal');
+    var moraLinea = (mora.nombre||nombre) + ' · Saldo: $' + (mora.saldo||mora.saldoAdeudado||0).toLocaleString('es-AR') + '  desde ' + (mora.fecha_mora||mora.fechaMora||'');
+    doc.text(moraLinea.substring(0, 80), 15, y+15);
+    y += 23;
   }
 
   // ── HISTORIAL BCRA ────────────────────────────────────────────────────────
   doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(30,41,59);
-  doc.text('Historial BCRA — últimos 24 meses', 10, y); y += 4;
+  doc.text('Historial BCRA — ultimos 24 meses', 10, y); y += 4;
   if (chartImg) {
     doc.addImage(chartImg, 'PNG', 10, y, W-20, 42);
     y += 46;
   } else {
     doc.setFontSize(9); doc.setFont('helvetica','italic'); doc.setTextColor(148,163,184);
-    doc.text('Historial no disponible para este período.', 10, y+8);
+    doc.text('Historial no disponible para este periodo.', 10, y+8);
     y += 16;
   }
 
+  // ── TABLA ENTIDADES BCRA ──────────────────────────────────────────────────
+  var bcraRes = window._ultimoBcraData && window._ultimoBcraData.results;
+  if (bcraRes && bcraRes.periodos && bcraRes.periodos.length) {
+    var perOrden = bcraRes.periodos.slice().sort(function(a,b){ return (b.periodo||'').localeCompare(a.periodo||''); });
+    var entVistas = {}, entidades = [];
+    perOrden.forEach(function(p){
+      (p.entidades||[]).forEach(function(e){
+        var k = e.entidad||e.codigo;
+        if (!entVistas[k]) { entVistas[k]=true; entidades.push(Object.assign({periodo:p.periodo},e)); }
+      });
+    });
+    if (entidades.length) {
+      if (y > 240) { doc.addPage(); y = 15; }
+      var sitNombrePdf = function(s){ return s===1?'Normal':s===2?'Atraso':s===3?'Irregular':s===4?'Dudoso':s===5?'Irrecuperable':'—'; };
+      doc.setDrawColor(210,220,240); doc.line(10,y,W-10,y); y+=5;
+      doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(30,41,59);
+      doc.text('Entidades reportadas en BCRA', 10, y); y+=5;
+      // Cabecera tabla
+      doc.setFillColor(237,242,250); doc.rect(10,y,W-20,6,'F');
+      doc.setFontSize(7.5); doc.setFont('helvetica','bold'); doc.setTextColor(71,85,105);
+      doc.text('Entidad', 12, y+4.2);
+      doc.text('Periodo', 90, y+4.2);
+      doc.text('Monto ($)', 120, y+4.2, {align:'right'});
+      doc.text('Situacion', 130, y+4.2);
+      doc.text('Dias atraso', W-12, y+4.2, {align:'right'});
+      y += 7;
+      doc.setFont('helvetica','normal'); doc.setTextColor(51,65,85);
+      entidades.slice(0,8).forEach(function(e, i){
+        if (y > 265) { doc.addPage(); y = 15; }
+        if (i%2===0) { doc.setFillColor(248,250,252); doc.rect(10,y-1,W-20,6,'F'); }
+        var monto = e.monto > 0 ? '$' + e.monto.toLocaleString('es-AR') : '-';
+        var sit = e.situacion || 1;
+        var sitColor = sit === 1 ? [22,101,52] : sit === 2 ? [133,77,14] : [185,28,28];
+        doc.setTextColor(51,65,85);
+        doc.text((e.entidad||'-').substring(0,28), 12, y+3.5);
+        doc.text(String(e.periodo||'-'), 90, y+3.5);
+        doc.setTextColor(...sitColor); doc.setFont('helvetica','bold');
+        doc.text(monto, 120, y+3.5, {align:'right'});
+        doc.text('Sit.' + sit + ' ' + sitNombrePdf(sit), 130, y+3.5);
+        doc.setTextColor(51,65,85); doc.setFont('helvetica','normal');
+        doc.text(String(e.diasAtrasoPago||0), W-12, y+3.5, {align:'right'});
+        y += 6;
+      });
+      y += 4;
+    }
+  }
+
+  // ── CHEQUES BCRA ──────────────────────────────────────────────────────────
+  var chDataPdf = window._chequesUltimaConsulta;
+  if (chDataPdf) {
+    if (chDataPdf.results !== undefined) chDataPdf = chDataPdf.results || {};
+    var chqPdf = [];
+    (chDataPdf.causales||[]).forEach(function(causal){
+      (causal.entidades||[]).forEach(function(ent){
+        (ent.detalle||[]).forEach(function(ch){
+          chqPdf.push({ entidad: ent.entidad||'-', monto: ch.monto||0, levantado: !!ch.fechaPago, motivo: causal.causal||'-', fecha: ch.fechaRechazo||'' });
+        });
+      });
+    });
+    if (y > 220) { doc.addPage(); y = 15; }
+    doc.setDrawColor(210,220,240); doc.line(10,y,W-10,y); y+=5;
+    doc.setFontSize(9); doc.setFont('helvetica','bold');
+    var rescPdf = chqPdf.filter(function(c){ return c.levantado; }).length;
+    var nopagPdf = chqPdf.filter(function(c){ return !c.levantado; }).length;
+    var montoPend = chqPdf.filter(function(c){ return !c.levantado; }).reduce(function(s,c){ return s+c.monto; },0);
+    if (!chqPdf.length) {
+      doc.setTextColor(22,101,52);
+      doc.text('Cheques BCRA: Sin antecedentes de cheques rechazados en los ultimos 24 meses', 10, y);
+      y += 9;
+    } else {
+      doc.setTextColor(185,28,28);
+      doc.text('Cheques rechazados en BCRA', 10, y);
+      doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(71,85,105);
+      doc.text('Rescatados: ' + rescPdf + '  |  Sin pagar: ' + nopagPdf + '  |  Monto pendiente: $' + montoPend.toLocaleString('es-AR'), 10, y+6);
+      y += 12;
+      // Tabla detalle
+      doc.setFillColor(237,242,250); doc.rect(10,y,W-20,6,'F');
+      doc.setFontSize(7.5); doc.setFont('helvetica','bold'); doc.setTextColor(71,85,105);
+      doc.text('Banco / Entidad', 12, y+4.2);
+      doc.text('Fecha rechazo', 80, y+4.2);
+      doc.text('Monto', 120, y+4.2, {align:'right'});
+      doc.text('Estado', 130, y+4.2);
+      doc.text('Motivo', 165, y+4.2);
+      y += 7;
+      doc.setFont('helvetica','normal'); doc.setTextColor(51,65,85);
+      chqPdf.slice(0,10).forEach(function(c, i){
+        if (y > 272) { doc.addPage(); y = 15; }
+        if (i%2===0) { doc.setFillColor(248,250,252); doc.rect(10,y-1,W-20,6,'F'); }
+        doc.setTextColor(51,65,85);
+        doc.text((c.entidad||'-').substring(0,20), 12, y+3.5);
+        doc.text(String(c.fecha||'-').substring(0,10), 80, y+3.5);
+        doc.text('$' + (c.monto||0).toLocaleString('es-AR'), 120, y+3.5, {align:'right'});
+        if (c.levantado) { doc.setTextColor(22,101,52); doc.setFont('helvetica','bold'); doc.text('Abonado', 130, y+3.5); }
+        else             { doc.setTextColor(185,28,28); doc.setFont('helvetica','bold'); doc.text('Rechazado', 130, y+3.5); }
+        doc.setTextColor(71,85,105); doc.setFont('helvetica','normal');
+        doc.text((c.motivo||'-').substring(0,20), 165, y+3.5);
+        y += 6;
+      });
+      y += 4;
+    }
+  }
+
   // ── ANÁLISIS DE RIESGO ────────────────────────────────────────────────────
+  if (y > 240) { doc.addPage(); y = 15; }
   doc.setDrawColor(210,220,240); doc.line(10, y, W-10, y); y += 7;
   doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(15,45,82);
-  doc.text('Análisis de Riesgo — ' + bodega, 10, y); y += 7;
+  doc.text('Analisis de Riesgo Crediticio', 10, y); y += 7;
   doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(51,65,85);
 
-  // Limpiar texto: reemplazar referencias a Veraz y frases de seguimiento especial
   var textoLimpio = (ultimoAnalisis.texto || '')
     .replace(/\bsolicitar\s+Veraz\s+completo\b/gi, 'analizar el historial completo del sistema financiero')
     .replace(/\bpedir\s+Veraz\b/gi, 'consultar el historial del sistema financiero')
     .replace(/\bVeraz\s*(\/\s*Nosis)?\b/gi, 'informe del sistema financiero')
     .replace(/\bseguimiento\s+especial\b/gi, 'monitoreo del riesgo')
-    .replace(/\bSeguimiento\s+Especial\b/g, 'Monitoreo de Riesgo');
+    .replace(/\bSeguimiento\s+Especial\b/g, 'Monitoreo de Riesgo')
+    .replace(/Ubicaci[oó]n no disponible[^.]*\./gi, '')
+    .replace(/\bUBICACION\b.*?\n/gi, '');
 
   var lines = doc.splitTextToSize(textoLimpio, W-20);
-  var maxLines = Math.floor((H - y - 20) / 5);
-  lines.slice(0, maxLines).forEach(function(l) { doc.text(l, 10, y); y += 5; });
+  lines.forEach(function(l) {
+    if (y > 275) { doc.addPage(); y = 15; }
+    doc.text(l, 10, y); y += 5;
+  });
 
   // ── PIE ────────────────────────────────────────────────────────────────────
-  doc.setDrawColor(210,220,240); doc.line(10, H-13, W-10, H-13);
-  doc.setFontSize(7); doc.setFont('helvetica','italic'); doc.setTextColor(148,163,184);
-  doc.text(bodega + ' · Vende Seguro · ' + ultimoAnalisis.fecha + ' · Confidencial — Uso interno', W/2, H-7, {align:'center'});
+  var totalPages = doc.internal.getNumberOfPages();
+  for (var pg = 1; pg <= totalPages; pg++) {
+    doc.setPage(pg);
+    doc.setDrawColor(210,220,240); doc.line(10, H-13, W-10, H-13);
+    doc.setFontSize(7); doc.setFont('helvetica','italic'); doc.setTextColor(148,163,184);
+    doc.text(bodega + ' · Vende Seguro · ' + ultimoAnalisis.fecha + ' · Confidencial — Uso interno · Pagina ' + pg + ' de ' + totalPages, W/2, H-7, {align:'center'});
+  }
 
   doc.save('VendeSeguro_' + bodega.replace(/\s+/g,'_') + '_' + raw + '_' + ultimoAnalisis.fecha.replace(/\//g,'-') + '.pdf');
   if (btn) { btn.disabled = false; btn.textContent = 'Exportar PDF'; }
@@ -4204,6 +4314,7 @@ function _renderAlertasList() {
     }
     html += '</div>';
     if (c.ultimaSit) html += getBadge(c.ultimaSit);
+    html += '<button onclick="event.stopPropagation();verCliente(\''+c.cuit+'\')" style="margin-top:6px;font-size:11px;font-weight:600;padding:4px 10px;background:#2563eb;color:#fff;border:none;border-radius:6px;cursor:pointer;letter-spacing:0.2px;">🔍 Ver</button>';
     html += '</div></div>';
     return html;
   }).join('');
