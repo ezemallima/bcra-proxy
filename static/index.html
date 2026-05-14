@@ -248,6 +248,56 @@
   .cli-meta-tag { font-size: 11px; color: #64748b; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 9999px; padding: 3px 10px; }
   .cli-btn-detalle { margin-left: auto; font-size: 12px !important; padding: 7px 16px !important; }
 
+  /* ── DECISION HEADER v30 ── */
+  .decision-header { display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+  .decision-avatar { width: 54px; height: 54px; border-radius: 14px; color: #fff; font-size: 22px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; letter-spacing: -1px; }
+  .decision-nombre { font-size: 1.5rem; font-weight: 700; color: var(--texto); letter-spacing: -0.5px; line-height: 1.15; }
+  .decision-cuit { font-size: 13px; color: #64748b; font-variant-numeric: tabular-nums; letter-spacing: 0.4px; margin-top: 3px; }
+  .decision-meta-row { display: flex; align-items: center; gap: 8px; margin-top: 5px; flex-wrap: wrap; }
+  .decision-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; flex-shrink: 0; }
+  .badge-cartera { font-size: 11px; padding: 4px 11px; border-radius: 9999px; font-weight: 600; background: #dcfce7; color: #166534; }
+  .badge-no-cartera { font-size: 11px; padding: 4px 11px; border-radius: 9999px; font-weight: 600; background: #f1f5f9; color: #64748b; }
+
+  /* ── BCRA VISUAL INDICATOR ── */
+  .bcra-indicator { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 10px; margin-bottom: 12px; }
+  .bcra-indicator.ok { background: #f0fdf4; border: 1px solid #86efac; }
+  .bcra-indicator.warn { background: #fefce8; border: 1px solid #fde047; }
+  .bcra-indicator.danger { background: #fff1f2; border: 1px solid #fca5a5; }
+  .bcra-ind-icon { font-size: 22px; line-height: 1; flex-shrink: 0; }
+  .bcra-ind-text { font-size: 13px; font-weight: 600; }
+  .bcra-indicator.ok .bcra-ind-text { color: #166534; }
+  .bcra-indicator.warn .bcra-ind-text { color: #92400e; }
+  .bcra-indicator.danger .bcra-ind-text { color: #991b1b; }
+  .bcra-ind-sub { font-size: 11px; color: #94a3b8; margin-top: 1px; }
+
+  /* ── RESOURCE BAR ── */
+  .resource-bar { display: flex; gap: 8px; flex-wrap: wrap; }
+  .resource-btn { display: inline-flex; align-items: center; gap: 7px; padding: 9px 14px; border: 1.5px solid #e2e8f0; border-radius: 10px; background: #fff; color: #64748b; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; font-family: 'Inter', sans-serif; }
+  .resource-btn:hover { border-color: var(--azul-claro); color: var(--azul-claro); background: var(--azul-suave); box-shadow: none; }
+  .resource-btn.active { border-color: var(--azul-claro); color: var(--azul-claro); background: var(--azul-suave); }
+  .resource-btn svg { width: 13px; height: 13px; flex-shrink: 0; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .resource-panel { display: none; padding-top: 14px; border-top: 1px solid #f1f5f9; margin-top: 12px; }
+  .resource-panel.open { display: block; }
+
+  /* ── NOTIFICATION CARDS (alertas-nuevas) ── */
+  .notif-card { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: #fff; border-radius: 12px; border: 1px solid #fca5a5; border-left: 4px solid #ef4444; box-shadow: 0 2px 8px rgba(239,68,68,0.07); margin-bottom: 8px; cursor: pointer; transition: all 0.15s; }
+  .notif-card:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(239,68,68,0.12); }
+  .notif-card.bodegas { border-color: #fde047; border-left-color: #f59e0b; box-shadow: 0 2px 8px rgba(245,158,11,0.07); }
+  .notif-avatar { width: 36px; height: 36px; border-radius: 9px; color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: linear-gradient(135deg, #dc2626, #7f1d1d); }
+  .notif-avatar.bodegas { background: linear-gradient(135deg, #f59e0b, #d97706); }
+  .notif-body { flex: 1; min-width: 0; }
+  .notif-nombre { font-size: 13px; font-weight: 700; color: var(--texto); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .notif-meta { font-size: 11px; color: #94a3b8; margin-top: 1px; }
+  .notif-sit { font-size: 11px; font-weight: 700; color: #991b1b; margin-top: 3px; }
+  .notif-right { flex-shrink: 0; text-align: right; }
+
+  /* ── FILTER BUTTON ACTIVE STATE ── */
+  .alr-counter { cursor: pointer; transition: box-shadow 0.15s, transform 0.15s; }
+  .alr-counter:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+  .alr-counter.critico.filter-on { box-shadow: 0 0 0 3px #dc2626; }
+  .alr-counter.advertencia.filter-on { box-shadow: 0 0 0 3px #d97706; }
+  .alr-counter.exceso.filter-on { box-shadow: 0 0 0 3px #ea580c; }
+
   /* ── ALERTAS PANEL v29 ── */
   .alr-counters { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px; }
   .alr-counter { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 14px; border: 1px solid; }
@@ -416,7 +466,7 @@
       </div>
       <div class="sb-brand-text">
         <div class="sb-name">Vende Seguro</div>
-        <div class="sb-ver">v29.0 · Risk Intelligence</div>
+        <div class="sb-ver">v30.0 · Risk Intelligence</div>
       </div>
     </div>
     <nav class="sb-nav">
@@ -479,7 +529,7 @@
     </div>
     <div class="canvas-body">
       <div class="container">
-  <div id="dashboard-metricas" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:1.5rem;">
+  <div id="dashboard-metricas" style="display:none;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:1.5rem;">
     <div style="background:var(--blanco);border:1px solid var(--azul-borde);border-radius:14px;padding:1.25rem;text-align:center;box-shadow:0 1px 4px rgba(37,99,235,0.06);">
       <div style="font-size:11px;color:var(--azul-claro);font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">Cartera</div>
       <div id="met-total" style="font-family:'Syne',sans-serif;font-size:36px;font-weight:800;color:var(--azul-oscuro);line-height:1;">—</div>
@@ -521,8 +571,8 @@
       <div id="verdict-container"></div>
       <div id="vende-score-container"></div>
 
+      <!-- BCRA card with visual indicator injected by JS before table -->
       <div class="card" style="margin-bottom:8px;">
-        <div class="card-title">Situación BCRA</div>
         <div id="bcra-data"><div class="empty-state" style="color:#64748b;">Consultando BCRA...</div></div>
       </div>
 
@@ -531,41 +581,51 @@
         <div id="cheques-rechazados-data"></div>
       </div>
 
-      <div class="card">
-        <div class="card-title">AFIP</div>
-        <div id="afip-container"></div>
-      </div>
-
-      <div class="card">
-        <div class="card-title">Historial grupo de bodegas</div>
-        <div id="wsp-data"><div class="wsp-no-data">Buscando en historial...</div></div>
-      </div>
-
-      <div class="card">
-        <div class="card-title">Informe crediticio (Veraz / Nosis)</div>
-        <div class="upload-area" id="veraz-area" onclick="document.getElementById('veraz-pdf').click()">
-          <div style="font-size:13px;color:#888;">Hacé clic para subir el PDF de Veraz o Nosis</div>
-          <div style="font-size:12px;color:#aaa;margin-top:4px;">Extrae automáticamente score, cheques, deudas y más</div>
+      <!-- Resources card: AFIP, Bodegas, Veraz como botones outline colapsables -->
+      <div class="card" style="margin-bottom:8px;">
+        <div class="resource-bar">
+          <button class="resource-btn" id="btn-res-afip" onclick="toggleResource('panel-afip','btn-res-afip')">
+            <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            AFIP
+          </button>
+          <button class="resource-btn" id="btn-res-wsp" onclick="toggleResource('panel-wsp','btn-res-wsp')">
+            <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            Historial Bodegas
+          </button>
+          <button class="resource-btn" id="btn-res-veraz" onclick="toggleResource('panel-veraz','btn-res-veraz')">
+            <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Veraz / Nosis
+          </button>
         </div>
-        <input type="file" id="veraz-pdf" accept=".pdf" style="display:none;" onchange="procesarVeraz(this)" />
-        <div id="veraz-status" style="display:none;font-size:13px;color:#888;margin-bottom:8px;"></div>
-        <div id="veraz-datos" style="display:none;padding:12px;background:#f9f9f7;border-radius:8px;border:1px solid #e0e0d8;margin-bottom:12px;"></div>
-
-        <!-- Carga manual de datos Veraz -->
-        <div id="veraz-manual-toggle" style="margin-bottom:8px;">
-          <button onclick="toggleVerazManual()" style="font-size:12px;color:#64748b;background:none;border:1px dashed #cbd5e1;border-radius:6px;padding:5px 12px;cursor:pointer;">✏ Cargar datos manualmente</button>
+        <div id="panel-afip" class="resource-panel">
+          <div id="afip-container"></div>
         </div>
-        <div id="veraz-manual" style="display:none;padding:12px;background:#f0f9ff;border-radius:8px;border:1px solid #bae6fd;margin-bottom:12px;">
-          <div style="font-size:12px;color:#0369a1;font-weight:600;margin-bottom:10px;">Carga manual de datos crediticios</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-            <div><label style="font-size:11px;color:#64748b;">Score (ej: 399)</label><input type="number" id="manual-score" placeholder="399" style="width:100%;font-size:13px;padding:6px;border:1px solid #cbd5e1;border-radius:6px;"></div>
-            <div><label style="font-size:11px;color:#64748b;">Cheques rechazados</label><input type="number" id="manual-cheques" placeholder="0" style="width:100%;font-size:13px;padding:6px;border:1px solid #cbd5e1;border-radius:6px;"></div>
-            <div><label style="font-size:11px;color:#64748b;">Situación BCRA</label><input type="text" id="manual-situacion" placeholder="ej: Normal / Sit. 1" style="width:100%;font-size:13px;padding:6px;border:1px solid #cbd5e1;border-radius:6px;"></div>
-            <div><label style="font-size:11px;color:#64748b;">Saldo vencido</label><input type="text" id="manual-saldo" placeholder="ej: $10.949" style="width:100%;font-size:13px;padding:6px;border:1px solid #cbd5e1;border-radius:6px;"></div>
-            <div><label style="font-size:11px;color:#64748b;">Deuda sistema financiero</label><input type="text" id="manual-deuda" placeholder="ej: $849.000" style="width:100%;font-size:13px;padding:6px;border:1px solid #cbd5e1;border-radius:6px;"></div>
-            <div><label style="font-size:11px;color:#64748b;">Máximo atraso 24 meses</label><input type="text" id="manual-atraso" placeholder="ej: 30-90 días" style="width:100%;font-size:13px;padding:6px;border:1px solid #cbd5e1;border-radius:6px;"></div>
+        <div id="panel-wsp" class="resource-panel">
+          <div id="wsp-data"><div class="wsp-no-data">Buscando en historial...</div></div>
+        </div>
+        <div id="panel-veraz" class="resource-panel">
+          <div class="upload-area" id="veraz-area" onclick="document.getElementById('veraz-pdf').click()">
+            <div style="font-size:13px;color:#888;">Hacé clic para subir el PDF de Veraz o Nosis</div>
+            <div style="font-size:12px;color:#aaa;margin-top:4px;">Extrae automáticamente score, cheques, deudas y más</div>
           </div>
-          <button onclick="aplicarVerazManual()" style="margin-top:10px;font-size:12px;padding:6px 14px;background:#0369a1;color:#fff;border-radius:6px;border:none;cursor:pointer;">✓ Aplicar datos</button>
+          <input type="file" id="veraz-pdf" accept=".pdf" style="display:none;" onchange="procesarVeraz(this)" />
+          <div id="veraz-status" style="display:none;font-size:13px;color:#888;margin-bottom:8px;"></div>
+          <div id="veraz-datos" style="display:none;padding:12px;background:#f9f9f7;border-radius:8px;border:1px solid #e0e0d8;margin-bottom:12px;"></div>
+          <div id="veraz-manual-toggle" style="margin-bottom:8px;">
+            <button onclick="toggleVerazManual()" style="font-size:12px;color:#64748b;background:none;border:1px dashed #cbd5e1;border-radius:6px;padding:5px 12px;cursor:pointer;">✏ Cargar datos manualmente</button>
+          </div>
+          <div id="veraz-manual" style="display:none;padding:12px;background:#f0f9ff;border-radius:8px;border:1px solid #bae6fd;margin-bottom:12px;">
+            <div style="font-size:12px;color:#0369a1;font-weight:600;margin-bottom:10px;">Carga manual de datos crediticios</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+              <div><label style="font-size:11px;color:#64748b;">Score (ej: 399)</label><input type="number" id="manual-score" placeholder="399" style="width:100%;font-size:13px;padding:6px;border:1px solid #cbd5e1;border-radius:6px;"></div>
+              <div><label style="font-size:11px;color:#64748b;">Cheques rechazados</label><input type="number" id="manual-cheques" placeholder="0" style="width:100%;font-size:13px;padding:6px;border:1px solid #cbd5e1;border-radius:6px;"></div>
+              <div><label style="font-size:11px;color:#64748b;">Situación BCRA</label><input type="text" id="manual-situacion" placeholder="ej: Normal / Sit. 1" style="width:100%;font-size:13px;padding:6px;border:1px solid #cbd5e1;border-radius:6px;"></div>
+              <div><label style="font-size:11px;color:#64748b;">Saldo vencido</label><input type="text" id="manual-saldo" placeholder="ej: $10.949" style="width:100%;font-size:13px;padding:6px;border:1px solid #cbd5e1;border-radius:6px;"></div>
+              <div><label style="font-size:11px;color:#64748b;">Deuda sistema financiero</label><input type="text" id="manual-deuda" placeholder="ej: $849.000" style="width:100%;font-size:13px;padding:6px;border:1px solid #cbd5e1;border-radius:6px;"></div>
+              <div><label style="font-size:11px;color:#64748b;">Máximo atraso 24 meses</label><input type="text" id="manual-atraso" placeholder="ej: 30-90 días" style="width:100%;font-size:13px;padding:6px;border:1px solid #cbd5e1;border-radius:6px;"></div>
+            </div>
+            <button onclick="aplicarVerazManual()" style="margin-top:10px;font-size:12px;padding:6px 14px;background:#0369a1;color:#fff;border-radius:6px;border:none;cursor:pointer;">✓ Aplicar datos</button>
+          </div>
         </div>
       </div>
 
@@ -800,21 +860,21 @@
     </div>
 
     <div id="alertas-counters" class="alr-counters">
-      <div class="alr-counter critico">
+      <div class="alr-counter critico" onclick="toggleAlertaFilter('critico')" id="filter-critico">
         <div class="alr-ico-wrap critico"><svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
         <div class="alr-counter-info">
           <div class="alr-counter-num" id="cnt-criticos">—</div>
           <div class="alr-counter-label">Críticos</div>
         </div>
       </div>
-      <div class="alr-counter advertencia">
+      <div class="alr-counter advertencia" onclick="toggleAlertaFilter('advertencia')" id="filter-advertencia">
         <div class="alr-ico-wrap advertencia"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
         <div class="alr-counter-info">
           <div class="alr-counter-num" id="cnt-advertencias">—</div>
           <div class="alr-counter-label">Advertencias</div>
         </div>
       </div>
-      <div class="alr-counter exceso">
+      <div class="alr-counter exceso" onclick="toggleAlertaFilter('exceso')" id="filter-exceso">
         <div class="alr-ico-wrap exceso"><svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
         <div class="alr-counter-info">
           <div class="alr-counter-num" id="cnt-excesos">—</div>
@@ -2530,6 +2590,30 @@ function buscarEnMoras(cuit) { return morasIndex ? morasIndex[cuit.replace(/-/g,
 
 var _pageTitles = {consulta:'Consultar CUIT', cheques:'Análisis de Cheques', historial:'Historial de Consultas', buscador:'Buscador Premium', cartera:'Gestión de Cartera', dso:'Módulo DSO', alertas:'Alertas BCRA', red:'Red de Bodegas', configuracion:'Configuración'};
 
+var _alertasFilter = null; // 'critico' | 'advertencia' | 'exceso' | null
+
+function toggleResource(panelId, btnId) {
+  var panel = document.getElementById(panelId);
+  var btn = document.getElementById(btnId);
+  if (!panel) return;
+  var isOpen = panel.classList.contains('open');
+  // Close all panels first
+  document.querySelectorAll('.resource-panel').forEach(function(p){ p.classList.remove('open'); });
+  document.querySelectorAll('.resource-btn').forEach(function(b){ b.classList.remove('active'); });
+  if (!isOpen) { panel.classList.add('open'); if (btn) btn.classList.add('active'); }
+}
+
+function toggleAlertaFilter(tipo) {
+  var wasActive = _alertasFilter === tipo;
+  _alertasFilter = wasActive ? null : tipo;
+  // Update visual state
+  ['critico','advertencia','exceso'].forEach(function(t){
+    var el = document.getElementById('filter-' + t);
+    if (el) el.classList.toggle('filter-on', _alertasFilter === t);
+  });
+  _renderAlertasList();
+}
+
 function switchTab(tab, el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
@@ -2538,11 +2622,14 @@ function switchTab(tab, el) {
   localStorage.setItem('piat_tab', tab);
   var _ptEl = document.getElementById('page-title-el');
   if (_ptEl) _ptEl.textContent = _pageTitles[tab] || tab;
+  // Dashboard de métricas: solo visible en tabs de gestión
+  var dm = document.getElementById('dashboard-metricas');
+  if (dm) dm.style.display = (tab === 'consulta' || tab === 'cheques' || tab === 'historial' || tab === 'buscador') ? 'none' : 'grid';
   if (tab === 'cheques') { document.getElementById('cheque-resultado').style.display='none'; }
   if (tab === 'historial') renderHistorial();
   if (tab === 'cartera') renderCartera();
   if (tab === 'buscador') renderBuscador('');
-  if (tab === 'alertas') { renderAlertas(); autoCargarScoresServidor(); }
+  if (tab === 'alertas') { _alertasFilter = null; renderAlertas(); autoCargarScoresServidor(); }
 }
 
 function scoreBarHtml(score) {
@@ -2791,24 +2878,26 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
     });
   }
   var yaEstaCartera = cartera.some(function(c) { return c.cuit === cuit; });
-  var botonCartera = yaEstaCartera
-    ? '<span style="font-size:11px;color:var(--verde);padding:4px 10px;background:var(--verde-bg);border-radius:6px;font-weight:600;">En cartera ✓</span>'
-    : '<button onclick="agregarDesdConsulta(\''+cuit+'\', \''+nombreMostrar.replace(/'/g,'')+'\')" style="font-size:12px;padding:6px 14px;background:var(--azul-suave);color:var(--azul-claro);border-color:var(--azul-borde);">+ Agregar a cartera</button>';
-  var headerHtml = '<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">';
-  headerHtml += '<div class="avatar">' + (nombreMostrar !== 'Sin denominación' ? nombreMostrar.charAt(0) : '?') + '</div>';
-  headerHtml += '<div style="flex:1;"><div style="font-size:16px;font-weight:600;" class="nombre-cliente">' + nombreMostrar + '</div>';
-  headerHtml += '<div style="font-size:12px;color:#64748b;margin-top:2px;">CUIT: ' + cuit + '</div>';
+  var _avatarGrad = maxSit >= 3 ? 'linear-gradient(135deg,#dc2626,#7f1d1d)' : maxSit === 2 ? 'linear-gradient(135deg,#d97706,#92400e)' : 'linear-gradient(135deg,#1e40af,#0f2d52)';
+  var _inicial = (nombreMostrar && nombreMostrar !== 'Sin denominación') ? nombreMostrar.charAt(0).toUpperCase() : '?';
+  var _cuitFmt = cuit.length === 11 ? cuit.slice(0,2)+'-'+cuit.slice(2,10)+'-'+cuit.slice(10) : cuit;
+  var headerHtml = '<div class="decision-header">';
+  headerHtml += '<div class="avatar" style="width:54px;height:54px;border-radius:14px;font-size:22px;font-weight:800;background:' + _avatarGrad + ';">' + _inicial + '</div>';
+  headerHtml += '<div style="flex:1;min-width:0;">';
+  headerHtml += '<div class="decision-nombre nombre-cliente">' + nombreMostrar + '</div>';
+  headerHtml += '<div class="decision-cuit">CUIT: ' + _cuitFmt + '</div>';
+  headerHtml += '<div class="decision-meta-row">';
   if (estadoAfip) {
-    var colorEstado = estadoAfip === 'ACTIVO' ? '#166534' : '#991b1b';
-    headerHtml += '<div style="font-size:11px;font-weight:600;color:' + colorEstado + ';margin-top:2px;">AFIP: ' + estadoAfip + '</div>';
+    var _colorAfip = estadoAfip === 'ACTIVO' ? '#166534' : '#991b1b';
+    headerHtml += '<span style="font-size:11px;font-weight:600;color:' + _colorAfip + ';">AFIP: ' + estadoAfip + '</span>';
   }
-  if (domicilioAfip) {
-    headerHtml += '<div style="font-size:11px;color:#94a3b8;margin-top:1px;">📍 ' + domicilioAfip + '</div>';
-  }
-  headerHtml += '</div>';
-  headerHtml += getBadge(maxSit);
-  headerHtml += '<div>' + botonCartera + '</div>';
-  headerHtml += '</div>';
+  if (domicilioAfip) headerHtml += '<span style="font-size:11px;color:#94a3b8;">📍 ' + domicilioAfip + '</span>';
+  headerHtml += '</div></div>';
+  headerHtml += '<div class="decision-actions">';
+  headerHtml += yaEstaCartera
+    ? '<span class="badge-cartera">En cartera ✓</span>'
+    : '<span class="badge-no-cartera">Sin seguimiento</span><button onclick="agregarDesdConsulta(\''+cuit+'\', \''+nombreMostrar.replace(/'/g,'')+'\');" class="resource-btn" style="font-size:12px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>Agregar</button>';
+  headerHtml += '</div></div>';
   document.getElementById('cliente-header').innerHTML = headerHtml;
   let v = '';
   if (esTimeout) v = '';
@@ -2881,13 +2970,20 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
       })
     }).catch(function(){});
   });
+  var _bcraInd = '';
   if (esTimeout) {
-    document.getElementById('bcra-data').innerHTML = `<div style="font-size:13px;color:#854d0e;padding:8px;background:#fefce8;border-radius:8px;border:1px solid #fde047;">El BCRA no respondió en este momento. Esto puede significar que el cliente no tiene deudas registradas, o que el servicio está temporalmente caído. Intentá de nuevo en unos segundos o consultá directamente en <a href="https://www.bcra.gob.ar/BCRAyVos/Situacion_Crediticia.asp" target="_blank" style="color:#854d0e;">bcra.gob.ar</a>.</div>`;
+    _bcraInd = '<div class="bcra-indicator warn"><span class="bcra-ind-icon">⚠️</span><div><div class="bcra-ind-text">BCRA sin respuesta</div><div class="bcra-ind-sub">El servicio no respondió. Puede no tener deudas registradas. Intentá de nuevo.</div></div></div>';
+    document.getElementById('bcra-data').innerHTML = _bcraInd;
   } else if (!entidades.length) {
-    document.getElementById('bcra-data').innerHTML = `<div class="empty-state" style="color:#166534;">✓ Sin deudas registradas en el BCRA para este CUIT.</div>`;
+    _bcraInd = '<div class="bcra-indicator ok"><span class="bcra-ind-icon">✅</span><div><div class="bcra-ind-text">Sin deudas en el sistema financiero</div><div class="bcra-ind-sub">BCRA no registra deudas para este CUIT.</div></div></div>';
+    document.getElementById('bcra-data').innerHTML = _bcraInd;
   } else {
+    _bcraInd = maxSit >= 3
+      ? '<div class="bcra-indicator danger"><span class="bcra-ind-icon">⛔</span><div><div class="bcra-ind-text">Situación ' + maxSit + ' — ' + sitNombre(maxSit) + '</div><div class="bcra-ind-sub">Mora bancaria activa en el sistema financiero.</div></div></div>'
+      : maxSit === 2
+        ? '<div class="bcra-indicator warn"><span class="bcra-ind-icon">⚠️</span><div><div class="bcra-ind-text">Situación 2 — Atrasos detectados</div><div class="bcra-ind-sub">El cliente registra atrasos en al menos una entidad bancaria.</div></div></div>'
+        : '<div class="bcra-indicator ok"><span class="bcra-ind-icon">✅</span><div><div class="bcra-ind-text">Situación normal</div><div class="bcra-ind-sub">Situación 1 en todas las entidades del sistema financiero.</div></div></div>';
     var conMonto = entidades.filter(function(e) { return e.monto > 0; });
-    var sinMonto = entidades.filter(function(e) { return !e.monto || e.monto === 0; });
     let t = `<table class="bcra-table"><thead><tr><th>Entidad</th><th>Período</th><th>Monto (miles $)</th><th>Situación</th><th>Días atraso</th></tr></thead><tbody>`;
     entidades.forEach(function(e) {
       var monto = e.monto > 0 ? '$' + (e.monto).toLocaleString('es-AR') : '-';
@@ -2898,7 +2994,7 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
       var totalMiles = conMonto.reduce(function(s,e) { return s + (e.monto||0); }, 0);
       t += `<div style="font-size:12px;color:#64748b;margin-top:6px;text-align:right;">Total deuda sistema financiero: <strong>$${totalMiles.toLocaleString('es-AR')}</strong></div>`;
     }
-    document.getElementById('bcra-data').innerHTML = t;
+    document.getElementById('bcra-data').innerHTML = _bcraInd + t;
   }
 }
 
@@ -4022,35 +4118,29 @@ function _alrScoreData(c) {
 }
 
 function renderAlertas() {
-  // Alertas de cambio reciente
+  // Notification cards — cambios recientes
   const alertasEl = document.getElementById('alertas-lista');
   const alertasNuevasDiv = document.getElementById('alertas-nuevas');
   if (alertas.length) {
     alertasNuevasDiv.style.display = 'block';
     alertasEl.innerHTML = alertas.map(function(a) {
-      var badgeClass = a.tipo === 'bodegas' ? 'badge-warning' : 'badge-danger';
-      var badgeStyle = a.tipo === 'bodegas' ? 'background:#fef9c3;color:#713f12;' : '';
-      var badgeText = a.tipo === 'bodegas' ? '⚠ Bodegas' : 'BCRA';
-      var html = '<div class="alert-card">';
-      html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">';
-      html += '<div style="flex:1;">';
-      html += '<div style="font-size:14px;font-weight:600;">' + a.nombre + '</div>';
-      html += '<div style="font-size:12px;color:#888;margin-top:2px;">CUIT: ' + a.cuit + ' · ' + a.fecha + '</div>';
+      var isBodegas = a.tipo === 'bodegas';
+      var initials = (a.nombre||'?').trim().split(/\s+/).slice(0,2).map(function(w){ return w[0]; }).join('').toUpperCase();
+      var sitArrow = a.tipo === 'bcra' && a.sitAnterior != null && a.sitActual != null
+        ? 'Sit. ' + a.sitAnterior + ' → Sit. ' + a.sitActual + (a.sitActual >= 3 ? ' 🚩' : a.sitActual === 2 ? ' ⚠️' : ' ✅')
+        : isBodegas ? '⚠️ Comentarios negativos en bodegas' : '';
+      var html = '<div class="notif-card' + (isBodegas?' bodegas':'') + '" onclick="verCliente(\'' + a.cuit + '\')">';
+      html += '<div class="notif-avatar' + (isBodegas?' bodegas':'') + '">' + initials + '</div>';
+      html += '<div class="notif-body">';
+      html += '<div class="notif-nombre">' + a.nombre + '</div>';
+      html += '<div class="notif-meta">CUIT: ' + a.cuit + (a.fecha ? ' · ' + a.fecha : '') + '</div>';
+      if (sitArrow) html += '<div class="notif-sit">' + sitArrow + '</div>';
+      html += '</div>';
+      html += '<div class="notif-right">';
       if (a.scoreCompleto) {
-        html += '<div style="font-size:12px;margin-top:4px;">Score Vende Seguro: <span style="font-weight:700;color:'+a.scoreColor+';">'+a.scoreEmoji+' '+a.scoreCompleto+'</span> <span style="color:#aaa;font-size:10px;">'+a.scoreRango+'</span></div>';
+        html += '<div style="font-size:14px;font-weight:800;color:'+a.scoreColor+';">'+a.scoreCompleto+'</div>';
+        html += '<div style="font-size:10px;color:'+a.scoreColor+';">'+a.scoreEmoji+' '+a.scoreRango+'</div>';
       }
-      if (a.tipo === 'bcra') {
-        html += '<div style="font-size:13px;margin-top:8px;color:#991b1b;font-weight:500;">BCRA: Situación ' + a.sitAnterior + ' → ' + a.sitActual + ' (' + sitNombre(a.sitActual) + ')</div>';
-      }
-      if (a.tipo === 'bodegas') {
-        html += '<div style="font-size:13px;margin-top:8px;color:#854d0e;font-weight:500;">Grupo bodegas: comentarios negativos detectados</div>';
-        if (a.mensajes && a.mensajes.length > 0) {
-          a.mensajes.forEach(function(msg) {
-            html += '<div style="font-size:12px;color:#666;margin-top:4px;padding:4px 8px;background:#fefce8;border-radius:6px;font-style:italic;">"' + msg + '"</div>';
-          });
-        }
-      }
-      html += '</div><span class="badge ' + badgeClass + '" style="' + badgeStyle + '">' + badgeText + '</span>';
       html += '</div></div>';
       return html;
     }).join('');
@@ -4058,13 +4148,26 @@ function renderAlertas() {
     alertasNuevasDiv.style.display = 'none';
   }
 
-  const listaEl = document.getElementById('cartera-bcra-lista');
   const ultimaVerif = localStorage.getItem('piat_ultima_verif');
-  if (ultimaVerif) document.getElementById('ultima-verificacion').textContent = 'Última verificación: ' + ultimaVerif;
+  if (ultimaVerif) { var uvEl = document.getElementById('ultima-verificacion'); if(uvEl) uvEl.textContent = 'Última verificación: ' + ultimaVerif; }
+
+  // Update counters
+  var nCrit = cartera.filter(function(c){ return c.ultimaSit && c.ultimaSit >= 3; }).length;
+  var nAdv  = cartera.filter(function(c){ return c.ultimaSit === 2; }).length;
+  var nExc  = cartera.filter(function(c){ return c.saldoActual && c.limiteCreditoARS && Number(c.saldoActual) > Number(c.limiteCreditoARS); }).length;
+  var cntC = document.getElementById('cnt-criticos'); if(cntC) cntC.textContent = nCrit;
+  var cntA = document.getElementById('cnt-advertencias'); if(cntA) cntA.textContent = nAdv;
+  var cntE = document.getElementById('cnt-excesos'); if(cntE) cntE.textContent = nExc;
+
+  _renderAlertasList();
+}
+
+function _renderAlertasList() {
+  const listaEl = document.getElementById('cartera-bcra-lista');
+  if (!listaEl) return;
 
   if (!cartera.length) {
     listaEl.innerHTML = '<div class="empty-state">No hay clientes en la cartera.<br>Agregá clientes en la pestaña Cartera.</div>';
-    ['cnt-criticos','cnt-advertencias','cnt-excesos'].forEach(function(id){ var el=document.getElementById(id); if(el) el.textContent='0'; });
     return;
   }
 
@@ -4080,13 +4183,19 @@ function renderAlertas() {
     return 0;
   });
 
-  // Update counters
-  var nCrit = cartera.filter(function(c){ return c.ultimaSit && c.ultimaSit >= 3; }).length;
-  var nAdv  = cartera.filter(function(c){ return c.ultimaSit === 2; }).length;
-  var nExc  = cartera.filter(function(c){ return c.saldoActual && c.limiteCreditoARS && Number(c.saldoActual) > Number(c.limiteCreditoARS); }).length;
-  var cntC = document.getElementById('cnt-criticos'); if(cntC) cntC.textContent = nCrit;
-  var cntA = document.getElementById('cnt-advertencias'); if(cntA) cntA.textContent = nAdv;
-  var cntE = document.getElementById('cnt-excesos'); if(cntE) cntE.textContent = nExc;
+  // Apply active filter
+  if (_alertasFilter === 'critico') {
+    carteraOrdenada = carteraOrdenada.filter(function(c){ return c.ultimaSit && c.ultimaSit >= 3; });
+  } else if (_alertasFilter === 'advertencia') {
+    carteraOrdenada = carteraOrdenada.filter(function(c){ return c.ultimaSit === 2; });
+  } else if (_alertasFilter === 'exceso') {
+    carteraOrdenada = carteraOrdenada.filter(function(c){ return c.saldoActual && c.limiteCreditoARS && Number(c.saldoActual) > Number(c.limiteCreditoARS); });
+  }
+
+  if (!carteraOrdenada.length) {
+    listaEl.innerHTML = '<div class="empty-state" style="padding:2rem;">Sin clientes en esta categoría.</div>';
+    return;
+  }
 
   listaEl.innerHTML = carteraOrdenada.map(function(c) {
     var mora = buscarEnMoras(c.cuit);
