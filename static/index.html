@@ -215,6 +215,39 @@
   .chq-clean { padding: 12px 0; text-align: center; }
   .chq-clean-label { font-size: 10px; font-weight: 700; color: #10b981; letter-spacing: 1.8px; text-transform: uppercase; }
 
+  /* ── BUSCADOR PREMIUM ── */
+  .buscador-wrap { position: relative; margin-bottom: 8px; }
+  .buscador-ico { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: #94a3b8; pointer-events: none; }
+  .buscador-input { width: 100%; padding: 14px 16px 14px 48px; border: 2px solid #e2e8f0; border-radius: 14px; font-size: 15px; font-family: 'Inter', sans-serif; background: #fff; color: var(--texto); outline: none; transition: all 0.2s; box-shadow: 0 2px 8px rgba(0,0,0,0.04); flex: none; min-width: 0; }
+  .buscador-input:focus { border-color: var(--azul-claro); box-shadow: 0 0 0 3px rgba(37,99,235,0.1), 0 2px 8px rgba(0,0,0,0.04); }
+  .buscador-count { font-size: 12px; color: var(--texto-suave); margin-bottom: 16px; padding-left: 2px; }
+
+  /* ── CLIENT CARDS ── */
+  .cli-cards-grid { display: flex; flex-direction: column; gap: 12px; }
+  .cli-card { background: #fff; border-radius: 16px; border: 1px solid rgba(226,232,240,0.8); padding: 20px; box-shadow: var(--card-shadow); transition: all 0.22s; }
+  .cli-card:hover { box-shadow: var(--card-shadow-hover); transform: translateY(-2px); border-color: #bfdbfe; }
+  .cli-card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .cli-avatar { width: 42px; height: 42px; border-radius: 12px; color: #fff; font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; letter-spacing: -0.5px; }
+  .cli-header-info { flex: 1; min-width: 0; }
+  .cli-nombre { font-size: 1.05rem; font-weight: 700; color: var(--texto); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.2px; }
+  .cli-cuit-tag { font-size: 12px; color: var(--texto-suave); margin-top: 2px; }
+  .cli-header-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .cli-btn-icon { padding: 5px 9px; font-size: 13px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; color: #64748b; cursor: pointer; transition: all 0.15s; }
+  .cli-btn-icon:hover { background: var(--azul-suave); border-color: var(--azul-claro); color: var(--azul-claro); box-shadow: none; }
+  .cli-btn-del:hover { background: #fee2e2 !important; border-color: #fca5a5 !important; color: #991b1b !important; }
+  .cli-data-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; padding: 14px 0; border-top: 1px solid #f1f5f9; border-bottom: 1px solid #f1f5f9; margin-bottom: 14px; }
+  .cli-data-cell { display: flex; flex-direction: column; gap: 3px; }
+  .cli-cell-label { font-size: 9px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 3px; }
+  .cli-score-num { font-size: 1.6rem; font-weight: 800; line-height: 1; letter-spacing: -1px; }
+  .cli-cell-sub { font-size: 11px; color: var(--texto-suave); margin-top: 2px; }
+  .cli-limite-num { font-size: 1.1rem; font-weight: 700; color: var(--texto); }
+  .cli-credit-bar-wrap { width: 100%; height: 5px; background: #f1f5f9; border-radius: 9999px; overflow: hidden; margin: 5px 0 2px; }
+  .cli-credit-bar-fill { height: 100%; border-radius: 9999px; background: linear-gradient(to right, #22c55e, #0ea5e9); transition: width 0.5s ease; }
+  .cli-credit-bar-fill.danger { background: linear-gradient(to right, #f59e0b, #ef4444); }
+  .cli-card-footer { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  .cli-meta-tag { font-size: 11px; color: #64748b; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 9999px; padding: 3px 10px; }
+  .cli-btn-detalle { margin-left: auto; font-size: 12px !important; padding: 7px 16px !important; }
+
   /* ── RESPONSIVE ── */
   @media (max-width: 768px) {
     #sidebar { width: 56px; }
@@ -227,6 +260,8 @@
     .page-header { padding: 10px 14px; }
     #dashboard-metricas { grid-template-columns: repeat(2,1fr) !important; }
     .info-grid, .afip-grid { grid-template-columns: 1fr; }
+    .cli-data-grid { grid-template-columns: 1fr 1fr; }
+    .buscador-input { font-size: 14px; padding: 12px 14px 12px 42px; }
   }
 </style>
 </head>
@@ -560,10 +595,9 @@
         </div>
       </div>
     </div>
-    <div style="margin-bottom:10px;">
-      <input type="text" id="buscar-cartera-admin" placeholder="🔍 Buscar por nombre o CUIT..." 
-        style="width:100%;padding:9px 12px;border:1px solid var(--azul-borde);border-radius:8px;font-size:14px;background:#fff;color:var(--texto);outline:none;"
-        oninput="filtrarListaCartera(this.value)" translate="no">
+    <div class="buscador-wrap">
+      <svg class="buscador-ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="buscar-cartera-admin" class="buscador-input" placeholder="Buscar cliente por nombre o CUIT..." oninput="filtrarListaCartera(this.value)" translate="no" autocomplete="off" spellcheck="false" />
     </div>
     <div id="lista-clientes"><div class="empty-state">No hay clientes en seguimiento.</div></div>
   </div>
@@ -3494,6 +3528,9 @@ function verClienteHistorial(cuit) {
 }
 
 function filtrarListaCartera(q) {
+  renderCartera(q.trim().toLowerCase());
+}
+function _filtrarListaCartera_legacy(q) {
   var query = q.trim().toLowerCase();
   var items = document.querySelectorAll('#lista-clientes .client-row');
   items.forEach(function(item) {
@@ -3563,34 +3600,116 @@ function eliminarCliente(i) {
   renderCartera();
 }
 
-function renderCartera() {
-  const el = document.getElementById('lista-clientes');
-  if (!cartera.length) { el.innerHTML = `<div class="empty-state">No hay clientes en seguimiento.</div>`; return; }
-  el.innerHTML = cartera.map((c,i) => `
-    <div class="client-row">
-      <div>
-          <div class="client-name">${c.nombre}</div>
-          <div class="client-meta">CUIT: ${c.cuit} · Alta: ${c.fechaAlta}${c.ultimaVerif?' · Verificado: '+c.ultimaVerif:''}</div>
-          ${(c.limiteCreditoARS || c.plazoDias) ? '<div style="font-size:11px;color:var(--azul-claro);margin-top:2px;">' + (c.limiteCreditoARS ? 'Límite: $'+c.limiteCreditoARS.toLocaleString('es-AR') : '') + (c.limiteCreditoARS && c.plazoDias ? ' · ' : '') + (c.plazoDias ? 'Plazo: '+c.plazoDias+' días' : '') + '</div>' : ''}
-        </div>
-      <div class="client-right">
-        ${(function(){
-          var mora = buscarEnMoras(c.cuit);
-          var sit = c.ultimaSit || 0;
-          var pts = sit===1?400:sit===2?200:sit===3?50:sit>=4?0:200;
-          if(mora) pts=Math.min(pts,300);
-          var color = pts>=700?'var(--verde)':pts>=400?'#f59e0b':pts>=200?'#f97316':'var(--rojo)';
-          var emoji = pts>=700?'🟢':pts>=400?'🟡':pts>=200?'🟠':'🔴';
-          return '<div style="text-align:right;margin-bottom:4px;"><span style="font-weight:700;font-size:13px;color:'+color+';">'+emoji+' '+pts+'</span><div style="font-size:9px;color:#aaa;">parcial</div></div>';
-        })()}
-        ${c.ultimaSit ? getBadge(c.ultimaSit) : '<span style="font-size:11px;color:#aaa;">Sin verificar</span>'}
-        ${buscarEnMoras(c.cuit) ? '<span class="badge badge-mora">Mora</span>' : ''}
-        ${buscarEnWSP(c.cuit) ? '<span class="badge badge-wsp">En bodegas</span>' : ''}
-        <button onclick="verCliente('${c.cuit}')" style="font-size:12px;padding:5px 12px;">Ver</button>
-        <button onclick="event.stopPropagation();editarCliente('${c.cuit}')" style="font-size:12px;padding:5px 10px;" title="Editar">✏</button>
-        <button onclick="eliminarCliente(${i})" style="font-size:12px;padding:5px 10px;color:#991b1b;">×</button>
-      </div>
-    </div>`).join('');
+function renderCartera(filtro) {
+  var el = document.getElementById('lista-clientes');
+  if (!cartera.length) {
+    el.innerHTML = '<div class="empty-state">No hay clientes en seguimiento.<br><span style="font-size:13px;">Agregá clientes con el formulario de arriba.</span></div>';
+    return;
+  }
+  var q = filtro !== undefined ? String(filtro) : ((document.getElementById('buscar-cartera-admin')||{}).value||'').trim().toLowerCase();
+  var lista = q ? cartera.filter(function(c){ return (c.nombre||'').toLowerCase().includes(q) || (c.cuit||'').includes(q); }) : cartera;
+  var shown = lista.slice(0, 10);
+
+  if (!shown.length) {
+    el.innerHTML = '<div class="empty-state">Sin resultados para "' + q + '".</div>';
+    return;
+  }
+
+  var countHtml = '<div class="buscador-count">' + (q ? shown.length + ' de ' + lista.length + ' resultado' + (lista.length!==1?'s':'') : lista.length + ' cliente' + (lista.length!==1?'s':'')) + '</div>';
+
+  var html = '<div class="cli-cards-grid">';
+  shown.forEach(function(c) {
+    var i = cartera.indexOf(c);
+    var initials = (c.nombre||'?').split(/\s+/).slice(0,2).map(function(w){ return (w[0]||'').toUpperCase(); }).join('');
+    var mora = buscarEnMoras(c.cuit);
+    var sit = c.ultimaSit || 0;
+    var _cuitRow = c.cuit.replace(/-/g,'');
+
+    // Score
+    var scoreNum = c.scoreCompleto || null;
+    var scoreColor = c.scoreColor || (scoreNum ? (scoreNum>=700?'#166534':scoreNum>=400?'#854d0e':'#991b1b') : '#94a3b8');
+    var scoreEmoji = c.scoreEmoji || '';
+    var scoreRango = c.scoreRango || (scoreNum ? (scoreNum>=700?'Bajo Riesgo':scoreNum>=400?'Riesgo Medio':'Alto Riesgo') : '—');
+    var avatarBg = scoreNum ? (scoreNum>=700?'linear-gradient(135deg,#166534,#16a34a)':scoreNum>=400?'linear-gradient(135deg,#854d0e,#d97706)':'linear-gradient(135deg,#991b1b,#ef4444)') : 'linear-gradient(135deg,#2563eb,#0f2d52)';
+
+    // BCRA badge
+    var sitLabels = ['Sin verificar','Normal','Con seguimiento','Con problemas','Irregular','Irregular','Incobrabilidad'];
+    var sitLabel = sitLabels[sit] || 'Irregular';
+    var sitClass = sit===0?'badge-warning':sit===1?'badge-success':sit===2?'badge-warning':'badge-danger';
+
+    // Credit
+    var limite = c.limiteCreditoARS || c.limiteCredito || 0;
+    var saldo  = c.saldoActual || 0;
+    var pct    = limite > 0 ? Math.min(100, Math.round(saldo / limite * 100)) : 0;
+    var creditHtml;
+    if (limite > 0) {
+      var limFmt = limite>=1000000 ? (limite/1000000).toFixed(1)+'M' : limite>=1000 ? Math.round(limite/1000)+'K' : limite;
+      creditHtml  = '<div class="cli-limite-num">$' + limFmt + '</div>';
+      creditHtml += '<div class="cli-credit-bar-wrap"><div class="cli-credit-bar-fill' + (pct>=80?' danger':'') + '" style="width:' + pct + '%;"></div></div>';
+      creditHtml += '<div class="cli-cell-sub">' + (saldo>0 ? '$'+Math.round(saldo/1000)+'K consumido ('+pct+'%)' : 'Sin consumo registrado') + '</div>';
+    } else {
+      creditHtml = '<div style="font-size:13px;color:#94a3b8;margin-top:4px;">Sin límite asignado</div>';
+    }
+
+    // Meta tags
+    var meta = '';
+    if (c.vendedor) meta += '<span class="cli-meta-tag">' + c.vendedor + '</span>';
+    if (c.ciudad)   meta += '<span class="cli-meta-tag">' + c.ciudad + '</span>';
+    if (c.plazoDias) meta += '<span class="cli-meta-tag">Plazo ' + c.plazoDias + 'd</span>';
+    if (mora)       meta += '<span class="badge badge-mora" style="font-size:11px;">Mora</span>';
+    if (buscarEnWSP(c.cuit)) meta += '<span class="badge badge-wsp" style="font-size:11px;">En bodegas</span>';
+
+    html += '<div class="cli-card">';
+
+    // Header
+    html += '<div class="cli-card-header">';
+    html += '<div class="cli-avatar" style="background:' + avatarBg + ';">' + initials + '</div>';
+    html += '<div class="cli-header-info">';
+    html += '<div class="cli-nombre">' + c.nombre + '</div>';
+    html += '<div class="cli-cuit-tag">CUIT ' + c.cuit + (c.ultimaVerif ? ' · ' + c.ultimaVerif : '') + '</div>';
+    html += '</div>';
+    html += '<div class="cli-header-actions">';
+    html += '<button onclick="event.stopPropagation();editarCliente(\'' + c.cuit + '\')" class="cli-btn-icon" title="Editar">✏</button>';
+    html += '<button onclick="event.stopPropagation();eliminarCliente(' + i + ')" class="cli-btn-icon cli-btn-del" title="Eliminar">×</button>';
+    html += '</div>';
+    html += '</div>';
+
+    // Data grid
+    html += '<div class="cli-data-grid">';
+
+    html += '<div class="cli-data-cell"><div class="cli-cell-label">Score</div>';
+    html += '<div id="score-cell-' + _cuitRow + '">';
+    if (scoreNum) {
+      html += '<div class="cli-score-num" style="color:' + scoreColor + ';">' + scoreNum + '</div>';
+      html += scoreBarHtml(scoreNum);
+      html += '<div class="cli-cell-sub">' + scoreEmoji + ' ' + scoreRango + '</div>';
+    } else {
+      html += '<div style="font-size:13px;color:#94a3b8;font-weight:600;margin-top:4px;">Sin score</div>';
+      html += '<div class="cli-cell-sub">No consultado</div>';
+    }
+    html += '</div></div>';
+
+    html += '<div class="cli-data-cell"><div class="cli-cell-label">Situación BCRA</div>';
+    html += '<span class="badge ' + sitClass + '">Sit. ' + (sit||'?') + ' — ' + sitLabel + '</span>';
+    if (sit > 0) html += '<div class="cli-cell-sub" style="margin-top:6px;">' + (c.ultimaVerif ? 'Verificado ' + c.ultimaVerif : 'Verificado') + '</div>';
+    html += '</div>';
+
+    html += '<div class="cli-data-cell"><div class="cli-cell-label">Crédito Asignado</div>' + creditHtml + '</div>';
+
+    html += '</div>'; // data-grid
+
+    // Footer
+    html += '<div class="cli-card-footer">' + meta;
+    html += '<button onclick="verCliente(\'' + c.cuit + '\')" class="primary cli-btn-detalle">Ver Detalle Completo →</button>';
+    html += '</div>';
+
+    html += '</div>'; // cli-card
+  });
+
+  html += '</div>';
+  if (lista.length > 10 && !q) html += '<div style="text-align:center;font-size:12px;color:#94a3b8;padding:14px 0;">Buscá por nombre o CUIT para filtrar entre ' + lista.length + ' clientes</div>';
+
+  el.innerHTML = countHtml + html;
 }
 
 function renderCarteraAdmin() { renderCartera(); }
