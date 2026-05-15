@@ -586,7 +586,7 @@
       </div>
 
       <!-- Resources card: AFIP, Bodegas, Veraz como botones outline colapsables -->
-      <div class="card" style="margin-bottom:8px;">
+      <div class="card" id="recursos-card" style="margin-bottom:8px;">
         <div class="resource-bar">
           <button class="resource-btn" id="btn-res-afip" onclick="toggleResource('panel-afip','btn-res-afip')">
             <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
@@ -2766,6 +2766,12 @@ async function consultarCliente() {
       nombreFinal = bcraData.results.denominacion;
     }
     if (!nombreFinal) nombreFinal = cuitFmtLocal;
+    // BLOQUEO: BCRA dice que el CUIT no tiene registros Y no hay nombre en AFIP ni cartera
+    // → el CUIT no existe o no está inscripto. No renderizar informe.
+    if (bcraData.sin_deudas === true && /^\d/.test(nombreFinal)) {
+      mostrarErrorCuitInexistente(raw);
+      return;
+    }
     if (bcraData.error === 'timeout') {
       mostrarResultado(raw, null, true, estadoAfip, domicilioAfip, nombreFinal);
     } else {
@@ -2774,6 +2780,8 @@ async function consultarCliente() {
     }
   } catch(e) {
     if (!nombreFinal) nombreFinal = cuitFmtLocal;
+    // Si BCRA lanza excepción y tampoco tenemos nombre → bloquear
+    if (/^\d/.test(nombreFinal)) { mostrarErrorCuitInexistente(raw); return; }
     mostrarResultado(raw, null, true, estadoAfip, domicilioAfip, nombreFinal);
   }
 
@@ -4247,6 +4255,47 @@ function verCliente(cuit) {
   document.querySelectorAll('.tab')[0].click();
   document.getElementById('cuit-input').value = cuit;
   consultarCliente();
+}
+
+function mostrarErrorCuitInexistente(raw) {
+  var cuitFmt = raw.length === 11 ? raw.slice(0,2)+'-'+raw.slice(2,10)+'-'+raw.slice(10) : raw;
+  document.getElementById('loading-state').style.display = 'none';
+  document.getElementById('resultado').style.display = 'block';
+
+  // Header: bloque de error total — reemplaza cualquier contenido previo
+  document.getElementById('cliente-header').innerHTML =
+    '<div style="text-align:center;padding:32px 20px;">' +
+    '<div style="font-size:48px;line-height:1;margin-bottom:14px;">🚫</div>' +
+    '<div style="font-size:17px;font-weight:800;color:#991b1b;letter-spacing:-0.3px;margin-bottom:8px;">ESTE CUIT NO EXISTE O NO TIENE REGISTRO EN AFIP/BCRA</div>' +
+    '<div style="font-size:13px;color:#64748b;margin-bottom:20px;">CUIT consultado: <strong style="color:#475569;">' + cuitFmt + '</strong></div>' +
+    '<a href="https://www.afip.gob.ar/genericos/consultaCUIT/" target="_blank" rel="noopener" ' +
+    'style="display:inline-flex;align-items:center;gap:8px;padding:11px 22px;background:#2563eb;color:#fff;border-radius:10px;font-weight:600;font-size:13px;text-decoration:none;">' +
+    '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>' +
+    'Verificar Constancia en ARCA (ex AFIP)' +
+    '</a>' +
+    '</div>';
+
+  // Limpiar y ocultar todo lo demás — estado de error total
+  document.getElementById('mora-alert-container').innerHTML = '';
+  ['saldos-interno-card','decision-grid','cheques-rechazados-card',
+   'recursos-card','analisis-resultado'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+  var scoreEl = document.getElementById('vende-score-container');
+  if (scoreEl) scoreEl.innerHTML = '';
+  var verdEl = document.getElementById('verdict-container');
+  if (verdEl) verdEl.innerHTML = '';
+  document.getElementById('btn-analizar').style.display = 'none';
+  document.getElementById('btn-export').style.display = 'none';
+
+  // Limpiar globals para que no queden datos de la consulta anterior
+  ultimoAnalisis = null;
+  window._ultimoBcraData = null;
+  window._ultimoScoreVende = null;
+  window._saldosCliente = null;
+  window._chequesUltimaConsulta = null;
 }
 
 function abrirConstanciaARCA() {
