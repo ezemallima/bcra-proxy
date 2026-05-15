@@ -1041,52 +1041,91 @@ function renderCartera(filtro) {
   else if (filtro === 'riesgo') lista = lista.filter(c => (c.ultimaSit||1) >= 3);
   else if (filtro === 'buenos') lista = lista.filter(c => (c.score||0) >= 700);
   else if (filtro === 'saldo') lista = lista.filter(c => getSaldos(c.nombre));
-  // Aplicar búsqueda si hay texto
-  if (_carteraFiltrada) lista = lista.filter(c => matchBusqueda(c.nombre, _carteraFiltrada));
+  if (_carteraFiltrada) lista = lista.filter(c => matchBusqueda(c.nombre, _carteraFiltrada, c.cuit));
 
   const el = document.getElementById('cartera-lista');
   if (!lista.length) {
     el.innerHTML = '<div class="empty"><div class="empty-icon">📭</div><div class="empty-text">Sin clientes en este filtro</div></div>';
     return;
   }
-  el.innerHTML = lista.map(c => {
-    const sit = c.ultimaSit || 1;
-    const score = c.score ?? null;
-    const tieneAlerta = c.alerta || alertaCuits.has(c.cuit);
-    const tieneAlertaTemprana = c.alerta_temprana && !tieneAlerta;
-    const alertaLog = c.alerta_logistica || '';
-    const esOportunidad = c.oportunidad;
-    const saldosData = getSaldos(c.nombre);
-    const scoreColor = scoreToColor(score);
-    const limiteCredito = c.limite_credito || 0;
-    const saldoActual = (saldosData && saldosData.total_saldo) || c.total_saldo || 0;
-    const cupoDisponible = limiteCredito > 0 ? Math.max(0, limiteCredito - saldoActual) : 0;
-    const excedido = limiteCredito > 0 && saldoActual >= limiteCredito;
-    const pctUsado = limiteCredito > 0 ? Math.min(100, (saldoActual / limiteCredito) * 100) : 0;
-    const barColor = excedido ? 'var(--red)' : pctUsado > 80 ? 'var(--orange)' : 'var(--green)';
-    // Colored dot: green=sit1, yellow=sit2, red=sit3+, gray=sin verificar
-    const dotColor = !score ? 'var(--text2)' : sit === 1 ? 'var(--green)' : sit === 2 ? 'var(--yellow)' : 'var(--red)';
-    const cardBorderClass = tieneAlerta ? ' alerta' : excedido ? ' excedido-card' : '';
-    return `<div class="cliente-card${cardBorderClass}" data-cuit="${esc(c.cuit)}" data-nombre="${esc(c.nombre)}" onclick="abrirModalCliente(this.dataset.cuit, this.dataset.nombre)">
-      <div class="cliente-row1">
-        <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
-          <span style="flex-shrink:0;width:10px;height:10px;border-radius:50%;background:${dotColor};display:inline-block;" title="Situación ${sit}"></span>
-          <div class="cliente-nombre">${esc(c.nombre)}${esOportunidad ? ' <span style="font-size:13px;" title="Oportunidad de venta">⭐</span>' : ''}</div>
+
+  // Construir HTML en string único — una sola escritura al DOM
+  el.innerHTML = lista.map(function(c) {
+    const sit          = c.ultimaSit || 1;
+    const score        = c.score ?? null;
+    const tieneAlerta  = c.alerta || alertaCuits.has(c.cuit);
+    const tieneAT      = c.alerta_temprana && !tieneAlerta;
+    const esOport      = c.oportunidad;
+    const saldosData   = getSaldos(c.nombre);
+    const scoreColor   = scoreToColor(score);
+    const limCred      = c.limite_credito || 0;
+    const saldoActual  = (saldosData && saldosData.total_saldo) || c.total_saldo || 0;
+    const excedido     = limCred > 0 && saldoActual >= limCred;
+    const pctUsado     = limCred > 0 ? Math.min(100, (saldoActual / limCred) * 100) : 0;
+    const barColor     = excedido ? 'var(--red)' : pctUsado > 80 ? 'var(--orange)' : 'var(--green)';
+    const dotColor     = !score ? 'var(--text2)' : sit === 1 ? 'var(--green)' : sit === 2 ? 'var(--yellow)' : 'var(--red)';
+
+    // ── DSO: días de atraso máximo sobre facturas abiertas ──────────
+    const dso          = calcDSO(saldosData);
+    const esDeudaCrit  = dso !== null && dso > 30;
+    const dsoCls       = dso === null ? '' : dso > 30 ? 'dso-critical' : dso > 15 ? 'dso-warning' : 'dso-ok';
+    const dsoLabel     = dso === null ? '' : dso > 0 ? dso + 'd venc.' : 'Al día';
+
+    // ── Avatar: inicial + color según situación ──────────────────────
+    const inicial      = (c.nombre || '?').trim()[0].toUpperCase();
+    const avCls        = tieneAlerta || esDeudaCrit ? 'av-alerta' : sit === 1 && (score||0) >= 600 ? 'av-ok' : '';
+
+    // ── CUIT formateado para display ─────────────────────────────────
+    const cuitRaw      = (c.cuit || '').replace(/\D/g, '');
+    const cuitFmt      = cuitRaw.length === 11
+      ? cuitRaw.slice(0,2)+'-'+cuitRaw.slice(2,10)+'-'+cuitRaw.slice(10)
+      : (c.cuit || '—');
+
+    // ── Clase de la card ─────────────────────────────────────────────
+    const cardCls = tieneAlerta    ? ' alerta'
+                  : excedido       ? ' excedido-card'
+                  : esDeudaCrit    ? ' deuda-critica'
+                  : '';
+
+    return `<div class="cliente-card${cardCls}" data-cuit="${esc(c.cuit)}" data-nombre="${esc(c.nombre)}" onclick="abrirModalCliente(this.dataset.cuit, this.dataset.nombre)">
+
+      <!-- Identidad: avatar + nombre + CUIT + score -->
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div class="avatar-circle ${avCls}">${inicial}</div>
+        <div style="flex:1;min-width:0;">
+          <div class="cliente-nombre">${esc(c.nombre)}${esOport ? ' <span title="Oportunidad">⭐</span>' : ''}</div>
+          <div style="font-family:'Roboto Mono',monospace;font-size:10px;color:var(--text3);margin-top:2px;letter-spacing:0.3px">${cuitFmt}</div>
         </div>
-        ${score ? `<div class="score-badge" style="color:${scoreColor};flex-shrink:0;">${score}</div>` : '<div class="score-badge" style="color:var(--text2);flex-shrink:0;">—</div>'}
+        <div style="text-align:right;flex-shrink:0;">
+          <div class="score-badge" style="color:${scoreColor};font-size:15px;">${score ?? '—'}</div>
+          <div style="font-size:9px;color:var(--text3);margin-top:2px;">${score ? scoreToRango(score) : ''}</div>
+        </div>
       </div>
-      <div class="cliente-row2">
-        <span class="cliente-ciudad">${esc(c.ciudad||'')}</span>
+
+      <!-- Badges de estado -->
+      <div class="cliente-row2" style="margin-top:8px;">
+        ${c.ciudad ? `<span class="cliente-ciudad">${esc(c.ciudad)}</span>` : ''}
         <span class="sit-badge sit-${sit}" style="background:${sitBg(sit)};color:${dotColor}">Sit ${sit}</span>
-        ${tieneAlerta ? '<span class="alerta-badge">⚠ Alerta</span>' : ''}
-        ${tieneAlertaTemprana ? '<span class="alerta-temprana-badge">⚡ Alerta Temprana</span>' : ''}
-        ${excedido ? '<span class="excedido-badge">⛔ Límite Excedido</span>' : ''}
-        ${saldoActual > 0 && !excedido ? `<span class="saldo-badge">💰 $${fmtM(saldoActual)}</span>` : ''}
+        ${tieneAlerta  ? '<span class="alerta-badge">⚠ Alerta BCRA</span>'     : ''}
+        ${tieneAT      ? '<span class="alerta-temprana-badge">⚡ Temprana</span>' : ''}
+        ${excedido     ? '<span class="excedido-badge">⛔ Límite excedido</span>' : ''}
+        ${c.alerta_logistica ? `<span class="alerta-temprana-badge">${esc(c.alerta_logistica)}</span>` : ''}
       </div>
-      ${limiteCredito > 0 ? `<div class="credit-bar-wrap">
+
+      <!-- Barra de crédito (si tiene límite configurado) -->
+      ${limCred > 0 ? `<div class="credit-bar-wrap">
         <div class="credit-bar-track"><div class="credit-bar-fill" style="width:${pctUsado}%;background:${barColor}"></div></div>
-        <div class="credit-bar-label">${excedido ? '<span style="color:var(--red);font-weight:600">Crédito agotado — $'+fmtM(saldoActual)+' de $'+fmtM(limiteCredito)+'</span>' : 'Crédito: $'+fmtM(cupoDisponible)+' disp. de $'+fmtM(limiteCredito)}</div>
+        <div class="credit-bar-label">${excedido
+          ? '<span style="color:var(--red);font-weight:700">Agotado — $'+fmtM(saldoActual)+' / $'+fmtM(limCred)+'</span>'
+          : 'Disponible: $'+fmtM(Math.max(0,limCred-saldoActual))+' de $'+fmtM(limCred)}</div>
       </div>` : ''}
+
+      <!-- Zona saldo + DSO (si hay deuda pendiente) -->
+      ${saldoActual > 0 ? `<div class="card-saldo-zone">
+        <span class="card-saldo-monto">💰 $${fmtFull(saldoActual)}</span>
+        ${dsoLabel ? `<span class="card-dso-badge ${dsoCls}">${dsoLabel}</span>` : ''}
+      </div>` : ''}
+
     </div>`;
   }).join('');
 }
@@ -1192,47 +1231,69 @@ async function renderOportunidades() {
     return;
   }
 
-  // Aplicar búsqueda si hay texto
+  // Filtro por texto — acepta nombre O CUIT
   const oppsFiltradas = (_oportFiltrada && _oportFiltrada.length > 0)
-    ? opps.filter(c => matchBusqueda(c.nombre, _oportFiltrada))
+    ? opps.filter(c => matchBusqueda(c.nombre, _oportFiltrada, c.cuit))
     : opps;
 
   if (!oppsFiltradas.length) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">🔍</div><div class="empty-text">Sin resultados para "' + _oportFiltrada + '"</div></div>';
+    el.innerHTML = '<div class="empty"><div class="empty-icon">🔍</div><div class="empty-text">Sin resultados para "' + esc(_oportFiltrada) + '"</div></div>';
     return;
   }
 
   el.innerHTML = oppsFiltradas.map(function(c) {
-    const score = c.score || 0;
-    const sit = c.ultimaSit || 1;
-    const saldosData = getSaldos(c.nombre);
+    const score       = c.score || 0;
+    const sit         = c.ultimaSit || 1;
+    const saldosData  = getSaldos(c.nombre);
     const saldoActual = (saldosData && saldosData.total_saldo) || c.total_saldo || 0;
-    const limiteCredito = c.limite_credito || 0;
-    const cupoDisponible = c.cupo_disponible !== undefined && c.cupo_disponible !== null
+    const limCred     = c.limite_credito || 0;
+    const cupoDisp    = c.cupo_disponible != null
       ? c.cupo_disponible
-      : (limiteCredito > 0 ? Math.max(0, limiteCredito - saldoActual) : 0);
-    const dotColor = sit === 1 ? 'var(--green)' : sit === 2 ? 'var(--yellow)' : 'var(--red)';
+      : (limCred > 0 ? Math.max(0, limCred - saldoActual) : 0);
     const borderColor = c.oportunidad ? 'var(--accent)' : 'var(--green)';
-    const tags = [];
-    if (c.oportunidad) tags.push('⭐ Sin saldo — listo para comprar');
-    if (score >= 750) tags.push('Score Excelente');
-    else tags.push('Score Bueno');
-    if (c.dias === null || c.dias >= 30) tags.push('🔥 Contactar');
-    if (!c.tieneSaldo) tags.push('Sin deuda pendiente');
-    if (c.tieneSaldo) tags.push('Saldo: $' + fmtM(saldoActual));
-    if (limiteCredito > 0) tags.push('Cupo: $' + fmtM(cupoDisponible));
+    const scoreColor  = scoreToColor(score);
 
-    return `<div class="oport-card" style="border-left-color:${borderColor}" data-cuit="${c.cuit}" data-nombre="${esc(c.nombre)}" onclick="abrirModalCliente(this.dataset.cuit, this.dataset.nombre)">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        <div style="display:flex;align-items:center;gap:7px;flex:1;min-width:0;">
-          <span style="flex-shrink:0;width:10px;height:10px;border-radius:50%;background:${dotColor};display:inline-block;" title="Sit ${sit}"></span>
+    // Avatar
+    const inicial  = (c.nombre || '?').trim()[0].toUpperCase();
+    const avCls    = sit >= 3 ? 'av-alerta' : sit === 1 && score >= 700 ? 'av-ok' : '';
+
+    // CUIT formateado
+    const cuitRaw  = (c.cuit || '').replace(/\D/g, '');
+    const cuitFmt  = cuitRaw.length === 11
+      ? cuitRaw.slice(0,2)+'-'+cuitRaw.slice(2,10)+'-'+cuitRaw.slice(10)
+      : (c.cuit || '—');
+
+    // Tags de oportunidad
+    const tags = [];
+    if (c.oportunidad) tags.push('⭐ Sin saldo — listo');
+    tags.push(score >= 750 ? 'Score Excelente' : 'Score Bueno');
+    if (c.dias === null || c.dias >= 30) tags.push('🔥 Contactar ya');
+    if (!c.tieneSaldo) tags.push('Sin deuda');
+    else tags.push('Saldo $' + fmtM(saldoActual));
+    if (limCred > 0) tags.push('Cupo $' + fmtM(cupoDisp));
+
+    return `<div class="oport-card" style="border-left-color:${borderColor}" data-cuit="${esc(c.cuit)}" data-nombre="${esc(c.nombre)}" onclick="abrirModalCliente(this.dataset.cuit, this.dataset.nombre)">
+
+      <!-- Identidad -->
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div class="avatar-circle ${avCls}">${inicial}</div>
+        <div style="flex:1;min-width:0;">
           <div class="oport-nombre">${c.oportunidad ? '⭐ ' : ''}${esc(c.nombre)}</div>
+          <div style="font-family:'Roboto Mono',monospace;font-size:10px;color:var(--text3);margin-top:1px">${cuitFmt}</div>
         </div>
-        <div class="oport-score" style="color:${scoreToColor(score)}">${score}</div>
+        <div style="text-align:right;flex-shrink:0;">
+          <div class="oport-score" style="color:${scoreColor}">${score}</div>
+          <div style="font-size:9px;color:var(--text3)">${scoreToRango(score)}</div>
+        </div>
       </div>
-      <div style="font-size:12px;color:${c.color};font-weight:600;margin-top:4px;">${c.motivo}</div>
-      <div style="font-size:11px;color:var(--text2);margin-top:2px">${esc(c.ciudad||'')}</div>
-      <div class="oport-tags">${tags.map(t=>`<span class="oport-tag">${t}</span>`).join('')}</div>
+
+      <!-- Motivo + ciudad -->
+      <div style="font-size:12px;color:${c.color};font-weight:600;margin-top:7px;">${c.motivo}</div>
+      ${c.ciudad ? `<div style="font-size:11px;color:var(--text3);margin-top:2px">${esc(c.ciudad)}</div>` : ''}
+
+      <!-- Tags -->
+      <div class="oport-tags">${tags.map(t => `<span class="oport-tag">${t}</span>`).join('')}</div>
+
     </div>`;
   }).join('');
 }
@@ -1323,9 +1384,19 @@ function renderFacturas(data, nombre) {
   const hoy = new Date(); hoy.setHours(0,0,0,0);
   const sorted = [...facturas].sort((a,b) => parseFecha(a.fechaPago)-parseFecha(b.fechaPago));
 
+  // DSO máximo para el header del modal
+  const dsoMax = calcDSO(data);
+  const dsoModalCls   = dsoMax > 30 ? 'dso-critical' : dsoMax > 15 ? 'dso-warning' : 'dso-ok';
+  const dsoModalLabel = dsoMax > 0 ? dsoMax + ' días vencida' : 'Al día';
+  const vencidasCnt   = sorted.filter(f => parseFecha(f.fechaPago) < hoy && f.saldo > 0).length;
+
   let html = `<div class="total-box">
-    <div class="total-label">Saldo total pendiente</div>
-    <div class="total-monto">$${fmtFull(data.total_saldo)}</div>
+    <div>
+      <div class="total-label">Total a cobrar</div>
+      <div class="total-monto">$${fmtFull(data.total_saldo)}</div>
+      ${vencidasCnt > 0 ? `<div style="font-size:11px;color:var(--text2);margin-top:4px">${vencidasCnt} factura${vencidasCnt!==1?'s':''} vencida${vencidasCnt!==1?'s':''}</div>` : ''}
+    </div>
+    ${dsoMax > 0 ? `<span class="card-dso-badge ${dsoModalCls}" style="font-size:11px;padding:5px 10px;">${dsoModalLabel}</span>` : ''}
   </div>`;
 
   sorted.forEach(f => {
@@ -1570,12 +1641,12 @@ async function consultarCuit() {
 
 function veredictoRapido(score, activosCheques, maxSit) {
   if (maxSit >= 4 || activosCheques > 0)
-    return {texto:'⛔ No recibir cheque', bg:'#fee2e2', color:'var(--rojo)', borde:'var(--rojo)'};
+    return {texto:'⛔ No recibir cheque',   bg:'rgba(239,68,68,0.12)',   color:'#fca5a5', borde:'rgba(239,68,68,0.4)'};
   if (maxSit === 3 || score < 300)
-    return {texto:'⚠ Riesgo elevado', bg:'#fef9c3', color:'#854d0e', borde:'var(--amarillo)'};
+    return {texto:'⚠ Riesgo elevado',       bg:'rgba(245,158,11,0.10)', color:'#fde68a', borde:'rgba(245,158,11,0.4)'};
   if (score >= 600 && activosCheques === 0)
-    return {texto:'✓ Apto para cheque', bg:'var(--verde-bg)', color:'var(--verde)', borde:'var(--verde)'};
-  return {texto:'👁 Revisar con cautela', bg:'#fff7ed', color:'var(--naranja)', borde:'var(--naranja)'};
+    return {texto:'✓ Apto para cheque',     bg:'rgba(16,185,129,0.10)', color:'#6ee7b7', borde:'rgba(16,185,129,0.4)'};
+  return   {texto:'👁 Revisar con cautela', bg:'rgba(249,115,22,0.10)', color:'#fed7aa', borde:'rgba(249,115,22,0.4)'};
 }
 
 function renderConsulta(cuit, dd, cd, hd, serverScore) {
@@ -2013,6 +2084,22 @@ function parseFecha(s) {
   if (s.includes('/')) { const [d,m,y]=s.split('/'); return new Date(parseInt(y),parseInt(m)-1,parseInt(d)); }
   return new Date(s);
 }
+
+// Días de atraso máximo sobre facturas abiertas de un cliente.
+// Devuelve: null=sin facturas, 0=todas vigentes, N>0=días vencidas la más antigua.
+function calcDSO(saldosData) {
+  if (!saldosData || !saldosData.facturas || !saldosData.facturas.length) return null;
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  let maxAtraso = 0;
+  saldosData.facturas.forEach(function(f) {
+    if (!(f.saldo > 0)) return;
+    const venc = parseFecha(f.fechaPago);
+    const atraso = Math.round((hoy - venc) / 86400000); // positivo = vencida
+    if (atraso > maxAtraso) maxAtraso = atraso;
+  });
+  return maxAtraso;
+}
+
 // Score completo sincrónico (con datos ya cargados) — espeja calcular_score_servidor
 function calcularScoreCompletoSync(maxSit, sinDeudas, periodos, chData, histData) {
   let pts = 0;
@@ -2283,11 +2370,17 @@ function buscarEnOport(q) {
 }
 
 // Normalizar para búsqueda fuzzy
-function matchBusqueda(nombre, query) {
+// matchBusqueda: filtra por nombre O por CUIT (d\u00edgitos) en tiempo real.
+function matchBusqueda(nombre, query, cuit) {
   if (!query) return true;
+  const q = query.trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  // Si la query es solo d\u00edgitos, buscar en CUIT
+  if (/^\d+$/.test(q)) {
+    const cn = (cuit || '').replace(/\D/g,'');
+    return cn.includes(q);
+  }
+  // B\u00fasqueda por nombre (todas las palabras deben estar presentes)
   const n = nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-  const q = query.normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-  // Match parcial por cualquier palabra
   return q.split(' ').every(p => p.length < 2 || n.includes(p));
 }
 </script>
