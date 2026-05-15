@@ -2730,7 +2730,7 @@ async function consultarCliente() {
 
   // Razón Social: 1) cartera local → 2) AFIP → 3) BCRA denominacion → 4) CUIT formateado
   var cuitFmtLocal = raw.slice(0,2)+'-'+raw.slice(2,10)+'-'+raw.slice(10);
-  var enCarteraLocal = cartera.find(function(c) { return c.cuit === raw; });
+  var enCarteraLocal = cartera.find(function(c) { return (c.cuit||'').replace(/-/g,'').replace(/\s/g,'') === raw; });
   var nombreFinal = (enCarteraLocal && enCarteraLocal.nombre) ? enCarteraLocal.nombre.split(',')[0].trim() : '';
   var estadoAfip = '';
   var domicilioAfip = '';
@@ -2934,9 +2934,10 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
   const maxSit = entidades.length ? entidades.reduce((m,e) => Math.max(m, e.situacion||1), 1) : 1;
   // Guardar monto BCRA para ratio de solvencia (miles de pesos)
   window._bcraMontoUltimo = entidades.reduce(function(s,e){ return s+(e.monto||0); }, 0);
-  // Jerarquía: BCRA > AFIP async > CUIT formateado
   var cuitFmt2 = cuit.length === 11 ? cuit.slice(0,2)+'-'+cuit.slice(2,10)+'-'+cuit.slice(10) : cuit;
-  var nombreMostrar = nombreExterno || nombre || cuitFmt2;
+  // Si nombreExterno empieza con dígito es un CUIT formateado — descartar como nombre visible
+  var _extEsNombre = nombreExterno && !/^\d/.test(nombreExterno);
+  var nombreMostrar = _extEsNombre ? nombreExterno : (nombre || nombreExterno || cuitFmt2);
   if (!nombre) {
     obtenerNombre(cuit).then(function(n) {
       if (n && n !== cuitFmt2) {
@@ -2947,7 +2948,7 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
       }
     });
   }
-  var yaEstaCartera = cartera.some(function(c) { return c.cuit === cuit; });
+  var yaEstaCartera = cartera.some(function(c) { return (c.cuit||'').replace(/-/g,'') === cuit; });
   var _avatarGrad = maxSit >= 3 ? 'linear-gradient(135deg,#dc2626,#7f1d1d)' : maxSit === 2 ? 'linear-gradient(135deg,#d97706,#92400e)' : 'linear-gradient(135deg,#1e40af,#0f2d52)';
   var _inicial = (nombreMostrar && nombreMostrar !== 'Sin denominación') ? nombreMostrar.charAt(0).toUpperCase() : '?';
   var _cuitFmt = cuit.length === 11 ? cuit.slice(0,2)+'-'+cuit.slice(2,10)+'-'+cuit.slice(10) : cuit;
