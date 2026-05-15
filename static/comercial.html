@@ -254,7 +254,8 @@
 
   /* ── CARDS (generic) ─────────────────────────────────────────────────── */
   .card {
-    background: var(--surface);
+    background: rgba(15,23,42,0.6);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 16px; margin-bottom: 12px;
@@ -332,7 +333,8 @@
 
   /* ── CLIENTE CARDS ────────────────────────────────────────────────────── */
   .cliente-card {
-    background: var(--surface);
+    background: rgba(15,23,42,0.6);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 14px; margin-bottom: 9px;
@@ -560,7 +562,7 @@
 
 <!-- ══ LOGIN ════════════════════════════════════════════════════════════ -->
 <div id="login-screen">
-  <span class="login-logo">🍷</span>
+  <span class="login-logo"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 22h8M12 11v11M6 2h12l-2 9a5 5 0 01-8 0z"/></svg></span>
   <div class="login-title">Vende Seguro</div>
   <div class="login-sub">vende sin riesgo</div>
 
@@ -588,7 +590,7 @@
   <!-- Header con blur -->
   <div class="app-header">
     <div class="header-brand">
-      <span class="header-logo">🍷</span>
+      <span class="header-logo"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 22h8M12 11v11M6 2h12l-2 9a5 5 0 01-8 0z"/></svg></span>
       <div>
         <div class="header-name" id="header-name">—</div>
         <div class="header-sub" id="header-cartera">— clientes</div>
@@ -621,20 +623,20 @@
       <!-- Buscador sticky con blur -->
       <div class="sticky-search">
         <input type="text" class="buscar-input" id="buscar-cartera"
-               placeholder="🔍 Buscar por nombre o ciudad…"
+               placeholder="Buscar por nombre o ciudad…"
                oninput="buscarEnCartera(this.value)" translate="no">
       </div>
 
       <!-- Filtros + recalc -->
       <div class="filter-row">
         <button class="filter-chip active" onclick="filtrarCartera('todos',this)">Todos</button>
-        <button class="filter-chip" onclick="filtrarCartera('alertas',this)">⚠ Alertas</button>
-        <button class="filter-chip" onclick="filtrarCartera('saldo',this)">💰 Con saldo</button>
+        <button class="filter-chip" onclick="filtrarCartera('alertas',this)">Alertas</button>
+        <button class="filter-chip" onclick="filtrarCartera('saldo',this)">Con saldo</button>
         <button id="btn-recalc" onclick="actualizarScores(this)"
                 style="margin-left:auto;background:none;border:1px solid var(--border);
                        border-radius:8px;padding:7px 11px;font-size:12px;
                        color:var(--text2);cursor:pointer;font-family:'Inter',sans-serif;">
-          ↻ Scores
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg> Scores
         </button>
       </div>
 
@@ -650,7 +652,7 @@
       <!-- Buscador sticky con blur -->
       <div class="sticky-search">
         <input type="text" id="buscar-oport" class="buscar-input"
-               placeholder="🔍 Buscar cliente…"
+               placeholder="Buscar cliente…"
                oninput="buscarEnOport(this.value)" translate="no">
       </div>
 
@@ -663,15 +665,15 @@
   <!-- Bottom nav (mobile) -->
   <div class="bottom-tabs">
     <button class="tab-btn active" onclick="switchTab('consulta',this)">
-      <span class="tab-icon">🔍</span>
+      <span class="tab-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
       <span class="tab-label">Consulta</span>
     </button>
     <button class="tab-btn" onclick="switchTab('cartera',this)">
-      <span class="tab-icon">📋</span>
+      <span class="tab-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></span>
       <span class="tab-label">Cartera</span>
     </button>
     <button class="tab-btn" onclick="switchTab('oport',this)">
-      <span class="tab-icon">⚡</span>
+      <span class="tab-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>
       <span class="tab-label">Oportunidades</span>
     </button>
   </div>
@@ -943,7 +945,7 @@ async function actualizarScores(btn) {
     const r = await fetch(API + '/recalcular-scores', { method: 'POST' });
     const d = await r.json();
     if (!d.ok) throw new Error(d.error || 'error');
-    btn.textContent = '✓ ' + d.recalculados;
+    btn.textContent = d.recalculados + ' scores';
     // Refrescar scores en CARTERA_LOCAL y re-renderizar
     const scR = await fetch(API + '/api-v17-scores?v=' + Date.now()).catch(()=>null);
     if (scR && scR.ok) {
@@ -966,7 +968,7 @@ async function actualizarScores(btn) {
       renderCartera(filtroActive?.dataset?.filtro || 'todos');
       renderOportunidades();
     }
-  } catch(e) { btn.textContent = '⚠'; }
+  } catch(e) { btn.textContent = '!'; }
   setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 3000);
 }
 
@@ -977,15 +979,15 @@ async function forzarRecalculo(cuit, btn) {
     const r = await fetch(API + '/calcular-score/' + cuit + '?fresh=1');
     const d = await r.json();
     if (d.ok) {
-      btn.textContent = '✓ Listo';
+      btn.textContent = 'Listo';
       // Re-consultar con datos frescos (el input ya tiene el CUIT)
       setTimeout(() => consultarCuit(), 400);
     } else {
-      btn.textContent = '✗ Error';
+      btn.textContent = 'Error';
       setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
     }
   } catch(e) {
-    btn.textContent = '✗ Error';
+    btn.textContent = 'Error';
     setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
   }
 }
@@ -1052,7 +1054,7 @@ function renderCartera(filtro) {
 
   const el = document.getElementById('cartera-lista');
   if (!lista.length) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">📭</div><div class="empty-text">Sin clientes en este filtro</div></div>';
+    el.innerHTML = '<div class="empty"><div class="empty-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg></div><div class="empty-text">Sin clientes en este filtro</div></div>';
     return;
   }
 
@@ -1100,7 +1102,7 @@ function renderCartera(filtro) {
       <div style="display:flex;align-items:center;gap:10px;">
         <div class="avatar-circle ${avCls}">${inicial}</div>
         <div style="flex:1;min-width:0;">
-          <div class="cliente-nombre">${esc(c.nombre)}${esOport ? ' <span title="Oportunidad">⭐</span>' : ''}</div>
+          <div class="cliente-nombre">${esc(c.nombre)}${esOport ? ' <span style="color:#f59e0b"><svg width="11" height="11" viewBox="0 0 24 24" fill="#f59e0b" stroke="none" style="vertical-align:-1px"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>' : ''}</div>
           <div style="font-family:'Roboto Mono',monospace;font-size:10px;color:var(--text3);margin-top:2px;letter-spacing:0.3px">${cuitFmt}</div>
         </div>
         <div style="text-align:right;flex-shrink:0;">
@@ -1113,9 +1115,9 @@ function renderCartera(filtro) {
       <div class="cliente-row2" style="margin-top:8px;">
         ${c.ciudad ? `<span class="cliente-ciudad">${esc(c.ciudad)}</span>` : ''}
         <span class="sit-badge sit-${sit}" style="background:${sitBg(sit)};color:${dotColor}">Sit ${sit}</span>
-        ${tieneAlerta  ? '<span class="alerta-badge">⚠ Alerta BCRA</span>'     : ''}
-        ${tieneAT      ? '<span class="alerta-temprana-badge">⚡ Temprana</span>' : ''}
-        ${excedido     ? '<span class="excedido-badge">⛔ Límite excedido</span>' : ''}
+        ${tieneAlerta  ? '<span class="alerta-badge"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Alerta BCRA</span>'     : ''}
+        ${tieneAT      ? '<span class="alerta-temprana-badge"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Temprana</span>' : ''}
+        ${excedido     ? '<span class="excedido-badge"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg> Límite excedido</span>' : ''}
         ${c.alerta_logistica ? `<span class="alerta-temprana-badge">${esc(c.alerta_logistica)}</span>` : ''}
       </div>
 
@@ -1129,7 +1131,7 @@ function renderCartera(filtro) {
 
       <!-- Zona saldo + DSO (si hay deuda pendiente) -->
       ${saldoActual > 0 ? `<div class="card-saldo-zone">
-        <span class="card-saldo-monto">💰 $${fmtFull(saldoActual)}</span>
+        <span class="card-saldo-monto"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg> $${fmtFull(saldoActual)}</span>
         ${dsoLabel ? `<span class="card-dso-badge ${dsoCls}">${dsoLabel}</span>` : ''}
       </div>` : ''}
 
@@ -1192,7 +1194,7 @@ async function renderOportunidades() {
   });
 
   if (!candidatos.length) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">⚡</div><div class="empty-text">Sin oportunidades detectadas. Los clientes con score ≥ 750 aparecerán aquí.</div></div>';
+    el.innerHTML = '<div class="empty"><div class="empty-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div><div class="empty-text">Sin oportunidades detectadas. Los clientes con score ≥ 750 aparecerán aquí.</div></div>';
     return;
   }
 
@@ -1234,7 +1236,7 @@ async function renderOportunidades() {
   });
 
   if (!opps.length) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">⚡</div><div class="empty-text">Sin oportunidades detectadas.</div></div>';
+    el.innerHTML = '<div class="empty"><div class="empty-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div><div class="empty-text">Sin oportunidades detectadas.</div></div>';
     return;
   }
 
@@ -1244,7 +1246,7 @@ async function renderOportunidades() {
     : opps;
 
   if (!oppsFiltradas.length) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">🔍</div><div class="empty-text">Sin resultados para "' + esc(_oportFiltrada) + '"</div></div>';
+    el.innerHTML = '<div class="empty"><div class="empty-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div><div class="empty-text">Sin resultados para "' + esc(_oportFiltrada) + '"</div></div>';
     return;
   }
 
@@ -1272,9 +1274,9 @@ async function renderOportunidades() {
 
     // Tags de oportunidad
     const tags = [];
-    if (c.oportunidad) tags.push('⭐ Sin saldo — listo');
+    if (c.oportunidad) tags.push('Sin saldo — listo');
     tags.push(score >= 750 ? 'Score Excelente' : 'Score Bueno');
-    if (c.dias === null || c.dias >= 30) tags.push('🔥 Contactar ya');
+    if (c.dias === null || c.dias >= 30) tags.push('<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path d="M8.5 14.5A2.5 2.5 0 0011 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 11-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 002.5 2.5z"/></svg> Contactar ya');
     if (!c.tieneSaldo) tags.push('Sin deuda');
     else tags.push('Saldo $' + fmtM(saldoActual));
     if (limCred > 0) tags.push('Cupo $' + fmtM(cupoDisp));
@@ -1285,7 +1287,7 @@ async function renderOportunidades() {
       <div style="display:flex;align-items:center;gap:10px;">
         <div class="avatar-circle ${avCls}">${inicial}</div>
         <div style="flex:1;min-width:0;">
-          <div class="oport-nombre">${c.oportunidad ? '⭐ ' : ''}${esc(c.nombre)}</div>
+          <div class="oport-nombre">${c.oportunidad ? '' : ''}${esc(c.nombre)}</div>
           <div style="font-family:'Roboto Mono',monospace;font-size:10px;color:var(--text3);margin-top:1px">${cuitFmt}</div>
         </div>
         <div style="text-align:right;flex-shrink:0;">
@@ -1313,8 +1315,8 @@ async function abrirModalCliente(cuit, nombre) {
   document.getElementById('modal-title').textContent = nombre;
   document.getElementById('modal-body').innerHTML = `
     <div class="modal-tabs">
-      <div class="modal-tab active" onclick="switchModalTab('facturas',this)">💰 Cuenta corriente</div>
-      <div class="modal-tab" onclick="switchModalTab('bcra',this)">🏦 BCRA</div>
+      <div class="modal-tab active" onclick="switchModalTab('facturas',this)"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg> Cuenta corriente</div>
+      <div class="modal-tab" onclick="switchModalTab('bcra',this)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><line x1="3" y1="22" x2="21" y2="22"/><line x1="6" y1="18" x2="6" y2="11"/><line x1="10" y1="18" x2="10" y2="11"/><line x1="14" y1="18" x2="14" y2="11"/><line x1="18" y1="18" x2="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg> BCRA</div>
     </div>
     <div id="mtab-facturas"><div class="ia-loading"><div class="spinner"></div><span>Cargando...</span></div></div>
     <div id="mtab-bcra" style="display:none"><div class="ia-loading"><div class="spinner"></div><span>Consultando BCRA...</span></div></div>`;
@@ -1336,7 +1338,7 @@ async function abrirModalCliente(cuit, nombre) {
     if (sd?.facturas?.length) { SALDOS_MAP[normNombre(nombre)] = sd; window._modalFacturasData = sd; }
     factEl.innerHTML = sd?.facturas?.length
       ? renderFacturas(sd, nombre)
-      : '<div class="empty"><div class="empty-icon">✅</div><div class="empty-text">Sin facturas pendientes</div></div>';
+      : '<div class="empty"><div class="empty-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="20 6 9 17 4 12"/></svg></div><div class="empty-text">Sin facturas pendientes</div></div>';
   });
 
   // ── BCRA + Score: esperar las 3 respuestas BCRA + score, luego renderizar ──
@@ -1386,7 +1388,7 @@ function switchModalTab(tab, btn) {
 
 function renderFacturas(data, nombre) {
   const facturas = data.facturas || [];
-  if (!facturas.length) return '<div class="empty"><div class="empty-icon">✅</div><div class="empty-text">Sin facturas pendientes</div></div>';
+  if (!facturas.length) return '<div class="empty"><div class="empty-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="20 6 9 17 4 12"/></svg></div><div class="empty-text">Sin facturas pendientes</div></div>';
 
   const hoy = new Date(); hoy.setHours(0,0,0,0);
   const sorted = [...facturas].sort((a,b) => parseFecha(a.fechaPago)-parseFecha(b.fechaPago));
@@ -1423,8 +1425,8 @@ function renderFacturas(data, nombre) {
         <div class="factura-saldo">$${fmtFull(f.saldo)}</div>
       </div>
       <div class="factura-fechas">
-        <span class="factura-fecha">📅 Emitida: ${f.fechaFactura}</span>
-        <span class="factura-fecha">⏰ Vence: ${f.fechaPago}</span>
+        <span class="factura-fecha"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Emitida: ${f.fechaFactura}</span>
+        <span class="factura-fecha"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Vence: ${f.fechaPago}</span>
       </div>
       ${diferencia ? `<div style="font-size:11px;color:var(--text3);margin-top:4px">Total fac: $${fmtFull(f.totalFactura)}</div>` : ''}
     </div>`;
@@ -1458,9 +1460,9 @@ function buildChequesRiesgoHtml(cheques, canvasId) {
   var nopagN = cheques.filter(function(c){ return !_chqIsLevantado(c); }).length;
   var pct = cheques.length ? Math.round(nopagN / cheques.length * 100) : 0;
   var nivel = nopagN === 0 ? 'bajo' : (pct >= 50 ? 'alto' : 'medio');
-  var bannerTxt = nivel === 'bajo' ? '✓ RIESGO BAJO — Sin cheques impagos activos'
-    : nivel === 'alto' ? '⚠ RIESGO ALTO — Mayoría de cheques sin levantar'
-    : '⚡ RIESGO MEDIO — Cheques parcialmente regularizados';
+  var bannerTxt = nivel === 'bajo' ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="20 6 9 17 4 12"/></svg> RIESGO BAJO — Sin cheques impagos activos'
+    : nivel === 'alto' ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> RIESGO ALTO — Mayoría de cheques sin levantar'
+    : '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> RIESGO MEDIO — Cheques parcialmente regularizados';
   var montoImpago = cheques.filter(function(c){ return !_chqIsLevantado(c); }).reduce(function(a,c){ return a+(c.monto||0); }, 0);
   var montoTotal  = cheques.reduce(function(a,c){ return a+(c.monto||0); }, 0);
   var sorted = cheques.slice().sort(function(a,b){
@@ -1484,7 +1486,7 @@ function buildChequesRiesgoHtml(cheques, canvasId) {
   html += '<div class="chq-legend-item"><span class="chq-legend-dot" style="background:#22c55e"></span>' + rescN + ' Levantado' + (rescN!==1?'s':'') + '</div>';
   html += '</div></div>';
   html += '<div class="chq-summary">Total: <strong>' + cheques.length + '</strong> cheques · Monto impago: <strong>$' + (montoImpago/1000).toLocaleString('es-AR',{maximumFractionDigits:0}) + 'K</strong> / Total: $' + (montoTotal/1000).toLocaleString('es-AR',{maximumFractionDigits:0}) + 'K</div>';
-  html += '<div class="chq-ia">🤖 ' + iaTxt + '</div>';
+  html += '<div class="chq-ia"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg> ' + iaTxt + '</div>';
   html += '<div class="chq-detail">';
   sorted.slice(0,8).forEach(function(ch){
     var imp = !_chqIsLevantado(ch);
@@ -1517,7 +1519,7 @@ function initChequesDonut(canvasId, rescN, nopagN) {
 }
 
 function renderBcraModal(bcraData, chData, histData, scoreData, clienteLocal) {
-  if (!bcraData || bcraData.error_bcra) return '<div class="card"><div style="color:var(--text2);font-size:13px">⚠ No se pudo obtener información del BCRA.</div></div>';
+  if (!bcraData || bcraData.error_bcra) return '<div class="card"><div style="color:var(--text2);font-size:13px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> No se pudo obtener información del BCRA.</div></div>';
   const results = bcraData.results || {};
   const periodos = results.periodos || [];
   let maxSit=1, entidades=[], montoTotal=0;
@@ -1532,10 +1534,10 @@ function renderBcraModal(bcraData, chData, histData, scoreData, clienteLocal) {
   // Badge mora interna: el cliente tiene deuda con Piattelli pero score BCRA es bueno
   const tieneMoraInterna = (clienteLocal?.total_saldo > 0) || (clienteLocal?.bloquear_oportunidad === true);
   const badgeMoraInterna = (tieneMoraInterna && scoreEst >= 600)
-    ? `<div style="margin-top:8px;background:#fef3c7;border:1px solid #d97706;border-radius:6px;padding:6px 10px;font-size:11px;color:#92400e;text-align:left">⚠ Score BCRA Protegido — Revisar Deuda Interna</div>`
+    ? `<div style="margin-top:8px;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.4);border-radius:6px;padding:6px 10px;font-size:11px;color:#fde68a;text-align:left"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Score BCRA Protegido — Revisar Deuda Interna</div>`
     : '';
   const badgeMoraTecnica = moraTecnica
-    ? `<div style="margin-top:8px;background:#fef9c3;border:1px solid #ca8a04;border-radius:6px;padding:6px 10px;font-size:11px;color:#92400e;text-align:left">⚠ ${esc(scoreData?.nota_mora_tecnica || 'Mora técnica por monto menor — riesgo moderado')}</div>`
+    ? `<div style="margin-top:8px;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.4);border-radius:6px;padding:6px 10px;font-size:11px;color:#fde68a;text-align:left"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> ${esc(scoreData?.nota_mora_tecnica || 'Mora técnica por monto menor — riesgo moderado')}</div>`
     : '';
   const causales = chData?.results?.causales||[];
   let dchq=[]; causales.forEach(ca=>ca.entidades?.forEach(en=>dchq.push(...(en.detalle||[]))));
@@ -1544,7 +1546,7 @@ function renderBcraModal(bcraData, chData, histData, scoreData, clienteLocal) {
   const _alertaCritica = scoreEst <= 50;
 
   if (scoreEst == null) {
-    return `<div class="card"><div style="color:var(--text2);font-size:13px;text-align:center;padding:16px">⚠ Error de conexión — no se pudo obtener el score del servidor.<br><small>Cerrá y volvé a abrir para reintentar.</small></div></div>`;
+    return `<div class="card"><div style="color:var(--text2);font-size:13px;text-align:center;padding:16px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Error de conexión — no se pudo obtener el score del servidor.<br><small>Cerrá y volvé a abrir para reintentar.</small></div></div>`;
   }
 
   let html = `<div class="card"><div class="card-title">Score Vende Seguro</div>
@@ -1552,7 +1554,7 @@ function renderBcraModal(bcraData, chData, histData, scoreData, clienteLocal) {
     <div>
       <div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:3px">Score Vende Seguro</div>
       <div class="score-num" style="color:${_alertaCritica?'#dc2626':cc};${_alertaCritica?'font-weight:900;':''}">
-        ${scoreEst}${_alertaCritica?'<span style="font-size:12px;font-weight:700;color:#dc2626;margin-left:6px;vertical-align:middle">⚠ CRÍTICO</span>':''}
+        ${scoreEst}${_alertaCritica?'<span style="font-size:12px;font-weight:700;color:#dc2626;margin-left:6px;vertical-align:middle"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> CRÍTICO</span>':''}
       </div>
     </div>
     <div><div class="score-rango" style="color:${cc}">${moraTecnica ? 'Revisar' : scoreToRango(scoreEst)}</div>
@@ -1560,7 +1562,7 @@ function renderBcraModal(bcraData, chData, histData, scoreData, clienteLocal) {
     <div class="score-bar-wrap"><div class="score-bar" style="width:${scoreEst/10}%;background:${_alertaCritica?'#dc2626':cc}"></div></div>
     ${badgeMoraTecnica}${badgeMoraInterna}
   </div>
-  <div class="credito-box"><div class="credito-label">💡 Crédito sugerido</div>
+  <div class="credito-box"><div class="credito-label"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><circle cx="12" cy="10" r="6"/><path d="M12 16v6M9 19h6"/></svg> Crédito sugerido</div>
     <div class="credito-monto">${calcularCredito(scoreEst)}</div>
   </div>`;
 
@@ -1586,7 +1588,7 @@ function renderBcraModal(bcraData, chData, histData, scoreData, clienteLocal) {
              levantado: !(!d.fechaPago||d.estadoMulta==='IMPAGA'), fechaPago: d.fechaPago, estadoMulta: d.estadoMulta };
   });
   html += `<div class="card"><div class="card-title">Cheques rechazados</div>`;
-  if (!dchq.length) { html += `<div class="chq-clean">✓ Sin cheques rechazados</div>`; }
+  if (!dchq.length) { html += `<div class="chq-clean"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="20 6 9 17 4 12"/></svg> Sin cheques rechazados</div>`; }
   else { html += buildChequesRiesgoHtml(_chqItems, _chqId); }
   html += '</div>';
   return html;
@@ -1600,7 +1602,7 @@ function mostrarErrorCuitInexistente(raw) {
   if (!resEl) return;
   hideLoading();
   resEl.innerHTML = `<div style="text-align:center;padding:32px 16px">
-    <div style="font-size:48px;margin-bottom:12px">🚫</div>
+    <div style="margin-bottom:12px"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></div>
     <div style="font-size:18px;font-weight:800;color:var(--red);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">CUIT sin registro activo</div>
     <div style="font-size:13px;color:var(--text2);margin-bottom:4px">CUIT consultado:</div>
     <div style="font-size:15px;font-weight:700;font-family:'Roboto Mono',monospace;color:var(--text);margin-bottom:20px">${fmt}</div>
@@ -1629,10 +1631,10 @@ async function consultarCuit() {
     hideLoading();
     if (!dd || dd._gateway_error) {
       resEl.innerHTML = `<div class="card" style="text-align:center;padding:20px">
-        <div style="font-size:28px">⏳</div>
+        <div style="margin-bottom:8px"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
         <div style="font-weight:700;margin:8px 0">Servidor ocupado (502)</div>
         <div style="font-size:12px;color:var(--text2);margin-bottom:12px">Esperá unos segundos e intentá de nuevo.</div>
-        <button onclick="consultarCuit()" style="background:var(--azul);color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer">🔄 Forzar Recálculo</button>
+        <button onclick="consultarCuit()" style="background:var(--azul);color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg> Forzar Recálculo</button>
       </div>`;
       return;
     }
@@ -1674,12 +1676,12 @@ async function consultarCuit() {
 
 function veredictoRapido(score, activosCheques, maxSit) {
   if (maxSit >= 4 || activosCheques > 0)
-    return {texto:'⛔ No recibir cheque',   bg:'rgba(239,68,68,0.12)',   color:'#fca5a5', borde:'rgba(239,68,68,0.4)'};
+    return {texto:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg> No recibir cheque',   bg:'rgba(239,68,68,0.12)',   color:'#fca5a5', borde:'rgba(239,68,68,0.4)'};
   if (maxSit === 3 || score < 300)
-    return {texto:'⚠ Riesgo elevado',       bg:'rgba(245,158,11,0.10)', color:'#fde68a', borde:'rgba(245,158,11,0.4)'};
+    return {texto:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Riesgo elevado',       bg:'rgba(245,158,11,0.10)', color:'#fde68a', borde:'rgba(245,158,11,0.4)'};
   if (score >= 600 && activosCheques === 0)
-    return {texto:'✓ Apto para cheque',     bg:'rgba(16,185,129,0.10)', color:'#6ee7b7', borde:'rgba(16,185,129,0.4)'};
-  return   {texto:'👁 Revisar con cautela', bg:'rgba(249,115,22,0.10)', color:'#fed7aa', borde:'rgba(249,115,22,0.4)'};
+    return {texto:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="20 6 9 17 4 12"/></svg> Apto para cheque',     bg:'rgba(16,185,129,0.10)', color:'#6ee7b7', borde:'rgba(16,185,129,0.4)'};
+  return   {texto:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> Revisar con cautela', bg:'rgba(249,115,22,0.10)', color:'#fed7aa', borde:'rgba(249,115,22,0.4)'};
 }
 
 function renderConsulta(cuit, dd, cd, hd, serverScore) {
@@ -1710,7 +1712,7 @@ function renderConsulta(cuit, dd, cd, hd, serverScore) {
   if (serverScore?.mora_tecnica) {
     // Mora técnica pisa cualquier veredicto basado en maxSit puro
     verd = {
-      texto: '⚠ Revisar — mora técnica por monto menor',
+      texto: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Revisar — mora técnica por monto menor',
       bg:    'rgba(245,158,11,0.10)',
       color: '#fde68a',
       borde: 'rgba(245,158,11,0.4)',
@@ -1722,7 +1724,7 @@ function renderConsulta(cuit, dd, cd, hd, serverScore) {
       <div id="consulta-nombre" style="font-size:15px;font-weight:700;color:var(--azul);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(results.denominacion||'Sin nombre')}</div>
       <div style="font-size:11px;color:var(--texto2);font-family:monospace">${cuit}</div>
     </div>
-    <button onclick="generarPDF('${cuit}')" style="flex-shrink:0;background:var(--azul);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer">📄 PDF</button>
+    <button onclick="generarPDF('${cuit}')" style="flex-shrink:0;background:var(--azul);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> PDF</button>
   </div>`;
 
   // ── 1. VEREDICTO RÁPIDO — decisión en 10 segundos ──
@@ -1747,7 +1749,7 @@ function renderConsulta(cuit, dd, cd, hd, serverScore) {
   if (_overrideAdmin) {
     const notaOv = _overrideNota || 'Situación Regularizada (Validación Interna)';
     overrideAdminHtml = `<div style="margin-top:8px;background:rgba(16,185,129,0.12);border:2px solid rgba(16,185,129,0.4);border-radius:8px;padding:10px 14px;font-size:12px;color:#6ee7b7;text-align:left">
-      <div style="font-weight:700;font-size:13px;margin-bottom:4px">✅ ${esc(notaOv)}</div>
+      <div style="font-weight:700;font-size:13px;margin-bottom:4px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="20 6 9 17 4 12"/></svg> ${esc(notaOv)}</div>
       <div style="color:#86efac">Score calculado por validación interna. Situaciones bancarias de entidades menores no aplican penalización.</div>
     </div>`;
   }
@@ -1763,7 +1765,7 @@ function renderConsulta(cuit, dd, cd, hd, serverScore) {
            return `Atención: Se detecta una mora técnica por monto menor que no afecta la solvencia general.${moraStr}${buenaStr}`;
          })();
     moraTecHtml = `<div style="margin-top:8px;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.4);border-radius:6px;padding:8px 12px;font-size:12px;color:#fde68a;text-align:left">
-      ⚠ ${esc(notaTxt)}
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> ${esc(notaTxt)}
     </div>`;
   }
 
@@ -1771,11 +1773,11 @@ function renderConsulta(cuit, dd, cd, hd, serverScore) {
   let moraAdmHtml = '';
   if (_moraAdm) {
     const limHtml = _limDin
-      ? `<br><span style="font-size:12px">💳 Límite dinámico sugerido: <strong>$${fmtM(_limDin)}</strong> (30 % de la deuda en Sit. 1)</span>`
+      ? `<br><span style="font-size:12px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> Límite dinámico sugerido: <strong>$${fmtM(_limDin)}</strong> (30 % de la deuda en Sit. 1)</span>`
       : '';
     const notaAdm = _avisoMora || 'Una entidad reporta atraso sin historial previo de incumplimiento. El banco principal está en Situación 1.';
     moraAdmHtml = `<div style="margin-top:8px;background:rgba(59,130,246,0.12);border:2px solid rgba(59,130,246,0.4);border-radius:8px;padding:10px 14px;font-size:12px;color:#93c5fd;text-align:left">
-      <div style="font-weight:700;font-size:13px;margin-bottom:4px">🔵 MORA ADMINISTRATIVA — REVISIÓN HUMANA</div>
+      <div style="font-weight:700;font-size:13px;margin-bottom:4px"><svg width="10" height="10" viewBox="0 0 10 10" fill="#3b82f6" style="vertical-align:-1px"><circle cx="5" cy="5" r="5"/></svg> MORA ADMINISTRATIVA — REVISIÓN HUMANA</div>
       <div style="font-weight:400;color:#bfdbfe">${esc(notaAdm)}${limHtml}</div>
     </div>`;
   }
@@ -1787,14 +1789,14 @@ function renderConsulta(cuit, dd, cd, hd, serverScore) {
   if (_deuda90d) {
     const montoStr  = (_monto90d && _monto90d > 0) ? ` — $${fmtM(_monto90d)} pendiente` : '';
     deuda90dHtml    = `<div style="margin-top:8px;background:rgba(239,68,68,0.12);border:2px solid rgba(239,68,68,0.4);border-radius:8px;padding:10px 14px;font-size:12px;color:#fca5a5;text-align:left">
-      <div style="font-weight:700;font-size:13px;margin-bottom:4px">🔴 DEUDA INTERNA +90 DÍAS${montoStr}</div>
+      <div style="font-weight:700;font-size:13px;margin-bottom:4px"><svg width="10" height="10" viewBox="0 0 10 10" fill="#ef4444" style="vertical-align:-1px"><circle cx="5" cy="5" r="5"/></svg> DEUDA INTERNA +90 DÍAS${montoStr}</div>
       <div style="color:#fecaca">Este cliente tiene facturas propias vencidas hace más de 90 días. <strong>Score penalizado −200 pts.</strong></div>
     </div>`;
   }
 
   // Mostrar 'VENTA RESTRINGIDA' como etiqueta de semáforo para mora administrativa
   const _rangoDisplay = _moraAdm && (serverScore?.rango === 'Rechazar' || serverScore?.rango === 'VENTA RESTRINGIDA')
-    ? '<span style="color:#7c3aed;font-weight:700">⚠ VENTA RESTRINGIDA / ANALIZAR</span>'
+    ? '<span style="color:#7c3aed;font-weight:700"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> VENTA RESTRINGIDA / ANALIZAR</span>'
     : `<span style="color:${cc}">${scoreToRango(scoreEst)}</span>`;
 
   html += `<div style="background:${verd.bg};border:2px solid ${verd.borde};border-radius:var(--radius);padding:16px;margin-bottom:10px;text-align:center">
@@ -1805,7 +1807,7 @@ function renderConsulta(cuit, dd, cd, hd, serverScore) {
         <div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:3px">Score Vende Seguro</div>
         <div style="font-size:28px;font-weight:800;color:${_alertaCritica?'#dc2626':cc};font-family:'Syne',sans-serif;${_alertaCritica?'text-shadow:0 0 12px rgba(220,38,38,0.25);':''}">${scoreEst}</div>
         <div style="font-size:12px;margin-top:2px">${_rangoDisplay}</div>
-        ${_alertaCritica?'<div style="font-size:11px;font-weight:700;color:#fca5a5;margin-top:4px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);border-radius:6px;padding:3px 8px;">⚠ Alerta Crediticia Crítica</div>':''}
+        ${_alertaCritica?'<div style="font-size:11px;font-weight:700;color:#fca5a5;margin-top:4px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);border-radius:6px;padding:3px 8px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Alerta Crediticia Crítica</div>':''}
       </div>
       <div style="text-align:center">
         <div style="font-size:28px;font-weight:800;color:${activos.length>0?'var(--rojo)':'var(--verde)'};font-family:'Syne',sans-serif">${activos.length}</div>
@@ -1823,7 +1825,7 @@ function renderConsulta(cuit, dd, cd, hd, serverScore) {
     <div style="margin-top:10px">
       <button onclick="forzarRecalculo('${cuit}', this)"
         style="font-size:11px;background:none;border:1px solid var(--border);color:var(--texto2);border-radius:6px;padding:4px 12px;cursor:pointer">
-        ↻ Forzar recálculo profundo
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg> Forzar recálculo profundo
       </button>
     </div>
   </div>`;
@@ -1831,7 +1833,7 @@ function renderConsulta(cuit, dd, cd, hd, serverScore) {
   // ── 2. CHEQUES — prioridad visual ──
   html += `<div class="card"><div class="card-title">Cheques rechazados BCRA</div>`;
   if (!dchq.length) {
-    html += `<div style="color:var(--verde);font-size:14px;font-weight:600;padding:8px 0">✓ Sin cheques rechazados</div>`;
+    html += `<div style="color:var(--verde);font-size:14px;font-weight:600;padding:8px 0"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="20 6 9 17 4 12"/></svg> Sin cheques rechazados</div>`;
   } else {
     html += `<div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap">
       <div style="flex:1;background:${activos.length>0?'var(--rojo-bg)':'var(--verde-bg)'};border-radius:8px;padding:10px;text-align:center;min-width:80px">
@@ -1893,7 +1895,7 @@ function renderConsulta(cuit, dd, cd, hd, serverScore) {
 
   // ── 3. SITUACIÓN BCRA ──
   if (dd.error_bcra) {
-    html += `<div class="card"><div style="color:var(--texto2);font-size:13px">⚠ No se pudo obtener info del BCRA.</div></div>`;
+    html += `<div class="card"><div style="color:var(--texto2);font-size:13px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> No se pudo obtener info del BCRA.</div></div>`;
   } else if (dd.sin_deudas||!entidades.length) {
     html += `<div class="card"><div class="card-title">Situación BCRA</div><div class="sit-grid">
     <div class="sit-chip"><span class="sit-chip-label">Situación</span><span class="sit-chip-val sit-1">1 — Normal</span></div>
@@ -1963,7 +1965,7 @@ function generarPDF(cuit) {
   const sitColor = maxSit>=4?'#dc2626':maxSit===3?'#d97706':maxSit===2?'#ca8a04':'#16a34a';
 
   const chqRows = dchq.length === 0
-    ? `<tr><td colspan="4" style="color:#16a34a;font-weight:600;padding:10px 8px">✓ Sin cheques rechazados</td></tr>`
+    ? `<tr><td colspan="4" style="color:#16a34a;font-weight:600;padding:10px 8px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="20 6 9 17 4 12"/></svg> Sin cheques rechazados</td></tr>`
     : dchq.slice(0,25).map(d => {
         const imp = !d.fechaPago || d.estadoMulta==='IMPAGA';
         return `<tr><td>$${fmtM(d.monto||0)}</td><td>${_e(d.nroCheque||'—')}</td><td>${d.fechaRechazo||'—'}</td>
@@ -1972,7 +1974,7 @@ function generarPDF(cuit) {
 
   const sitRows = entidades.length
     ? entidades.map(e=>`<tr><td>${_e(e.entidad||'')}</td><td style="text-align:center;font-weight:700;color:${sitColor}">Sit. ${e.situacion||1}</td><td style="text-align:right">$${fmtM((e.monto||0)*1000)}</td></tr>`).join('')
-    : `<tr><td colspan="3" style="color:#16a34a;font-weight:600;padding:10px 8px">✓ Sin deudas en el sistema financiero</td></tr>`;
+    : `<tr><td colspan="3" style="color:#16a34a;font-weight:600;padding:10px 8px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="20 6 9 17 4 12"/></svg> Sin deudas en el sistema financiero</td></tr>`;
 
   const pw = window.open('','_blank','width=820,height=900');
   pw.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
@@ -1999,7 +2001,7 @@ function generarPDF(cuit) {
 </style></head><body>
 <div class="header">
   <div><div class="logo">Vende Seguro — Bodega Piattelli</div><div class="sub">Informe de Riesgo Crediticio</div></div>
-  <div style="text-align:right"><div style="font-size:12px;font-weight:600">${fecha}</div><button onclick="window.print()" style="margin-top:6px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer">🖨 Imprimir</button></div>
+  <div style="text-align:right"><div style="font-size:12px;font-weight:600">${fecha}</div><button onclick="window.print()" style="margin-top:6px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg> Imprimir</button></div>
 </div>
 <div class="section">
   <h2>${_e(nombre)}</h2>
@@ -2048,7 +2050,7 @@ function enviarEstadoCuenta() {
     `*Facturas pendientes:*\n${detalle}\n\n` +
     `*Total pendiente: $${fmtFull(data.total_saldo)}*\n\n` +
     `*Datos de Pago:*\n` +
-    `🏦 Banco Galicia - CC $: 10653-1 081-8\n` +
+    `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><line x1="3" y1="22" x2="21" y2="22"/><line x1="6" y1="18" x2="6" y2="11"/><line x1="10" y1="18" x2="10" y2="11"/><line x1="14" y1="18" x2="14" y2="11"/><line x1="18" y1="18" x2="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg> Banco Galicia - CC $: 10653-1 081-8\n` +
     `CBU: 0070081820000010653188\n` +
     `ALIAS: ARTELINCGALICIA\n` +
     `CUIT: 30710295022\n\n` +
@@ -2075,7 +2077,7 @@ function showLoading(txt){document.getElementById('loading-text').textContent=tx
 function hideLoading(){document.getElementById('loading-overlay').style.display='none';}
 
 // ── safeFetch: sin retry en 502, detecta HTML, devuelve JSON o null ──────────
-async function safeFetch(url, { retries = 0, timeoutMs = 15000 } = {}) {
+async function safeFetch(url, { retries = 1, timeoutMs = 15000 } = {}) {
   for (let i = 0; i <= retries; i++) {
     let r;
     try {
@@ -2108,7 +2110,7 @@ function _gateway502Html(cuit, nombre) {
     <div style="font-size:12px;color:var(--text2);margin-bottom:14px">Render está procesando una consulta pesada. Esperá unos segundos e intentá de nuevo.</div>
     <button onclick="abrirModalCliente('${cuit}','${(nombre||'').replace(/'/g,"\\'")}');this.closest('.card').innerHTML='<div style=padding:16px>Reintentando…</div>'"
       style="background:var(--azul);color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer">
-      🔄 Forzar Recálculo
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg> Forzar Recálculo
     </button>
   </div>`;
 }
@@ -2351,7 +2353,7 @@ async function calcularScoreCompleto(cuit) {
       score,
       rango: scoreToRango(score),
       color: scoreToColor(score),
-      emoji: score>=700?'🟢':score>=400?'🟡':score>=200?'🟠':'🔴'
+      emoji: score>=700?'<svg width="10" height="10" viewBox="0 0 10 10" fill="#10b981" style="vertical-align:-1px"><circle cx="5" cy="5" r="5"/></svg>':score>=400?'<svg width="10" height="10" viewBox="0 0 10 10" fill="#f59e0b" style="vertical-align:-1px"><circle cx="5" cy="5" r="5"/></svg>':score>=200?'<svg width="10" height="10" viewBox="0 0 10 10" fill="#f59e0b" style="vertical-align:-1px"><circle cx="5" cy="5" r="5"/></svg>':'<svg width="10" height="10" viewBox="0 0 10 10" fill="#ef4444" style="vertical-align:-1px"><circle cx="5" cy="5" r="5"/></svg>'
     };
   } catch(e) { return null; }
 }
