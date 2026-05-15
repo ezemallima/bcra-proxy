@@ -3425,16 +3425,20 @@ def get_saldos_cliente(cliente):
 
 @app.route("/saldos-cuit/<cuit>")
 def get_saldos_cuit(cuit):
-    """Busca facturas por CUIT (prioridad absoluta). Si no hay CUIT en registros, cae a nombre."""
+    """Busca facturas por CUIT (prioridad absoluta). Si no hay CUIT en registros, cae a nombre + fuzzy."""
     from urllib.parse import unquote
     cuit_limpio = str(unquote(cuit)).replace('-', '').replace(' ', '').strip()
-    # Prioridad 1: buscar por CUIT si los registros lo tienen (fuente: gestión semanal)
     fuente_g = _saldos_gestion if _saldos_gestion else _saldos_facturas
-    result = [f for f in fuente_g if str(f.get('cuit', '')).replace('-', '').replace(' ', '').strip() == cuit_limpio]
+    # Prioridad 1: CUIT exacto (limpiado de guiones y espacios)
+    result = [f for f in fuente_g
+              if str(f.get('cuit', '')).replace('-', '').replace(' ', '').strip() == cuit_limpio]
     if result:
         total_saldo = sum(f.get('saldo', 0) for f in result)
-        return jsonify({"facturas": result, "total_saldo": total_saldo, "cantidad": len(result), "metodo": "cuit"})
-    # Prioridad 2: buscar por nombre en cartera comercial
+        nombre_m = result[0].get('cliente', '')
+        print(f"[saldos-cuit] CUIT {cuit_limpio}: {len(result)} facturas (método: cuit)", flush=True)
+        return jsonify({"facturas": result, "total_saldo": total_saldo, "cantidad": len(result),
+                        "metodo": "cuit", "nombre_match": nombre_m})
+    # Prioridad 2: nombre canónico desde cartera_comercial → exact → fuzzy
     nombre_en_cartera = next(
         (str(c.get('nombre', '')).strip() for c in _cartera_comercial
          if str(c.get('cuit', '')).replace('-', '').replace(' ', '').strip() == cuit_limpio),
@@ -3443,8 +3447,20 @@ def get_saldos_cuit(cuit):
     if nombre_en_cartera:
         cn = _norm_nombre(nombre_en_cartera)
         result = [f for f in fuente_g if _norm_nombre(f.get('cliente', '')) == cn]
+        if not result:
+            # Fuzzy: match ≥2 palabras significativas
+            palabras = [p for p in cn.split() if len(p) > 2]
+            if palabras:
+                result = [f for f in fuente_g
+                          if sum(1 for p in palabras
+                                 if p in _norm_nombre(f.get('cliente', ''))) >= min(2, len(palabras))]
+                if result:
+                    print(f"[saldos-cuit] Fuzzy '{nombre_en_cartera}' → {len(result)} facturas", flush=True)
         total_saldo = sum(f.get('saldo', 0) for f in result)
-        return jsonify({"facturas": result, "total_saldo": total_saldo, "cantidad": len(result), "metodo": "nombre"})
+        print(f"[saldos-cuit] Nombre '{nombre_en_cartera}': {len(result)} facturas (método: nombre)", flush=True)
+        return jsonify({"facturas": result, "total_saldo": total_saldo, "cantidad": len(result),
+                        "metodo": "nombre", "nombre_match": nombre_en_cartera})
+    print(f"[saldos-cuit] CUIT {cuit_limpio}: sin match en cartera_comercial", flush=True)
     return jsonify({"facturas": [], "total_saldo": 0, "cantidad": 0, "metodo": "nulo"})
 
 @app.route("/api/facturas/<cuit>")

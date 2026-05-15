@@ -2728,37 +2728,23 @@ async function consultarCliente() {
   mostrarAFIP(raw);
   mostrarWSP(raw);
 
-  // Traer razón social (AFIP + BCRA como fallback) y situación BCRA
-  // Prioridad: 1) cartera local, 2) AFIP/BCRA, 3) CUIT formateado
+  // Razón Social: 1) cartera local → 2) AFIP → 3) BCRA denominacion → 4) CUIT formateado
   var cuitFmtLocal = raw.slice(0,2)+'-'+raw.slice(2,10)+'-'+raw.slice(10);
   var enCarteraLocal = cartera.find(function(c) { return c.cuit === raw; });
-  var nombreFinal = '';
-  if (enCarteraLocal && enCarteraLocal.nombre) {
-    // Tomar solo la parte antes de la coma (sin suffijos tipo "contacto", "entrega")
-    nombreFinal = enCarteraLocal.nombre.split(',')[0].trim();
-  }
+  var nombreFinal = (enCarteraLocal && enCarteraLocal.nombre) ? enCarteraLocal.nombre.split(',')[0].trim() : '';
   var estadoAfip = '';
   var domicilioAfip = '';
-  if (!nombreFinal) {
-    try {
-      var afipR = await fetch('/afip/' + raw, {signal: AbortSignal.timeout(30000)});
-      var afipData = await afipR.json();
+  try {
+    var afipR = await fetch('/afip/' + raw, {signal: AbortSignal.timeout(30000)});
+    var afipData = await afipR.json();
+    estadoAfip = afipData.estado_afip || '';
+    estadoAfipGlobal = estadoAfip;
+    domicilioAfip = afipData.domicilio || '';
+    if (!nombreFinal) {
       var afipNombre = afipData.nombre || '';
       if (afipNombre && afipNombre !== cuitFmtLocal) nombreFinal = afipNombre;
-      estadoAfip = afipData.estado_afip || '';
-      estadoAfipGlobal = estadoAfip;
-      domicilioAfip = afipData.domicilio || '';
-    } catch(e) {}
-  } else {
-    try {
-      var afipR2 = await fetch('/afip/' + raw, {signal: AbortSignal.timeout(30000)});
-      var afipData2 = await afipR2.json();
-      estadoAfip = afipData2.estado_afip || '';
-      estadoAfipGlobal = estadoAfip;
-      domicilioAfip = afipData2.domicilio || '';
-    } catch(e) {}
-  }
-  if (!nombreFinal) nombreFinal = cuitFmtLocal;
+    }
+  } catch(e) {}
 
   // Asegurar que el div resultado esté visible antes de llamar mostrarResultado
   document.getElementById('loading-state').style.display = 'none';
@@ -2767,11 +2753,11 @@ async function consultarCliente() {
   try {
     var bcraR = await fetch('/deudas/' + raw, {signal: AbortSignal.timeout(30000)});
     var bcraData = await bcraR.json();
-    // Tomar nombre del BCRA si AFIP no lo trajo
+    // BCRA denominacion como fuente de verdad si aún no tenemos nombre
     if (!nombreFinal && bcraData.results && bcraData.results.denominacion) {
       nombreFinal = bcraData.results.denominacion;
     }
-    // Mostrar situación BCRA
+    if (!nombreFinal) nombreFinal = cuitFmtLocal;
     if (bcraData.error === 'timeout') {
       mostrarResultado(raw, null, true, estadoAfip, domicilioAfip, nombreFinal);
     } else {
@@ -2779,7 +2765,8 @@ async function consultarCliente() {
       mostrarResultado(raw, bcraData, false, estadoAfip, domicilioAfip, nombreFinal);
     }
   } catch(e) {
-    mostrarResultado(raw, null, true);
+    if (!nombreFinal) nombreFinal = cuitFmtLocal;
+    mostrarResultado(raw, null, true, estadoAfip, domicilioAfip, nombreFinal);
   }
 
   // mostrarResultado ya maneja el header completo con nombre, badge y botón cartera
@@ -2976,10 +2963,12 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
   }
   if (domicilioAfip) headerHtml += '<span style="font-size:11px;color:#94a3b8;">📍 ' + domicilioAfip + '</span>';
   headerHtml += '</div></div>';
-  headerHtml += '<div class="decision-actions">';
+  headerHtml += '<div class="decision-actions" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">';
   headerHtml += yaEstaCartera
     ? '<span class="badge-cartera">En cartera ✓</span>'
     : '<span class="badge-no-cartera">Sin seguimiento</span><button onclick="agregarDesdConsulta(\''+cuit+'\', \''+nombreMostrar.replace(/'/g,'')+'\');" class="resource-btn" style="font-size:12px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>Agregar</button>';
+  headerHtml += '<button onclick="verCliente(\''+cuit+'\')" title="Refrescar datos BCRA" style="padding:5px 9px;font-size:14px;background:none;border:1px solid #cbd5e1;border-radius:7px;cursor:pointer;color:#475569;line-height:1;" >↻</button>';
+  headerHtml += '<button onclick="nuevaConsulta()" title="Nueva consulta" style="padding:5px 9px;font-size:14px;background:none;border:1px solid #cbd5e1;border-radius:7px;cursor:pointer;color:#475569;line-height:1;">✕</button>';
   headerHtml += '</div></div>';
   document.getElementById('cliente-header').innerHTML = headerHtml;
   let v = '';
@@ -3623,6 +3612,56 @@ async function exportarReporte() {
     }
   }
 
+  // ── SALDOS BODEGA ─────────────────────────────────────────────────────────
+  var saldosPdf = window._saldosCliente;
+  if (saldosPdf && saldosPdf.facturas && saldosPdf.facturas.length > 0) {
+    if (y > 240) { doc.addPage(); y = 15; }
+    doc.setDrawColor(210,220,240); doc.line(10,y,W-10,y); y+=5;
+    doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(30,41,59);
+    doc.text('Cuenta Corriente Bodega', 10, y);
+    var saldoTotalPdf = saldosPdf.total_saldo || 0;
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(71,85,105);
+    doc.text('Saldo pendiente: $' + Math.round(saldoTotalPdf).toLocaleString('es-AR') + '  |  Facturas: ' + saldosPdf.facturas.length, 10, y+6);
+    // DSO del cliente
+    var pagadasPdf = (saldosPdf.facturas||[]).filter(function(f){ return f.fechaPago && (f.totalFactura||0) > 0; });
+    var dsoPdf = null;
+    if (pagadasPdf.length) {
+      var parseFePdf = function(s){ if(!s) return null; var p=String(s).split('/'); return p.length===3?new Date(+p[2],+p[1]-1,+p[0]):new Date(s); };
+      var diasPdf = pagadasPdf.map(function(f){ var d1=parseFePdf(f.fechaFactura),d2=parseFePdf(f.fechaPago); return (d1&&d2)?Math.max(0,Math.round((d2-d1)/86400000)):null; }).filter(function(d){ return d!==null&&d<365; });
+      if (diasPdf.length) dsoPdf = Math.round(diasPdf.reduce(function(s,d){return s+d;},0)/diasPdf.length);
+    }
+    if (dsoPdf !== null) doc.text('DSO cliente: ' + dsoPdf + ' dias promedio', 130, y+6);
+    y += 13;
+    // Tabla facturas pendientes
+    var pendientesPdf = (saldosPdf.facturas||[]).filter(function(f){ return (f.saldo||0) > 0; });
+    if (pendientesPdf.length && y < 260) {
+      if (y > 250) { doc.addPage(); y = 15; }
+      doc.setFillColor(237,242,250); doc.rect(10,y,W-20,6,'F');
+      doc.setFontSize(7.5); doc.setFont('helvetica','bold'); doc.setTextColor(71,85,105);
+      doc.text('N Factura', 12, y+4.2);
+      doc.text('Fecha', 65, y+4.2);
+      doc.text('Total', 110, y+4.2, {align:'right'});
+      doc.text('Saldo', 148, y+4.2, {align:'right'});
+      doc.text('Estado pago', W-12, y+4.2, {align:'right'});
+      y += 7;
+      doc.setFont('helvetica','normal'); doc.setTextColor(51,65,85);
+      pendientesPdf.slice(0,10).forEach(function(f, i) {
+        if (y > 272) { doc.addPage(); y = 15; }
+        if (i%2===0) { doc.setFillColor(248,250,252); doc.rect(10,y-1,W-20,6,'F'); }
+        doc.setTextColor(51,65,85);
+        doc.text(String(f.nroFactura||'-').substring(0,22), 12, y+3.5);
+        doc.text(String(f.fechaFactura||'-').substring(0,10), 65, y+3.5);
+        doc.text('$'+(f.totalFactura||0).toLocaleString('es-AR'), 110, y+3.5, {align:'right'});
+        doc.setTextColor(185,28,28); doc.setFont('helvetica','bold');
+        doc.text('$'+(f.saldo||0).toLocaleString('es-AR'), 148, y+3.5, {align:'right'});
+        doc.setTextColor(71,85,105); doc.setFont('helvetica','normal');
+        doc.text(String(f.fechaPago||'Pendiente').substring(0,12), W-12, y+3.5, {align:'right'});
+        y += 6;
+      });
+      y += 4;
+    }
+  }
+
   // ── ANÁLISIS DE RIESGO ────────────────────────────────────────────────────
   if (y > 240) { doc.addPage(); y = 15; }
   doc.setDrawColor(210,220,240); doc.line(10, y, W-10, y); y += 7;
@@ -4167,6 +4206,18 @@ function verCliente(cuit) {
   document.querySelectorAll('.tab')[0].click();
   document.getElementById('cuit-input').value = cuit;
   consultarCliente();
+}
+
+function nuevaConsulta() {
+  document.getElementById('resultado').style.display = 'none';
+  document.getElementById('loading-state').style.display = 'none';
+  var hero = document.getElementById('consulta-search-hero');
+  if (hero) hero.style.display = '';
+  document.getElementById('cuit-input').value = '';
+  window._saldosCliente = null;
+  window._ultimoBcraData = null;
+  window._chequesUltimaConsulta = null;
+  ultimoAnalisis = null;
 }
 
 async function verificarTodos(forzar) {
