@@ -274,6 +274,8 @@
     font-family: 'Syne', sans-serif;
     font-size: 52px; font-weight: 800;
     letter-spacing: -3px; line-height: 1;
+    text-shadow: 0 0 28px currentColor;
+    transition: text-shadow 0.4s ease;
   }
   .score-rango { font-size: 16px; font-weight: 700; }
   .score-bar-wrap {
@@ -520,6 +522,11 @@
     box-shadow: 0 0 0 1.5px rgba(239,68,68,0.3),
                 0 4px 20px rgba(239,68,68,0.1);
     border-color: rgba(239,68,68,0.3);
+    animation: pulseBorder 2.4s ease-in-out infinite;
+  }
+  @keyframes pulseBorder {
+    0%, 100% { box-shadow: 0 0 0 1.5px rgba(239,68,68,0.3), 0 4px 20px rgba(239,68,68,0.1); }
+    50%       { box-shadow: 0 0 0 2.5px rgba(239,68,68,0.55), 0 4px 28px rgba(239,68,68,0.2); }
   }
 
   /* ── STICKY SEARCH BAR ────────────────────────────────────────────── */
@@ -1586,6 +1593,25 @@ function renderBcraModal(bcraData, chData, histData, scoreData, clienteLocal) {
 }
 
 // ── CONSULTA CUIT ──
+function mostrarErrorCuitInexistente(raw) {
+  const digits = (raw||'').replace(/\D/g,'');
+  const fmt = digits.length===11 ? digits.slice(0,2)+'-'+digits.slice(2,10)+'-'+digits.slice(10) : raw;
+  const resEl = document.getElementById('consulta-resultado');
+  if (!resEl) return;
+  hideLoading();
+  resEl.innerHTML = `<div style="text-align:center;padding:32px 16px">
+    <div style="font-size:48px;margin-bottom:12px">🚫</div>
+    <div style="font-size:18px;font-weight:800;color:var(--red);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">CUIT sin registro activo</div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:4px">CUIT consultado:</div>
+    <div style="font-size:15px;font-weight:700;font-family:'Roboto Mono',monospace;color:var(--text);margin-bottom:20px">${fmt}</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:20px">Este CUIT no figura en BCRA, AFIP ni en cartera.<br>No es posible calcular un score confiable.</div>
+    <a href="https://seti.afip.gob.ar/padron-puc-constancia-internet/ConsultaConstanciaAction.do" target="_blank"
+       style="display:inline-block;background:var(--accent);color:#fff;border-radius:8px;padding:10px 20px;font-size:13px;font-weight:700;text-decoration:none">
+      Verificar en ARCA →
+    </a>
+  </div>`;
+}
+
 async function consultarCuit() {
   const cuit = document.getElementById('cuit-input').value.trim().replace(/\D/g,'');
   if (cuit.length < 10) { alert('CUIT inválido'); return; }
@@ -1627,6 +1653,13 @@ async function consultarCuit() {
       hideLoading();
     }
 
+    // Anti-fantasma: CUIT sin identidad en ningún registro
+    const _nombreFinal = dd?.results?.denominacion?.trim() || '';
+    if (dd?.sin_deudas === true && /^\d/.test(_nombreFinal)) {
+      mostrarErrorCuitInexistente(cuit);
+      return;
+    }
+
     // Guardar estado para generarPDF()
     window._ultimaConsulta = { cuit, dd, cd: cd || {}, hd, serverScore };
 
@@ -1666,6 +1699,7 @@ function renderConsulta(cuit, dd, cd, hd, serverScore) {
   window._ultimoScoreComercial = scoreEst;
   // Mora técnica: color del círculo siempre naranja aunque maxSit sea alto
   const cc = (serverScore?.mora_tecnica) ? '#ca8a04' : scoreToColor(scoreEst);
+  const _alertaCritica = scoreEst !== null && scoreEst <= 50;
 
   // Cheques
   const causales = cd.results?.causales||[]; let dchq=[];
@@ -1677,9 +1711,9 @@ function renderConsulta(cuit, dd, cd, hd, serverScore) {
     // Mora técnica pisa cualquier veredicto basado en maxSit puro
     verd = {
       texto: '⚠ Revisar — mora técnica por monto menor',
-      bg:    '#fef9c3',
-      color: '#ca8a04',
-      borde: '#ca8a04',
+      bg:    'rgba(245,158,11,0.10)',
+      color: '#fde68a',
+      borde: 'rgba(245,158,11,0.4)',
     };
   }
 
@@ -1712,9 +1746,9 @@ function renderConsulta(cuit, dd, cd, hd, serverScore) {
   let overrideAdminHtml = '';
   if (_overrideAdmin) {
     const notaOv = _overrideNota || 'Situación Regularizada (Validación Interna)';
-    overrideAdminHtml = `<div style="margin-top:8px;background:#dcfce7;border:2px solid #16a34a;border-radius:8px;padding:10px 14px;font-size:12px;color:#14532d;text-align:left">
+    overrideAdminHtml = `<div style="margin-top:8px;background:rgba(16,185,129,0.12);border:2px solid rgba(16,185,129,0.4);border-radius:8px;padding:10px 14px;font-size:12px;color:#6ee7b7;text-align:left">
       <div style="font-weight:700;font-size:13px;margin-bottom:4px">✅ ${esc(notaOv)}</div>
-      <div>Score calculado por validación interna. Situaciones bancarias de entidades menores no aplican penalización.</div>
+      <div style="color:#86efac">Score calculado por validación interna. Situaciones bancarias de entidades menores no aplican penalización.</div>
     </div>`;
   }
 
@@ -1728,7 +1762,7 @@ function renderConsulta(cuit, dd, cd, hd, serverScore) {
            const buenaStr = pctBuena != null ? ` ${pctBuena}% de la cartera en situación normal.` : '';
            return `Atención: Se detecta una mora técnica por monto menor que no afecta la solvencia general.${moraStr}${buenaStr}`;
          })();
-    moraTecHtml = `<div style="margin-top:8px;background:#fef9c3;border:1px solid #ca8a04;border-radius:6px;padding:8px 12px;font-size:12px;color:#92400e;text-align:left">
+    moraTecHtml = `<div style="margin-top:8px;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.4);border-radius:6px;padding:8px 12px;font-size:12px;color:#fde68a;text-align:left">
       ⚠ ${esc(notaTxt)}
     </div>`;
   }
@@ -1740,9 +1774,9 @@ function renderConsulta(cuit, dd, cd, hd, serverScore) {
       ? `<br><span style="font-size:12px">💳 Límite dinámico sugerido: <strong>$${fmtM(_limDin)}</strong> (30 % de la deuda en Sit. 1)</span>`
       : '';
     const notaAdm = _avisoMora || 'Una entidad reporta atraso sin historial previo de incumplimiento. El banco principal está en Situación 1.';
-    moraAdmHtml = `<div style="margin-top:8px;background:#dbeafe;border:2px solid #2563eb;border-radius:8px;padding:10px 14px;font-size:12px;color:#1e40af;text-align:left">
+    moraAdmHtml = `<div style="margin-top:8px;background:rgba(59,130,246,0.12);border:2px solid rgba(59,130,246,0.4);border-radius:8px;padding:10px 14px;font-size:12px;color:#93c5fd;text-align:left">
       <div style="font-weight:700;font-size:13px;margin-bottom:4px">🔵 MORA ADMINISTRATIVA — REVISIÓN HUMANA</div>
-      <div style="font-weight:400">${esc(notaAdm)}${limHtml}</div>
+      <div style="font-weight:400;color:#bfdbfe">${esc(notaAdm)}${limHtml}</div>
     </div>`;
   }
 
@@ -1752,9 +1786,9 @@ function renderConsulta(cuit, dd, cd, hd, serverScore) {
   let deuda90dHtml  = '';
   if (_deuda90d) {
     const montoStr  = (_monto90d && _monto90d > 0) ? ` — $${fmtM(_monto90d)} pendiente` : '';
-    deuda90dHtml    = `<div style="margin-top:8px;background:#fee2e2;border:2px solid #dc2626;border-radius:8px;padding:10px 14px;font-size:12px;color:#991b1b;text-align:left">
+    deuda90dHtml    = `<div style="margin-top:8px;background:rgba(239,68,68,0.12);border:2px solid rgba(239,68,68,0.4);border-radius:8px;padding:10px 14px;font-size:12px;color:#fca5a5;text-align:left">
       <div style="font-weight:700;font-size:13px;margin-bottom:4px">🔴 DEUDA INTERNA +90 DÍAS${montoStr}</div>
-      <div>Este cliente tiene facturas propias vencidas hace más de 90 días. <strong>Score penalizado −200 pts.</strong></div>
+      <div style="color:#fecaca">Este cliente tiene facturas propias vencidas hace más de 90 días. <strong>Score penalizado −200 pts.</strong></div>
     </div>`;
   }
 
@@ -1771,7 +1805,7 @@ function renderConsulta(cuit, dd, cd, hd, serverScore) {
         <div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:3px">Score Vende Seguro</div>
         <div style="font-size:28px;font-weight:800;color:${_alertaCritica?'#dc2626':cc};font-family:'Syne',sans-serif;${_alertaCritica?'text-shadow:0 0 12px rgba(220,38,38,0.25);':''}">${scoreEst}</div>
         <div style="font-size:12px;margin-top:2px">${_rangoDisplay}</div>
-        ${_alertaCritica?'<div style="font-size:11px;font-weight:700;color:#dc2626;margin-top:4px;background:#fee2e2;border-radius:6px;padding:3px 8px;">⚠ Alerta Crediticia Crítica</div>':''}
+        ${_alertaCritica?'<div style="font-size:11px;font-weight:700;color:#fca5a5;margin-top:4px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);border-radius:6px;padding:3px 8px;">⚠ Alerta Crediticia Crítica</div>':''}
       </div>
       <div style="text-align:center">
         <div style="font-size:28px;font-weight:800;color:${activos.length>0?'var(--rojo)':'var(--verde)'};font-family:'Syne',sans-serif">${activos.length}</div>
