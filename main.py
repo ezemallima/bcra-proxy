@@ -1497,6 +1497,15 @@ def calcular_rating_predictivo(
     elif score >= 200: rango, color, emoji = 'Alto riesgo', '#dc2626', '🔴'
     else:              rango, color, emoji = 'Rechazar',    '#7f1d1d', '⛔'
 
+    # ── Cap: sin actividad bancaria (fantasma crediticio) → max 350 ──────────
+    # Un cliente sin ningún banco reportante y sin historial BCRA es un riesgo
+    # de identidad desconocido — nunca puede aparecer como "Bueno".
+    _sin_actividad_bancaria = (not _ents_curr) and n_periodos_h == 0 and monto_real == 0
+    if _sin_actividad_bancaria:
+        score = min(score, 350)
+        rango, color, emoji = 'Alto riesgo', '#dc2626', '🔴'
+        print(f"[score] {cuit_limpio} sin actividad bancaria → cap 350", flush=True)
+
     alerta_temprana      = alerta_creciente or es_monotrib_bajo or indice_solv < 0.40
     bloquear_oportunidad = (
         (hard_block_mora or hard_block_bcra or (en_mora and score > 700)) and

@@ -600,6 +600,10 @@
             <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
             Veraz / Nosis
           </button>
+          <button class="resource-btn" id="btn-res-arca" onclick="abrirConstanciaARCA()" title="Verificar inscripción en ARCA/AFIP">
+            <svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            Constancia ARCA
+          </button>
         </div>
         <div id="panel-afip" class="resource-panel">
           <div id="afip-container"></div>
@@ -1788,6 +1792,8 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
   var maxSit = entidades.length
     ? entidades.reduce(function(m,e){ return Math.max(m, e.situacion||1); }, 1)
     : sinDeudasReal ? 1 : null;
+  // Fantasma crediticio: BCRA respondió "sin deudas" Y no hay ningún banco reportante
+  var _sinBancos = sinDeudasReal && entidades.length === 0;
   // ── CALCULAR nPeriodosH del historial 24m (variable raíz) ──
   var periodosHist = [];
   if (historialBCRA && historialBCRA.results && historialBCRA.results.periodos) {
@@ -1869,8 +1875,9 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
       }
     }
   } else if (bcraData && bcraData.sin_deudas) {
-    pHistorial = 150;
-    historialLabel = 'Sin deudas registradas';
+    // Sin bancos reportantes → no premiar ausencia de historial
+    pHistorial = _sinBancos ? 20 : 150;
+    historialLabel = _sinBancos ? 'Sin actividad bancaria' : 'Sin deudas registradas';
   }
   puntos += pHistorial;
   detalle.push({ label:'Historial BCRA 24m', valor:historialLabel, puntos:pHistorial, max:150 });
@@ -2089,8 +2096,9 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
   // Penalidad arrastre irregular (2-5 meses en 24m) → -25% global
   if (penaltyArrastre) { puntos = Math.round(puntos * 0.75); }
 
-  // Techo duro por condiciones críticas
+  // Techos duros
   if (mora)              { puntos = Math.min(puntos, 300); }
+  if (_sinBancos)        { puntos = Math.min(puntos, 350); } // sin actividad bancaria = riesgo desconocido
   if (maxSit >= 5)       { puntos = Math.min(puntos, 1); }
   else if (maxSit >= 4)  { puntos = Math.min(puntos, 250); }
   else if (maxSit === 3) { puntos = Math.min(puntos, 400); }
@@ -2935,9 +2943,11 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
   // Guardar monto BCRA para ratio de solvencia (miles de pesos)
   window._bcraMontoUltimo = entidades.reduce(function(s,e){ return s+(e.monto||0); }, 0);
   var cuitFmt2 = cuit.length === 11 ? cuit.slice(0,2)+'-'+cuit.slice(2,10)+'-'+cuit.slice(10) : cuit;
-  // Si nombreExterno empieza con dígito es un CUIT formateado — descartar como nombre visible
   var _extEsNombre = nombreExterno && !/^\d/.test(nombreExterno);
   var nombreMostrar = _extEsNombre ? nombreExterno : (nombre || nombreExterno || cuitFmt2);
+  // Flags de alerta estructural
+  var _sinActividad = (!esTimeout) && data && data.sin_deudas === true && entidades.length === 0;
+  var _esFantasma   = /^\d/.test(nombreMostrar); // nombre resolvió a CUIT formateado
   if (!nombre) {
     obtenerNombre(cuit).then(function(n) {
       if (n && n !== cuitFmt2) {
@@ -2972,11 +2982,30 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
   headerHtml += '<button onclick="nuevaConsulta()" title="Nueva consulta" style="padding:5px 9px;font-size:14px;background:none;border:1px solid #cbd5e1;border-radius:7px;cursor:pointer;color:#475569;line-height:1;">✕</button>';
   headerHtml += '</div></div>';
   document.getElementById('cliente-header').innerHTML = headerHtml;
+  // Banner fantasma: CUIT sin Razón Social identificada
+  if (_esFantasma) {
+    var _mAlertEl = document.getElementById('mora-alert-container');
+    if (_mAlertEl) {
+      _mAlertEl.innerHTML =
+        '<div style="background:#fff7ed;border:1.5px solid #fb923c;border-radius:10px;padding:10px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px;">' +
+        '<span style="font-size:18px;flex-shrink:0;">⚠</span>' +
+        '<div><div style="font-weight:700;color:#c2410c;font-size:13px;">CUIT SIN REGISTRO ACTIVO</div>' +
+        '<div style="font-size:12px;color:#9a3412;margin-top:2px;">No se encontró Razón Social en AFIP ni BCRA. Verificá la identidad antes de operar.</div></div>' +
+        '</div>' + _mAlertEl.innerHTML;
+    }
+  }
+
   let v = '';
   if (!esTimeout) {
-    if (maxSit === 1) v = '<div class="verdict-compact aprobar"><span class="vc-icon">✅</span><span class="vc-text">Situación Normal — Sin alertas bancarias</span></div>';
-    else if (maxSit === 2) v = '<div class="verdict-compact revisar"><span class="vc-icon">⚠️</span><span class="vc-text">Situación 2 — Atrasos detectados</span></div>';
-    else v = '<div class="verdict-compact rechazar"><span class="vc-icon">⛔</span><span class="vc-text">Situación ' + maxSit + ' — ' + sitNombre(maxSit) + '</span></div>';
+    if (_sinActividad) {
+      v = '<div class="verdict-compact revisar"><span class="vc-icon">ⓘ</span><span class="vc-text">Sin actividad bancaria registrada en los últimos 24 meses</span></div>';
+    } else if (maxSit === 1) {
+      v = '<div class="verdict-compact aprobar"><span class="vc-icon">✅</span><span class="vc-text">Situación Normal — Sin alertas bancarias</span></div>';
+    } else if (maxSit === 2) {
+      v = '<div class="verdict-compact revisar"><span class="vc-icon">⚠️</span><span class="vc-text">Situación 2 — Atrasos detectados</span></div>';
+    } else {
+      v = '<div class="verdict-compact rechazar"><span class="vc-icon">⛔</span><span class="vc-text">Situación ' + maxSit + ' — ' + sitNombre(maxSit) + '</span></div>';
+    }
   }
   document.getElementById('verdict-container').innerHTML = v;
 
@@ -3003,6 +3032,17 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
       scoreObjFinal  = calcularVendeScore(cuit, data, _scoreMora, _scoreWsp, historial, window._chequesUltimaConsulta || null);
     }
     var scoreElF = document.getElementById('vende-score-container');
+    // Bloquear score para CUITs sin Razón Social identificada
+    if (_esFantasma) {
+      if (scoreElF) scoreElF.innerHTML =
+        '<div style="padding:20px 12px;background:#fff7ed;border:1.5px solid #fb923c;border-radius:12px;text-align:center;">' +
+        '<div style="font-size:28px;font-weight:800;color:#c2410c;line-height:1;">—</div>' +
+        '<div style="font-size:11px;font-weight:700;color:#c2410c;margin-top:6px;text-transform:uppercase;letter-spacing:0.5px;">Incalificable</div>' +
+        '<div style="font-size:10px;color:#9a3412;margin-top:4px;">Sin Antecedentes Registrados</div>' +
+        '</div>';
+      window._ultimoScoreVende = {score:0, rango:'Incalificable', color:'#c2410c', emoji:'⚠'};
+      return;
+    }
     if (scoreElF) {
       scoreElF.innerHTML = renderVendeScore(scoreObjFinal) +
         (_usandoFallback ? '<div style="font-size:10px;color:#ca8a04;margin-top:6px;padding:4px 8px;background:#fefce8;border-radius:6px;border:1px solid #fde047;">⚠ Usando datos locales — servidor BCRA no disponible</div>' : '');
@@ -4207,6 +4247,21 @@ function verCliente(cuit) {
   document.querySelectorAll('.tab')[0].click();
   document.getElementById('cuit-input').value = cuit;
   consultarCliente();
+}
+
+function abrirConstanciaARCA() {
+  var cuit = (document.getElementById('cuit-input').value || '').replace(/-/g,'').trim();
+  // POST al servicio público de constancia AFIP/ARCA
+  var form = document.createElement('form');
+  form.method = 'POST';
+  form.action = 'https://seti.afip.gob.ar/padron-puc-constancia-internet/ConsultaConstanciaAction.do';
+  form.target = '_blank';
+  var inp = document.createElement('input');
+  inp.type = 'hidden'; inp.name = 'inputExpressionIdunico'; inp.value = cuit;
+  form.appendChild(inp);
+  document.body.appendChild(form);
+  form.submit();
+  document.body.removeChild(form);
 }
 
 function nuevaConsulta() {
