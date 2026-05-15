@@ -465,86 +465,213 @@
     z-index: 999; flex-direction: column; gap: 14px;
   }
   .loading-text { font-size: 13px; color: var(--text2); }
+
+  /* ── RESPONSIVE GRID (Cartera / Oportunidades) ────────────────────── */
+  #cartera-lista {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 9px;
+  }
+  #cartera-lista .cliente-card { margin-bottom: 0; }
+  #oport-lista { display: grid; grid-template-columns: 1fr; gap: 9px; }
+  #oport-lista .oport-card { margin-bottom: 0; }
+  @media (min-width: 600px) {
+    #cartera-lista, #oport-lista { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (min-width: 960px) {
+    #cartera-lista, #oport-lista { grid-template-columns: repeat(3, 1fr); }
+  }
+  @media (min-width: 1400px) {
+    #cartera-lista { grid-template-columns: repeat(4, 1fr); }
+  }
+
+  /* ── AVATAR CIRCLE ────────────────────────────────────────────────── */
+  .avatar-circle {
+    width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+    background: linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%);
+    color: #fff; font-family: 'Syne', sans-serif;
+    font-weight: 800; font-size: 16px;
+    display: flex; align-items: center; justify-content: center;
+    letter-spacing: -0.5px;
+    box-shadow: 0 2px 10px rgba(59,130,246,0.28);
+  }
+  .avatar-circle.av-alerta { background: linear-gradient(135deg, #991b1b, #ef4444); box-shadow: 0 2px 10px rgba(239,68,68,0.28); }
+  .avatar-circle.av-ok     { background: linear-gradient(135deg, #065f46, #10b981); box-shadow: 0 2px 10px rgba(16,185,129,0.22); }
+
+  /* ── CARD SALDO / DSO ────────────────────────────────────────────── */
+  .card-saldo-zone {
+    margin-top: 10px; padding-top: 9px;
+    border-top: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  }
+  .card-saldo-monto {
+    font-family: 'Roboto Mono', monospace;
+    font-size: 13px; font-weight: 700; color: var(--yellow);
+  }
+  .card-dso-badge {
+    font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 6px; flex-shrink: 0;
+  }
+  .card-dso-badge.dso-ok       { background: rgba(16,185,129,0.13); color: var(--green); }
+  .card-dso-badge.dso-warning  { background: rgba(245,158,11,0.13);  color: var(--yellow); }
+  .card-dso-badge.dso-critical { background: rgba(239,68,68,0.15);   color: var(--red);
+                                  border: 1px solid rgba(239,68,68,0.3); }
+  /* Glow rojo para deuda >30 días */
+  .cliente-card.deuda-critica {
+    box-shadow: 0 0 0 1.5px rgba(239,68,68,0.3),
+                0 4px 20px rgba(239,68,68,0.1);
+    border-color: rgba(239,68,68,0.3);
+  }
+
+  /* ── STICKY SEARCH BAR ────────────────────────────────────────────── */
+  .sticky-search {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(7,13,26,0.9);
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    margin: -16px -16px 14px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .sticky-search .buscar-input { margin-bottom: 0; }
+
+  /* ── SLIDE-IN MODAL ───────────────────────────────────────────────── */
+  #detail-modal[style*="flex"] {
+    animation: modalIn 0.26s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+  }
+  @keyframes modalIn {
+    from { opacity: 0.4; transform: translateY(4%); }
+    to   { opacity: 1;   transform: translateY(0); }
+  }
+
+  /* ── UTILIDADES ───────────────────────────────────────────────────── */
+  .mono      { font-family: 'Roboto Mono', monospace; }
+  .text-dim  { color: var(--text3); }
+  #consulta-resultado { min-height: 60px; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
-
-<!-- LOGIN -->
+<!-- ══ LOGIN ════════════════════════════════════════════════════════════ -->
 <div id="login-screen">
-  <div class="login-logo">🍷</div>
+  <span class="login-logo">🍷</span>
   <div class="login-title">Vende Seguro</div>
   <div class="login-sub">vende sin riesgo</div>
+
   <div class="login-form">
-    <div><div class="field-label">Nombre completo</div>
-      <input class="field-input" id="inp-nombre" type="text" placeholder="Ej: Alejandro Valan" autocomplete="name"></div>
-    <div><div class="field-label">CUIT del comercial</div>
-      <input class="field-input" id="inp-cuit" type="tel" placeholder="Ej: 20123456789" inputmode="numeric"></div>
-    <div><div class="field-label">PIN de acceso</div>
-      <input class="field-input" id="inp-pin" type="password" placeholder="••••••••" autocomplete="off"></div>
+    <div class="field-label">Nombre completo</div>
+    <input class="field-input" id="inp-nombre" type="text"
+           placeholder="Ej: Alejandro Valan" autocomplete="name">
+
+    <div class="field-label">CUIT del comercial</div>
+    <input class="field-input" id="inp-cuit" type="tel"
+           placeholder="Ej: 20123456789" inputmode="numeric">
+
+    <div class="field-label">PIN de acceso</div>
+    <input class="field-input" id="inp-pin" type="password"
+           placeholder="••••••••" autocomplete="off">
+
     <div class="login-error" id="login-error">Datos incorrectos.</div>
     <button class="btn-login" onclick="doLogin()">Ingresar →</button>
   </div>
 </div>
 
-<!-- APP -->
+<!-- ══ APP ══════════════════════════════════════════════════════════════ -->
 <div id="app">
+
+  <!-- Header con blur -->
   <div class="app-header">
-    <div>
-      <div class="header-name" id="header-name">—</div>
-      <div class="header-sub" id="header-cartera">— clientes</div>
+    <div class="header-brand">
+      <span class="header-logo">🍷</span>
+      <div>
+        <div class="header-name" id="header-name">—</div>
+        <div class="header-sub" id="header-cartera">— clientes</div>
+      </div>
     </div>
     <button class="btn-logout" onclick="doLogout()">Salir</button>
   </div>
+
+  <!-- Contenido de tabs -->
   <div class="tab-content">
+
+    <!-- ── TAB: CONSULTA ──────────────────────────────────────────── -->
     <div class="tab-pane active" id="tab-consulta">
       <div class="section-title">Consulta CUIT</div>
       <div class="section-sub">Situación BCRA, score y análisis de riesgo</div>
       <div class="search-box">
-        <input class="search-input" id="cuit-input" type="tel" inputmode="numeric" placeholder="CUIT sin guiones" maxlength="11">
+        <input class="search-input" id="cuit-input"
+               type="tel" inputmode="numeric"
+               placeholder="CUIT sin guiones" maxlength="11">
         <button class="btn-search" onclick="consultarCuit()">Buscar</button>
       </div>
       <div id="consulta-resultado"></div>
     </div>
+
+    <!-- ── TAB: CARTERA ───────────────────────────────────────────── -->
     <div class="tab-pane" id="tab-cartera">
       <div class="section-title">Mi Cartera</div>
       <div class="section-sub" id="cartera-subtitle">Clientes activos</div>
-      <input type="text" class="buscar-input" id="buscar-cartera" placeholder="🔍 Buscar cliente..." oninput="buscarEnCartera(this.value)" translate="no">
+
+      <!-- Buscador sticky con blur -->
+      <div class="sticky-search">
+        <input type="text" class="buscar-input" id="buscar-cartera"
+               placeholder="🔍 Buscar por nombre o ciudad…"
+               oninput="buscarEnCartera(this.value)" translate="no">
+      </div>
+
+      <!-- Filtros + recalc -->
       <div class="filter-row">
         <button class="filter-chip active" onclick="filtrarCartera('todos',this)">Todos</button>
         <button class="filter-chip" onclick="filtrarCartera('alertas',this)">⚠ Alertas</button>
         <button class="filter-chip" onclick="filtrarCartera('saldo',this)">💰 Con saldo</button>
-        <button id="btn-recalc" onclick="actualizarScores(this)" style="margin-left:auto;background:none;border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:12px;color:var(--text2);cursor:pointer;font-family:'DM Sans',sans-serif;">↻ Scores</button>
-
+        <button id="btn-recalc" onclick="actualizarScores(this)"
+                style="margin-left:auto;background:none;border:1px solid var(--border);
+                       border-radius:8px;padding:7px 11px;font-size:12px;
+                       color:var(--text2);cursor:pointer;font-family:'Inter',sans-serif;">
+          ↻ Scores
+        </button>
       </div>
+
+      <!-- Grid responsive de tarjetas (renderCartera() inyecta .cliente-card aquí) -->
       <div id="cartera-lista"></div>
     </div>
+
+    <!-- ── TAB: OPORTUNIDADES ─────────────────────────────────────── -->
     <div class="tab-pane" id="tab-oport">
       <div class="section-title">Oportunidades</div>
       <div class="section-sub">Clientes con potencial de venta</div>
-      <div style="margin-bottom:12px;">
-        <input type="text" id="buscar-oport" placeholder="🔍 Buscar cliente..."
-          style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:14px;background:var(--surface);color:var(--text);outline:none;"
-          oninput="buscarEnOport(this.value)" translate="no">
+
+      <!-- Buscador sticky con blur -->
+      <div class="sticky-search">
+        <input type="text" id="buscar-oport" class="buscar-input"
+               placeholder="🔍 Buscar cliente…"
+               oninput="buscarEnOport(this.value)" translate="no">
       </div>
+
+      <!-- Grid responsive (renderOportunidades() inyecta .oport-card aquí) -->
       <div id="oport-lista"></div>
     </div>
-  </div>
+
+  </div><!-- /tab-content -->
+
+  <!-- Bottom nav (mobile) -->
   <div class="bottom-tabs">
     <button class="tab-btn active" onclick="switchTab('consulta',this)">
-      <span class="tab-icon">🔍</span><span class="tab-label">Consulta</span>
+      <span class="tab-icon">🔍</span>
+      <span class="tab-label">Consulta</span>
     </button>
     <button class="tab-btn" onclick="switchTab('cartera',this)">
-      <span class="tab-icon">📋</span><span class="tab-label">Cartera</span>
+      <span class="tab-icon">📋</span>
+      <span class="tab-label">Cartera</span>
     </button>
     <button class="tab-btn" onclick="switchTab('oport',this)">
-      <span class="tab-icon">⚡</span><span class="tab-label">Oportunidades</span>
+      <span class="tab-icon">⚡</span>
+      <span class="tab-label">Oportunidades</span>
     </button>
   </div>
-</div>
 
-<!-- MODAL CLIENTE -->
+</div><!-- /app -->
+
+<!-- ══ MODAL CLIENTE (slide-in) ════════════════════════════════════════ -->
 <div id="detail-modal">
   <div class="modal-header">
     <button class="btn-back" onclick="closeModal()">←</button>
@@ -553,9 +680,9 @@
   <div class="modal-body" id="modal-body"></div>
 </div>
 
-<!-- Loading -->
+<!-- ══ LOADING OVERLAY ══════════════════════════════════════════════════ -->
 <div id="loading-overlay">
-  <div class="spinner" style="width:36px;height:36px;border-width:3px"></div>
+  <div class="spinner" style="width:38px;height:38px;border-width:3px;"></div>
   <div class="loading-text" id="loading-text">Cargando...</div>
 </div>
 
