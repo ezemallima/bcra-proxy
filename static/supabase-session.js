@@ -2,8 +2,8 @@
 // Requiere: @supabase/supabase-js v2 cargado antes de este script
 // Configurar con las credenciales del proyecto Supabase
 
-const SUPABASE_URL  = 'https://TU_PROYECTO.supabase.co';
-const SUPABASE_ANON = 'TU_ANON_KEY';
+const SUPABASE_URL  = 'https://REEMPLAZAR_PROJECT_REF.supabase.co'; // ← pegar URL del proyecto
+const SUPABASE_ANON = 'sb_publishable_KE_-r2F760BVWRun_aqxhg_OloyoVW5';
 
 let _supabase = null;
 let _perfil   = null;  // { id, empresa_id, nombre, rol, email }
