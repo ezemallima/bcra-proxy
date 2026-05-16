@@ -2036,6 +2036,14 @@ def ping():
 def comercial():
     return send_from_directory('static', 'comercial.html')
 
+@app.route("/login")
+def login():
+    return send_from_directory('static', 'login.html')
+
+@app.route("/supabase-session.js")
+def supabase_session_js():
+    return send_from_directory('static', 'supabase-session.js')
+
 @app.route("/todos-los-clientes")
 def get_todos_los_clientes():
     """Devuelve la cartera completa con CUITs para que el admin pueda verificar sin localStorage."""

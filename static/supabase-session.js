@@ -53,8 +53,7 @@ async function verificarSesion() {
   const { data: { session } } = await sb.auth.getSession();
 
   if (!session) {
-    const base = window.location.pathname.replace(/\/[^/]*$/, '');
-    window.location.replace(base + '/login.html');
+    window.location.replace('/login');
     return null;
   }
 
@@ -62,7 +61,7 @@ async function verificarSesion() {
     return await cargarPerfil();
   } catch (e) {
     await sb.auth.signOut();
-    window.location.replace('./login.html');
+    window.location.replace('/login');
     return null;
   }
 }
@@ -72,7 +71,7 @@ async function verificarSesion() {
 async function doLogout() {
   _perfil = null;
   await getClient().auth.signOut();
-  window.location.replace('./login.html');
+  window.location.replace('/login');
 }
 
 // ── Helpers para otros módulos ───────────────────────────────────────────────
