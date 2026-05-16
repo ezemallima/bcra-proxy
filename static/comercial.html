@@ -1170,18 +1170,29 @@ function renderCartera(filtro) {
 
   // Construir HTML en string único — una sola escritura al DOM
   el.innerHTML = lista.map(function(c) {
+    // ── Reset por cliente — ningún valor del anterior se filtra ──────
     const sit          = c.ultimaSit || 1;
     const score        = c.score ?? null;
-    const tieneAlerta  = c.alerta || alertaCuits.has(c.cuit);
-    const tieneAT      = c.alerta_temprana && !tieneAlerta;
-    const esOport      = c.oportunidad;
+
+    // ── Carriles de alerta completamente separados ───────────────────
+    // esAlertaBCRA: SOLO situación BCRA > 1 (Sit 2/3/4/5).
+    // c.alerta viene del servidor y puede reflejar criterios internos
+    // (logística, límite) que NO son riesgo bancario → NO pisa este flag.
+    const esAlertaBCRA = sit > 1;
+
+    // esExcedido: deuda Odoo >= límite de crédito asignado (carril comercial)
     const saldosData   = getSaldos(c.nombre);
-    const scoreColor   = scoreToColor(score);
     const limCred      = c.limite_credito || 0;
     const saldoActual  = (saldosData && saldosData.total_saldo) || c.total_saldo || 0;
-    const excedido     = limCred > 0 && saldoActual >= limCred;
+    const esExcedido   = limCred > 0 && saldoActual >= limCred;
+
+    // tieneAT: alerta temprana del servidor, solo si no hay alerta BCRA real
+    const tieneAT      = c.alerta_temprana && !esAlertaBCRA;
+
+    const esOport      = c.oportunidad;
+    const scoreColor   = scoreToColor(score);
     const pctUsado     = limCred > 0 ? Math.min(100, (saldoActual / limCred) * 100) : 0;
-    const barColor     = excedido ? 'var(--red)' : pctUsado > 80 ? 'var(--orange)' : 'var(--green)';
+    const barColor     = esExcedido ? 'var(--red)' : pctUsado > 80 ? 'var(--orange)' : 'var(--green)';
     const dotColor     = !score ? 'var(--text2)' : sit === 1 ? 'var(--green)' : sit === 2 ? 'var(--yellow)' : 'var(--red)';
 
     // ── DSO: días de atraso máximo sobre facturas abiertas ──────────
@@ -1190,9 +1201,9 @@ function renderCartera(filtro) {
     const dsoCls       = dso === null ? '' : dso > 30 ? 'dso-critical' : dso > 15 ? 'dso-warning' : 'dso-ok';
     const dsoLabel     = dso === null ? '' : dso > 0 ? dso + 'd venc.' : 'Al día';
 
-    // ── Avatar: inicial + color según situación ──────────────────────
+    // ── Avatar: rojo solo si hay alerta BCRA real o deuda crítica ────
     const inicial      = (c.nombre || '?').trim()[0].toUpperCase();
-    const avCls        = tieneAlerta || esDeudaCrit ? 'av-alerta' : sit === 1 && (score||0) >= 600 ? 'av-ok' : '';
+    const avCls        = esAlertaBCRA || esDeudaCrit ? 'av-alerta' : sit === 1 && (score||0) >= 600 ? 'av-ok' : '';
 
     // ── CUIT formateado para display ─────────────────────────────────
     const cuitRaw      = (c.cuit || '').replace(/\D/g, '');
@@ -1200,10 +1211,10 @@ function renderCartera(filtro) {
       ? cuitRaw.slice(0,2)+'-'+cuitRaw.slice(2,10)+'-'+cuitRaw.slice(10)
       : (c.cuit || '—');
 
-    // ── Clase de la card ─────────────────────────────────────────────
-    const cardCls = tieneAlerta    ? ' alerta'
-                  : excedido       ? ' excedido-card'
-                  : esDeudaCrit    ? ' deuda-critica'
+    // ── Clase de la card — deriva de la alerta correcta ──────────────
+    const cardCls = esAlertaBCRA    ? ' alerta'
+                  : esExcedido      ? ' excedido-card'
+                  : esDeudaCrit     ? ' deuda-critica'
                   : '';
 
     return `<div class="cliente-card${cardCls}" data-cuit="${esc(c.cuit)}" data-nombre="${esc(c.nombre)}" onclick="abrirModalCliente(this.dataset.cuit, this.dataset.nombre)">
@@ -1225,16 +1236,16 @@ function renderCartera(filtro) {
       <div class="cliente-row2" style="margin-top:8px;">
         ${c.ciudad ? `<span class="cliente-ciudad">${esc(c.ciudad)}</span>` : ''}
         <span class="sit-badge sit-${sit}" style="background:${sitBg(sit)};color:${dotColor}">Sit ${sit}</span>
-        ${tieneAlerta  ? '<span class="alerta-badge"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Alerta BCRA</span>'     : ''}
+        ${esAlertaBCRA ? '<span class="alerta-badge"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Alerta BCRA</span>'    : ''}
         ${tieneAT      ? '<span class="alerta-temprana-badge"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Temprana</span>' : ''}
-        ${excedido     ? '<span class="excedido-badge"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg> Límite excedido</span>' : ''}
+        ${esExcedido   ? '<span class="excedido-badge"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg> Límite excedido</span>' : ''}
         ${c.alerta_logistica ? `<span class="alerta-temprana-badge">${esc(c.alerta_logistica)}</span>` : ''}
       </div>
 
       <!-- Barra de crédito (si tiene límite configurado) -->
       ${limCred > 0 ? `<div class="credit-bar-wrap">
         <div class="credit-bar-track"><div class="credit-bar-fill" style="width:${pctUsado}%;background:${barColor}"></div></div>
-        <div class="credit-bar-label">${excedido
+        <div class="credit-bar-label">${esExcedido
           ? '<span style="color:var(--red);font-weight:700">Agotado — $'+fmtM(saldoActual)+' / $'+fmtM(limCred)+'</span>'
           : 'Disponible: $'+fmtM(Math.max(0,limCred-saldoActual))+' de $'+fmtM(limCred)}</div>
       </div>` : ''}
