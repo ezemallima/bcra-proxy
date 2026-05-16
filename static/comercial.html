@@ -555,6 +555,69 @@
   .mono      { font-family: 'Roboto Mono', monospace; }
   .text-dim  { color: var(--text3); }
   #consulta-resultado { min-height: 60px; }
+
+  /* ── MOBILE-FIRST TWEAKS (≤768px) ──────────────────────────────────── */
+  @media (max-width: 768px) {
+    .tab-pane { padding: 12px; }
+    .search-input, .buscar-input, .field-input { font-size: 16px; }
+    .btn-search { min-height: 48px; }
+    .filter-chip { padding: 8px 14px; min-height: 40px; }
+    .tab-btn { min-height: 52px; }
+  }
+
+  /* ── SIDEBAR (desktop ≥769px) ───────────────────────────────────────── */
+  .sidebar { display: none; }
+
+  @media (min-width: 769px) {
+    #app { flex-direction: row; align-items: stretch; }
+    .sidebar {
+      display: flex; flex-direction: column;
+      width: var(--sidebar-width); min-height: 100dvh;
+      background: var(--sidebar-bg);
+      border-right: 1px solid rgba(255,255,255,0.06);
+      position: sticky; top: 0; align-self: flex-start;
+      height: 100dvh; overflow-y: auto; flex-shrink: 0;
+    }
+    .sidebar-brand {
+      display: flex; align-items: center; gap: 10px;
+      padding: 20px 16px 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+    }
+    .sidebar-logo { color: #fff; flex-shrink: 0; }
+    .sidebar-title {
+      font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 800;
+      color: #fff; letter-spacing: -0.2px; line-height: 1.2;
+    }
+    .sidebar-sub { font-size: 10px; color: rgba(255,255,255,0.38); margin-top: 2px; }
+    .sidebar-nav { flex: 1; padding: 12px 8px; display: flex; flex-direction: column; gap: 3px; }
+    .sidebar-btn {
+      display: flex; align-items: center; gap: 10px;
+      width: 100%; padding: 9px 12px; border: none; border-radius: 9px;
+      background: none; cursor: pointer; font-family: 'Inter', sans-serif;
+      font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.45);
+      transition: background 0.15s, color 0.15s; text-align: left;
+    }
+    .sidebar-btn:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.82); }
+    .sidebar-btn.active { background: rgba(59,130,246,0.2); color: #fff; font-weight: 700; }
+    .sidebar-btn svg { flex-shrink: 0; opacity: 0.7; }
+    .sidebar-btn.active svg { opacity: 1; }
+    .sidebar-footer { padding: 12px 8px; border-top: 1px solid rgba(255,255,255,0.07); }
+    .sidebar-user { padding: 8px 12px; font-size: 11px; color: rgba(255,255,255,0.45); }
+    .sidebar-user-name { font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.88); margin-bottom: 2px; }
+    .btn-sidebar-logout {
+      width: 100%; padding: 8px 12px; border-radius: 8px;
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+      color: rgba(255,255,255,0.45); font-size: 12px; font-weight: 600;
+      cursor: pointer; font-family: 'Inter', sans-serif;
+      transition: background 0.15s; margin-top: 6px; text-align: center;
+    }
+    .btn-sidebar-logout:hover { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.7); }
+    .app-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    .app-header { display: none; }
+    .bottom-tabs { display: none; }
+    .tab-content { padding-bottom: 16px; }
+    .tab-pane { padding: 20px 24px; }
+  }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 </head>
@@ -586,6 +649,41 @@
 
 <!-- ══ APP ══════════════════════════════════════════════════════════════ -->
 <div id="app">
+
+  <!-- ── SIDEBAR (desktop only) ─────────────────────────────────────── -->
+  <aside class="sidebar" id="app-sidebar">
+    <div class="sidebar-brand">
+      <span class="sidebar-logo"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 22h8M12 11v11M6 2h12l-2 9a5 5 0 01-8 0z"/></svg></span>
+      <div>
+        <div class="sidebar-title">Vende Seguro</div>
+        <div class="sidebar-sub" id="sb-user-name">—</div>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <button class="sidebar-btn active" id="sb-consulta" onclick="switchTab('consulta',this)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        Consulta
+      </button>
+      <button class="sidebar-btn" id="sb-cartera" onclick="switchTab('cartera',this)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        Mi Cartera
+      </button>
+      <button class="sidebar-btn" id="sb-oport" onclick="switchTab('oport',this)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        Oportunidades
+      </button>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="sidebar-user">
+        <div class="sidebar-user-name" id="sb-name">—</div>
+        <div id="sb-cartera-count">— clientes</div>
+      </div>
+      <button class="btn-sidebar-logout" onclick="doLogout()">Salir</button>
+    </div>
+  </aside>
+
+  <!-- ── MAIN AREA ──────────────────────────────────────────────────── -->
+  <div class="app-main">
 
   <!-- Header con blur -->
   <div class="app-header">
@@ -678,6 +776,7 @@
     </button>
   </div>
 
+  </div><!-- /app-main -->
 </div><!-- /app -->
 
 <!-- ══ MODAL CLIENTE (slide-in) ════════════════════════════════════════ -->
@@ -845,6 +944,13 @@ async function iniciarApp() {
   const n = CARTERA_LOCAL.length;
   document.getElementById('header-cartera').textContent = n + ' cliente' + (n!==1?'s':'');
   document.getElementById('cartera-subtitle').textContent = n + ' clientes activos';
+  // Populate sidebar (desktop)
+  const _sbName = document.getElementById('sb-name');
+  const _sbUser = document.getElementById('sb-user-name');
+  const _sbCnt  = document.getElementById('sb-cartera-count');
+  if (_sbName) _sbName.textContent = SESSION.nombre;
+  if (_sbUser) _sbUser.textContent = SESSION.nombre;
+  if (_sbCnt)  _sbCnt.textContent  = n + ' cliente' + (n!==1?'s':'');
   renderCartera('todos');
   renderOportunidades();
   cargarSaldosCartera();
@@ -994,9 +1100,14 @@ async function forzarRecalculo(cuit, btn) {
 
 function switchTab(tab, btn) {
   document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-btn, .sidebar-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
-  btn.classList.add('active');
+  if (btn) btn.classList.add('active');
+  // Sync sidebar ↔ bottom-tabs so both reflect active state
+  const sbEl = document.getElementById('sb-' + tab);
+  if (sbEl) sbEl.classList.add('active');
+  const btEl = [...document.querySelectorAll('.tab-btn')].find(b => b.getAttribute('onclick')?.includes("'" + tab + "'"));
+  if (btEl) btEl.classList.add('active');
   localStorage.setItem('vendeSeguro_tab', tab);
   if (tab === 'cartera' || tab === 'oport') {
     refrescarScores();
@@ -1617,16 +1728,17 @@ function mostrarErrorCuitInexistente(raw) {
 async function consultarCuit() {
   const cuit = document.getElementById('cuit-input').value.trim().replace(/\D/g,'');
   if (cuit.length < 10) { alert('CUIT inválido'); return; }
-  showLoading('Consultando BCRA...');
+  showLoading('Consultando BCRA…');
   document.getElementById('consulta-resultado').innerHTML = '';
   const resEl = document.getElementById('consulta-resultado');
   try {
-    showLoading('Consultando BCRA…');
-    const [dd, cd, hd, serverScore] = await Promise.all([
+    // AFIP en paralelo con BCRA — sin overhead extra de tiempo
+    const [dd, cd, hd, serverScore, afipRaw] = await Promise.all([
       safeFetch(API + '/deudas/' + cuit),
       safeFetch(API + '/deudas/' + cuit + '/cheques'),
       safeFetch(API + '/deudas/' + cuit + '/historial'),
       safeFetch(API + '/fetch-score/' + cuit + '?fresh=1'),
+      safeFetch(API + '/afip/' + cuit).catch(() => null),
     ]);
     hideLoading();
     if (!dd || dd._gateway_error) {
@@ -1639,25 +1751,19 @@ async function consultarCuit() {
       return;
     }
 
-    // Resolución bloqueante de Razón Social: BCRA no siempre devuelve denominacion
-    // (cliente sin deuda vigente, CUIT nuevo, etc.) → fallback a /afip/ que busca
-    // en BCRA historial → cartera comercial → saldos/facturas.
-    if (!dd?.results?.denominacion?.trim()) {
-      showLoading('Obteniendo razón social…');
-      try {
-        const afipData = await safeFetch(API + '/afip/' + cuit);
-        if (afipData?.nombre && afipData.nombre !== cuit) {
-          if (!dd.results) dd.results = {};
-          dd.results.denominacion = afipData.nombre;
-          console.log('[consulta] Razón social desde', afipData.fuente + ':', afipData.nombre);
-        }
-      } catch(e) { console.warn('[consulta] /afip/ falló:', e); }
-      hideLoading();
+    // Normalizar AFIP — null si falló o devolvió error de gateway
+    const afipExtra = (afipRaw && !afipRaw._gateway_error) ? afipRaw : null;
+
+    // Usar AFIP como fallback de denominacion si BCRA no la trajo
+    if (!dd?.results?.denominacion?.trim() && afipExtra?.nombre && afipExtra.nombre !== cuit) {
+      if (!dd.results) dd.results = {};
+      dd.results.denominacion = afipExtra.nombre;
+      console.log('[consulta] Razón social desde', afipExtra.fuente + ':', afipExtra.nombre);
     }
 
-    // Anti-fantasma: CUIT sin identidad en ningún registro
+    // Anti-CUIT: frena si denominacion vacía, igual al CUIT, o solo dígitos (CUIT duplicado)
     const _nombreFinal = dd?.results?.denominacion?.trim() || '';
-    if (dd?.sin_deudas === true && /^\d/.test(_nombreFinal)) {
+    if (!_nombreFinal || _nombreFinal === cuit || /^\d{10,11}$/.test(_nombreFinal)) {
       mostrarErrorCuitInexistente(cuit);
       return;
     }
@@ -1665,8 +1771,9 @@ async function consultarCuit() {
     // Guardar estado para generarPDF()
     window._ultimaConsulta = { cuit, dd, cd: cd || {}, hd, serverScore };
 
-    console.log('[consulta] score=', serverScore?.score, 'mt=', serverScore?.mora_tecnica);
-    renderConsulta(cuit, dd, cd || {}, hd, serverScore);
+    console.log('[consulta] score=', serverScore?.score, 'mt=', serverScore?.mora_tecnica,
+                '| afip:', afipExtra ? (afipExtra.fuente || 'ok') : 'offline');
+    renderConsulta(cuit, dd, cd || {}, hd, serverScore, afipExtra);
     lanzarAnalisisIA(cuit, dd, cd || {});
   } catch(e) {
     hideLoading();
@@ -1676,15 +1783,15 @@ async function consultarCuit() {
 
 function veredictoRapido(score, activosCheques, maxSit) {
   if (maxSit >= 4 || activosCheques > 0)
-    return {texto:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg> No recibir cheque',   bg:'rgba(239,68,68,0.12)',   color:'#fca5a5', borde:'rgba(239,68,68,0.4)'};
+    return {texto:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg> No recibir cheque',   bg:'rgba(239,68,68,0.08)',   color:'#991b1b', borde:'rgba(239,68,68,0.3)'};
   if (maxSit === 3 || score < 300)
-    return {texto:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Riesgo elevado',       bg:'rgba(245,158,11,0.10)', color:'#fde68a', borde:'rgba(245,158,11,0.4)'};
+    return {texto:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Riesgo elevado',       bg:'rgba(245,158,11,0.08)', color:'#92400e', borde:'rgba(245,158,11,0.3)'};
   if (score >= 600 && activosCheques === 0)
-    return {texto:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="20 6 9 17 4 12"/></svg> Apto para cheque',     bg:'rgba(16,185,129,0.10)', color:'#6ee7b7', borde:'rgba(16,185,129,0.4)'};
-  return   {texto:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> Revisar con cautela', bg:'rgba(249,115,22,0.10)', color:'#fed7aa', borde:'rgba(249,115,22,0.4)'};
+    return {texto:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="20 6 9 17 4 12"/></svg> Apto para cheque',     bg:'rgba(16,185,129,0.08)', color:'#166534', borde:'rgba(16,185,129,0.3)'};
+  return   {texto:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> Revisar con cautela', bg:'rgba(249,115,22,0.08)', color:'#9a3412', borde:'rgba(249,115,22,0.3)'};
 }
 
-function renderConsulta(cuit, dd, cd, hd, serverScore) {
+function renderConsulta(cuit, dd, cd, hd, serverScore, afipData) {
   const results = dd.results||{}, periodos = results.periodos||[];
   let maxSit=1, entidades=[], montoTotal=0;
   if (periodos.length) {
@@ -1748,9 +1855,9 @@ function renderConsulta(cuit, dd, cd, hd, serverScore) {
   let overrideAdminHtml = '';
   if (_overrideAdmin) {
     const notaOv = _overrideNota || 'Situación Regularizada (Validación Interna)';
-    overrideAdminHtml = `<div style="margin-top:8px;background:rgba(16,185,129,0.12);border:2px solid rgba(16,185,129,0.4);border-radius:8px;padding:10px 14px;font-size:12px;color:#6ee7b7;text-align:left">
+    overrideAdminHtml = `<div style="margin-top:8px;background:rgba(16,185,129,0.1);border:2px solid rgba(16,185,129,0.35);border-radius:8px;padding:10px 14px;font-size:12px;color:#166534;text-align:left">
       <div style="font-weight:700;font-size:13px;margin-bottom:4px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="20 6 9 17 4 12"/></svg> ${esc(notaOv)}</div>
-      <div style="color:#86efac">Score calculado por validación interna. Situaciones bancarias de entidades menores no aplican penalización.</div>
+      <div style="color:#14532d">Score calculado por validación interna. Situaciones bancarias de entidades menores no aplican penalización.</div>
     </div>`;
   }
 
@@ -1764,7 +1871,7 @@ function renderConsulta(cuit, dd, cd, hd, serverScore) {
            const buenaStr = pctBuena != null ? ` ${pctBuena}% de la cartera en situación normal.` : '';
            return `Atención: Se detecta una mora técnica por monto menor que no afecta la solvencia general.${moraStr}${buenaStr}`;
          })();
-    moraTecHtml = `<div style="margin-top:8px;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.4);border-radius:6px;padding:8px 12px;font-size:12px;color:#fde68a;text-align:left">
+    moraTecHtml = `<div style="margin-top:8px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:6px;padding:8px 12px;font-size:12px;color:#92400e;text-align:left">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> ${esc(notaTxt)}
     </div>`;
   }
@@ -1776,9 +1883,9 @@ function renderConsulta(cuit, dd, cd, hd, serverScore) {
       ? `<br><span style="font-size:12px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> Límite dinámico sugerido: <strong>$${fmtM(_limDin)}</strong> (30 % de la deuda en Sit. 1)</span>`
       : '';
     const notaAdm = _avisoMora || 'Una entidad reporta atraso sin historial previo de incumplimiento. El banco principal está en Situación 1.';
-    moraAdmHtml = `<div style="margin-top:8px;background:rgba(59,130,246,0.12);border:2px solid rgba(59,130,246,0.4);border-radius:8px;padding:10px 14px;font-size:12px;color:#93c5fd;text-align:left">
+    moraAdmHtml = `<div style="margin-top:8px;background:rgba(59,130,246,0.08);border:2px solid rgba(59,130,246,0.3);border-radius:8px;padding:10px 14px;font-size:12px;color:#1e40af;text-align:left">
       <div style="font-weight:700;font-size:13px;margin-bottom:4px"><svg width="10" height="10" viewBox="0 0 10 10" fill="#3b82f6" style="vertical-align:-1px"><circle cx="5" cy="5" r="5"/></svg> MORA ADMINISTRATIVA — REVISIÓN HUMANA</div>
-      <div style="font-weight:400;color:#bfdbfe">${esc(notaAdm)}${limHtml}</div>
+      <div style="font-weight:400;color:#1e3a8a">${esc(notaAdm)}${limHtml}</div>
     </div>`;
   }
 
@@ -1788,9 +1895,9 @@ function renderConsulta(cuit, dd, cd, hd, serverScore) {
   let deuda90dHtml  = '';
   if (_deuda90d) {
     const montoStr  = (_monto90d && _monto90d > 0) ? ` — $${fmtM(_monto90d)} pendiente` : '';
-    deuda90dHtml    = `<div style="margin-top:8px;background:rgba(239,68,68,0.12);border:2px solid rgba(239,68,68,0.4);border-radius:8px;padding:10px 14px;font-size:12px;color:#fca5a5;text-align:left">
+    deuda90dHtml    = `<div style="margin-top:8px;background:rgba(239,68,68,0.08);border:2px solid rgba(239,68,68,0.3);border-radius:8px;padding:10px 14px;font-size:12px;color:#991b1b;text-align:left">
       <div style="font-weight:700;font-size:13px;margin-bottom:4px"><svg width="10" height="10" viewBox="0 0 10 10" fill="#ef4444" style="vertical-align:-1px"><circle cx="5" cy="5" r="5"/></svg> DEUDA INTERNA +90 DÍAS${montoStr}</div>
-      <div style="color:#fecaca">Este cliente tiene facturas propias vencidas hace más de 90 días. <strong>Score penalizado −200 pts.</strong></div>
+      <div style="color:#7f1d1d">Este cliente tiene facturas propias vencidas hace más de 90 días. <strong>Score penalizado −200 pts.</strong></div>
     </div>`;
   }
 
@@ -1807,7 +1914,7 @@ function renderConsulta(cuit, dd, cd, hd, serverScore) {
         <div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:3px">Score Vende Seguro</div>
         <div style="font-size:28px;font-weight:800;color:${_alertaCritica?'#dc2626':cc};font-family:'Syne',sans-serif;${_alertaCritica?'text-shadow:0 0 12px rgba(220,38,38,0.25);':''}">${scoreEst}</div>
         <div style="font-size:12px;margin-top:2px">${_rangoDisplay}</div>
-        ${_alertaCritica?'<div style="font-size:11px;font-weight:700;color:#fca5a5;margin-top:4px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);border-radius:6px;padding:3px 8px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Alerta Crediticia Crítica</div>':''}
+        ${_alertaCritica?'<div style="font-size:11px;font-weight:700;color:#991b1b;margin-top:4px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);border-radius:6px;padding:3px 8px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Alerta Crediticia Crítica</div>':''}
       </div>
       <div style="text-align:center">
         <div style="font-size:28px;font-weight:800;color:${activos.length>0?'var(--rojo)':'var(--verde)'};font-family:'Syne',sans-serif">${activos.length}</div>
@@ -1907,6 +2014,39 @@ function renderConsulta(cuit, dd, cd, hd, serverScore) {
     <div class="sit-chip"><span class="sit-chip-label">Monto total</span><span class="sit-chip-val">$${fmtM(montoTotal*1000)}</span></div></div>
     ${entidades.map(e=>`<div class="divider"></div><div class="row-data"><span class="row-key">${esc(e.entidad||'')}</span><span class="row-val sit-${e.situacion||1}">Sit. ${e.situacion||1} — $${fmtM((e.monto||0)*1000)}</span></div>`).join('')}</div>`;
   }
+
+  // ── 3.5. AFIP / ARCA ──
+  const _condIVA     = afipData?.condicion_iva || afipData?.condicionIVA || afipData?.condicion || null;
+  const _activAfip   = afipData?.actividad || afipData?.actividad_principal || null;
+  const _activDisp   = _activAfip || _activ || null;  // fallback a score server
+  const _afipFuente  = afipData?.fuente || null;
+  const _afipOffline = !afipData;
+
+  html += `<div class="card"><div class="card-title">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><line x1="3" y1="22" x2="21" y2="22"/><line x1="6" y1="18" x2="6" y2="11"/><line x1="10" y1="18" x2="10" y2="11"/><line x1="14" y1="18" x2="14" y2="11"/><line x1="18" y1="18" x2="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg>
+    AFIP / ARCA</div>`;
+
+  if (_afipOffline) {
+    html += `<div style="display:flex;align-items:center;gap:8px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:8px;padding:9px 12px;font-size:12px;color:#92400e">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      AFIP: Fuera de línea
+      <button onclick="consultarCuit()" style="margin-left:auto;background:none;border:1px solid rgba(245,158,11,0.3);border-radius:5px;padding:3px 10px;font-size:11px;font-weight:700;color:#92400e;cursor:pointer">Reintentar</button>
+    </div>`;
+  } else {
+    if (_condIVA) {
+      html += `<div class="row-data"><span class="row-key">Condición IVA</span><span class="row-val" style="color:#1e293b;font-weight:600">${esc(_condIVA)}</span></div>`;
+    }
+    if (_activDisp) {
+      html += `<div class="row-data"><span class="row-key">Actividad principal</span><span class="row-val" style="font-size:11px;max-width:58%;text-align:right;color:#1e293b">${esc(_activDisp)}</span></div>`;
+    }
+    if (!_condIVA && !_activDisp) {
+      html += `<div style="font-size:12px;color:var(--text2);padding:4px 0">Datos fiscales no disponibles para este CUIT.</div>`;
+    }
+    if (_afipFuente) {
+      html += `<div style="font-size:10px;color:var(--text3);margin-top:6px">Fuente: ${esc(_afipFuente)}</div>`;
+    }
+  }
+  html += '</div>';
 
   // ── 4. ANÁLISIS IA ──
   html += `<div class="card"><div class="card-title">Análisis IA</div>
