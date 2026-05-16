@@ -342,8 +342,8 @@
   }
   .cliente-card:hover { box-shadow: 0 8px 20px rgba(37,99,235,0.1); transform: translateY(-1px); border-color: #bfdbfe; }
   .cliente-card:active { background: #f8fafc; transform: translateY(0); }
-  .cliente-card.alerta { border-color: #fca5a5; border-left: 4px solid #991b1b; }
-  .cliente-card.excedido-card { border-color: #fde68a; border-left: 4px solid #92400e; }
+  .cliente-card.alerta { border-color: #fca5a5; border-left: 3px solid #991b1b; }
+  .cliente-card.excedido-card { border-color: #fde68a; border-left: 3px solid #92400e; }
   .cliente-row1 { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
   .cliente-nombre { font-size: 14px; font-weight: 700; color: #1e293b; line-height: 1.3; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .score-badge { font-family: 'Roboto Mono', monospace; font-size: 14px; font-weight: 700; flex-shrink: 0; }
@@ -472,23 +472,17 @@
   .loading-text { font-size: 13px; color: var(--text); font-weight: 600; }
 
   /* ── RESPONSIVE GRID (Cartera / Oportunidades) ────────────────────── */
-  #cartera-lista {
+  /* auto-fill + minmax: se adapta al ancho REAL del contenedor,
+     no al viewport — evita overflow cuando la sidebar resta 220px */
+  #cartera-lista, #oport-lista {
     display: grid;
-    grid-template-columns: 1fr;
-    gap: 9px;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 14px;
+    width: 100%;
+    box-sizing: border-box;
   }
-  #cartera-lista .cliente-card { margin-bottom: 0; }
-  #oport-lista { display: grid; grid-template-columns: 1fr; gap: 9px; }
+  #cartera-lista .cliente-card,
   #oport-lista .oport-card { margin-bottom: 0; }
-  @media (min-width: 600px) {
-    #cartera-lista, #oport-lista { grid-template-columns: repeat(2, 1fr); }
-  }
-  @media (min-width: 960px) {
-    #cartera-lista, #oport-lista { grid-template-columns: repeat(3, 1fr); }
-  }
-  @media (min-width: 1400px) {
-    #cartera-lista { grid-template-columns: repeat(4, 1fr); }
-  }
 
   /* ── AVATAR CIRCLE ────────────────────────────────────────────────── */
   .avatar-circle {
@@ -612,11 +606,16 @@
       transition: background 0.15s; margin-top: 6px; text-align: center;
     }
     .btn-sidebar-logout:hover { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.7); }
-    .app-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    .app-main {
+      flex: 1; min-width: 0;
+      display: flex; flex-direction: column;
+      overflow-x: hidden;           /* ningún hijo puede reventar el ancho */
+      box-sizing: border-box;
+    }
     .app-header { display: none; }
     .bottom-tabs { display: none; }
-    .tab-content { padding-bottom: 16px; }
-    .tab-pane { padding: 20px 24px; }
+    .tab-content { padding-bottom: 16px; overflow-x: hidden; }
+    .tab-pane { padding: 20px 24px; box-sizing: border-box; }
   }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
