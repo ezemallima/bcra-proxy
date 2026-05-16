@@ -425,10 +425,17 @@ body {
 // Limpiar datos del sistema PIN legacy
 localStorage.removeItem('vendeSeguro_session');
 
+function rutaSegunRol(rol) {
+  return (rol === 'admin' || rol === 'administracion') ? '/' : '/comercial';
+}
+
 (async function redirectIfLoggedIn() {
   try {
     const { data: { session } } = await getClient().auth.getSession();
-    if (session) window.location.replace('/comercial');
+    if (session) {
+      const perfil = await cargarPerfil();
+      window.location.replace(rutaSegunRol(perfil.rol));
+    }
   } catch (_) { /* primera carga sin sesión — normal */ }
 })();
 
@@ -454,7 +461,8 @@ async function handleLogin(e) {
 
   try {
     await loginConEmail(email, password);
-    window.location.replace('/comercial');
+    const perfil = await cargarPerfil();
+    window.location.replace(rutaSegunRol(perfil.rol));
   } catch (err) {
     btn.disabled = false;
     btn.classList.remove('loading');
