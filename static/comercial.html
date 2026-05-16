@@ -797,9 +797,6 @@
 </div>
 
 <script>
-// Limpiar datos del sistema PIN legacy para evitar autofill cruzado
-localStorage.removeItem('vendeSeguro_session');
-
 const API = 'https://bcra-proxy-xykm.onrender.com';
 const VENDEDORES = {
   'Adrian Arango':            '20208913604',
@@ -826,6 +823,7 @@ function doLogin() { /* entrada ahora en login.html */ }
 async function doLogout() {
   SESSION = null; CARTERA_LOCAL = []; SALDOS_MAP = {}; SALDOS_TIMESTAMP = 0;
   document.getElementById('consulta-resultado').innerHTML = '';
+  localStorage.removeItem('vendeSeguro_session');
   try { await getClient().auth.signOut(); } catch(_) {}
   window.location.replace('/login');
 }
@@ -2521,14 +2519,29 @@ function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').
 
 document.getElementById('cuit-input').addEventListener('keypress',e=>{if(e.key==='Enter')consultarCuit();});
 
-// ── Guard de sesión Supabase ──
+// ── Guard dual: Supabase Auth + sesión legacy CUIT/PIN ───────────────────────
 (async function() {
   try {
+    // Camino 1: Supabase Auth
     const perfil = await verificarSesion();
-    if (perfil) await iniciarApp(perfil);
+    if (perfil) { await iniciarApp(perfil); return; }
+
+    // Camino 2: sesión legacy (vendedores con CUIT+PIN)
+    const saved = localStorage.getItem('vendeSeguro_session');
+    if (saved) {
+      const sess = JSON.parse(saved);
+      if (sess?.nombre && sess?.cuit) {
+        SESSION = { nombre: sess.nombre, cuit: sess.cuit };
+        await iniciarApp(null);
+        return;
+      }
+    }
+
+    // Sin sesión válida → login
+    window.location.replace('/login');
+
   } catch (e) {
     console.error('[guard] Excepción crítica en arranque:', e);
-    // No redirigir en loop — mostrar error inline
     document.getElementById('loading-overlay').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
     document.querySelector('.tab-content').innerHTML =

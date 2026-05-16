@@ -381,20 +381,20 @@ body {
 
       <form id="login-form" onsubmit="handleLogin(event)" novalidate autocomplete="on">
         <div class="field">
-          <label for="input-email">Correo electrónico</label>
+          <label for="input-email">Email o CUIT</label>
           <input
-            type="email"
+            type="text"
             id="input-email"
             name="email"
-            placeholder="tu@empresa.com"
-            autocomplete="email"
-            inputmode="email"
+            placeholder="usuario@empresa.com  ó  20xxxxxxxxx"
+            autocomplete="username"
+            inputmode="text"
             required
           >
         </div>
 
         <div class="field">
-          <label for="input-password">Contraseña</label>
+          <label for="input-password">Contraseña / PIN</label>
           <input
             type="password"
             id="input-password"
@@ -422,51 +422,90 @@ body {
 </div>
 
 <script>
-// Limpiar datos del sistema PIN legacy
-localStorage.removeItem('vendeSeguro_session');
+// ── Credenciales sistema legacy (vendedores) ─────────────────────────────────
+const PIN_COMERCIAL = 'PIATTELLI2025';
+const VENDEDORES = {
+  'Adrian Arango':            '20208913604',
+  'Alejandro Valan':          '20207619923',
+  'Anabel Borrageiros':       '27308869313',
+  'Ezequiel Mallima':         '20393831821',
+  'Marcelo Fernandez':        '20251483680',
+  'Pablo Perticone':          '20224421371',
+  'Roberto Pascual':          '20206068834',
+  'Sergio Piatanesi':         '20217157332',
+  'Valeria Gutierrez Castex': '27224289966',
+};
 
 function rutaSegunRol(rol) {
   return (rol === 'admin' || rol === 'administracion') ? '/' : '/comercial';
 }
 
+function esCuit(val) {
+  return /^\d{10,11}$/.test(val.replace(/\D/g, ''));
+}
+
+// ── Redirect si ya hay sesión activa ─────────────────────────────────────────
 (async function redirectIfLoggedIn() {
+  // Camino 1: sesión legacy (sin red)
+  try {
+    const saved = localStorage.getItem('vendeSeguro_session');
+    if (saved) {
+      const sess = JSON.parse(saved);
+      if (sess?.nombre && sess?.cuit) { window.location.replace('/comercial'); return; }
+    }
+  } catch(_) { localStorage.removeItem('vendeSeguro_session'); }
+
+  // Camino 2: sesión Supabase
   try {
     const { data: { session } } = await getClient().auth.getSession();
     if (session) {
       const perfil = await cargarPerfil();
       window.location.replace(rutaSegunRol(perfil.rol));
     }
-  } catch (_) { /* primera carga sin sesión — normal */ }
+  } catch (_) {}
 })();
 
+// ── Login híbrido ─────────────────────────────────────────────────────────────
 async function handleLogin(e) {
   e.preventDefault();
 
-  const email    = document.getElementById('input-email').value.trim();
-  const password = document.getElementById('input-password').value;
-  const btn      = document.getElementById('btn-submit');
-  const errorBox = document.getElementById('error-box');
+  const identifier = document.getElementById('input-email').value.trim();
+  const password   = document.getElementById('input-password').value.trim();
+  const btn        = document.getElementById('btn-submit');
 
-  // Reset error
-  errorBox.textContent = '';
-  errorBox.classList.remove('visible');
+  document.getElementById('error-box').textContent = '';
+  document.getElementById('error-box').classList.remove('visible');
 
-  if (!email || !password) {
-    mostrarError('Completá el correo y la contraseña.');
-    return;
-  }
+  if (!identifier || !password) { mostrarError('Completá los dos campos.'); return; }
 
   btn.disabled = true;
   btn.classList.add('loading');
 
-  try {
-    await loginConEmail(email, password);
-    const perfil = await cargarPerfil();
-    window.location.replace(rutaSegunRol(perfil.rol));
-  } catch (err) {
-    btn.disabled = false;
-    btn.classList.remove('loading');
-    mostrarError(traducirError(err.message));
+  if (esCuit(identifier)) {
+    // ── Camino A: CUIT + PIN (vendedores legacy) ─────────────────────────────
+    const cuit = identifier.replace(/\D/g, '');
+    if (password !== PIN_COMERCIAL) {
+      btn.disabled = false; btn.classList.remove('loading');
+      mostrarError('PIN incorrecto.'); return;
+    }
+    const nombre = Object.keys(VENDEDORES).find(k => VENDEDORES[k] === cuit);
+    if (!nombre) {
+      btn.disabled = false; btn.classList.remove('loading');
+      mostrarError('CUIT no registrado en el sistema.'); return;
+    }
+    localStorage.setItem('vendeSeguro_session', JSON.stringify({ nombre, cuit }));
+    window.location.replace('/comercial');
+
+  } else {
+    // ── Camino B: Email + contraseña (Supabase) ───────────────────────────────
+    try {
+      await loginConEmail(identifier, password);
+      const perfil = await cargarPerfil();
+      window.location.replace(rutaSegunRol(perfil.rol));
+    } catch (err) {
+      btn.disabled = false; btn.classList.remove('loading');
+      mostrarError(traducirError(err.message));
+    }
   }
 }
 

@@ -53,8 +53,7 @@ async function verificarSesion() {
   const { data: { session } } = await sb.auth.getSession();
 
   if (!session) {
-    window.location.replace('/login');
-    return null;
+    return null; // sin sesión Supabase — el guard decide si usar legacy o redirigir
   }
 
   try {
