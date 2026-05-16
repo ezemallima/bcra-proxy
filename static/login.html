@@ -379,7 +379,7 @@ body {
 
       <div id="error-box"></div>
 
-      <form id="login-form" onsubmit="handleLogin(event)" novalidate>
+      <form id="login-form" onsubmit="handleLogin(event)" novalidate autocomplete="on">
         <div class="field">
           <label for="input-email">Correo electrónico</label>
           <input
@@ -422,6 +422,9 @@ body {
 </div>
 
 <script>
+// Limpiar datos del sistema PIN legacy
+localStorage.removeItem('vendeSeguro_session');
+
 (async function redirectIfLoggedIn() {
   try {
     const { data: { session } } = await getClient().auth.getSession();

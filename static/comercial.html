@@ -797,6 +797,9 @@
 </div>
 
 <script>
+// Limpiar datos del sistema PIN legacy para evitar autofill cruzado
+localStorage.removeItem('vendeSeguro_session');
+
 const API = 'https://bcra-proxy-xykm.onrender.com';
 const VENDEDORES = {
   'Adrian Arango':            '20208913604',

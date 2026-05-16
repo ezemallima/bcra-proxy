@@ -60,9 +60,9 @@ async function verificarSesion() {
   try {
     return await cargarPerfil();
   } catch (e) {
-    await sb.auth.signOut();
-    window.location.replace('/login');
-    return null;
+    // No hacer signOut — el guard en comercial.html muestra el error inline
+    // y le da al usuario la opción de cerrar sesión conscientemente
+    throw e;
   }
 }
 
