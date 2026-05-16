@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es" translate="no">
 <head>
 <meta charset="UTF-8">
@@ -83,10 +83,11 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* ── LOGIN ──────────────────────────────────────────────────────────────── */
+  /* ── LOGIN (legacy — entrada redirigida a login.html) ───────────────────── */
   #login-screen {
+    display: none !important;
     min-height: 100dvh;
-    display: flex; flex-direction: column;
+    flex-direction: column;
     align-items: center; justify-content: center;
     padding: 32px 24px;
     background:
@@ -619,6 +620,8 @@
   }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./supabase-session.js"></script>
 </head>
 <body>
 
@@ -795,8 +798,6 @@
 
 <script>
 const API = 'https://bcra-proxy-xykm.onrender.com';
-const PIN_COMERCIAL = 'PIATTELLI2025';
-
 const VENDEDORES = {
   'Adrian Arango':            '20208913604',
   'Alejandro Valan':          '20207619923',
@@ -815,37 +816,22 @@ let ALERTAS = [];
 let SALDOS_MAP = {};
 let SALDOS_TIMESTAMP = 0;
 
-// ── LOGIN ──
-function doLogin() {
-  const nombre = document.getElementById('inp-nombre').value.trim();
-  const cuit   = document.getElementById('inp-cuit').value.trim().replace(/\D/g,'');
-  const pin    = document.getElementById('inp-pin').value.trim();
-  const err    = document.getElementById('login-error');
-  err.style.display = 'none';
-  if (!nombre || !cuit || !pin) { err.textContent = 'Completá todos los campos.'; err.style.display = 'block'; return; }
-  if (pin !== PIN_COMERCIAL) { err.textContent = 'PIN incorrecto.'; err.style.display = 'block'; return; }
-  const norm = s => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-  const key = Object.keys(VENDEDORES).find(k => norm(k) === norm(nombre));
-  if (!key) { err.textContent = 'Nombre no encontrado en el sistema.'; err.style.display = 'block'; return; }
-  const cuitEsp = VENDEDORES[key];
-  if (!cuitEsp.includes('X') && cuit !== cuitEsp) { err.textContent = 'CUIT no coincide.'; err.style.display = 'block'; return; }
-  SESSION = { nombre: key, cuit };
-  localStorage.setItem('vendeSeguro_session', JSON.stringify(SESSION));
-  iniciarApp();
-}
+// ── LOGIN (reemplazado por login.html + Supabase) ──
+// ── LOGIN (reemplazado por login.html + Supabase) ──
+function doLogin() { /* entrada ahora en login.html */ }
 
-function doLogout() {
+async function doLogout() {
   SESSION = null; CARTERA_LOCAL = []; SALDOS_MAP = {}; SALDOS_TIMESTAMP = 0;
-  localStorage.removeItem('vendeSeguro_session');
-  document.getElementById('app').style.display = 'none';
-  document.getElementById('login-screen').style.display = 'flex';
-  document.getElementById('inp-pin').value = '';
   document.getElementById('consulta-resultado').innerHTML = '';
+  try { await getClient().auth.signOut(); } catch(_) {}
+  window.location.replace('./login.html');
 }
 
 // ── INICIAR ──
-async function iniciarApp() {
-  document.getElementById('login-screen').style.display = 'none';
+async function iniciarApp(perfil) {
+  if (perfil) {
+    SESSION = { nombre: perfil.nombre, email: perfil.email, rol: perfil.rol, empresa_id: perfil.empresa_id };
+  }
   document.getElementById('app').style.display = 'flex';
   document.getElementById('header-name').textContent = SESSION.nombre;
   showLoading('Cargando cartera...');
@@ -2524,16 +2510,11 @@ function fmtFull(n){if(!n)return'0';return Math.round(n).toLocaleString('es-AR')
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 
 document.getElementById('cuit-input').addEventListener('keypress',e=>{if(e.key==='Enter')consultarCuit();});
-document.getElementById('inp-pin').addEventListener('keypress',e=>{if(e.key==='Enter')doLogin();});
 
-(function(){
-  try {
-    const saved = localStorage.getItem('vendeSeguro_session');
-    if (saved) {
-      SESSION = JSON.parse(saved);
-      if (SESSION && SESSION.nombre && SESSION.cuit) iniciarApp();
-    }
-  } catch(e) { localStorage.removeItem('vendeSeguro_session'); }
+// ── Guard de sesión Supabase ──
+(async function() {
+  const perfil = await verificarSesion();
+  if (perfil) iniciarApp(perfil);
 })();
 
 // ── BUSCADORES ──
