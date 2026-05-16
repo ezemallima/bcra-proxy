@@ -451,7 +451,6 @@ async function handleLogin(e) {
 
   try {
     await loginConEmail(email, password);
-    await cargarPerfil();
     window.location.replace('/comercial');
   } catch (err) {
     btn.disabled = false;

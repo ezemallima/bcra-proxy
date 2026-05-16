@@ -829,9 +829,11 @@ async function doLogout() {
 
 // ── INICIAR ──
 async function iniciarApp(perfil) {
+  try {
   if (perfil) {
     SESSION = { nombre: perfil.nombre, email: perfil.email, rol: perfil.rol, empresa_id: perfil.empresa_id };
   }
+  if (!SESSION || !SESSION.nombre) throw new Error('Sesión sin nombre de usuario');
   document.getElementById('app').style.display = 'flex';
   document.getElementById('header-name').textContent = SESSION.nombre;
   showLoading('Cargando cartera...');
@@ -963,6 +965,11 @@ async function iniciarApp(perfil) {
     const chipBtn = [...document.querySelectorAll('.filter-chip')]
       .find(c => c.getAttribute('onclick') && c.getAttribute('onclick').includes("'" + savedFiltro + "'"));
     if (chipBtn) filtrarCartera(savedFiltro, chipBtn);
+  }
+  } catch (e) {
+    hideLoading();
+    console.error('[iniciarApp] Fallo en arranque:', e);
+    throw e; // re-lanzar para que el guard lo capture y muestre el mensaje
   }
 }
 
@@ -2513,8 +2520,20 @@ document.getElementById('cuit-input').addEventListener('keypress',e=>{if(e.key==
 
 // ── Guard de sesión Supabase ──
 (async function() {
-  const perfil = await verificarSesion();
-  if (perfil) iniciarApp(perfil);
+  try {
+    const perfil = await verificarSesion();
+    if (perfil) await iniciarApp(perfil);
+  } catch (e) {
+    console.error('[guard] Excepción crítica en arranque:', e);
+    // No redirigir en loop — mostrar error inline
+    document.getElementById('loading-overlay').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+    document.querySelector('.tab-content').innerHTML =
+      '<div style="padding:40px 24px;text-align:center;color:#991b1b">' +
+      '<b>Error al iniciar la aplicación.</b><br><small>' + (e?.message || e) + '</small><br><br>' +
+      '<button onclick="doLogout()" style="margin-top:8px;padding:10px 20px;background:#2563eb;color:#fff;border:none;border-radius:8px;cursor:pointer">Volver al login</button>' +
+      '</div>';
+  }
 })();
 
 // ── BUSCADORES ──
