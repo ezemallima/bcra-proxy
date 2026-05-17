@@ -1444,7 +1444,7 @@ async function abrirModalCliente(cuit, nombre) {
   const brP   = safeFetch(API + '/deudas/' + cuit);
   const chrP  = safeFetch(API + '/deudas/' + cuit + '/cheques');
   const hrP   = safeFetch(API + '/deudas/' + cuit + '/historial');
-  const scrP  = safeFetch(API + '/fetch-score/' + cuit + '?fresh=1');
+  const scrP  = safeFetch(API + '/fetch-score/' + cuit + '?fresh=1', { timeoutMs: 29000 });
 
   // ── Facturas: renderiza en cuanto llegan (sin esperar BCRA) ──
   facP.then(sd => {
@@ -1642,8 +1642,8 @@ function renderBcraModal(bcraData, chData, histData, scoreData, clienteLocal) {
     entidades = periodos[0].entidades||[];
     if (entidades.length) { maxSit=Math.max(...entidades.map(e=>e.situacion||1)); montoTotal=entidades.reduce((s,e)=>s+(e.monto||0),0); }
   }
-  // SSoT: score del servidor es la única fuente — sin recálculo JS
-  const scoreEst    = scoreData?.score ?? null;
+  // Servidor es fuente primaria; caché de cartera como fallback si hay timeout/error
+  const scoreEst    = scoreData?.score ?? clienteLocal?.scoreCompleto ?? null;
   const moraTecnica = scoreData?.mora_tecnica === true;
   const cc          = moraTecnica ? '#ca8a04' : scoreToColor(scoreEst);
   // Badge mora interna: el cliente tiene deuda con Piattelli pero score BCRA es bueno

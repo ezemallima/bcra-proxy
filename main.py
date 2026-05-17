@@ -2703,13 +2703,29 @@ def _calcular_score_handler(cuit: str):
     except Exception as e:
         import traceback
         print(f"[score] ERROR {cuit_limpio}: {e}\n{traceback.format_exc()}", flush=True)
+        # Fallback: intentar score solo con datos BCRA (sin solvencia/AFIP) para no
+        # devolver null al frontend — un score parcial es mejor que un error en blanco.
+        try:
+            bcra_fb, _ = consultar_bcra_cached(cuit_limpio)
+            sd_fb = calcular_rating_predictivo(
+                cuit=cuit_limpio, bcra_data=bcra_fb or {},
+                solvency_data={},  # evita scraping AFIP/ANSES
+            )
+            resp_fb = _score_response(sd_fb, {})
+            resp_fb['_fallback'] = True
+            resp_fb['_error']    = str(e)
+            return jsonify(resp_fb)
+        except Exception as e2:
+            print(f"[score] FALLBACK ERROR {cuit_limpio}: {e2}", flush=True)
+        # Último recurso: devolver 200 con score=null para que el frontend
+        # pueda usar el score en caché de CARTERA_LOCAL en lugar de null.
         return jsonify({
             "ok": False, "error": str(e),
-            "score": 0, "rango": "Error", "color": "#6b7280", "emoji": "⚠️",
+            "score": None, "rango": "Error", "color": "#6b7280", "emoji": "⚠️",
             "razonamiento_score": None, "mora_administrativa": False,
             "override_admin": False, "bloquear_oportunidad": False,
             "mora_tecnica": False, "nota_mora_tecnica": None,
-        }), 500
+        })
 
 
 @app.route("/calcular-score/<cuit>")
