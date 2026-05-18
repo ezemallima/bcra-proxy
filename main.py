@@ -664,8 +664,8 @@ def get_solvency_data(cuit):
 # ║  Prospectos: BCRA+AFIP(80%) / Comunidad(20%) — sin historial Odoo        ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
 
-_SCORE_VERSION          = "10.0"
-_MOTOR_VERSION_CARTERA  = "v16.8"   # bump aquí cada vez que cambie la lógica del motor
+_SCORE_VERSION          = "11.0"
+_MOTOR_VERSION_CARTERA  = "v17.0"   # bump aquí cada vez que cambie la lógica del motor
 
 # Keywords para NLP de chat de bodegas (Capa C — Comunidad)
 _KW_NEG = [
@@ -1233,21 +1233,18 @@ def calcular_rating_predictivo(
         flush=True
     )
 
-    # Regla de Materialidad v20.0: mora < $100.000 ARS (100 miles) o < 5% del total → mora técnica
-    _MORA_TEC_K   = 100.0    # $100.000 ARS en miles de pesos (ajustado por inflación)
-    _MORA_TEC_PCT = 0.05
-    es_mora_tecnica = (
-        max_sit > 1 and _raw_total_m > 0 and
-        (monto_mora_k <= _MORA_TEC_K or pct_mora <= _MORA_TEC_PCT)
-    )
-    # Regla de Consistencia v20.0: >= 4 entidades y solo 1 outlier → error operativo, no insolvencia
-    _entidades_en_mora = sum(1 for e in _ents_curr if (e.get('situacion', 1) or 1) > 1)
-    if max_sit > 1 and nro_entidades >= 4 and _entidades_en_mora == 1:
-        es_mora_tecnica = True
+    # Mora Técnica v11.0: solo max_sit == 2 Y monto en mora < $200.000 ARS (200 miles)
+    # Si max_sit >= 3 O monto >= $200k → Mora Comercial Activa (riesgo de insolvencia)
+    es_mora_tecnica = (max_sit == 2 and monto_mora_k < 200.0)
+    es_mora_comercial_activa = (max_sit > 1 and not es_mora_tecnica)
     if es_mora_tecnica:
         print(
-            f"[mora_tec] {cuit_limpio} mora={monto_mora_k:.0f}k pct={pct_mora:.3f} "
-            f"sp={sit_ponderada:.2f} ents={nro_entidades} outliers={_entidades_en_mora}",
+            f"[mora_tec v11] {cuit_limpio} mora={monto_mora_k:.0f}k sit={max_sit} → Mora Técnica",
+            flush=True
+        )
+    elif es_mora_comercial_activa:
+        print(
+            f"[mora_com v11] {cuit_limpio} mora={monto_mora_k:.0f}k sit={max_sit} → Mora Comercial Activa",
             flush=True
         )
 
@@ -1271,6 +1268,29 @@ def calcular_rating_predictivo(
             else:          _mm_antiguos  += 1
         if idx_p < 6 and smax >= 3: sit_grave_6m = True
     n_periodos_h = min(n_periodos_h, n_periodos_recientes * 4)
+
+    # ── Deterioro Estructural v11.0: transición Sit.1 → Sit.3/4/5 sostenida ─
+    deterioro_estructural = False
+    _periodos_rev = periodos_hist[:24]
+    if len(_periodos_rev) >= 6:
+        _max_per_mes = [
+            max(((e.get('situacion') or 1) for e in p.get('entidades', [])), default=1)
+            for p in _periodos_rev
+        ]
+        _sit_reciente = _max_per_mes[:6]
+        _sit_anterior = _max_per_mes[6:]
+        _estaba_estable = (
+            len(_sit_anterior) > 0 and
+            sum(1 for s in _sit_anterior if s == 1) >= max(1, len(_sit_anterior) * 0.6)
+        )
+        _deterioro_sostenido = sum(1 for s in _sit_reciente if s >= 3) >= 3
+        if _estaba_estable and _deterioro_sostenido:
+            deterioro_estructural = True
+            print(
+                f"[deterioro v11] {cuit_limpio}: transición Sit.1→Sit.3+ sostenida "
+                f"ant={_sit_anterior} rec={_sit_reciente}",
+                flush=True
+            )
 
     # ── Mora Piattelli ────────────────────────────────────────────────────
     moras_norm: dict = {}
@@ -1464,6 +1484,11 @@ def calcular_rating_predictivo(
     if hard_block_bcra:
         puntos = 0
 
+    # ── Hard Ceiling v11.0: max_sit >= 3 → score nunca supera 450 pts ────
+    if max_sit >= 3:
+        puntos = min(puntos, 450)
+        print(f"[hard-ceil v11] {cuit_limpio} max_sit={max_sit} → cap 450", flush=True)
+
     # ── Techos duros por situación BCRA (sobre sit_efectivo, no max_sit) ─
     if sit_efectivo >= 5:
         puntos = min(puntos, 400 if es_mora_tecnica else 1)
@@ -1529,6 +1554,7 @@ def calcular_rating_predictivo(
         f"mt={es_mora_tecnica} tend={tendencia} prosp={sin_historial_interno} "
         f"cA={pts_c1} cB={pts_cb} cC={pts_cc} liq={pts_liq} "
         f"mora_bcra={tipo_mora_bcra} sit_ef={sit_efectivo} "
+        f"mc={es_mora_comercial_activa} det={deterioro_estructural} "
         f"→ {score} {rango} | at={alerta_temprana} bloq={bloquear_oportunidad} geo={alerta_log or '-'}",
         flush=True
     )
@@ -1550,6 +1576,8 @@ def calcular_rating_predictivo(
         'indice_solvencia':         indice_solv,
         'version':                  _SCORE_VERSION,
         'mora_tecnica':             es_mora_tecnica,
+        'mora_comercial_activa':    es_mora_comercial_activa,
+        'deterioro_estructural':    deterioro_estructural,
         'sit_ponderada':            round(sit_ponderada, 3),
         'pct_mora':                 round(pct_mora, 4),
         'max_sit':                  max_sit,

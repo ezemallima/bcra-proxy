@@ -1689,7 +1689,7 @@ function renderBcraModal(bcraData, chData, histData, scoreData, clienteLocal) {
       : badgeMoraTecnica + badgeMoraInterna}
   </div>
   <div class="credito-box"><div class="credito-label"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><circle cx="12" cy="10" r="6"/><path d="M12 16v6M9 19h6"/></svg> Crédito sugerido</div>
-    <div class="credito-monto">${_scorePending ? 'Pendiente de cálculo' : calcularCredito(scoreEst)}</div>
+    <div class="credito-monto">${_scorePending ? 'Pendiente de cálculo' : calcularCredito(scoreEst, maxSit)}</div>
   </div>`;
 
   if (bcraData.sin_deudas || !entidades.length) {
@@ -1918,7 +1918,7 @@ function renderConsulta(cuit, dd, cd, hd, serverScore, afipData) {
         <div style="font-size:10px;color:var(--texto2)">Cheques impagos</div>
       </div>
       <div style="text-align:center">
-        <div style="font-size:18px;font-weight:700;color:var(--azul);font-family:'Syne',sans-serif">${calcularCredito(scoreEst)}</div>
+        <div style="font-size:18px;font-weight:700;color:var(--azul);font-family:'Syne',sans-serif">${calcularCredito(scoreEst, maxSit)}</div>
         <div style="font-size:10px;color:var(--texto2)">Crédito sugerido</div>
       </div>
       <div style="text-align:center">
@@ -2085,8 +2085,11 @@ async function lanzarAnalisisIA(cuit, dd, cd) {
   if (periodos.length){entidades=periodos[0].entidades||[];if(entidades.length){maxSit=Math.max(...entidades.map(e=>e.situacion||1));montoTotal=entidades.reduce((s,e)=>s+(e.monto||0),0);}}
   const causales=cd.results?.causales||[];let chqTotal=0;causales.forEach(ca=>ca.entidades?.forEach(en=>{chqTotal+=(en.detalle||[]).length;}));
   const scoreActual = window._ultimoScoreComercial || estimarScore(maxSit,dd.sin_deudas,cd);
-  const creditoSug = calcularCredito(scoreActual);
-  const prompt=`Sos analista de riesgo crediticio para Bodega Piattelli, Mendoza.\nDatos del cliente CUIT ${cuit}:\n- Situación BCRA: ${maxSit} (${maxSit===1?'Normal':maxSit===2?'Seguimiento':'Crítico'})\n- Deuda sistema financiero: $${fmtM(montoTotal*1000)}\n- Entidades: ${entidades.length}\n- Cheques rechazados: ${chqTotal}\n- Score Vende Seguro: ${scoreActual}/999 (${scoreToRango(scoreActual)})\n- Crédito sugerido: ${creditoSug}\n\nRedactá un análisis de riesgo breve (3-4 oraciones) en español informal orientado a un vendedor de vinos. El crédito sugerido es EXACTAMENTE ${creditoSug} — no sugerás un monto diferente. Sin listas, sin markdown, solo texto directo.`;
+  const creditoSug = calcularCredito(scoreActual, maxSit);
+  const _sitLabel = maxSit===1?'Normal':maxSit===2?'Seguimiento':maxSit===3?'Mora grave':maxSit===4?'Alto riesgo':'Irrecuperable';
+  const prompt = maxSit >= 3
+    ? `Sos analista de riesgo crediticio para Bodega Piattelli, Mendoza. ADVERTENCIA SEVERA: Este cliente presenta situación BCRA ${maxSit} (${_sitLabel}) — riesgo de insolvencia confirmado.\nDatos del cliente CUIT ${cuit}:\n- Situación BCRA: ${maxSit} (Crítico)\n- Deuda sistema financiero: $${fmtM(montoTotal*1000)}\n- Entidades: ${entidades.length}\n- Cheques rechazados: ${chqTotal}\n- Score Vende Seguro: ${scoreActual}/999 (${scoreToRango(scoreActual)})\n- Crédito sugerido: ${creditoSug}\n\nRedactá un análisis de riesgo severo (3-4 oraciones) en español informal orientado a un vendedor de vinos. OBLIGATORIO: iniciá con una advertencia crítica de riesgo de impago. Indicá que NO se recomienda otorgar líneas de crédito. El crédito sugerido es EXACTAMENTE ${creditoSug} — no sugerás un monto diferente. Sin listas, sin markdown, solo texto directo.`
+    : `Sos analista de riesgo crediticio para Bodega Piattelli, Mendoza.\nDatos del cliente CUIT ${cuit}:\n- Situación BCRA: ${maxSit} (${_sitLabel})\n- Deuda sistema financiero: $${fmtM(montoTotal*1000)}\n- Entidades: ${entidades.length}\n- Cheques rechazados: ${chqTotal}\n- Score Vende Seguro: ${scoreActual}/999 (${scoreToRango(scoreActual)})\n- Crédito sugerido: ${creditoSug}\n\nRedactá un análisis de riesgo breve (3-4 oraciones) en español informal orientado a un vendedor de vinos. El crédito sugerido es EXACTAMENTE ${creditoSug} — no sugerás un monto diferente. Sin listas, sin markdown, solo texto directo.`;
   try {
     const resp=await fetch(API+'/analizar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt})});
     const data=await resp.json();
@@ -2103,7 +2106,7 @@ function generarPDF(cuit) {
   const fecha    = new Date().toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'});
   const scoreNum = serverScore?.score ?? '—';
   const rango    = (serverScore?.score != null) ? scoreToRango(serverScore.score) : '—';
-  const credito  = calcularCredito(serverScore?.score);
+  const credito  = calcularCredito(serverScore?.score, serverScore?.max_sit);
   const scColor  = (serverScore?.mora_tecnica) ? '#d97706' : scoreToColor(serverScore?.score);
 
   // Extraer cheques
@@ -2520,7 +2523,8 @@ async function calcularScoreCompleto(cuit) {
     };
   } catch(e) { return null; }
 }
-function calcularCredito(s){
+function calcularCredito(s, maxSit) {
+  if (maxSit != null && maxSit >= 4) return '$0 — Cuenta Corriente Rechazada';
   if(s>=900)return '$800.000 – $2.000.000';
   if(s>=700)return '$500.000 – $800.000';
   if(s>=500)return '$200.000 – $500.000';
