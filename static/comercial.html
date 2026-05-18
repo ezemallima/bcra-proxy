@@ -1477,7 +1477,7 @@ async function abrirModalCliente(cuit, nombre) {
       let _chqAll = [];
       _chqCausales.forEach(function(ca){ (ca.entidades||[]).forEach(function(en){ (en.detalle||[]).forEach(function(d){ _chqAll.push(d); }); }); });
       const _rescC = _chqAll.filter(function(d){ return !(!d.fechaPago||d.estadoMulta==='IMPAGA'); }).length;
-      const _nopC  = _chqAll.filter(function(d){ return !d.fechaPago||d.estadoMulta==='IMPAGA'); }).length;
+      const _nopC  = _chqAll.filter(function(d){ return !d.fechaPago||d.estadoMulta==='IMPAGA'; }).length;
       setTimeout(function(){ initChequesDonut(_chqCid, _rescC, _nopC); }, 60);
     }
   }
