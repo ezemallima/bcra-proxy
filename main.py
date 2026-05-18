@@ -2567,6 +2567,58 @@ def verificar_cartera():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/recalcular-pendientes", methods=["POST"])
+def recalcular_pendientes():
+    """Recalcula solo los clientes de cartera_comercial.json sin score o con verificación fallida."""
+    if verificacion_estado["corriendo"]:
+        return jsonify({"error": "Ya hay una verificación en curso — esperá que termine o usá /verificar-reset"}), 400
+    try:
+        # Estado actual de alertas_cartera.json
+        try:
+            with open(ALERTAS_FILE, 'r', encoding='utf-8') as _f:
+                alertas_data = json.load(_f)
+            cartera_status = {
+                str(c.get('cuit', '')).replace('-', '').replace(' ', '').strip(): c
+                for c in alertas_data.get('cartera', [])
+            }
+        except Exception:
+            cartera_status = {}
+
+        pendientes = []
+        for c in _cartera_comercial:
+            cuit = str(c.get('cuit') or '').replace('-', '').replace(' ', '').strip()
+            if not cuit:
+                continue
+            st = cartera_status.get(cuit, {})
+            sin_score   = not st.get('scoreCompleto')
+            pendiente   = st.get('pendiente') is True
+            fallido     = st.get('verificacion_fallida') is True
+            if sin_score or pendiente or fallido:
+                pendientes.append({
+                    "cuit":       cuit,
+                    "nombre":     str(c.get('nombre') or '').strip(),
+                    "ciudad":     str(c.get('ciudad') or '').strip(),
+                    "ultimaSit":  c.get('ultimaSit', 1),
+                    "ultimaVerif": st.get('ultimaVerif'),
+                })
+
+        if not pendientes:
+            return jsonify({"ok": True, "mensaje": "Todos los clientes ya tienen score. Nada que recalcular.", "total": 0})
+
+        nombres = [p['nombre'] or p['cuit'] for p in pendientes[:5]]
+        print(f"[recalc-pendientes] {len(pendientes)} pendientes: {nombres}{'...' if len(pendientes)>5 else ''}", flush=True)
+        t = threading.Thread(target=ejecutar_verificacion, args=(pendientes,), daemon=True)
+        t.start()
+        return jsonify({
+            "ok":      True,
+            "mensaje": f"Recálculo iniciado: {len(pendientes)} clientes pendientes.",
+            "total":   len(pendientes),
+            "muestra": nombres,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/verificar-progreso", methods=["GET"])
 def verificar_progreso():
     return jsonify(verificacion_estado)

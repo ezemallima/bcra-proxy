@@ -1604,8 +1604,12 @@ function buildChequesRiesgoHtml(cheques, canvasId) {
   html += '<div class="chq-ia"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg> ' + iaTxt + '</div>';
   html += '<div class="chq-detail">';
   sorted.slice(0,8).forEach(function(ch){
-    var imp = !_chqIsLevantado(ch);
-    html += '<div class="chq-row"><span>' + (ch.fecha||ch.fechaRechazo||'-') + ' · ' + (ch.motivo||ch.causal||'-') + '</span>';
+    var imp     = !_chqIsLevantado(ch);
+    var fechaCh = ch.fecha||ch.fechaRechazo||'—';
+    var motivCh = ch.motivo||ch.causal||'—';
+    html += '<div class="chq-row">';
+    html += '<span><span style="font-size:11px;font-weight:600;font-family:\'Roboto Mono\',monospace;color:' + (imp?'#dc2626':'#475569') + '">' + fechaCh + '</span>'
+          + '<span style="font-size:10px;color:#94a3b8"> · ' + motivCh + '</span></span>';
     html += '<span style="display:flex;align-items:center;gap:8px;"><span style="color:#94a3b8">$' + ((ch.monto||0)/1000).toLocaleString('es-AR',{maximumFractionDigits:0}) + 'K</span>';
     html += '<span class="' + (imp?'chq-badge-impago':'chq-badge-pagado') + '">' + (imp?'IMPAGO':'PAGADO') + '</span></span></div>';
   });
@@ -1944,10 +1948,15 @@ function renderConsulta(cuit, dd, cd, hd, serverScore, afipData) {
     </div>`;
     dchq.slice(0,8).forEach(d=>{
       const imp = !d.fechaPago||d.estadoMulta==='IMPAGA';
+      const fechaCheque  = d.fechaRechazo || d.fecha || '—';
+      const causalCheque = esc(d.causal||d.motivo||'');
       html += `<div class="cheque-item" style="${imp?'border-left:3px solid var(--rojo)':''}">
-        <div>
-          <div style="font-weight:700;font-size:13px">$${fmtM(d.monto||0)}</div>
-          <div style="font-size:10px;color:var(--texto2)">${esc(d.nroCheque||'')} · ${d.fechaRechazo||''}</div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:2px">
+            <span style="font-weight:700;font-size:14px">$${fmtM(d.monto||0)}</span>
+            <span style="font-size:12px;font-weight:600;color:${imp?'#dc2626':'#475569'};font-family:'Roboto Mono',monospace">${fechaCheque}</span>
+          </div>
+          <div style="font-size:10px;color:var(--texto2)">${esc(d.nroCheque||'')}${causalCheque?' · '+causalCheque:''}</div>
         </div>
         <span class="cheque-estado ${imp?'impago':'pagado'}">${imp?'IMPAGO':'PAGADO'}</span>
       </div>`;
