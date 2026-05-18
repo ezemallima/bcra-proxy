@@ -841,18 +841,6 @@
 
   <div id="alertas" class="section">
 
-    <!-- ── Alertas Crediticias Críticas — Cta. Cte. vencida +30 días ── -->
-    <div class="card" id="alertas-mora-card" style="border-left:4px solid #dc2626;margin-bottom:12px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
-        <div>
-          <div class="card-title" style="color:#dc2626;margin-bottom:2px;">Alertas Crediticias Críticas — Cta. Cte. Vencida +30 días</div>
-          <div style="font-size:11px;color:#94a3b8;">Facturas con fecha de vencimiento superada. Requieren gestión de cobro inmediata.</div>
-        </div>
-        <span id="alertas-mora-badge" style="display:none;font-size:11px;font-weight:700;padding:3px 12px;border-radius:20px;background:#fee2e2;color:#991b1b;"></span>
-      </div>
-      <div id="alertas-mora-lista"><div style="font-size:13px;color:#94a3b8;padding:8px 0;">Cargando alertas...</div></div>
-    </div>
-
     <div class="card">
       <div class="card-title">Monitoreo BCRA — Cartera activa</div>
       <p style="font-size:13px;color:#666;line-height:1.6;margin-bottom:8px;">
@@ -887,10 +875,10 @@
         </div>
       </div>
       <div class="alr-counter exceso" onclick="toggleAlertaFilter('exceso')" id="filter-exceso">
-        <div class="alr-ico-wrap exceso"><svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+        <div class="alr-ico-wrap exceso"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
         <div class="alr-counter-info">
           <div class="alr-counter-num" id="cnt-excesos">—</div>
-          <div class="alr-counter-label">Excesos de Límite</div>
+          <div class="alr-counter-label">Clientes Morosos</div>
         </div>
       </div>
     </div>
@@ -2608,7 +2596,8 @@ function buscarEnMoras(cuit) { return morasIndex ? morasIndex[cuit.replace(/-/g,
 
 var _pageTitles = {consulta:'Consultar CUIT', cheques:'Análisis de Cheques', historial:'Historial de Consultas', buscador:'Buscador Premium', cartera:'Gestión de Cartera', dso:'Módulo DSO', alertas:'Alertas BCRA', red:'Red de Bodegas', configuracion:'Configuración'};
 
-var _alertasFilter = null; // 'critico' | 'advertencia' | 'exceso' | null
+var _alertasFilter  = null; // 'critico' | 'advertencia' | 'exceso' | null
+var _alertasMoraData = null; // cache de /api/alertas-mora
 
 function toggleResource(panelId, btnId) {
   var panel = document.getElementById(panelId);
@@ -4538,49 +4527,66 @@ function _alrScoreData(c) {
 }
 
 async function cargarAlertasMora() {
-  var listaEl  = document.getElementById('alertas-mora-lista');
-  var badgeEl  = document.getElementById('alertas-mora-badge');
-  if (!listaEl) return;
   try {
     var r = await fetch('/api/alertas-mora');
     if (!r.ok) throw new Error('HTTP ' + r.status);
     var data = await r.json();
-    var alertas = data.alertas || [];
-    if (!alertas.length) {
-      listaEl.innerHTML = '<div style="font-size:13px;color:#16a34a;padding:8px 0;display:flex;align-items:center;gap:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Sin clientes con facturas vencidas hace más de 30 días.</div>';
-      if (badgeEl) badgeEl.style.display = 'none';
-      return;
+    _alertasMoraData = data;
+    var cnt = (data.alertas || []).length;
+    var cntE = document.getElementById('cnt-excesos');
+    if (cntE) cntE.textContent = cnt;
+    // Si el filtro ya está activo, re-renderizar la tabla
+    if (_alertasFilter === 'exceso') {
+      var listaEl = document.getElementById('cartera-bcra-lista');
+      if (listaEl) _renderMorasTable(listaEl);
     }
-    if (badgeEl) { badgeEl.textContent = alertas.length + ' cliente' + (alertas.length !== 1 ? 's' : ''); badgeEl.style.display = ''; }
-    var fmt = function(n) { return n >= 1e6 ? '$'+(n/1e6).toFixed(1)+'M' : n >= 1e3 ? '$'+(Math.round(n/1000))+'K' : '$'+Math.round(n).toLocaleString('es-AR'); };
-    var totalVencido = data.total_monto_vencido || 0;
-    var html = '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#fff1f2;border-radius:8px;margin-bottom:10px;border:1px solid #fca5a5;">'
-      + '<div style="font-size:12px;font-weight:700;color:#991b1b;">' + alertas.length + ' clientes con deuda vencida</div>'
-      + '<div style="font-size:14px;font-weight:800;color:#dc2626;font-family:\'Syne\',sans-serif;">' + fmt(totalVencido) + ' total vencido</div>'
-      + '</div>';
-    alertas.forEach(function(a) {
-      var diasColor = a.dias_max_atraso > 90 ? '#7f1d1d' : a.dias_max_atraso > 60 ? '#dc2626' : '#ca8a04';
-      var diasBg    = a.dias_max_atraso > 90 ? 'rgba(127,29,29,0.08)' : a.dias_max_atraso > 60 ? 'rgba(220,38,38,0.08)' : 'rgba(202,138,4,0.08)';
-      html += '<div class="alert-card" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 14px;flex-wrap:wrap;">';
-      html += '<div style="flex:1;min-width:0;">'
-        + '<div style="font-weight:700;font-size:14px;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(a.nombre) + '</div>';
-      if (a.cuit) html += '<div style="font-size:11px;color:#64748b;font-family:monospace;margin-top:1px;">' + a.cuit + '</div>';
-      html += '<div style="font-size:11px;color:#94a3b8;margin-top:2px;">' + a.cantidad_facturas + ' factura' + (a.cantidad_facturas !== 1 ? 's' : '') + ' vencida' + (a.cantidad_facturas !== 1 ? 's' : '') + '</div>'
-        + '</div>';
-      html += '<div style="text-align:right;flex-shrink:0;">'
-        + '<div style="font-weight:700;font-size:15px;color:#dc2626;">' + fmt(a.monto_vencido_30d) + '</div>'
-        + '<div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;">vencido</div>'
-        + '</div>';
-      html += '<div style="text-align:center;background:' + diasBg + ';border-radius:8px;padding:7px 12px;flex-shrink:0;">'
-        + '<div style="font-weight:800;font-size:22px;color:' + diasColor + ';font-family:\'Syne\',sans-serif;line-height:1;">' + a.dias_max_atraso + '</div>'
-        + '<div style="font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;margin-top:1px;">días</div>'
-        + '</div>';
-      html += '</div>';
-    });
-    listaEl.innerHTML = html;
   } catch(e) {
-    listaEl.innerHTML = '<div style="font-size:12px;color:#94a3b8;padding:8px 0;">No se pudo cargar el panel de alertas (' + e.message + ').</div>';
+    _alertasMoraData = { alertas: [], total_monto_vencido: 0, _error: e.message };
   }
+}
+
+function _renderMorasTable(listaEl) {
+  if (!_alertasMoraData) {
+    listaEl.innerHTML = '<div style="text-align:center;padding:24px;color:#94a3b8;font-size:13px;">Cargando clientes morosos...</div>';
+    cargarAlertasMora();
+    return;
+  }
+  if (_alertasMoraData._error) {
+    listaEl.innerHTML = '<div style="font-size:12px;color:#94a3b8;padding:16px 0;text-align:center;">No se pudo cargar (' + _alertasMoraData._error + ').</div>';
+    return;
+  }
+  var alertas = _alertasMoraData.alertas || [];
+  if (!alertas.length) {
+    listaEl.innerHTML = '<div style="padding:28px;text-align:center;color:#16a34a;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Sin clientes con facturas vencidas hace más de 30 días.</div>';
+    return;
+  }
+  var fmt = function(n) { return n >= 1e6 ? '$'+(n/1e6).toFixed(1)+'M' : n >= 1e3 ? '$'+(Math.round(n/1000))+'K' : '$'+Math.round(n).toLocaleString('es-AR'); };
+  var totalVencido = _alertasMoraData.total_monto_vencido || 0;
+  var html = '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#fff1f2;border-radius:8px;margin-bottom:10px;border:1px solid #fca5a5;">'
+    + '<div style="font-size:12px;font-weight:700;color:#991b1b;">' + alertas.length + ' clientes con deuda vencida +30 días</div>'
+    + '<div style="font-size:14px;font-weight:800;color:#dc2626;font-family:\'Syne\',sans-serif;">' + fmt(totalVencido) + ' total vencido</div>'
+    + '</div>';
+  alertas.forEach(function(a) {
+    var diasColor = a.dias_max_atraso > 90 ? '#7f1d1d' : a.dias_max_atraso > 60 ? '#dc2626' : '#ca8a04';
+    var diasBg    = a.dias_max_atraso > 90 ? 'rgba(127,29,29,0.08)' : a.dias_max_atraso > 60 ? 'rgba(220,38,38,0.08)' : 'rgba(202,138,4,0.08)';
+    html += '<div class="alert-card" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 14px;flex-wrap:wrap;">';
+    html += '<div style="flex:1;min-width:0;">'
+      + '<div style="font-weight:700;font-size:14px;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(a.nombre) + '</div>';
+    if (a.cuit) html += '<div style="font-size:11px;color:#64748b;font-family:monospace;margin-top:1px;">' + a.cuit + '</div>';
+    html += '<div style="font-size:11px;color:#94a3b8;margin-top:2px;">' + a.cantidad_facturas + ' factura' + (a.cantidad_facturas !== 1 ? 's' : '') + ' vencida' + (a.cantidad_facturas !== 1 ? 's' : '') + '</div>'
+      + '</div>';
+    html += '<div style="text-align:right;flex-shrink:0;">'
+      + '<div style="font-weight:700;font-size:15px;color:#dc2626;">' + fmt(a.monto_vencido_30d) + '</div>'
+      + '<div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;">vencido</div>'
+      + '</div>';
+    html += '<div style="text-align:center;background:' + diasBg + ';border-radius:8px;padding:7px 12px;flex-shrink:0;">'
+      + '<div style="font-weight:800;font-size:22px;color:' + diasColor + ';font-family:\'Syne\',sans-serif;line-height:1;">' + a.dias_max_atraso + '</div>'
+      + '<div style="font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;margin-top:1px;">días</div>'
+      + '</div>';
+    if (a.cuit) html += '<button onclick="event.stopPropagation();verCliente(\'' + a.cuit + '\')" style="font-size:11px;font-weight:600;padding:4px 10px;background:#dc2626;color:#fff;border:none;border-radius:6px;cursor:pointer;letter-spacing:0.2px;">Ver</button>';
+    html += '</div>';
+  });
+  listaEl.innerHTML = html;
 }
 
 function renderAlertas() {
@@ -4622,10 +4628,9 @@ function renderAlertas() {
   var nAdv = _vmVals.length > 0
     ? _vmVals.filter(function(v){ return v.ultimaSit === 2; }).length
     : cartera.filter(function(c){ return c.ultimaSit === 2; }).length;
-  var nExc  = cartera.filter(function(c){ return c.saldoActual && c.limiteCreditoARS && Number(c.saldoActual) > Number(c.limiteCreditoARS); }).length;
   var cntC = document.getElementById('cnt-criticos'); if(cntC) cntC.textContent = nCrit;
   var cntA = document.getElementById('cnt-advertencias'); if(cntA) cntA.textContent = nAdv;
-  var cntE = document.getElementById('cnt-excesos'); if(cntE) cntE.textContent = nExc;
+  // cnt-excesos se actualiza en cargarAlertasMora() desde /api/alertas-mora
   _renderAlertasList();
 }
 
@@ -4634,7 +4639,13 @@ function _renderAlertasList() {
   if (!listaEl) return;
 
   if (_alertasFilter === null) {
-    listaEl.innerHTML = '<div class="alertas-prompt"><div class="alertas-prompt-icon">🔎</div><div class="alertas-prompt-text">Seleccioná un filtro para ver los clientes</div><div class="alertas-prompt-sub">Hacé clic en Críticos, Advertencias o Excesos de Límite</div></div>';
+    listaEl.innerHTML = '<div class="alertas-prompt"><div class="alertas-prompt-icon">🔎</div><div class="alertas-prompt-text">Seleccioná un filtro para ver los clientes</div><div class="alertas-prompt-sub">Hacé clic en Críticos, Advertencias o Clientes Morosos</div></div>';
+    return;
+  }
+
+  // Clientes Morosos — tabla desde /api/alertas-mora (no usa carteraOrdenada)
+  if (_alertasFilter === 'exceso') {
+    _renderMorasTable(listaEl);
     return;
   }
 
@@ -4660,8 +4671,6 @@ function _renderAlertasList() {
     carteraOrdenada = carteraOrdenada.filter(function(c){ return c.ultimaSit && c.ultimaSit >= 3; });
   } else if (_alertasFilter === 'advertencia') {
     carteraOrdenada = carteraOrdenada.filter(function(c){ return c.ultimaSit === 2; });
-  } else if (_alertasFilter === 'exceso') {
-    carteraOrdenada = carteraOrdenada.filter(function(c){ return c.saldoActual && c.limiteCreditoARS && Number(c.saldoActual) > Number(c.limiteCreditoARS); });
   }
 
   if (!carteraOrdenada.length) {
