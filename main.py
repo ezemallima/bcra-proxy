@@ -664,8 +664,8 @@ def get_solvency_data(cuit):
 # ║  Prospectos: BCRA+AFIP(80%) / Comunidad(20%) — sin historial Odoo        ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
 
-_SCORE_VERSION          = "12.0"
-_MOTOR_VERSION_CARTERA  = "v18.0"   # bump aquí cada vez que cambie la lógica del motor
+_SCORE_VERSION          = "12.1"
+_MOTOR_VERSION_CARTERA  = "v18.1"   # bump aquí cada vez que cambie la lógica del motor
 
 # Keywords para NLP de chat de bodegas (Capa C — Comunidad)
 _KW_NEG = [
@@ -1484,11 +1484,12 @@ def calcular_rating_predictivo(
     if hard_block_bcra:
         puntos = 0
 
-    # ── Elastic Bounding v12.0: max_sit >= 3 → penalización dinámica ─────
-    # Reemplaza techos rígidos. Score acotado a rango que refleja la salud
-    # real del resto de la cartera: pct_mora alto → hacia el piso; bajo → al techo.
+    # ── Elastic Bounding v12.1: max_sit >= 3 → penalización dinámica ─────
+    # Aplica SIEMPRE para max_sit >= 3, incluso si hard_block_bcra es True.
+    # hard_block_bcra = True es común (default real = tuvo Sit.1 y cayó) y
+    # no justifica un score de 1. El rango elástico ya captura la severidad.
     # max_sit 3 → [460, 550] | max_sit >= 4 → [300, 460] (pisa 200 con historial severo)
-    if max_sit >= 3 and not hard_block_bcra:
+    if max_sit >= 3:
         _pit     = min(1.0, pct_mora)                    # 0=todo Sit.1, 1=todo en mora
         _sit_mul = 1.0 + (max_sit - 3) * 0.25           # Sit3→1.0, Sit4→1.25, Sit5→1.50
         _pit_adj = min(1.0, _pit * _sit_mul)
