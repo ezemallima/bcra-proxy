@@ -1456,31 +1456,20 @@ async function abrirModalCliente(cuit, nombre) {
       : '<div class="empty"><div class="empty-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="20 6 9 17 4 12"/></svg></div><div class="empty-text">Sin facturas pendientes</div></div>';
   });
 
-  // ── BCRA + Score: esperar las 3 respuestas BCRA + score, luego renderizar ──
-  const [bcraData, chData, histData, _scoreData] = await Promise.all([brP, chrP, hrP, scrP]);
+  // ── BCRA: renderiza en cuanto llegan los 3 endpoints (sin esperar score) ──
+  const [bcraData, chData, histData] = await Promise.all([brP, chrP, hrP]);
   const bcraEl = document.getElementById('mtab-bcra');
 
-  // Detectar error de gateway
   if (bcraData?._gateway_error || chData?._gateway_error) {
     if (bcraEl) bcraEl.innerHTML = _gateway502Html(cuit, nombre);
     return;
   }
-  // Actualizar CARTERA_LOCAL con score fresco
+
   const clienteLocal = CARTERA_LOCAL.find(c => c.cuit === cuit);
-  if (_scoreData?.score != null && clienteLocal) {
-    clienteLocal.score                = _scoreData.score;
-    clienteLocal.scoreRango           = _scoreData.rango;
-    clienteLocal.scoreColor           = _scoreData.color;
-    clienteLocal.alerta_temprana      = _scoreData.alerta_temprana;
-    clienteLocal.bloquear_oportunidad = _scoreData.bloquear_oportunidad;
-  }
-  console.log("[modal] Score server:", _scoreData?.score,
-              "| mora_tecnica:", _scoreData?.mora_tecnica,
-              "| cache anterior:", clienteLocal?.score,
-              "| scoreData:", _scoreData);
-  // Pasar el objeto completo — renderBcraModal usará _scoreData.score, no el caché de CARTERA_LOCAL
-  if (bcraEl) {
-    bcraEl.innerHTML = renderBcraModal(bcraData, chData, histData, _scoreData, clienteLocal);
+
+  function _renderBcraWithScore(sd) {
+    if (!bcraEl) return;
+    bcraEl.innerHTML = renderBcraModal(bcraData, chData, histData, sd, clienteLocal);
     const _chqCanvasEl = bcraEl.querySelector('canvas[id^="chq-modal-"]');
     if (_chqCanvasEl) {
       const _chqCid = _chqCanvasEl.id;
@@ -1488,10 +1477,26 @@ async function abrirModalCliente(cuit, nombre) {
       let _chqAll = [];
       _chqCausales.forEach(function(ca){ (ca.entidades||[]).forEach(function(en){ (en.detalle||[]).forEach(function(d){ _chqAll.push(d); }); }); });
       const _rescC = _chqAll.filter(function(d){ return !(!d.fechaPago||d.estadoMulta==='IMPAGA'); }).length;
-      const _nopC  = _chqAll.filter(function(d){ return !d.fechaPago||d.estadoMulta==='IMPAGA'; }).length;
+      const _nopC  = _chqAll.filter(function(d){ return !d.fechaPago||d.estadoMulta==='IMPAGA'); }).length;
       setTimeout(function(){ initChequesDonut(_chqCid, _rescC, _nopC); }, 60);
     }
   }
+
+  // Primer render inmediato con score=null → muestra BCRA + "Calculando score..."
+  _renderBcraWithScore(null);
+
+  // Score llega en paralelo: actualiza el card cuando esté listo
+  scrP.then(function(_scoreData) {
+    if (_scoreData?.score != null && clienteLocal) {
+      clienteLocal.score                = _scoreData.score;
+      clienteLocal.scoreRango           = _scoreData.rango;
+      clienteLocal.scoreColor           = _scoreData.color;
+      clienteLocal.alerta_temprana      = _scoreData.alerta_temprana;
+      clienteLocal.bloquear_oportunidad = _scoreData.bloquear_oportunidad;
+    }
+    console.log("[modal] Score server:", _scoreData?.score, "| mora_tecnica:", _scoreData?.mora_tecnica);
+    _renderBcraWithScore(_scoreData);
+  });
 }
 
 function switchModalTab(tab, btn) {
@@ -1662,27 +1667,29 @@ function renderBcraModal(bcraData, chData, histData, scoreData, clienteLocal) {
   let dchq=[]; causales.forEach(ca=>ca.entidades?.forEach(en=>dchq.push(...(en.detalle||[]))));
   const activos=dchq.filter(d=>!d.fechaPago||d.estadoMulta==='IMPAGA');
 
-  const _alertaCritica = scoreEst <= 50;
-
-  if (scoreEst == null) {
-    return `<div class="card"><div style="color:var(--text2);font-size:13px;text-align:center;padding:16px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Error de conexión — no se pudo obtener el score del servidor.<br><small>Cerrá y volvé a abrir para reintentar.</small></div></div>`;
-  }
+  const _alertaCritica = scoreEst !== null && scoreEst <= 50;
+  const _scorePending  = scoreEst == null;
+  const _scoreColor    = _scorePending ? '#94a3b8' : (_alertaCritica ? '#dc2626' : cc);
 
   let html = `<div class="card"><div class="card-title">Score Vende Seguro</div>
     <div class="score-hero">
     <div>
       <div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:3px">Score Vende Seguro</div>
-      <div class="score-num" style="color:${_alertaCritica?'#dc2626':cc};${_alertaCritica?'font-weight:900;':''}">
-        ${scoreEst}${_alertaCritica?'<span style="font-size:12px;font-weight:700;color:#dc2626;margin-left:6px;vertical-align:middle"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> CRÍTICO</span>':''}
+      <div class="score-num" style="color:${_scoreColor};${_alertaCritica?'font-weight:900;':''}">
+        ${_scorePending ? '—' : scoreEst}${_alertaCritica?'<span style="font-size:12px;font-weight:700;color:#dc2626;margin-left:6px;vertical-align:middle"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> CRÍTICO</span>':''}
       </div>
     </div>
-    <div><div class="score-rango" style="color:${cc}">${moraTecnica ? 'Revisar' : scoreToRango(scoreEst)}</div>
+    <div><div class="score-rango" style="color:${_scoreColor}">${_scorePending ? 'Calculando...' : (moraTecnica ? 'Revisar' : scoreToRango(scoreEst))}</div>
     <div style="font-size:11px;color:var(--text2);margin-top:2px">Sin historial Piattelli</div></div></div>
-    <div class="score-bar-wrap"><div class="score-bar" style="width:${scoreEst/10}%;background:${_alertaCritica?'#dc2626':cc}"></div></div>
-    ${badgeMoraTecnica}${badgeMoraInterna}
+    <div class="score-bar-wrap"><div class="score-bar" style="width:${_scorePending ? 0 : scoreEst/10}%;background:${_scoreColor}"></div></div>
+    ${_scorePending
+      ? `<div style="margin-top:8px;background:rgba(100,116,139,0.07);border:1px solid rgba(100,116,139,0.2);border-radius:7px;padding:7px 11px;font-size:11px;color:#64748b">
+           Score en cálculo — los datos BCRA y cheques están disponibles abajo.
+         </div>`
+      : badgeMoraTecnica + badgeMoraInterna}
   </div>
   <div class="credito-box"><div class="credito-label"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><circle cx="12" cy="10" r="6"/><path d="M12 16v6M9 19h6"/></svg> Crédito sugerido</div>
-    <div class="credito-monto">${calcularCredito(scoreEst)}</div>
+    <div class="credito-monto">${_scorePending ? 'Pendiente de cálculo' : calcularCredito(scoreEst)}</div>
   </div>`;
 
   if (bcraData.sin_deudas || !entidades.length) {
