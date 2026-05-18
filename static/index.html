@@ -2663,6 +2663,10 @@ function scoreBarHtml(score) {
   return '<div class="score-bar-wrap"><div class="score-bar-fill" style="width:' + pct + '%;"></div></div>';
 }
 
+// ── Helpers globales ─────────────────────────────────────────────────────────
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function _fmtM(n) { n=Number(n||0); return n>=1e9?'$'+(n/1e6).toFixed(0)+'MM':n>=1e6?'$'+(n/1e6).toFixed(1)+'M':n>=1e3?'$'+Math.round(n/1000)+'K':'$'+Math.round(n).toLocaleString('es-AR'); }
+
 var _alertasLastLoad = 0;
 async function autoCargarScoresServidor() {
   var now = Date.now();
@@ -2874,37 +2878,37 @@ async function consultarCliente() {
   }
 }
 
-function renderSaldosInterno(data, cuit) {
-  var el = document.getElementById('saldos-interno-card');
-  if (!el) return;
-  var facturas = data.facturas || [];
+// ── Cta. Cte. — función pura (retorna HTML, sin efectos DOM) ────────────────
+function buildCtaCteHtml(data) {
+  var facturas   = data.facturas || [];
   var totalSaldo = data.total_saldo || 0;
+  var fmtL = function(n){ return Math.round(n||0).toLocaleString('es-AR'); };
+
   if (!facturas.length) {
-    el.style.display = 'block';
-    el.innerHTML = '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">' +
-      '<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#2563eb;">Cuenta Corriente Piattelli</span>' +
-      '</div><div style="font-size:13px;color:#64748b;">Sin deuda registrada en Bodega Piattelli</div>';
-    return;
+    return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">'
+      + '<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#2563eb;">Cuenta Corriente Piattelli</span>'
+      + '</div><div style="font-size:13px;color:#64748b;">Sin deuda registrada en Bodega Piattelli</div>';
   }
-  el.style.display = 'block';
-  // DSO: promedio días entre fechaFactura y fechaPago para facturas abonadas
-  var fmt = function(n){ return (n||0).toLocaleString('es-AR'); };
+
+  // DSO: días netos promedio (fechaFactura → fechaPago = fecha vencimiento)
   var parseFecha = function(f) {
     if (!f) return null;
     var p = String(f).split('/');
     return p.length === 3 ? new Date(+p[2], +p[1]-1, +p[0]) : new Date(f);
   };
-  var pagadas = facturas.filter(function(f){ return f.fechaPago && f.totalFactura > 0; });
+  var conFechas = facturas.filter(function(f){ return f.fechaFactura && f.fechaPago && f.totalFactura > 0; });
   var dsoCliente = null;
-  if (pagadas.length) {
-    var dias = pagadas.map(function(f){
+  if (conFechas.length) {
+    var diasDso = conFechas.map(function(f){
       var d1 = parseFecha(f.fechaFactura), d2 = parseFecha(f.fechaPago);
       return (d1 && d2) ? Math.max(0, Math.round((d2-d1)/86400000)) : null;
     }).filter(function(d){ return d !== null && d < 365; });
-    if (dias.length) dsoCliente = Math.round(dias.reduce(function(s,d){return s+d;},0)/dias.length);
+    if (diasDso.length) dsoCliente = Math.round(diasDso.reduce(function(s,d){return s+d;},0)/diasDso.length);
   }
+
   var pendientes = facturas.filter(function(f){ return (f.saldo||0) > 0; });
-  // Calcular vencidas >30d usando diasMora (enriquecido por el backend) o parseo local
+
+  // Monto vencido: usar campo del backend si viene, sino calcular con diasMora
   var hoyTs = Date.now();
   var montoVencido30 = data.monto_pendiente_vencido != null ? data.monto_pendiente_vencido
     : pendientes.reduce(function(s,f){
@@ -2912,56 +2916,80 @@ function renderSaldosInterno(data, cuit) {
           if (!f.fechaPago) return 0;
           var p = String(f.fechaPago).split('/');
           if (p.length !== 3) return 0;
-          var fv = new Date(+p[2], +p[1]-1, +p[0]);
-          return Math.max(0, Math.round((hoyTs - fv.getTime()) / 86400000));
+          return Math.max(0, Math.round((hoyTs - new Date(+p[2],+p[1]-1,+p[0]).getTime())/86400000));
         })();
         return s + (dm > 0 ? (f.saldo||0) : 0);
       }, 0);
-  var alerta30 = data.alerta_mora_30 || pendientes.some(function(f){ return (f.diasMora||0) > 30; });
+  var alerta30 = data.alerta_mora_30 === true || pendientes.some(function(f){ return (f.diasMora||0) > 30; });
+
   var colorSaldo = totalSaldo > 0 ? '#dc2626' : '#16a34a';
-  var dsoColor = dsoCliente === null ? '#94a3b8' : dsoCliente > 60 ? '#dc2626' : dsoCliente > 30 ? '#ca8a04' : '#16a34a';
-  var colorV30 = montoVencido30 > 0 ? '#dc2626' : '#16a34a';
-  el.innerHTML =
-    '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:10px;flex-wrap:wrap;">' +
-      '<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#2563eb;">Cuenta Corriente Piattelli</span>' +
-      (alerta30 ? '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:#fee2e2;color:#991b1b;">Vencido +30 días</span>' : '') +
-    '</div>' +
-    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">' +
-      '<div style="text-align:center;">' +
-        '<div style="font-family:\'Syne\',sans-serif;font-size:20px;font-weight:800;color:'+colorSaldo+';line-height:1;">' + (totalSaldo > 0 ? '$'+fmt(Math.round(totalSaldo)) : '—') + '</div>' +
-        '<div style="font-size:11px;color:#64748b;margin-top:3px;">Saldo total</div>' +
-      '</div>' +
-      '<div style="text-align:center;">' +
-        '<div style="font-family:\'Syne\',sans-serif;font-size:20px;font-weight:800;color:'+colorV30+';line-height:1;">' + (montoVencido30 > 0 ? '$'+fmt(Math.round(montoVencido30)) : '—') + '</div>' +
-        '<div style="font-size:11px;color:#64748b;margin-top:3px;">Vencido (mora)</div>' +
-      '</div>' +
-      '<div style="text-align:center;">' +
-        '<div style="font-family:\'Syne\',sans-serif;font-size:20px;font-weight:800;color:'+dsoColor+';line-height:1;">' + (dsoCliente !== null ? dsoCliente+'d' : '—') + '</div>' +
-        '<div style="font-size:11px;color:#64748b;margin-top:3px;">DSO del cliente</div>' +
-      '</div>' +
-      '<div style="text-align:center;">' +
-        '<div style="font-family:\'Syne\',sans-serif;font-size:20px;font-weight:800;color:#334155;line-height:1;">' + pendientes.length + '</div>' +
-        '<div style="font-size:11px;color:#64748b;margin-top:3px;">Facturas abiertas</div>' +
-      '</div>' +
-    '</div>';
-  // Listar facturas vencidas con días exactos
+  var colorV30   = montoVencido30 > 0 ? '#dc2626' : '#64748b';
+  var dsoColor   = dsoCliente === null ? '#94a3b8' : dsoCliente > 60 ? '#dc2626' : dsoCliente > 30 ? '#ca8a04' : '#16a34a';
+
+  var html =
+    '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:10px;flex-wrap:wrap;">'
+    + '<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#2563eb;">Cuenta Corriente Piattelli</span>'
+    + (alerta30 ? '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:#fee2e2;color:#991b1b;">Vencido +30 días</span>' : '')
+    + '</div>'
+    + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">'
+    + '<div style="text-align:center;">'
+    +   '<div style="font-family:\'Syne\',sans-serif;font-size:20px;font-weight:800;color:'+colorSaldo+';line-height:1;">'+(totalSaldo>0?'$'+fmtL(Math.round(totalSaldo)):'—')+'</div>'
+    +   '<div style="font-size:11px;color:#64748b;margin-top:3px;">Saldo total</div>'
+    + '</div>'
+    + '<div style="text-align:center;">'
+    +   '<div style="font-family:\'Syne\',sans-serif;font-size:20px;font-weight:800;color:'+colorV30+';line-height:1;">'+(montoVencido30>0?'$'+fmtL(Math.round(montoVencido30)):'—')+'</div>'
+    +   '<div style="font-size:11px;color:#64748b;margin-top:3px;">Vencido (mora)</div>'
+    + '</div>'
+    + '<div style="text-align:center;">'
+    +   '<div style="font-family:\'Syne\',sans-serif;font-size:20px;font-weight:800;color:'+dsoColor+';line-height:1;">'+(dsoCliente!==null?dsoCliente+'d':'—')+'</div>'
+    +   '<div style="font-size:11px;color:#64748b;margin-top:3px;">DSO del cliente</div>'
+    + '</div>'
+    + '<div style="text-align:center;">'
+    +   '<div style="font-family:\'Syne\',sans-serif;font-size:20px;font-weight:800;color:#334155;line-height:1;">'+pendientes.length+'</div>'
+    +   '<div style="font-size:11px;color:#64748b;margin-top:3px;">Facturas abiertas</div>'
+    + '</div>'
+    + '</div>';
+
+  // Listado de facturas vencidas >30d con número, fecha y días exactos
   var vencidas30 = pendientes.filter(function(f){ return (f.diasMora||0) > 30; });
-  if (vencidas30.length > 0) {
-    var fhtml = '<div style="margin-top:12px;border-top:1px solid #fee2e2;padding-top:10px;">'
+  if (vencidas30.length) {
+    html += '<div style="margin-top:12px;border-top:1px solid #fee2e2;padding-top:10px;">'
       + '<div style="font-size:10px;font-weight:700;color:#dc2626;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:7px;">Facturas vencidas</div>';
-    vencidas30.sort(function(a,b){ return (b.diasMora||0)-(a.diasMora||0); }).forEach(function(f){
-      var diasColor2 = (f.diasMora||0) > 90 ? '#7f1d1d' : '#dc2626';
-      fhtml += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-radius:7px;background:#fff1f2;margin-bottom:4px;">'
-        + '<div><div style="font-size:12px;font-weight:600;color:#0f172a;">' + esc(f.nroFactura||'—') + '</div>'
-        + '<div style="font-size:10px;color:#94a3b8;">Vcto: ' + (f.fechaPago||'—') + '</div></div>'
+    vencidas30.slice().sort(function(a,b){ return (b.diasMora||0)-(a.diasMora||0); }).forEach(function(f){
+      var dc = (f.diasMora||0) > 90 ? '#7f1d1d' : '#dc2626';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-radius:7px;background:#fff1f2;margin-bottom:4px;">'
+        + '<div><div style="font-size:12px;font-weight:600;color:#0f172a;">'+esc(f.nroFactura||'—')+'</div>'
+        +      '<div style="font-size:10px;color:#94a3b8;">Vcto: '+(f.fechaPago||'—')+'</div></div>'
         + '<div style="text-align:right;">'
-        + '<div style="font-size:13px;font-weight:700;color:#dc2626;">$' + fmt(Math.round(f.saldo||0)) + '</div>'
-        + '<div style="font-size:10px;font-weight:700;color:' + diasColor2 + ';">' + (f.diasMora||0) + ' días</div>'
+        +   '<div style="font-size:13px;font-weight:700;color:#dc2626;">$'+fmtL(Math.round(f.saldo||0))+'</div>'
+        +   '<div style="font-size:10px;font-weight:700;color:'+dc+';">'+(f.diasMora||0)+' días</div>'
         + '</div></div>';
     });
-    fhtml += '</div>';
-    el.innerHTML += fhtml;
+    html += '</div>';
   }
+  return html;
+}
+
+// ── renderSaldosInterno — usa buildCtaCteHtml, actualiza #saldos-interno-card ─
+function renderSaldosInterno(data, cuit) {
+  var el = document.getElementById('saldos-interno-card');
+  if (!el) return;
+  el.style.display = 'block';
+  el.innerHTML = buildCtaCteHtml(data);
+}
+
+// ── _loadCtaCteCard — carga Cta. Cte. en un div arbitrario (Cartera) ─────────
+async function _loadCtaCteCard(cuit, targetId) {
+  var el = document.getElementById(targetId);
+  if (!el) return;
+  try {
+    var r = await fetch('/saldos-cuit/' + cuit, { signal: AbortSignal.timeout(8000) });
+    if (!r.ok) { el.innerHTML = ''; return; }
+    var data = await r.json();
+    if (!data.facturas || !data.facturas.length) { el.innerHTML = ''; return; }
+    el.innerHTML = '<div style="margin-top:12px;padding-top:12px;border-top:1px solid #e2e8f0;">'
+      + buildCtaCteHtml(data) + '</div>';
+  } catch(e) { el.innerHTML = ''; }
 }
 
 function agregarDesdConsulta(cuit, nombre) {
@@ -4198,6 +4226,9 @@ function renderCartera(filtro) {
 
     html += '</div>'; // data-grid
 
+    // Cta. Cte. placeholder (loaded async after DOM injection)
+    html += '<div id="ctacte-' + _cuitRow + '"></div>';
+
     // Footer
     html += '<div class="cli-card-footer">' + meta;
     html += '<button onclick="verCliente(\'' + c.cuit + '\')" class="primary cli-btn-detalle">Ver Detalle Completo →</button>';
@@ -4210,6 +4241,12 @@ function renderCartera(filtro) {
   if (lista.length > 10 && !q) html += '<div style="text-align:center;font-size:12px;color:#94a3b8;padding:14px 0;">Buscá por nombre o CUIT para filtrar entre ' + lista.length + ' clientes</div>';
 
   el.innerHTML = countHtml + html;
+
+  // Fire async Cta. Cte. loads after DOM is ready
+  shown.forEach(function(c) {
+    var cr = c.cuit.replace(/-/g,'');
+    _loadCtaCteCard(cr, 'ctacte-' + cr);
+  });
 }
 
 function renderCarteraAdmin() { renderCartera(); }

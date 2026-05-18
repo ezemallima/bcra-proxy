@@ -3607,8 +3607,10 @@ def api_facturas_por_cuit(cuit):
     result = _saldos_idx_cuit.get(cuit_limpio, [])
     if result:
         total = sum(f.get('saldo', 0) for f in result)
-        print(f"[facturas] CUIT {cuit_limpio}: {len(result)} facturas ${total:,.0f} (método: cuit)", flush=True)
-        return jsonify({"facturas": result, "total_saldo": total, "cantidad": len(result), "metodo": "cuit"})
+        enriched, monto_v30, alerta30 = _enrich_con_mora(result)
+        print(f"[facturas] CUIT {cuit_limpio}: {len(enriched)} facturas ${total:,.0f} (método: cuit)", flush=True)
+        return jsonify({"facturas": enriched, "total_saldo": total, "cantidad": len(enriched),
+                        "monto_pendiente_vencido": monto_v30, "alerta_mora_30": alerta30, "metodo": "cuit"})
 
     # 2. Nombre canónico desde cartera_comercial (garantiza string exacto del archivo fuente)
     nombre_cartera = next(
@@ -3623,13 +3625,16 @@ def api_facturas_por_cuit(cuit):
         result = _buscar_por_nombre_en_idx(nombre)
         if result:
             total = sum(f.get('saldo', 0) for f in result)
+            enriched, monto_v30, alerta30 = _enrich_con_mora(result)
             metodo = "nombre_cartera" if nombre_cartera else "nombre_hint"
-            print(f"[facturas] '{nombre}': {len(result)} facturas ${total:,.0f} (método: {metodo})", flush=True)
-            return jsonify({"facturas": result, "total_saldo": total, "cantidad": len(result), "metodo": metodo})
+            print(f"[facturas] '{nombre}': {len(enriched)} facturas ${total:,.0f} (método: {metodo})", flush=True)
+            return jsonify({"facturas": enriched, "total_saldo": total, "cantidad": len(enriched),
+                            "monto_pendiente_vencido": monto_v30, "alerta_mora_30": alerta30, "metodo": metodo})
 
     print(f"[facturas] CUIT {cuit_limpio} nombre='{nombre}': sin resultados "
           f"(idx_cuit={len(_saldos_idx_cuit)} entradas, idx_nombre={len(_saldos_idx_nombre)} entradas)", flush=True)
-    return jsonify({"facturas": [], "total_saldo": 0, "cantidad": 0, "metodo": "nulo"})
+    return jsonify({"facturas": [], "total_saldo": 0, "cantidad": 0,
+                    "monto_pendiente_vencido": 0, "alerta_mora_30": False, "metodo": "nulo"})
 
 
 @app.route("/upload-saldos-gestion", methods=["POST"])
