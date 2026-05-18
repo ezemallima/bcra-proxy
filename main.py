@@ -664,8 +664,8 @@ def get_solvency_data(cuit):
 # ║  Prospectos: BCRA+AFIP(80%) / Comunidad(20%) — sin historial Odoo        ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
 
-_SCORE_VERSION          = "11.0"
-_MOTOR_VERSION_CARTERA  = "v17.0"   # bump aquí cada vez que cambie la lógica del motor
+_SCORE_VERSION          = "12.0"
+_MOTOR_VERSION_CARTERA  = "v18.0"   # bump aquí cada vez que cambie la lógica del motor
 
 # Keywords para NLP de chat de bodegas (Capa C — Comunidad)
 _KW_NEG = [
@@ -1474,28 +1474,37 @@ def calcular_rating_predictivo(
     # ── Penalidades históricas ────────────────────────────────────────────
     if 2 <= meses_malos <= 5 and not es_mora_tecnica and not es_mora_administrativa:
         puntos = round(puntos * 0.75)
-    # sit_grave_6m: solo aplica si la situación EFECTIVA (no el outlier) es grave
-    if sit_grave_6m and not es_mora_tecnica and sit_efectivo >= 3:
+    # sit_grave_6m: solo aplica cuando max_sit < 3 (max_sit >= 3 → elastic bounding)
+    if sit_grave_6m and not es_mora_tecnica and sit_efectivo >= 3 and max_sit < 3:
         puntos = min(puntos, 150)
-    elif sit_grave_6m and es_mora_tecnica and sit_efectivo >= 3:
+    elif sit_grave_6m and es_mora_tecnica and sit_efectivo >= 3 and max_sit < 3:
         puntos = min(puntos, 350)
 
     # ── Hard Block D2: Default Real BCRA → score forzado a 1 ─────────────
     if hard_block_bcra:
         puntos = 0
 
-    # ── Hard Ceiling v11.0: max_sit >= 3 → score nunca supera 450 pts ────
-    if max_sit >= 3:
-        puntos = min(puntos, 450)
-        print(f"[hard-ceil v11] {cuit_limpio} max_sit={max_sit} → cap 450", flush=True)
-
-    # ── Techos duros por situación BCRA (sobre sit_efectivo, no max_sit) ─
-    if sit_efectivo >= 5:
-        puntos = min(puntos, 400 if es_mora_tecnica else 1)
-    elif sit_efectivo >= 4:
-        puntos = min(puntos, 650 if es_mora_tecnica else 250)
-    elif sit_efectivo == 3:
-        puntos = min(puntos, 650 if es_mora_tecnica else 400)
+    # ── Elastic Bounding v12.0: max_sit >= 3 → penalización dinámica ─────
+    # Reemplaza techos rígidos. Score acotado a rango que refleja la salud
+    # real del resto de la cartera: pct_mora alto → hacia el piso; bajo → al techo.
+    # max_sit 3 → [460, 550] | max_sit >= 4 → [300, 460] (pisa 200 con historial severo)
+    if max_sit >= 3 and not hard_block_bcra:
+        _pit     = min(1.0, pct_mora)                    # 0=todo Sit.1, 1=todo en mora
+        _sit_mul = 1.0 + (max_sit - 3) * 0.25           # Sit3→1.0, Sit4→1.25, Sit5→1.50
+        _pit_adj = min(1.0, _pit * _sit_mul)
+        if max_sit == 3:
+            _lo, _hi = 460, 550
+        else:                                             # max_sit >= 4
+            _lo, _hi = 300, 460
+            if sit_grave_6m and meses_malos >= 3:        # historial severo → pisa piso 300
+                _lo = max(200, _lo - 100)
+        _puntos_eb = round(_hi - _pit_adj * (_hi - _lo))
+        puntos     = max(_lo, min(_hi, _puntos_eb))
+        print(
+            f"[elastic v12] {cuit_limpio} max_sit={max_sit} pct_mora={pct_mora:.2f} "
+            f"pit_adj={_pit_adj:.3f} box=[{_lo},{_hi}] → {puntos}",
+            flush=True
+        )
 
     # ── Hard Block: mora interna Odoo → score ≤ 400 ──────────────────────
     if hard_block_mora:
