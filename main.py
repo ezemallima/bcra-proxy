@@ -3558,8 +3558,10 @@ def get_saldos_cuit(cuit):
     if result:
         total_saldo = sum(f.get('saldo', 0) for f in result)
         nombre_m = result[0].get('cliente', '')
-        print(f"[saldos-cuit] CUIT {cuit_limpio}: {len(result)} facturas (método: cuit)", flush=True)
-        return jsonify({"facturas": result, "total_saldo": total_saldo, "cantidad": len(result),
+        enriched, monto_v30, alerta30 = _enrich_con_mora(result)
+        print(f"[saldos-cuit] CUIT {cuit_limpio}: {len(enriched)} facturas, vencido30=${monto_v30:,.0f}", flush=True)
+        return jsonify({"facturas": enriched, "total_saldo": total_saldo, "cantidad": len(enriched),
+                        "monto_pendiente_vencido": monto_v30, "alerta_mora_30": alerta30,
                         "metodo": "cuit", "nombre_match": nombre_m})
     # Prioridad 2: nombre canónico desde cartera_comercial → exact → fuzzy
     nombre_en_cartera = next(
@@ -3580,11 +3582,14 @@ def get_saldos_cuit(cuit):
                 if result:
                     print(f"[saldos-cuit] Fuzzy '{nombre_en_cartera}' → {len(result)} facturas", flush=True)
         total_saldo = sum(f.get('saldo', 0) for f in result)
-        print(f"[saldos-cuit] Nombre '{nombre_en_cartera}': {len(result)} facturas (método: nombre)", flush=True)
-        return jsonify({"facturas": result, "total_saldo": total_saldo, "cantidad": len(result),
+        enriched, monto_v30, alerta30 = _enrich_con_mora(result)
+        print(f"[saldos-cuit] Nombre '{nombre_en_cartera}': {len(enriched)} facturas, vencido30=${monto_v30:,.0f}", flush=True)
+        return jsonify({"facturas": enriched, "total_saldo": total_saldo, "cantidad": len(enriched),
+                        "monto_pendiente_vencido": monto_v30, "alerta_mora_30": alerta30,
                         "metodo": "nombre", "nombre_match": nombre_en_cartera})
     print(f"[saldos-cuit] CUIT {cuit_limpio}: sin match en cartera_comercial", flush=True)
-    return jsonify({"facturas": [], "total_saldo": 0, "cantidad": 0, "metodo": "nulo"})
+    return jsonify({"facturas": [], "total_saldo": 0, "cantidad": 0,
+                    "monto_pendiente_vencido": 0, "alerta_mora_30": False, "metodo": "nulo"})
 
 @app.route("/api/facturas/<cuit>")
 def api_facturas_por_cuit(cuit):
@@ -3736,6 +3741,85 @@ def get_dso_global_saldos():
         "facturas_vencidas": vencidas,
         "ultima_actualizacion": time.strftime('%d/%m/%Y')
     })
+
+def _parse_fecha_venc(s):
+    """Parsea 'DD/MM/YYYY' a date. fechaPago en el modelo = fecha_vencimiento de Odoo."""
+    from datetime import date
+    if not s: return None
+    try:
+        d, m, y = str(s).strip().split('/')
+        return date(int(y), int(m), int(d))
+    except:
+        return None
+
+def _enrich_con_mora(facturas: list) -> tuple:
+    """Agrega diasMora a cada factura y retorna (facturas_enriquecidas, monto_vencido_30d, alerta_mora_30)."""
+    from datetime import date
+    hoy = date.today()
+    enriched, monto_v30 = [], 0.0
+    for f in facturas:
+        fc = dict(f)
+        fv = _parse_fecha_venc(fc.get('fechaPago', ''))
+        saldo = float(fc.get('saldo') or 0)
+        if fv and saldo > 0:
+            fc['diasMora'] = max(0, (hoy - fv).days)
+            if fc['diasMora'] > 0:
+                monto_v30 += saldo
+        else:
+            fc['diasMora'] = 0
+        enriched.append(fc)
+    alerta = any(f.get('diasMora', 0) > 30 for f in enriched)
+    return enriched, round(monto_v30, 2), alerta
+
+
+@app.route("/api/alertas-mora")
+def get_alertas_mora():
+    """Clientes con facturas cuya fecha de vencimiento (fechaPago) supera los 30 días sin cobrar."""
+    from datetime import date
+    hoy = date.today()
+    fuente = _saldos_gestion if _saldos_gestion else _saldos_facturas
+    clientes: dict = {}
+    for f in fuente:
+        saldo = float(f.get('saldo') or 0)
+        if saldo <= 0:
+            continue
+        fv = _parse_fecha_venc(f.get('fechaPago', ''))
+        if not fv:
+            continue
+        dias = (hoy - fv).days
+        if dias <= 30:
+            continue
+        key = str(f.get('cliente', '') or '').strip()
+        if not key:
+            continue
+        if key not in clientes:
+            clientes[key] = {
+                'nombre': key,
+                'cuit': str(f.get('cuit', '') or '').strip(),
+                'monto_vencido_30d': 0.0,
+                'dias_max_atraso': 0,
+                'cantidad_facturas': 0,
+            }
+        clientes[key]['monto_vencido_30d'] += saldo
+        clientes[key]['dias_max_atraso'] = max(clientes[key]['dias_max_atraso'], dias)
+        clientes[key]['cantidad_facturas'] += 1
+    # Enriquecer CUIT desde cartera_comercial cuando el archivo de saldos no lo trae
+    for c in _cartera_comercial:
+        nombre_c = str(c.get('nombre', '') or '').strip()
+        cuit_c = str(c.get('cuit', '') or '').replace('-', '').replace(' ', '').strip()
+        if nombre_c in clientes and not clientes[nombre_c]['cuit'] and cuit_c:
+            clientes[nombre_c]['cuit'] = cuit_c
+    result = sorted(clientes.values(), key=lambda x: x['monto_vencido_30d'], reverse=True)
+    for r in result:
+        r['monto_vencido_30d'] = round(r['monto_vencido_30d'], 2)
+    total_vencido = sum(r['monto_vencido_30d'] for r in result)
+    print(f"[alertas-mora] {len(result)} clientes con vencimiento >30d, total ${total_vencido:,.0f}", flush=True)
+    return jsonify({
+        'alertas': result,
+        'total_clientes': len(result),
+        'total_monto_vencido': round(total_vencido, 2),
+    })
+
 
 @app.route("/upload-saldos-facturas", methods=["POST"])
 def upload_saldos_facturas():

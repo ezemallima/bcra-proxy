@@ -840,6 +840,19 @@
   </div>
 
   <div id="alertas" class="section">
+
+    <!-- ── Alertas Crediticias Críticas — Cta. Cte. vencida +30 días ── -->
+    <div class="card" id="alertas-mora-card" style="border-left:4px solid #dc2626;margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+        <div>
+          <div class="card-title" style="color:#dc2626;margin-bottom:2px;">Alertas Crediticias Críticas — Cta. Cte. Vencida +30 días</div>
+          <div style="font-size:11px;color:#94a3b8;">Facturas con fecha de vencimiento superada. Requieren gestión de cobro inmediata.</div>
+        </div>
+        <span id="alertas-mora-badge" style="display:none;font-size:11px;font-weight:700;padding:3px 12px;border-radius:20px;background:#fee2e2;color:#991b1b;"></span>
+      </div>
+      <div id="alertas-mora-lista"><div style="font-size:13px;color:#94a3b8;padding:8px 0;">Cargando alertas...</div></div>
+    </div>
+
     <div class="card">
       <div class="card-title">Monitoreo BCRA — Cartera activa</div>
       <p style="font-size:13px;color:#666;line-height:1.6;margin-bottom:8px;">
@@ -2631,7 +2644,7 @@ function switchTab(tab, el) {
   if (tab === 'historial') renderHistorial();
   if (tab === 'cartera') renderCartera();
   if (tab === 'buscador') renderBuscador('');
-  if (tab === 'alertas') { _alertasFilter = null; renderAlertas(); autoCargarScoresServidor(); }
+  if (tab === 'alertas') { _alertasFilter = null; renderAlertas(); autoCargarScoresServidor(); cargarAlertasMora(); }
   if (tab === 'consulta') {
     var _hero = document.getElementById('consulta-search-hero');
     var _res = document.getElementById('resultado');
@@ -2891,26 +2904,64 @@ function renderSaldosInterno(data, cuit) {
     if (dias.length) dsoCliente = Math.round(dias.reduce(function(s,d){return s+d;},0)/dias.length);
   }
   var pendientes = facturas.filter(function(f){ return (f.saldo||0) > 0; });
+  // Calcular vencidas >30d usando diasMora (enriquecido por el backend) o parseo local
+  var hoyTs = Date.now();
+  var montoVencido30 = data.monto_pendiente_vencido != null ? data.monto_pendiente_vencido
+    : pendientes.reduce(function(s,f){
+        var dm = f.diasMora != null ? f.diasMora : (function(){
+          if (!f.fechaPago) return 0;
+          var p = String(f.fechaPago).split('/');
+          if (p.length !== 3) return 0;
+          var fv = new Date(+p[2], +p[1]-1, +p[0]);
+          return Math.max(0, Math.round((hoyTs - fv.getTime()) / 86400000));
+        })();
+        return s + (dm > 0 ? (f.saldo||0) : 0);
+      }, 0);
+  var alerta30 = data.alerta_mora_30 || pendientes.some(function(f){ return (f.diasMora||0) > 30; });
   var colorSaldo = totalSaldo > 0 ? '#dc2626' : '#16a34a';
   var dsoColor = dsoCliente === null ? '#94a3b8' : dsoCliente > 60 ? '#dc2626' : dsoCliente > 30 ? '#ca8a04' : '#16a34a';
+  var colorV30 = montoVencido30 > 0 ? '#dc2626' : '#16a34a';
   el.innerHTML =
-    '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:10px;flex-wrap:wrap;">' +
       '<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#2563eb;">Cuenta Corriente Piattelli</span>' +
+      (alerta30 ? '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:#fee2e2;color:#991b1b;">Vencido +30 días</span>' : '') +
     '</div>' +
-    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">' +
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">' +
       '<div style="text-align:center;">' +
-        '<div style="font-family:\'Syne\',sans-serif;font-size:22px;font-weight:800;color:'+colorSaldo+';line-height:1;">' + (totalSaldo > 0 ? '$'+fmt(Math.round(totalSaldo)) : '—') + '</div>' +
-        '<div style="font-size:11px;color:#64748b;margin-top:3px;">Saldo pendiente</div>' +
+        '<div style="font-family:\'Syne\',sans-serif;font-size:20px;font-weight:800;color:'+colorSaldo+';line-height:1;">' + (totalSaldo > 0 ? '$'+fmt(Math.round(totalSaldo)) : '—') + '</div>' +
+        '<div style="font-size:11px;color:#64748b;margin-top:3px;">Saldo total</div>' +
       '</div>' +
       '<div style="text-align:center;">' +
-        '<div style="font-family:\'Syne\',sans-serif;font-size:22px;font-weight:800;color:'+dsoColor+';line-height:1;">' + (dsoCliente !== null ? dsoCliente+'d' : '—') + '</div>' +
+        '<div style="font-family:\'Syne\',sans-serif;font-size:20px;font-weight:800;color:'+colorV30+';line-height:1;">' + (montoVencido30 > 0 ? '$'+fmt(Math.round(montoVencido30)) : '—') + '</div>' +
+        '<div style="font-size:11px;color:#64748b;margin-top:3px;">Vencido (mora)</div>' +
+      '</div>' +
+      '<div style="text-align:center;">' +
+        '<div style="font-family:\'Syne\',sans-serif;font-size:20px;font-weight:800;color:'+dsoColor+';line-height:1;">' + (dsoCliente !== null ? dsoCliente+'d' : '—') + '</div>' +
         '<div style="font-size:11px;color:#64748b;margin-top:3px;">DSO del cliente</div>' +
       '</div>' +
       '<div style="text-align:center;">' +
-        '<div style="font-family:\'Syne\',sans-serif;font-size:22px;font-weight:800;color:#334155;line-height:1;">' + pendientes.length + '</div>' +
+        '<div style="font-family:\'Syne\',sans-serif;font-size:20px;font-weight:800;color:#334155;line-height:1;">' + pendientes.length + '</div>' +
         '<div style="font-size:11px;color:#64748b;margin-top:3px;">Facturas abiertas</div>' +
       '</div>' +
     '</div>';
+  // Listar facturas vencidas con días exactos
+  var vencidas30 = pendientes.filter(function(f){ return (f.diasMora||0) > 30; });
+  if (vencidas30.length > 0) {
+    var fhtml = '<div style="margin-top:12px;border-top:1px solid #fee2e2;padding-top:10px;">'
+      + '<div style="font-size:10px;font-weight:700;color:#dc2626;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:7px;">Facturas vencidas</div>';
+    vencidas30.sort(function(a,b){ return (b.diasMora||0)-(a.diasMora||0); }).forEach(function(f){
+      var diasColor2 = (f.diasMora||0) > 90 ? '#7f1d1d' : '#dc2626';
+      fhtml += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-radius:7px;background:#fff1f2;margin-bottom:4px;">'
+        + '<div><div style="font-size:12px;font-weight:600;color:#0f172a;">' + esc(f.nroFactura||'—') + '</div>'
+        + '<div style="font-size:10px;color:#94a3b8;">Vcto: ' + (f.fechaPago||'—') + '</div></div>'
+        + '<div style="text-align:right;">'
+        + '<div style="font-size:13px;font-weight:700;color:#dc2626;">$' + fmt(Math.round(f.saldo||0)) + '</div>'
+        + '<div style="font-size:10px;font-weight:700;color:' + diasColor2 + ';">' + (f.diasMora||0) + ' días</div>'
+        + '</div></div>';
+    });
+    fhtml += '</div>';
+    el.innerHTML += fhtml;
+  }
 }
 
 function agregarDesdConsulta(cuit, nombre) {
@@ -4447,6 +4498,52 @@ function _alrScoreData(c) {
   if (alertaC && alertaC.scoreCompleto) return { num: alertaC.scoreCompleto, color: alertaC.scoreColor, emoji: alertaC.scoreEmoji, rango: alertaC.scoreRango };
   if (c.scoreCompleto) return { num: c.scoreCompleto, color: c.scoreColor, emoji: c.scoreEmoji, rango: c.scoreRango };
   return null;
+}
+
+async function cargarAlertasMora() {
+  var listaEl  = document.getElementById('alertas-mora-lista');
+  var badgeEl  = document.getElementById('alertas-mora-badge');
+  if (!listaEl) return;
+  try {
+    var r = await fetch('/api/alertas-mora');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    var data = await r.json();
+    var alertas = data.alertas || [];
+    if (!alertas.length) {
+      listaEl.innerHTML = '<div style="font-size:13px;color:#16a34a;padding:8px 0;display:flex;align-items:center;gap:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Sin clientes con facturas vencidas hace más de 30 días.</div>';
+      if (badgeEl) badgeEl.style.display = 'none';
+      return;
+    }
+    if (badgeEl) { badgeEl.textContent = alertas.length + ' cliente' + (alertas.length !== 1 ? 's' : ''); badgeEl.style.display = ''; }
+    var fmt = function(n) { return n >= 1e6 ? '$'+(n/1e6).toFixed(1)+'M' : n >= 1e3 ? '$'+(Math.round(n/1000))+'K' : '$'+Math.round(n).toLocaleString('es-AR'); };
+    var totalVencido = data.total_monto_vencido || 0;
+    var html = '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#fff1f2;border-radius:8px;margin-bottom:10px;border:1px solid #fca5a5;">'
+      + '<div style="font-size:12px;font-weight:700;color:#991b1b;">' + alertas.length + ' clientes con deuda vencida</div>'
+      + '<div style="font-size:14px;font-weight:800;color:#dc2626;font-family:\'Syne\',sans-serif;">' + fmt(totalVencido) + ' total vencido</div>'
+      + '</div>';
+    alertas.forEach(function(a) {
+      var diasColor = a.dias_max_atraso > 90 ? '#7f1d1d' : a.dias_max_atraso > 60 ? '#dc2626' : '#ca8a04';
+      var diasBg    = a.dias_max_atraso > 90 ? 'rgba(127,29,29,0.08)' : a.dias_max_atraso > 60 ? 'rgba(220,38,38,0.08)' : 'rgba(202,138,4,0.08)';
+      html += '<div class="alert-card" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 14px;flex-wrap:wrap;">';
+      html += '<div style="flex:1;min-width:0;">'
+        + '<div style="font-weight:700;font-size:14px;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(a.nombre) + '</div>';
+      if (a.cuit) html += '<div style="font-size:11px;color:#64748b;font-family:monospace;margin-top:1px;">' + a.cuit + '</div>';
+      html += '<div style="font-size:11px;color:#94a3b8;margin-top:2px;">' + a.cantidad_facturas + ' factura' + (a.cantidad_facturas !== 1 ? 's' : '') + ' vencida' + (a.cantidad_facturas !== 1 ? 's' : '') + '</div>'
+        + '</div>';
+      html += '<div style="text-align:right;flex-shrink:0;">'
+        + '<div style="font-weight:700;font-size:15px;color:#dc2626;">' + fmt(a.monto_vencido_30d) + '</div>'
+        + '<div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;">vencido</div>'
+        + '</div>';
+      html += '<div style="text-align:center;background:' + diasBg + ';border-radius:8px;padding:7px 12px;flex-shrink:0;">'
+        + '<div style="font-weight:800;font-size:22px;color:' + diasColor + ';font-family:\'Syne\',sans-serif;line-height:1;">' + a.dias_max_atraso + '</div>'
+        + '<div style="font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;margin-top:1px;">días</div>'
+        + '</div>';
+      html += '</div>';
+    });
+    listaEl.innerHTML = html;
+  } catch(e) {
+    listaEl.innerHTML = '<div style="font-size:12px;color:#94a3b8;padding:8px 0;">No se pudo cargar el panel de alertas (' + e.message + ').</div>';
+  }
 }
 
 function renderAlertas() {
