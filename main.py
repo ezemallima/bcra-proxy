@@ -126,39 +126,13 @@ def cache_set(cuit, data, error=None):
             json.dump(cache, f)
     except: pass
 
-def _cache_invalidar(cuit):
-    """Borra la entrada de un CUIT del cache de disco (bcra_cache.json)."""
-    try:
-        cf = os.path.join(DATA_DIR, 'bcra_cache.json') if os.path.exists(DATA_DIR) else '/tmp/bcra_cache.json'
-        if not os.path.exists(cf):
-            return
-        with open(cf, 'r') as f:
-            cache = json.load(f)
-        if cuit in cache:
-            del cache[cuit]
-            with open(cf, 'w') as f:
-                json.dump(cache, f)
-            print(f"[bcra] cache invalidado para {cuit}", flush=True)
-    except Exception as _e:
-        print(f"[bcra] Error invalidando cache {cuit}: {_e}", flush=True)
-
-
 def consultar_bcra_cached(cuit):
     print(f"[bcra] {cuit} consultando BCRA...", flush=True)
     cached_data, cached_error = cache_get(cuit)
     if cached_data is not None:
-        # Detectar cache malformado: lista vacía o valor no-dict después de normalizar
-        _normalizado = _norm_bcra_resp(cached_data)
-        _es_lista_vacia = isinstance(cached_data, list) and len(cached_data) == 0
-        _es_invalido    = not isinstance(_normalizado, dict) or _es_lista_vacia
-        if _es_invalido or isinstance(cached_data, list):
-            # Cache guardado como lista → invalidar y forzar consulta fresca
-            print(f"[bcra] cache malformado para {cuit} (tipo={type(cached_data).__name__}) — invalidando", flush=True)
-            _cache_invalidar(cuit)
-        else:
-            origen = "cache-error" if cached_error else "caché"
-            print(f"[bcra] {cuit} desde {origen}", flush=True)
-            return _normalizado, cached_error
+        origen = "cache-error" if cached_error else "caché"
+        print(f"[bcra] {cuit} desde {origen}", flush=True)
+        return _norm_bcra_resp(cached_data), cached_error
     data, error = consultar_bcra(cuit)
     if error or not data:
         data_cache = {"results": None, "sin_deudas": None, "error_bcra": str(error or "sin_respuesta")}
@@ -2666,34 +2640,28 @@ def verificar_cartera():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-def procesar_y_guardar_cliente_core(cuit: str) -> dict:
-    """Función core aislada: procesa un CUIT completo y persiste de forma atómica.
-
-    Flujo: BCRA → Score → Mora Odoo → score_cache.json → alertas_cartera.json
-    Toda respuesta de API pasa por _norm_bcra_resp antes de cualquier .get().
-    Lanza excepción si hay error irrecuperable; el caller decide cómo registrarlo.
+def ejecutar_analisis_cliente_v22(cuit: str) -> dict:
+    """Misma lógica que _calcular_score_handler (el endpoint individual de v22).
+    Versión pura para uso interno: devuelve dict en lugar de Flask Response.
+    Fuerza recálculo limpio (limpia session cache) y persiste en servidor.
     """
-    cuit = str(cuit).replace('-', '').replace(' ', '').strip()
+    cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
 
-    # ── 1. BCRA (normalizado en consultar_bcra_cached + calcular_rating_predictivo) ──
-    bcra_data, _ = consultar_bcra_cached(cuit)
+    # Limpiar cache de sesión para recalcular fresco en cada iteración del lote
+    _score_session_cache.pop(cuit_limpio, None)
 
-    # Guardia de último recurso: si bcra_data sigue siendo lista por cualquier motivo,
-    # lo desmantela aquí mismo antes de que llegue al motor de scoring
-    if isinstance(bcra_data, list):
-        bcra_data = bcra_data[0] if len(bcra_data) > 0 else {}
+    # ── BCRA + Score + Solvencia (idéntico a la consulta individual v22) ──────
+    bcra_data, _ = consultar_bcra_cached(cuit_limpio)
+    score_data   = calcular_score_servidor(cuit_limpio, bcra_data or {})
+    solvency     = get_solvency_data(cuit_limpio)
+    resp         = _score_response(score_data, solvency)
 
-    # ── 2. Score completo ─────────────────────────────────────────────────────
-    score_data = calcular_score_servidor(cuit, bcra_data or {})
-    resp       = _score_response(score_data, {})
-
-    # ── 3. Mora contable (Odoo) — lookup por CUIT, luego por nombre ───────────
-    saldos_raw = _saldos_idx_cuit.get(cuit, [])
+    # ── Mora contable Odoo — lookup por CUIT con fallback a nombre ────────────
+    saldos_raw = _saldos_idx_cuit.get(cuit_limpio, [])
     if not saldos_raw:
         _nb = next(
-            (str(cl.get('nombre', '')).strip()
-             for cl in _cartera_comercial
-             if str(cl.get('cuit', '')).replace('-', '').replace(' ', '').strip() == cuit),
+            (str(cl.get('nombre', '')).strip() for cl in _cartera_comercial
+             if str(cl.get('cuit', '')).replace('-', '').replace(' ', '').strip() == cuit_limpio),
             None,
         )
         if _nb:
@@ -2706,23 +2674,22 @@ def procesar_y_guardar_cliente_core(cuit: str) -> dict:
     resp['monto_pendiente_vencido'] = _pi_safe(monto_v30, float, 0.0)
     resp['alerta_mora_30']          = bool(alerta30)
 
-    # ── 4. Persistencia atómica: score_cache.json ─────────────────────────────
+    # ── Persistencia: score_cache.json + alertas_cartera.json ─────────────────
     with _score_cache_lock:
-        cache = _score_cache_read()
-        cache[cuit] = resp
-        _score_cache_write(cache)
+        _sc = _score_cache_read()
+        _sc[cuit_limpio] = resp
+        _score_cache_write(_sc)
 
-    # ── 5. Persistencia atómica: alertas_cartera.json ────────────────────────
     with _alertas_file_lock:
-        _actualizar_score_en_cartera(cuit, score_data, {})
+        _actualizar_score_en_cartera(cuit_limpio, score_data, solvency)
 
     return resp
 
 
 def _ejecutar_proceso_integral(cartera_data: list):
     """Thread del proceso masivo nocturno.
-    Itera secuencialmente sobre la cartera, llama a procesar_y_guardar_cliente_core()
-    por cada CUIT y registra errores sin interrumpir el lote."""
+    Itera sobre la cartera y llama a ejecutar_analisis_cliente_v22() por cada CUIT.
+    Errores individuales se registran en el log y el lote continúa sin interrumpirse."""
     import traceback as _tb
     global _proceso_integral_estado
 
@@ -2740,7 +2707,7 @@ def _ejecutar_proceso_integral(cartera_data: list):
         _proceso_integral_estado['mensaje'] = f'Procesando {i+1}/{total}: {nombre or cuit}'
 
         try:
-            procesar_y_guardar_cliente_core(cuit)
+            ejecutar_analisis_cliente_v22(cuit)
 
         except Exception as e:
             err_tipo = type(e).__name__
@@ -2758,7 +2725,6 @@ def _ejecutar_proceso_integral(cartera_data: list):
                 'num': i + 1, 'cuit': cuit, 'nombre': nombre,
                 'tipo': err_tipo, 'mensaje': err_msg, 'linea': tb_last,
             })
-            # Marca de error en cache para que el frontend pueda mostrarlo
             with _score_cache_lock:
                 _ec = _score_cache_read()
                 _ec[cuit] = {
@@ -2768,10 +2734,8 @@ def _ejecutar_proceso_integral(cartera_data: list):
                 _score_cache_write(_ec)
 
         _proceso_integral_estado['procesados'] = i + 1
-        # Throttle 1.2-1.5 s: evita rate-limit BCRA sin extender demasiado el proceso
         time.sleep(random.uniform(1.2, 1.5))
 
-    # ── Persistir cartera a disco al finalizar ────────────────────────────────
     try:
         with open(_CC_FILE, 'w', encoding='utf-8') as _f:
             json.dump(_cartera_comercial, _f, ensure_ascii=False, indent=2)
