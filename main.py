@@ -132,7 +132,9 @@ def consultar_bcra_cached(cuit):
     if cached_data is not None:
         origen = "cache-error" if cached_error else "caché"
         print(f"[bcra] {cuit} desde {origen}", flush=True)
-        return cached_data, cached_error
+        # Normalizar en el punto de salida del cache — cierra la brecha con datos
+        # guardados antes de que _norm_bcra_resp existiera (listas en lugar de dicts)
+        return _norm_bcra_resp(cached_data), cached_error
     data, error = consultar_bcra(cuit)
     if error or not data:
         data_cache = {"results": None, "sin_deudas": None, "error_bcra": str(error or "sin_respuesta")}
@@ -413,7 +415,7 @@ def _scrape_tangofactura_full(cuit, ua):
             timeout=12, verify=False)
         if r.status_code != 200:
             return None
-        contrib = (r.json().get('Contribuyente') or {})
+        contrib = (_norm_bcra_resp(r.json()).get('Contribuyente') or {})
         if not contrib:
             return None
 
@@ -627,7 +629,7 @@ def get_solvency_data(cuit):
                          'x-api-key': CUIT_API_KEY, 'User-Agent': ua},
                 timeout=8, verify=False)
             if r.status_code == 200:
-                raw = r.json()
+                raw = _norm_bcra_resp(r.json())
                 if not raw.get('ingresos_anuales'):
                     ing, fi = _inferir_ingresos_afip(
                         raw.get('categoria_monotrib', ''), raw.get('tipo_persona', ''),
@@ -2640,119 +2642,120 @@ def verificar_cartera():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-def _ejecutar_proceso_integral(cartera_data: list):
-    """Thread blindado: BCRA + Score + Mora por cliente con persistencia inmediata.
-    Tolerancia a fallos: captura tipo de error exacto, throttle humanizado, locks."""
-    import traceback as _tb
-    global _proceso_integral_estado
+def procesar_y_guardar_cliente_core(cuit: str) -> dict:
+    """Función core aislada: procesa un CUIT completo y persiste de forma atómica.
 
-    # Lectura única del cache al inicio — se escribe bajo lock tras cada cliente
+    Flujo: BCRA → Score → Mora Odoo → score_cache.json → alertas_cartera.json
+    Toda respuesta de API pasa por _norm_bcra_resp antes de cualquier .get().
+    Lanza excepción si hay error irrecuperable; el caller decide cómo registrarlo.
+    """
+    cuit = str(cuit).replace('-', '').replace(' ', '').strip()
+
+    # ── 1. BCRA (normalizado en consultar_bcra_cached + calcular_rating_predictivo) ──
+    bcra_data, _ = consultar_bcra_cached(cuit)
+
+    # ── 2. Score completo ─────────────────────────────────────────────────────
+    score_data = calcular_score_servidor(cuit, bcra_data or {})
+    resp       = _score_response(score_data, {})
+
+    # ── 3. Mora contable (Odoo) — lookup por CUIT, luego por nombre ───────────
+    saldos_raw = _saldos_idx_cuit.get(cuit, [])
+    if not saldos_raw:
+        _nb = next(
+            (str(cl.get('nombre', '')).strip()
+             for cl in _cartera_comercial
+             if str(cl.get('cuit', '')).replace('-', '').replace(' ', '').strip() == cuit),
+            None,
+        )
+        if _nb:
+            saldos_raw = _buscar_por_nombre_en_idx(_nb)
+    try:
+        _, monto_v30, alerta30 = _enrich_con_mora(saldos_raw) if saldos_raw else (None, 0.0, False)
+    except Exception:
+        monto_v30, alerta30 = 0.0, False
+
+    resp['monto_pendiente_vencido'] = _pi_safe(monto_v30, float, 0.0)
+    resp['alerta_mora_30']          = bool(alerta30)
+
+    # ── 4. Persistencia atómica: score_cache.json ─────────────────────────────
     with _score_cache_lock:
         cache = _score_cache_read()
+        cache[cuit] = resp
+        _score_cache_write(cache)
+
+    # ── 5. Persistencia atómica: alertas_cartera.json ────────────────────────
+    with _alertas_file_lock:
+        _actualizar_score_en_cartera(cuit, score_data, {})
+
+    return resp
+
+
+def _ejecutar_proceso_integral(cartera_data: list):
+    """Thread del proceso masivo nocturno.
+    Itera secuencialmente sobre la cartera, llama a procesar_y_guardar_cliente_core()
+    por cada CUIT y registra errores sin interrumpir el lote."""
+    import traceback as _tb
+    global _proceso_integral_estado
 
     total = len(cartera_data)
 
     for i, c in enumerate(cartera_data):
-        cuit   = str(c.get("cuit", "")).replace("-", "").replace(" ", "").strip()
-        nombre = str(c.get("nombre") or "").strip()
+        cuit   = str(c.get('cuit', '')).replace('-', '').replace(' ', '').strip()
+        nombre = str(c.get('nombre') or '').strip()
 
         if not cuit or len(cuit) < 10:
-            _proceso_integral_estado["procesados"] = i + 1
+            _proceso_integral_estado['procesados'] = i + 1
             continue
 
-        _proceso_integral_estado["cliente_actual"] = nombre or cuit
-        _proceso_integral_estado["mensaje"] = (
-            f"Procesando {i+1}/{total}: {nombre or cuit}"
-        )
+        _proceso_integral_estado['cliente_actual'] = nombre or cuit
+        _proceso_integral_estado['mensaje'] = f'Procesando {i+1}/{total}: {nombre or cuit}'
 
         try:
-            # ── 1. BCRA ──────────────────────────────────────────────────────
-            bcra_data, _ = consultar_bcra_cached(cuit)
-
-            # ── 2. Score ─────────────────────────────────────────────────────
-            score_data = calcular_score_servidor(cuit, bcra_data or {})
-
-            # ── 3. Formatear respuesta (ya maneja tipos via json.dumps/loads) ─
-            resp = _score_response(score_data, {})
-
-            # ── 4. Mora contable (Odoo) con fallbacks seguros ─────────────────
-            _saldos_raw = _saldos_idx_cuit.get(cuit, [])
-            if not _saldos_raw:
-                _nb = next(
-                    (str(cl.get("nombre", "")).strip() for cl in _cartera_comercial
-                     if str(cl.get("cuit", "")).replace("-", "").replace(" ", "").strip() == cuit),
-                    None,
-                )
-                if _nb:
-                    _saldos_raw = _buscar_por_nombre_en_idx(_nb)
-            if _saldos_raw:
-                try:
-                    _, monto_v30, alerta30 = _enrich_con_mora(_saldos_raw)
-                except Exception:
-                    monto_v30, alerta30 = 0.0, False
-            else:
-                monto_v30, alerta30 = 0.0, False
-
-            # Tipos seguros antes de persistir
-            resp["monto_pendiente_vencido"] = _pi_safe(monto_v30, float, 0.0)
-            resp["alerta_mora_30"]          = bool(alerta30)
-
-            # ── 5. Persistencia inmediata con lock ────────────────────────────
-            cache[cuit] = resp
-            with _score_cache_lock:
-                _score_cache_write(cache)
-
-            # ── 6. Actualizar alertas_cartera.json con lock ───────────────────
-            with _alertas_file_lock:
-                _actualizar_score_en_cartera(cuit, score_data, {})
+            procesar_y_guardar_cliente_core(cuit)
 
         except Exception as e:
-            err_tipo = type(e).__name__          # ej: "Timeout", "HTTPError", "KeyError"
+            err_tipo = type(e).__name__
             err_msg  = str(e)[:300]
-            tb_last  = _tb.format_exc().strip().split("\n")[-1][:200]
-            full_log = f"{err_tipo}: {err_msg}"
+            tb_last  = _tb.format_exc().strip().split('\n')[-1][:200]
             print(
-                f"[proceso-integral] ERROR cliente {i+1}/{total} — {cuit} ({nombre})\n"
-                f"  Tipo   : {err_tipo}\n"
-                f"  Mensaje: {err_msg}\n"
-                f"  Línea  : {tb_last}",
+                f'[proceso-integral] ERROR {i+1}/{total} — {cuit} ({nombre})\n'
+                f'  Tipo   : {err_tipo}\n'
+                f'  Mensaje: {err_msg}\n'
+                f'  Línea  : {tb_last}',
                 flush=True,
             )
-            _proceso_integral_estado["errores"] += 1
-            _proceso_integral_estado["log_errores"].append({
-                "num":      i + 1,
-                "cuit":     cuit,
-                "nombre":   nombre,
-                "tipo":     err_tipo,
-                "mensaje":  err_msg,
-                "linea":    tb_last,
+            _proceso_integral_estado['errores'] += 1
+            _proceso_integral_estado['log_errores'].append({
+                'num': i + 1, 'cuit': cuit, 'nombre': nombre,
+                'tipo': err_tipo, 'mensaje': err_msg, 'linea': tb_last,
             })
-            cache[cuit] = {
-                "ok": False, "error": full_log, "score": None,
-                "_proceso_error": True, "_error_tipo": err_tipo, "_ts": time.time(),
-            }
+            # Marca de error en cache para que el frontend pueda mostrarlo
             with _score_cache_lock:
-                _score_cache_write(cache)
+                _ec = _score_cache_read()
+                _ec[cuit] = {
+                    'ok': False, 'error': f'{err_tipo}: {err_msg}', 'score': None,
+                    '_proceso_error': True, '_error_tipo': err_tipo, '_ts': time.time(),
+                }
+                _score_cache_write(_ec)
 
-        _proceso_integral_estado["procesados"] = i + 1
+        _proceso_integral_estado['procesados'] = i + 1
+        # Throttle 1.2-1.5 s: evita rate-limit BCRA sin extender demasiado el proceso
+        time.sleep(random.uniform(1.2, 1.5))
 
-        # Throttle humanizado: 1.5-2.0 s aleatorio para no ser bloqueado por BCRA
-        time.sleep(random.uniform(1.5, 2.0))
-
-    # ── Persistir cartera actualizada a disco ─────────────────────────────────
+    # ── Persistir cartera a disco al finalizar ────────────────────────────────
     try:
-        with open(_CC_FILE, "w", encoding="utf-8") as _f:
+        with open(_CC_FILE, 'w', encoding='utf-8') as _f:
             json.dump(_cartera_comercial, _f, ensure_ascii=False, indent=2)
     except Exception as _e:
-        print(f"[proceso-integral] Error guardando cartera: {_e}", flush=True)
+        print(f'[proceso-integral] Error guardando cartera: {_e}', flush=True)
 
-    n_ok = _proceso_integral_estado["procesados"] - _proceso_integral_estado["errores"]
-    _proceso_integral_estado["corriendo"] = False
-    _proceso_integral_estado["mensaje"] = (
-        f"Completado — {n_ok} OK, {_proceso_integral_estado['errores']} errores"
-        f" | {total} clientes procesados"
+    n_ok = _proceso_integral_estado['procesados'] - _proceso_integral_estado['errores']
+    _proceso_integral_estado['corriendo'] = False
+    _proceso_integral_estado['mensaje'] = (
+        f'Completado — {n_ok} OK, {_proceso_integral_estado["errores"]} errores'
+        f' | {total} clientes procesados'
     )
-    print(f"[proceso-integral] {_proceso_integral_estado['mensaje']}", flush=True)
+    print(f'[proceso-integral] {_proceso_integral_estado["mensaje"]}', flush=True)
 
 
 @app.route("/proceso-integral", methods=["POST"])
@@ -3112,7 +3115,7 @@ def get_afip(cuit):
     try:
         r = requests.get("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit_limpio, timeout=10, verify=False)
         if r.status_code == 200:
-            den2 = r.json().get('results', {}).get('denominacion', '').strip()
+            den2 = _norm_bcra_resp(r.json()).get('results', {}).get('denominacion', '').strip()
             if den2: return jsonify({"nombre": den2, "fuente": "bcra_hist"})
     except Exception: pass
 
@@ -3120,7 +3123,7 @@ def get_afip(cuit):
     try:
         r = requests.get("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit_limpio, timeout=10, verify=False)
         if r.status_code == 200:
-            den3 = r.json().get('results', {}).get('denominacion', '').strip()
+            den3 = _norm_bcra_resp(r.json()).get('results', {}).get('denominacion', '').strip()
             if den3: return jsonify({"nombre": den3, "fuente": "bcra_live"})
     except Exception: pass
 
