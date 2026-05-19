@@ -126,15 +126,39 @@ def cache_set(cuit, data, error=None):
             json.dump(cache, f)
     except: pass
 
+def _cache_invalidar(cuit):
+    """Borra la entrada de un CUIT del cache de disco (bcra_cache.json)."""
+    try:
+        cf = os.path.join(DATA_DIR, 'bcra_cache.json') if os.path.exists(DATA_DIR) else '/tmp/bcra_cache.json'
+        if not os.path.exists(cf):
+            return
+        with open(cf, 'r') as f:
+            cache = json.load(f)
+        if cuit in cache:
+            del cache[cuit]
+            with open(cf, 'w') as f:
+                json.dump(cache, f)
+            print(f"[bcra] cache invalidado para {cuit}", flush=True)
+    except Exception as _e:
+        print(f"[bcra] Error invalidando cache {cuit}: {_e}", flush=True)
+
+
 def consultar_bcra_cached(cuit):
     print(f"[bcra] {cuit} consultando BCRA...", flush=True)
     cached_data, cached_error = cache_get(cuit)
     if cached_data is not None:
-        origen = "cache-error" if cached_error else "caché"
-        print(f"[bcra] {cuit} desde {origen}", flush=True)
-        # Normalizar en el punto de salida del cache — cierra la brecha con datos
-        # guardados antes de que _norm_bcra_resp existiera (listas en lugar de dicts)
-        return _norm_bcra_resp(cached_data), cached_error
+        # Detectar cache malformado: lista vacía o valor no-dict después de normalizar
+        _normalizado = _norm_bcra_resp(cached_data)
+        _es_lista_vacia = isinstance(cached_data, list) and len(cached_data) == 0
+        _es_invalido    = not isinstance(_normalizado, dict) or _es_lista_vacia
+        if _es_invalido or isinstance(cached_data, list):
+            # Cache guardado como lista → invalidar y forzar consulta fresca
+            print(f"[bcra] cache malformado para {cuit} (tipo={type(cached_data).__name__}) — invalidando", flush=True)
+            _cache_invalidar(cuit)
+        else:
+            origen = "cache-error" if cached_error else "caché"
+            print(f"[bcra] {cuit} desde {origen}", flush=True)
+            return _normalizado, cached_error
     data, error = consultar_bcra(cuit)
     if error or not data:
         data_cache = {"results": None, "sin_deudas": None, "error_bcra": str(error or "sin_respuesta")}
@@ -2653,6 +2677,11 @@ def procesar_y_guardar_cliente_core(cuit: str) -> dict:
 
     # ── 1. BCRA (normalizado en consultar_bcra_cached + calcular_rating_predictivo) ──
     bcra_data, _ = consultar_bcra_cached(cuit)
+
+    # Guardia de último recurso: si bcra_data sigue siendo lista por cualquier motivo,
+    # lo desmantela aquí mismo antes de que llegue al motor de scoring
+    if isinstance(bcra_data, list):
+        bcra_data = bcra_data[0] if len(bcra_data) > 0 else {}
 
     # ── 2. Score completo ─────────────────────────────────────────────────────
     score_data = calcular_score_servidor(cuit, bcra_data or {})

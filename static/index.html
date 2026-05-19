@@ -4588,6 +4588,17 @@ async function ejecutarProcesoIntegral() {
   if (!confirm('Iniciará el proceso completo (BCRA + Score + Mora) para toda la cartera.\n\nEsto puede tardar varios minutos. ¿Continuar?')) return;
   btn.disabled = true;
   btn.textContent = 'Procesando...';
+  // Reset total del estado visual — borra logs y contadores de la corrida anterior
+  var _logEl = document.getElementById('pi-log-errores');
+  if (_logEl) { _logEl.innerHTML = ''; _logEl.style.display = 'none'; }
+  var _errEl = document.getElementById('pi-errores');
+  if (_errEl) _errEl.textContent = '0';
+  var _procEl = document.getElementById('pi-procesados');
+  if (_procEl) _procEl.textContent = '0';
+  var _barEl = document.getElementById('proceso-integral-bar');
+  if (_barEl) { _barEl.style.width = '0%'; _barEl.style.background = 'linear-gradient(90deg,#2563eb,#06b6d4)'; }
+  var _pctEl = document.getElementById('proceso-integral-pct');
+  if (_pctEl) _pctEl.textContent = '0%';
   try {
     var r = await fetch('/proceso-integral', { method: 'POST' });
     var d = await r.json();
