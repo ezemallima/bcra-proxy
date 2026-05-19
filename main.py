@@ -151,6 +151,11 @@ verificacion_estado = {
     "mensaje": ""
 }
 
+_proceso_integral_estado: dict = {
+    "corriendo": False, "total": 0, "procesados": 0,
+    "errores": 0, "cliente_actual": "", "mensaje": "Listo", "iniciado_en": None
+}
+
 def gemini_request(payload, timeout=250):
     if GEMINI_KEY:
         url = "https://generativelanguage.googleapis.com/v1beta/models/" + GEMINI_MODEL + ":generateContent?key=" + GEMINI_KEY
@@ -2604,6 +2609,113 @@ def verificar_cartera():
         return jsonify({"ok": True, "mensaje": f"Verificación iniciada: {len(cartera_data)} clientes desde cartera_comercial.json", "total": len(cartera_data)})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+def _ejecutar_proceso_integral(cartera_data: list):
+    """Thread: BCRA + Score + Mora por cliente, persistiendo score_cache.json tras cada uno."""
+    global _proceso_integral_estado
+    _proceso_integral_estado.update({
+        "corriendo": True, "total": len(cartera_data), "procesados": 0,
+        "errores": 0, "cliente_actual": "", "mensaje": "Iniciando...",
+        "iniciado_en": __import__("datetime").datetime.now().strftime("%d/%m/%Y %H:%M"),
+    })
+
+    cache = _score_cache_read()   # lectura única al inicio
+
+    for i, c in enumerate(cartera_data):
+        cuit = str(c.get("cuit", "")).replace("-", "").replace(" ", "").strip()
+        nombre = str(c.get("nombre") or "").strip()
+        if not cuit or len(cuit) < 10:
+            _proceso_integral_estado["procesados"] = i + 1
+            continue
+
+        _proceso_integral_estado["cliente_actual"] = nombre or cuit
+        _proceso_integral_estado["mensaje"] = (
+            f"Procesando cliente {i+1} de {len(cartera_data)}: {nombre or cuit}"
+        )
+
+        try:
+            # 1 — BCRA (usa caché de disco si existe, fuerza solo si expiró)
+            bcra_data, _ = consultar_bcra_cached(cuit)
+
+            # 2 — Score
+            score_data = calcular_score_servidor(cuit, bcra_data or {})
+
+            # 3 — Score response (sin solvencia AFIP para no bloquear el lote)
+            resp = _score_response(score_data, {})
+
+            # 4 — Mora contable (Odoo saldos)
+            _saldos_raw = _saldos_idx_cuit.get(cuit, [])
+            if not _saldos_raw:
+                _nb = next(
+                    (str(cl.get("nombre", "")).strip() for cl in _cartera_comercial
+                     if str(cl.get("cuit", "")).replace("-", "").replace(" ", "").strip() == cuit),
+                    None,
+                )
+                if _nb:
+                    _saldos_raw = _buscar_por_nombre_en_idx(_nb)
+            if _saldos_raw:
+                _, monto_v30, alerta30 = _enrich_con_mora(_saldos_raw)
+            else:
+                monto_v30, alerta30 = 0.0, False
+            resp["monto_pendiente_vencido"] = monto_v30
+            resp["alerta_mora_30"] = alerta30
+
+            # 5 — Guardar en cache inmediatamente (persistencia por cliente)
+            cache[cuit] = resp
+            _score_cache_write(cache)
+
+            # 6 — Actualizar cartera en memoria
+            _actualizar_score_en_cartera(cuit, score_data, {})
+
+        except Exception as e:
+            import traceback as _tb
+            print(f"[proceso-integral] ERROR {cuit}: {e}\n{_tb.format_exc()}", flush=True)
+            _proceso_integral_estado["errores"] += 1
+            cache[cuit] = {
+                "ok": False, "error": str(e), "score": None,
+                "_proceso_error": True, "_ts": __import__("time").time(),
+            }
+            _score_cache_write(cache)
+
+        _proceso_integral_estado["procesados"] = i + 1
+        __import__("time").sleep(0.8)   # throttle BCRA API
+
+    # Persistir cartera actualizada (situaciones + scores en memoria → JSON)
+    try:
+        with open(_CC_FILE, "w", encoding="utf-8") as _f:
+            __import__("json").dump(_cartera_comercial, _f, ensure_ascii=False, indent=2)
+    except Exception as _e:
+        print(f"[proceso-integral] Error al guardar cartera: {_e}", flush=True)
+
+    n_ok  = _proceso_integral_estado["procesados"] - _proceso_integral_estado["errores"]
+    _proceso_integral_estado["corriendo"] = False
+    _proceso_integral_estado["mensaje"] = (
+        f"Proceso completado — {n_ok} clientes OK, "
+        f"{_proceso_integral_estado['errores']} con error"
+    )
+    print(f"[proceso-integral] {_proceso_integral_estado['mensaje']}", flush=True)
+
+
+@app.route("/proceso-integral", methods=["POST"])
+def iniciar_proceso_integral():
+    global _proceso_integral_estado
+    if _proceso_integral_estado.get("corriendo"):
+        return jsonify({"error": "Ya hay un proceso en curso — esperá que termine"}), 400
+    if verificacion_estado.get("corriendo"):
+        return jsonify({"error": "Hay una verificación BCRA en curso — esperá que termine"}), 400
+    cartera = [c for c in _cartera_comercial if str(c.get("cuit", "")).strip()]
+    if not cartera:
+        return jsonify({"error": "Cartera vacía"}), 400
+    t = threading.Thread(target=_ejecutar_proceso_integral, args=(cartera,), daemon=True)
+    t.start()
+    return jsonify({"ok": True, "total": len(cartera),
+                    "mensaje": f"Proceso integral iniciado: {len(cartera)} clientes"})
+
+
+@app.route("/proceso-integral/progreso")
+def progreso_proceso_integral():
+    return jsonify(_proceso_integral_estado)
+
 
 @app.route("/recalcular-pendientes", methods=["POST"])
 def recalcular_pendientes():
