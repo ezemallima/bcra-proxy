@@ -2615,18 +2615,18 @@ function toggleAlertaFilter(tipo) {
   var wasActive = _alertasFilter === tipo;
   _alertasFilter = wasActive ? null : tipo;
 
-  // ── Ocultamiento y limpieza DRÁSTICA de ambos contenedores ──────────────
-  var _bcraEl    = document.getElementById('cartera-bcra-lista');
+  // ── LIMPIEZA NUCLEAR — se ejecuta PRIMERO, antes de cualquier otra cosa ──
   var _morososEl = document.getElementById('morosos-lista');
+  var _bcraEl    = document.getElementById('cartera-bcra-lista');
 
+  // Siempre vaciar morosos primero, sin excepciones
+  if (_morososEl) { _morososEl.innerHTML = ''; _morososEl.style.display = 'none'; }
+  if (_bcraEl)    { _bcraEl.innerHTML    = ''; _bcraEl.style.display    = 'block'; }
+
+  // Si es 'exceso', entonces sí mostrar el contenedor de morosos
   if (_alertasFilter === 'exceso') {
-    // Morosos: mostrar su bloque, ocultar y limpiar el del BCRA
-    if (_morososEl) { _morososEl.style.display = 'block'; _morososEl.innerHTML = ''; }
-    if (_bcraEl)    { _bcraEl.style.display    = 'none';  _bcraEl.innerHTML    = ''; }
-  } else {
-    // Críticos / Advertencias / null: ocultar y limpiar morosos, mostrar BCRA
-    if (_morososEl) { _morososEl.style.display = 'none';  _morososEl.innerHTML = ''; }
-    if (_bcraEl)    { _bcraEl.style.display    = 'block'; _bcraEl.innerHTML    = ''; }
+    if (_morososEl) _morososEl.style.display = 'block';
+    if (_bcraEl)    _bcraEl.style.display    = 'none';
   }
 
   // Update visual state
@@ -4569,6 +4569,8 @@ async function cargarAlertasMora() {
 }
 
 function _renderMorasTable(listaEl) {
+  // Guardia estricta: si el filtro ya cambió, no escribir nada en el DOM
+  if (_alertasFilter !== 'exceso') return;
   if (!_alertasMoraData) {
     listaEl.innerHTML = '<div style="text-align:center;padding:24px;color:#94a3b8;font-size:13px;">Cargando clientes morosos...</div>';
     cargarAlertasMora();
