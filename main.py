@@ -2640,56 +2640,7 @@ def verificar_cartera():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-def ejecutar_analisis_cliente_v22(cuit: str) -> dict:
-    """Misma lógica que _calcular_score_handler (el endpoint individual de v22).
-    Versión pura para uso interno: devuelve dict en lugar de Flask Response.
-    Fuerza recálculo limpio (limpia session cache) y persiste en servidor.
-    """
-    cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
-
-    # Limpiar cache de sesión para recalcular fresco en cada iteración del lote
-    _score_session_cache.pop(cuit_limpio, None)
-
-    # ── BCRA + Score + Solvencia (idéntico a la consulta individual v22) ──────
-    bcra_data, _ = consultar_bcra_cached(cuit_limpio)
-    score_data   = calcular_score_servidor(cuit_limpio, bcra_data or {})
-    solvency     = get_solvency_data(cuit_limpio)
-    resp         = _score_response(score_data, solvency)
-
-    # ── Mora contable Odoo — lookup por CUIT con fallback a nombre ────────────
-    saldos_raw = _saldos_idx_cuit.get(cuit_limpio, [])
-    if not saldos_raw:
-        _nb = next(
-            (str(cl.get('nombre', '')).strip() for cl in _cartera_comercial
-             if str(cl.get('cuit', '')).replace('-', '').replace(' ', '').strip() == cuit_limpio),
-            None,
-        )
-        if _nb:
-            saldos_raw = _buscar_por_nombre_en_idx(_nb)
-    try:
-        _, monto_v30, alerta30 = _enrich_con_mora(saldos_raw) if saldos_raw else (None, 0.0, False)
-    except Exception:
-        monto_v30, alerta30 = 0.0, False
-
-    resp['monto_pendiente_vencido'] = _pi_safe(monto_v30, float, 0.0)
-    resp['alerta_mora_30']          = bool(alerta30)
-
-    # ── Persistencia: score_cache.json + alertas_cartera.json ─────────────────
-    with _score_cache_lock:
-        _sc = _score_cache_read()
-        _sc[cuit_limpio] = resp
-        _score_cache_write(_sc)
-
-    with _alertas_file_lock:
-        _actualizar_score_en_cartera(cuit_limpio, score_data, solvency)
-
-    return resp
-
-
 def _ejecutar_proceso_integral(cartera_data: list):
-    """Thread del proceso masivo nocturno.
-    Itera sobre la cartera y llama a ejecutar_analisis_cliente_v22() por cada CUIT.
-    Errores individuales se registran en el log y el lote continúa sin interrumpirse."""
     import traceback as _tb
     global _proceso_integral_estado
 
@@ -2707,31 +2658,28 @@ def _ejecutar_proceso_integral(cartera_data: list):
         _proceso_integral_estado['mensaje'] = f'Procesando {i+1}/{total}: {nombre or cuit}'
 
         try:
-            ejecutar_analisis_cliente_v22(cuit)
+            # Exactamente lo mismo que hace el botón individual (v22)
+            _score_session_cache.pop(cuit, None)
+            bcra_data, _ = consultar_bcra_cached(cuit)
+            score_data   = calcular_score_servidor(cuit, bcra_data or {})
+            solvency     = get_solvency_data(cuit)
+            _actualizar_score_en_cartera(cuit, score_data, solvency)
+            resp = _score_response(score_data, solvency)
+            with _score_cache_lock:
+                _sc = _score_cache_read()
+                _sc[cuit] = resp
+                _score_cache_write(_sc)
 
         except Exception as e:
             err_tipo = type(e).__name__
             err_msg  = str(e)[:300]
             tb_last  = _tb.format_exc().strip().split('\n')[-1][:200]
-            print(
-                f'[proceso-integral] ERROR {i+1}/{total} — {cuit} ({nombre})\n'
-                f'  Tipo   : {err_tipo}\n'
-                f'  Mensaje: {err_msg}\n'
-                f'  Línea  : {tb_last}',
-                flush=True,
-            )
+            print(f'[proceso-integral] ERROR {i+1}/{total} — {cuit} ({nombre}): {err_tipo}: {err_msg}\n  {tb_last}', flush=True)
             _proceso_integral_estado['errores'] += 1
             _proceso_integral_estado['log_errores'].append({
                 'num': i + 1, 'cuit': cuit, 'nombre': nombre,
                 'tipo': err_tipo, 'mensaje': err_msg, 'linea': tb_last,
             })
-            with _score_cache_lock:
-                _ec = _score_cache_read()
-                _ec[cuit] = {
-                    'ok': False, 'error': f'{err_tipo}: {err_msg}', 'score': None,
-                    '_proceso_error': True, '_error_tipo': err_tipo, '_ts': time.time(),
-                }
-                _score_cache_write(_ec)
 
         _proceso_integral_estado['procesados'] = i + 1
         time.sleep(random.uniform(1.2, 1.5))
