@@ -2613,11 +2613,7 @@ def verificar_cartera():
 def _ejecutar_proceso_integral(cartera_data: list):
     """Thread: BCRA + Score + Mora por cliente, persistiendo score_cache.json tras cada uno."""
     global _proceso_integral_estado
-    _proceso_integral_estado.update({
-        "corriendo": True, "total": len(cartera_data), "procesados": 0,
-        "errores": 0, "cliente_actual": "", "mensaje": "Iniciando...",
-        "iniciado_en": __import__("datetime").datetime.now().strftime("%d/%m/%Y %H:%M"),
-    })
+    # Estado ya inicializado en el route para evitar race condition en primer poll
 
     cache = _score_cache_read()   # lectura única al inicio
 
@@ -2705,10 +2701,17 @@ def iniciar_proceso_integral():
         return jsonify({"error": "Hay una verificación BCRA en curso — esperá que termine"}), 400
     cartera = [c for c in _cartera_comercial if str(c.get("cuit", "")).strip()]
     if not cartera:
-        return jsonify({"error": "Cartera vacía"}), 400
+        return jsonify({"error": "Cartera vacía — cargá cartera_comercial.json en el servidor"}), 400
+    # ── Marcar como corriendo ANTES de lanzar el thread (elimina race condition) ──
+    import datetime as _dt
+    _proceso_integral_estado.update({
+        "corriendo": True, "total": len(cartera), "procesados": 0,
+        "errores": 0, "cliente_actual": "", "mensaje": "Iniciando proceso...",
+        "iniciado_en": _dt.datetime.now().strftime("%d/%m/%Y %H:%M"),
+    })
     t = threading.Thread(target=_ejecutar_proceso_integral, args=(cartera,), daemon=True)
     t.start()
-    return jsonify({"ok": True, "total": len(cartera),
+    return jsonify({"ok": True, "total": len(cartera), "corriendo": True,
                     "mensaje": f"Proceso integral iniciado: {len(cartera)} clientes"})
 
 

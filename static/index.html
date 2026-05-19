@@ -4580,6 +4580,7 @@ function _alrScoreData(c) {
 
 // ── Proceso Integral ────────────────────────────────────────────────────────
 var _procesoIntegralInterval = null;
+var _procesoIntegralTotal    = 0;   // total conocido desde el POST
 
 async function ejecutarProcesoIntegral() {
   var btn = document.getElementById('btn-proceso-integral');
@@ -4589,37 +4590,56 @@ async function ejecutarProcesoIntegral() {
   try {
     var r = await fetch('/proceso-integral', { method: 'POST' });
     var d = await r.json();
-    if (!r.ok || d.error) { alert('Error: ' + (d.error || r.status)); btn.disabled = false; btn.textContent = 'Ejecutar Proceso Integral (BCRA + Score + Mora)'; return; }
-    document.getElementById('proceso-integral-wrap').style.display = 'block';
-    document.getElementById('pi-total').textContent = d.total || '?';
+    if (!r.ok || d.error) {
+      alert('Error: ' + (d.error || ('HTTP ' + r.status)));
+      btn.disabled = false;
+      btn.textContent = 'Ejecutar Proceso Integral (BCRA + Score + Mora)';
+      return;
+    }
+    // Inicializar UI desde la respuesta del POST (antes del primer poll)
+    _procesoIntegralTotal = d.total || 0;
+    var wrap = document.getElementById('proceso-integral-wrap');
+    if (wrap) wrap.style.display = 'block';
+    var totEl = document.getElementById('pi-total');
+    if (totEl) totEl.textContent = _procesoIntegralTotal;
+    var msgEl = document.getElementById('proceso-integral-msg');
+    if (msgEl) msgEl.textContent = d.mensaje || 'Iniciando proceso...';
+    // Limpiar interval previo si quedó colgado
+    if (_procesoIntegralInterval) { clearInterval(_procesoIntegralInterval); }
     _procesoIntegralInterval = setInterval(_pollProcesoIntegral, 2000);
-  } catch(e) { alert('Error de red: ' + e.message); btn.disabled = false; btn.textContent = 'Ejecutar Proceso Integral (BCRA + Score + Mora)'; }
+  } catch(e) {
+    alert('Error de red: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = 'Ejecutar Proceso Integral (BCRA + Score + Mora)';
+  }
 }
 
 async function _pollProcesoIntegral() {
   try {
     var r = await fetch('/proceso-integral/progreso');
     var d = await r.json();
+    var total = d.total || _procesoIntegralTotal;  // usar el total conocido si el servidor devuelve 0
     var msg  = document.getElementById('proceso-integral-msg');
     var pct  = document.getElementById('proceso-integral-pct');
     var bar  = document.getElementById('proceso-integral-bar');
     var proc = document.getElementById('pi-procesados');
     var err  = document.getElementById('pi-errores');
     var tot  = document.getElementById('pi-total');
-    var p = d.total > 0 ? Math.round(d.procesados / d.total * 100) : 0;
-    if (msg)  msg.textContent  = d.mensaje || '';
+    var p = total > 0 ? Math.round((d.procesados || 0) / total * 100) : 0;
+    if (msg)  msg.textContent  = d.mensaje || 'Procesando...';
     if (pct)  pct.textContent  = p + '%';
     if (bar)  bar.style.width  = p + '%';
     if (proc) proc.textContent = d.procesados || 0;
-    if (err)  err.textContent  = d.errores   || 0;
-    if (tot)  tot.textContent  = d.total     || 0;
-    if (!d.corriendo) {
+    if (err)  err.textContent  = d.errores    || 0;
+    if (tot)  tot.textContent  = total;
+    // Parar solo si no está corriendo Y ya hubo actividad real (evita falso positivo en primer tick)
+    var terminado = !d.corriendo && (d.procesados > 0 || d.mensaje !== 'Listo');
+    if (terminado) {
       clearInterval(_procesoIntegralInterval);
       _procesoIntegralInterval = null;
       var btn = document.getElementById('btn-proceso-integral');
       if (btn) { btn.disabled = false; btn.textContent = 'Ejecutar Proceso Integral (BCRA + Score + Mora)'; }
       if (bar) bar.style.background = 'linear-gradient(90deg,#16a34a,#22c55e)';
-      // Recargar scores en cartera/alertas para reflejar resultados
       autoCargarScoresServidor();
       _alertasMoraData = null;
       cargarAlertasMora();
