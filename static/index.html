@@ -866,6 +866,7 @@
           <span>Errores: <b id="pi-errores" style="color:#dc2626;">0</b></span>
           <span>Total: <b id="pi-total">0</b></span>
         </div>
+        <div id="pi-log-errores" style="display:none;margin-top:10px;max-height:160px;overflow-y:auto;border:1px solid #fecaca;border-radius:6px;padding:6px 8px;background:#fff5f5;font-size:11px;font-family:monospace;color:#991b1b;"></div>
       </div>
     </div>
 
@@ -4632,6 +4633,18 @@ async function _pollProcesoIntegral() {
     if (proc) proc.textContent = d.procesados || 0;
     if (err)  err.textContent  = d.errores    || 0;
     if (tot)  tot.textContent  = total;
+    // Log de errores en tiempo real
+    var logEl = document.getElementById('pi-log-errores');
+    if (logEl && d.log_errores && d.log_errores.length > 0) {
+      logEl.style.display = 'block';
+      logEl.innerHTML = d.log_errores.map(function(e) {
+        return '<div style="border-bottom:1px solid #fecaca;padding:3px 0;">' +
+          '<b>#' + e.num + ' ' + (e.nombre || e.cuit) + '</b> — ' +
+          '<span style="color:#b91c1c;">' + e.tipo + '</span>: ' + e.mensaje +
+        '</div>';
+      }).join('');
+      logEl.scrollTop = logEl.scrollHeight;
+    }
     // Parar solo si no está corriendo Y ya hubo actividad real (evita falso positivo en primer tick)
     var terminado = !d.corriendo && (d.procesados > 0 || d.mensaje !== 'Listo');
     if (terminado) {
