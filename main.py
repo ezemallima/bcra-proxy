@@ -172,6 +172,15 @@ def _pi_safe(v, cast=None, default=None):
     except (TypeError, ValueError):
         return default
 
+
+def _norm_bcra_resp(data) -> dict:
+    """Normaliza respuesta BCRA/worker: si viene como lista, toma el primer elemento.
+    Garantiza que el resultado siempre sea un dict (nunca None ni list).
+    Algunos proxies/workers devuelven [{...}] en lugar de {...}."""
+    if isinstance(data, list):
+        data = data[0] if data else {}
+    return data if isinstance(data, dict) else {}
+
 def gemini_request(payload, timeout=250):
     if GEMINI_KEY:
         url = "https://generativelanguage.googleapis.com/v1beta/models/" + GEMINI_MODEL + ":generateContent?key=" + GEMINI_KEY
@@ -301,7 +310,7 @@ def consultar_bcra(cuit, reintentos=3):
                 if not text or len(text) < 10:
                     print(f"[bcra] Vacío via {via} para {cuit}", flush=True)
                     continue
-                data = r.json()
+                data = _norm_bcra_resp(r.json())
                 if data.get('error'):
                     continue
                 results = data.get('results') or {}
@@ -1207,6 +1216,11 @@ def calcular_rating_predictivo(
     id_cliente  = ''.join(c for c in cuit_limpio if c.isdigit())
     print(f">>> ENTRANDO AL MOTOR - CUIT: {cuit_limpio} | id_cliente: {id_cliente}", flush=True)
 
+    # Blindaje de tipo: algunos workers devuelven lista en lugar de dict
+    bcra_data = _norm_bcra_resp(bcra_data)
+    if hist_data  is not None: hist_data  = _norm_bcra_resp(hist_data)
+    if cheq_data  is not None: cheq_data  = _norm_bcra_resp(cheq_data)
+
     if cuit_limpio in _score_session_cache:
         print(f">>> CACHE HIT - CUIT: {cuit_limpio}", flush=True)
         return _score_session_cache[cuit_limpio]
@@ -1678,7 +1692,7 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
             try:
                 r = requests.get(u, timeout=5, verify=False)
                 if r.status_code == 200 and len(r.text.strip()) > 10:
-                    hist_data = r.json()
+                    hist_data = _norm_bcra_resp(r.json())
                     try:
                         with open(os.path.join(DATA_DIR, f'historial_{cuit_limpio}.json'), 'w') as f:
                             json.dump({'payload': hist_data, 'ts': time.time()}, f)
@@ -1694,7 +1708,7 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
             try:
                 r = requests.get(u, timeout=5, verify=False)
                 if r.status_code == 200 and len(r.text.strip()) > 10:
-                    cheq_data = r.json()
+                    cheq_data = _norm_bcra_resp(r.json())
                     try:
                         with open(os.path.join(DATA_DIR, f'cheques_{cuit_limpio}.json'), 'w') as f:
                             json.dump({'payload': cheq_data, 'ts': time.time()}, f)
