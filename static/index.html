@@ -888,6 +888,7 @@
       <div id="alertas-lista"></div>
     </div>
 
+    <div id="morosos-lista"></div>
     <div id="cartera-bcra-lista"></div>
   </div>
 
@@ -2613,6 +2614,11 @@ function toggleResource(panelId, btnId) {
 function toggleAlertaFilter(tipo) {
   var wasActive = _alertasFilter === tipo;
   _alertasFilter = wasActive ? null : tipo;
+  // Limpieza estricta de AMBOS contenedores antes de cualquier render
+  var _bcraEl    = document.getElementById('cartera-bcra-lista');
+  var _morososEl = document.getElementById('morosos-lista');
+  if (_bcraEl)    _bcraEl.innerHTML    = '';
+  if (_morososEl) _morososEl.innerHTML = '';
   // Update visual state
   ['critico','advertencia','exceso'].forEach(function(t){
     var el = document.getElementById('filter-' + t);
@@ -4535,10 +4541,10 @@ async function cargarAlertasMora() {
     var cnt = (data.alertas || []).length;
     var cntE = document.getElementById('cnt-excesos');
     if (cntE) cntE.textContent = cnt;
-    // Si el filtro ya está activo, re-renderizar la tabla
+    // Si el filtro ya está activo, re-renderizar en su contenedor exclusivo
     if (_alertasFilter === 'exceso') {
-      var listaEl = document.getElementById('cartera-bcra-lista');
-      if (listaEl) _renderMorasTable(listaEl);
+      var morososEl = document.getElementById('morosos-lista');
+      if (morososEl) _renderMorasTable(morososEl);
     }
   } catch(e) {
     _alertasMoraData = { alertas: [], total_monto_vencido: 0, _error: e.message };
@@ -4635,22 +4641,27 @@ function renderAlertas() {
 }
 
 function _renderAlertasList() {
-  const listaEl = document.getElementById('cartera-bcra-lista');
-  if (!listaEl) return;
+  const bcraEl    = document.getElementById('cartera-bcra-lista');
+  const morososEl = document.getElementById('morosos-lista');
+  if (!bcraEl) return;
+
+  // Limpieza completa de ambos contenedores al inicio
+  bcraEl.innerHTML    = '';
+  if (morososEl) morososEl.innerHTML = '';
 
   if (_alertasFilter === null) {
-    listaEl.innerHTML = '<div class="alertas-prompt"><div class="alertas-prompt-icon">🔎</div><div class="alertas-prompt-text">Seleccioná un filtro para ver los clientes</div><div class="alertas-prompt-sub">Hacé clic en Críticos, Advertencias o Clientes Morosos</div></div>';
+    bcraEl.innerHTML = '<div class="alertas-prompt"><div class="alertas-prompt-icon">🔎</div><div class="alertas-prompt-text">Seleccioná un filtro para ver los clientes</div><div class="alertas-prompt-sub">Hacé clic en Críticos, Advertencias o Clientes Morosos</div></div>';
     return;
   }
 
-  // Clientes Morosos — tabla desde /api/alertas-mora (no usa carteraOrdenada)
+  // Clientes Morosos — tabla desde /api/alertas-mora en contenedor exclusivo
   if (_alertasFilter === 'exceso') {
-    _renderMorasTable(listaEl);
+    if (morososEl) _renderMorasTable(morososEl);
     return;
   }
 
   if (!cartera.length) {
-    listaEl.innerHTML = '<div class="empty-state">No hay clientes en la cartera.<br>Agregá clientes en la pestaña Cartera.</div>';
+    bcraEl.innerHTML = '<div class="empty-state">No hay clientes en la cartera.<br>Agregá clientes en la pestaña Cartera.</div>';
     return;
   }
 
@@ -4674,11 +4685,11 @@ function _renderAlertasList() {
   }
 
   if (!carteraOrdenada.length) {
-    listaEl.innerHTML = '<div class="empty-state" style="padding:2rem;">Sin clientes en esta categoría.</div>';
+    bcraEl.innerHTML = '<div class="empty-state" style="padding:2rem;">Sin clientes en esta categoría.</div>';
     return;
   }
 
-  listaEl.innerHTML = carteraOrdenada.map(function(c) {
+  bcraEl.innerHTML = carteraOrdenada.map(function(c) {
     var mora = buscarEnMoras(c.cuit);
     var esCritico = c.ultimaSit && c.ultimaSit >= 3;
     var esAtencion = c.ultimaSit === 2;
