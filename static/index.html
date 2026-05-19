@@ -888,7 +888,7 @@
       <div id="alertas-lista"></div>
     </div>
 
-    <div id="morosos-lista"></div>
+    <div id="morosos-lista" style="display:none;"></div>
     <div id="cartera-bcra-lista"></div>
   </div>
 
@@ -2614,11 +2614,21 @@ function toggleResource(panelId, btnId) {
 function toggleAlertaFilter(tipo) {
   var wasActive = _alertasFilter === tipo;
   _alertasFilter = wasActive ? null : tipo;
-  // Limpieza estricta de AMBOS contenedores antes de cualquier render
+
+  // ── Ocultamiento y limpieza DRÁSTICA de ambos contenedores ──────────────
   var _bcraEl    = document.getElementById('cartera-bcra-lista');
   var _morososEl = document.getElementById('morosos-lista');
-  if (_bcraEl)    _bcraEl.innerHTML    = '';
-  if (_morososEl) _morososEl.innerHTML = '';
+
+  if (_alertasFilter === 'exceso') {
+    // Morosos: mostrar su bloque, ocultar y limpiar el del BCRA
+    if (_morososEl) { _morososEl.style.display = 'block'; _morososEl.innerHTML = ''; }
+    if (_bcraEl)    { _bcraEl.style.display    = 'none';  _bcraEl.innerHTML    = ''; }
+  } else {
+    // Críticos / Advertencias / null: ocultar y limpiar morosos, mostrar BCRA
+    if (_morososEl) { _morososEl.style.display = 'none';  _morososEl.innerHTML = ''; }
+    if (_bcraEl)    { _bcraEl.style.display    = 'block'; _bcraEl.innerHTML    = ''; }
+  }
+
   // Update visual state
   ['critico','advertencia','exceso'].forEach(function(t){
     var el = document.getElementById('filter-' + t);
@@ -2639,7 +2649,14 @@ function switchTab(tab, el) {
   if (tab === 'historial') renderHistorial();
   if (tab === 'cartera') renderCartera();
   if (tab === 'buscador') renderBuscador('');
-  if (tab === 'alertas') { _alertasFilter = null; renderAlertas(); autoCargarScoresServidor(); cargarAlertasMora(); }
+  if (tab === 'alertas') {
+    _alertasFilter = null;
+    var _mL = document.getElementById('morosos-lista');
+    var _bL = document.getElementById('cartera-bcra-lista');
+    if (_mL) { _mL.style.display = 'none';  _mL.innerHTML = ''; }
+    if (_bL) { _bL.style.display = 'block'; _bL.innerHTML = ''; }
+    renderAlertas(); autoCargarScoresServidor(); cargarAlertasMora();
+  }
   if (tab === 'consulta') {
     var _hero = document.getElementById('consulta-search-hero');
     var _res = document.getElementById('resultado');
