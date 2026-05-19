@@ -2612,12 +2612,16 @@ function toggleResource(panelId, btnId) {
 }
 
 function toggleAlertaFilter(tipo) {
-  // PRIMERÍSIMAS LÍNEAS — destrucción incondicional del contenedor de morosos
+  // PRIMERÍSIMAS LÍNEAS — limpiar los tres contenedores sin condición
   document.getElementById('morosos-lista').innerHTML = '';
   document.getElementById('morosos-lista').style.display = 'none';
 
   var wasActive = _alertasFilter === tipo;
   _alertasFilter = wasActive ? null : tipo;
+
+  // Cambios recientes: visible solo cuando no hay filtro activo
+  var _recientesEl = document.getElementById('alertas-nuevas');
+  if (_recientesEl) _recientesEl.style.display = _alertasFilter ? 'none' : '';
 
   var _bcraEl = document.getElementById('cartera-bcra-lista');
   if (_bcraEl) { _bcraEl.innerHTML = ''; _bcraEl.style.display = 'block'; }
