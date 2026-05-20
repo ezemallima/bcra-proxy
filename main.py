@@ -252,6 +252,11 @@ BCRA_WORKER_4 = "https://fancy-feather-7ead.ezequielmallima.workers.dev"
 BCRA_WORKER_5 = "https://summer-wood-9639.ezequielmallima.workers.dev"
 BCRA_WORKERS  = [BCRA_WORKER, BCRA_WORKER_2, BCRA_WORKER_3, BCRA_WORKER_4, BCRA_WORKER_5]
 
+# ── API de respaldo — se activa solo si todos los workers fallan ──────────────
+# Cargar en Render: RESPALDO_API_URL=https://proveedor.com/bcra  RESPALDO_API_KEY=xxx
+RESPALDO_API_URL = os.environ.get('RESPALDO_API_URL', '').rstrip('/')
+RESPALDO_API_KEY = os.environ.get('RESPALDO_API_KEY', '')
+
 AWS_LAMBDA_FUNCTION = os.environ.get('AWS_LAMBDA_FUNCTION', 'vende-seguro-bcra')
 AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
 
@@ -296,6 +301,70 @@ def consultar_bcra_lambda(cuit):
         print(f"[aws] Fallo Lambda {cuit}: {e}", flush=True)
         return None
 
+def _consultar_respaldo(cuit: str):
+    """Failover BCRA: llama a RESPALDO_API_URL cuando todos los workers fallan.
+    Mapea cualquier formato de respuesta al esquema interno BCRA que usa el Score.
+    Retorna (data_dict, None) en éxito, o (None, motivo) si no hay respaldo configurado
+    o la llamada falla."""
+    if not RESPALDO_API_URL or not RESPALDO_API_KEY:
+        return None, "respaldo_no_configurado"
+
+    url = f"{RESPALDO_API_URL}/{cuit}"
+    headers = {
+        'Authorization': f'Bearer {RESPALDO_API_KEY}',
+        'x-api-key': RESPALDO_API_KEY,
+        'Accept': 'application/json',
+    }
+    try:
+        r = requests.get(url, headers=headers, timeout=5, verify=False)
+        print(f"[respaldo] {cuit} HTTP {r.status_code}", flush=True)
+        if r.status_code == 404:
+            return {"results": {"denominacion": "", "periodos": []}, "sin_deudas": True}, None
+        if r.status_code != 200:
+            return None, f"respaldo_http_{r.status_code}"
+
+        raw = _norm_bcra_resp(r.json())
+
+        # ── Caso A: el proveedor ya devuelve formato BCRA nativo ─────────────
+        if raw.get('results') and isinstance(raw['results'], dict):
+            periodos = raw['results'].get('periodos') or []
+            raw['sin_deudas'] = len(periodos) == 0
+            print(f"[respaldo] {cuit} OK (formato BCRA nativo)", flush=True)
+            return raw, None
+
+        # ── Caso B: formato alternativo → mapear a esquema interno ───────────
+        # Campos comunes en Apidata, RapidAPI BCRA, etc.
+        denominacion = (raw.get('denominacion') or raw.get('razon_social') or
+                        raw.get('nombre') or '')
+        deudas_raw   = (raw.get('deudas') or raw.get('entidades') or
+                        raw.get('periodos') or [])
+
+        # Normalizar cada deuda al formato entidad BCRA
+        entidades = []
+        for d in (deudas_raw if isinstance(deudas_raw, list) else []):
+            sit = int(d.get('situacion') or d.get('situation') or d.get('sit') or 1)
+            mon = float(d.get('monto') or d.get('amount') or d.get('deuda') or 0)
+            entidades.append({
+                'entidad':   str(d.get('entidad') or d.get('banco') or d.get('bank') or ''),
+                'situacion': max(1, min(6, sit)),
+                'monto':     mon,
+            })
+
+        data = {
+            'results': {
+                'denominacion': denominacion,
+                'periodos': [{'entidades': entidades}] if entidades else [],
+            },
+            'sin_deudas': len(entidades) == 0,
+        }
+        print(f"[respaldo] {cuit} OK (mapeado) — {len(entidades)} entidades", flush=True)
+        return data, None
+
+    except Exception as e:
+        print(f"[respaldo] Error {cuit}: {e}", flush=True)
+        return None, str(e)
+
+
 def consultar_bcra(cuit, reintentos=3):
     # Máximo 3 endpoints para no superar el timeout de Render (30s)
     # Workers primero (más rápidos), BCRA directo como último recurso
@@ -325,6 +394,11 @@ def consultar_bcra(cuit, reintentos=3):
         except Exception as e:
             print(f"[bcra] Error via {via} para {cuit}: {e}", flush=True)
             continue
+    # Todos los workers fallaron → intentar API de respaldo antes de rendirnos
+    data_rb, err_rb = _consultar_respaldo(cuit)
+    if data_rb is not None:
+        return data_rb, None
+    print(f"[bcra] {cuit} sin respuesta en todos los endpoints (respaldo: {err_rb})", flush=True)
     return None, "sin_respuesta"
 
 def analizar_bodegas_server(cuit, nombre, mensajes):
