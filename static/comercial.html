@@ -846,8 +846,11 @@ async function iniciarApp(perfil) {
       CARTERA_LOCAL = await cr.json();
       CARTERA_LOCAL.forEach(c => {
         if ((c.total_saldo || 0) > 0) {
-          const k = normNombre(c.nombre);
-          if (!SALDOS_MAP[k]) SALDOS_MAP[k] = { total_saldo: c.total_saldo, facturas: [] };
+          const k  = normNombre(c.nombre);
+          const nc = String(c.cuit||'').replace(/\D/g,'').trim();
+          const entry = { total_saldo: c.total_saldo, facturas: [] };
+          if (!SALDOS_MAP[k])         SALDOS_MAP[k]         = entry;
+          if (nc && !SALDOS_MAP['__c:'+nc]) SALDOS_MAP['__c:'+nc] = entry;
         }
       });
     }
@@ -1005,7 +1008,11 @@ async function cargarSaldosCartera(forzar = false) {
                               '?nombre=' + encodeURIComponent(c.nombre || ''));
         if (!r.ok) return;
         const d = await r.json();
-        if (d.facturas && d.facturas.length) SALDOS_MAP[normNombre(c.nombre)] = d;
+        if (d.facturas && d.facturas.length) {
+          SALDOS_MAP[normNombre(c.nombre)] = d;
+          const nc = String(c.cuit||'').replace(/\D/g,'').trim();
+          if (nc) SALDOS_MAP['__c:'+nc] = d;
+        }
       } catch(e) {}
     }));
   }
@@ -1029,11 +1036,12 @@ function normUltra(s) {
 function normPrim(s, n = 2) {
   return normUltra(s).split(' ').filter(Boolean).slice(0, n).join(' ');
 }
-function getSaldos(nombre) {
-  // Exacto primero, luego por primeras 2 palabras
-  return SALDOS_MAP[normNombre(nombre)]
-    || Object.entries(SALDOS_MAP).find(([k]) => normPrim(k) === normPrim(nombre))?.[1]
-    || null;
+function getSaldos(nombre, cuit) {
+  // CUIT estricto primero — nunca mezcla facturas entre clientes
+  const nc = String(cuit||'').replace(/\D/g,'').trim();
+  if (nc && SALDOS_MAP['__c:'+nc]) return SALDOS_MAP['__c:'+nc];
+  // Fallback: nombre exacto normalizado
+  return SALDOS_MAP[normNombre(nombre)] || null;
 }
 
 // ── TABS ──
@@ -1153,10 +1161,10 @@ function renderCartera(filtro) {
   if (filtro === 'alertas') {
     const hoy45 = new Date(); hoy45.setHours(0,0,0,0);
     lista = lista.filter(c => {
-      const saldos = getSaldos(c.nombre);
+      const saldos = getSaldos(c.nombre, c.cuit);
       if (!saldos?.facturas?.length) return false;
       return saldos.facturas.some(f => {
-        if (!((f.saldo ?? f.total ?? 0) > 0)) return false; // solo facturas abiertas
+        if (!((parseFloat(f.saldo) || 0) > 0)) return false; // solo facturas abiertas
         const s = f.fechaFactura;
         if (!s) return false;
         // Parseo robusto: YYYY-MM-DD (forzar local) o DD/MM/YYYY
@@ -1177,7 +1185,7 @@ function renderCartera(filtro) {
   }
   else if (filtro === 'riesgo') lista = lista.filter(c => (c.ultimaSit||1) >= 3);
   else if (filtro === 'buenos') lista = lista.filter(c => (c.score||0) >= 700);
-  else if (filtro === 'saldo') lista = lista.filter(c => getSaldos(c.nombre));
+  else if (filtro === 'saldo') lista = lista.filter(c => getSaldos(c.nombre, c.cuit));
   if (_carteraFiltrada) lista = lista.filter(c => matchBusqueda(c.nombre, _carteraFiltrada, c.cuit));
 
   const el = document.getElementById('cartera-lista');
@@ -1199,7 +1207,7 @@ function renderCartera(filtro) {
     const esAlertaBCRA = sit > 1;
 
     // esExcedido: deuda Odoo >= límite de crédito asignado (carril comercial)
-    const saldosData   = getSaldos(c.nombre);
+    const saldosData   = getSaldos(c.nombre, c.cuit);
     const limCred      = c.limite_credito || 0;
     const saldoActual  = (saldosData && saldosData.total_saldo) || c.total_saldo || 0;
     const esExcedido   = limCred > 0 && saldoActual >= limCred;
@@ -1474,7 +1482,12 @@ async function abrirModalCliente(cuit, nombre) {
   facP.then(sd => {
     const factEl = document.getElementById('mtab-facturas');
     if (!factEl) return;
-    if (sd?.facturas?.length) { SALDOS_MAP[normNombre(nombre)] = sd; window._modalFacturasData = sd; }
+    if (sd?.facturas?.length) {
+      SALDOS_MAP[normNombre(nombre)] = sd;
+      const _nc = String(cuit||'').replace(/\D/g,'').trim();
+      if (_nc) SALDOS_MAP['__c:'+_nc] = sd;
+      window._modalFacturasData = sd;
+    }
     factEl.innerHTML = sd?.facturas?.length
       ? renderFacturas(sd, nombre)
       : '<div class="empty"><div class="empty-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="20 6 9 17 4 12"/></svg></div><div class="empty-text">Sin facturas pendientes</div></div>';
