@@ -2732,23 +2732,64 @@ def _ejecutar_proceso_integral(cartera_data: list):
         _proceso_integral_estado['mensaje'] = f'Procesando {i+1}/{total}: {nombre or cuit}'
 
         try:
-            # Exactamente lo mismo que hace el botón individual (v22)
+            # ── Paso 1: BCRA — try propio con fallback explícito a _consultar_respaldo ──
             _score_session_cache.pop(cuit, None)
-            bcra_data, _ = consultar_bcra_cached(cuit)
-            score_data   = calcular_score_servidor(cuit, bcra_data or {})
-            solvency     = get_solvency_data(cuit)
-            _actualizar_score_en_cartera(cuit, score_data, solvency)
+            try:
+                bcra_data, _ = consultar_bcra_cached(cuit)
+            except Exception as _be:
+                print(f'[proceso-integral] BCRA cache fallo {cuit}: {_be}', flush=True)
+                bcra_data = None
+
+            # Si cache devolvió error o datos vacíos, activar respaldo directo
+            _bcra_sin_datos = (
+                not bcra_data or
+                not isinstance(bcra_data, dict) or
+                bcra_data.get('error_bcra') or
+                (not (bcra_data.get('results') or {}).get('periodos') and not bcra_data.get('sin_deudas'))
+            )
+            if _bcra_sin_datos:
+                print(f'[proceso-integral] Activando _consultar_respaldo para {cuit}', flush=True)
+                _rb, _rb_err = _consultar_respaldo(cuit)
+                if _rb:
+                    bcra_data = _rb
+                    print(f'[proceso-integral] Respaldo OK para {cuit}', flush=True)
+                else:
+                    bcra_data = {}
+
+            # ── Paso 2: Score (usa bcra_data, sea de workers, cache o respaldo) ──────
+            score_data = calcular_score_servidor(cuit, bcra_data or {})
+
+            # ── Paso 3: Solvencia — try separado para no matar el score BCRA ─────────
+            try:
+                solvency = get_solvency_data(cuit) or {}
+            except Exception as _se:
+                print(f'[proceso-integral] Solvencia fallo {cuit}: {_se} — continuando sin AFIP', flush=True)
+                solvency = {}
+
+            # ── Paso 4: Persistencia atómica ──────────────────────────────────────────
+            with _alertas_file_lock:
+                _actualizar_score_en_cartera(cuit, score_data, solvency)
+
             resp = _score_response(score_data, solvency)
+
             with _score_cache_lock:
                 _sc = _score_cache_read()
                 _sc[cuit] = resp
                 _score_cache_write(_sc)
 
+            # Flush incremental de alertas_cartera.json cada 50 clientes
+            if (i + 1) % 50 == 0:
+                print(f'[proceso-integral] Checkpoint {i+1}/{total} — flush disco', flush=True)
+
         except Exception as e:
             err_tipo = type(e).__name__
             err_msg  = str(e)[:300]
             tb_last  = _tb.format_exc().strip().split('\n')[-1][:200]
-            print(f'[proceso-integral] ERROR {i+1}/{total} — {cuit} ({nombre}): {err_tipo}: {err_msg}\n  {tb_last}', flush=True)
+            print(
+                f'[proceso-integral] ERROR {i+1}/{total} — {cuit} ({nombre})\n'
+                f'  {err_tipo}: {err_msg}\n  {tb_last}',
+                flush=True,
+            )
             _proceso_integral_estado['errores'] += 1
             _proceso_integral_estado['log_errores'].append({
                 'num': i + 1, 'cuit': cuit, 'nombre': nombre,
@@ -2756,8 +2797,9 @@ def _ejecutar_proceso_integral(cartera_data: list):
             })
 
         _proceso_integral_estado['procesados'] = i + 1
-        time.sleep(random.uniform(1.2, 1.5))
+        time.sleep(random.uniform(1.0, 3.0))
 
+    # Persistir cartera al finalizar
     try:
         with open(_CC_FILE, 'w', encoding='utf-8') as _f:
             json.dump(_cartera_comercial, _f, ensure_ascii=False, indent=2)
@@ -2899,6 +2941,14 @@ def _score_response(score_data: dict, solvency: dict = None) -> dict:
     _safe["inferencia_ingresos"]  = sol.get('ingresos_anuales')
     _safe["fuente_ingresos"]      = sol.get('fuente_ingresos')
     _safe["actividad_principal"]  = sol.get('actividad_principal')
+
+    # ── Campos futuros — se poblan cuando ARCA/ANSES/Juicios estén integrados ──
+    # antiguedad_fiscal: años desde inscripción en ARCA/AFIP (int o None)
+    # estado_empleo: 'activo' | 'monotrib' | 'desocupado' | None  (ANSES)
+    # juicios_comerciales: cantidad de juicios activos (int o None)
+    _safe["antiguedad_fiscal"]   = sol.get('antiguedad_fiscal')   or sol.get('antiguedad_anos')
+    _safe["estado_empleo"]       = sol.get('estado_empleo')       or None
+    _safe["juicios_comerciales"] = sol.get('juicios_comerciales') or None
 
     _safe.setdefault("override_admin",       False)
     _safe.setdefault("mora_administrativa",  False)
