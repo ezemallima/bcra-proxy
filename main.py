@@ -3952,39 +3952,34 @@ def _rebuild_saldos_index():
           f"({len(fuente)} registros)", flush=True)
 
 def _buscar_por_nombre_en_idx(nombre: str) -> list:
-    """3-nivel de matching sobre el índice de nombres — devuelve UNA sola clave ganadora."""
+    """Match estricto de 2 niveles — sin fuzzy ni aproximaciones por palabras genéricas.
+    Si no hay coincidencia exacta, devuelve [] (saldo $0). Jamás adivina.
+    """
+    # Nivel 1: coincidencia exacta sobre nombre normalizado completo
     cn = _norm_nombre(nombre)
-
-    # Nivel 1: exacto
     r = _saldos_idx_nombre.get(cn)
     if r:
+        print(f"[idx] exacto '{nombre}' → {len(r)} facturas", flush=True)
         return r
 
-    # Nivel 2: primeras 2 palabras (sin sufijos legales)
-    cu = _norm_ultra(nombre)
-    prim2 = ' '.join(cu.split()[:2])
-    if len(prim2) > 3:
+    # Nivel 2: primeras 2 palabras significativas (sin sufijos SA/SRL/etc.)
+    # Solo aplica si esas 2 palabras tienen más de 3 caracteres c/u (evita 'SA', 'SH', etc.)
+    cu    = _norm_ultra(nombre)
+    words = [w for w in cu.split() if len(w) > 3]
+    if len(words) >= 2:
+        prim2 = ' '.join(words[:2])
         r = _saldos_idx_nombre.get(prim2)
         if r:
+            print(f"[idx] prim2 '{nombre}' → clave '{prim2}' {len(r)} facturas", flush=True)
             return r
         for k, v in _saldos_idx_nombre.items():
-            if ' '.join(_norm_ultra(k).split()[:2]) == prim2:
+            k_words = [w for w in _norm_ultra(k).split() if len(w) > 3]
+            if len(k_words) >= 2 and ' '.join(k_words[:2]) == prim2:
+                print(f"[idx] prim2-iter '{nombre}' → clave '{k}' {len(v)} facturas", flush=True)
                 return v
 
-    # Nivel 3: mayor cantidad de palabras en común — NUNCA mezcla claves distintas
-    # Se elige el índice con el SCORE más alto; si hay empate se toma el primero.
-    palabras = [w for w in cn.split() if len(w) > 2]
-    if palabras:
-        best_k   = None
-        best_score = 0
-        for k in _saldos_idx_nombre:
-            score = sum(1 for p in palabras if p in k)
-            if score >= min(2, len(palabras)) and score > best_score:
-                best_score = score
-                best_k = k
-        if best_k:
-            print(f"[idx] parcial '{nombre}' → '{best_k}' (score={best_score})", flush=True)
-            return _saldos_idx_nombre[best_k]
+    # Sin match → saldo $0, sin facturas. No se adivina.
+    print(f"[idx] sin match para '{nombre}' — devuelve []", flush=True)
     return []
 
 def _norm_nombre(s):
