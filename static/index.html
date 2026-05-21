@@ -848,10 +848,16 @@
           <div class="card-title" style="color:#1d4ed8;margin-bottom:2px;">Proceso Integral Nocturno</div>
           <div style="font-size:11px;color:#64748b;">BCRA + Score + Mora por cliente — guarda en servidor tras cada registro</div>
         </div>
-        <button id="btn-proceso-integral" onclick="ejecutarProcesoIntegral()"
-          style="background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;border:none;border-radius:10px;padding:10px 22px;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:0.2px;box-shadow:0 4px 12px rgba(37,99,235,0.3);">
-          Ejecutar Proceso Integral (BCRA + Score + Mora)
-        </button>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button id="btn-proceso-integral" onclick="ejecutarProcesoIntegral()"
+            style="background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;border:none;border-radius:10px;padding:10px 22px;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:0.2px;box-shadow:0 4px 12px rgba(37,99,235,0.3);">
+            Ejecutar Proceso Integral (BCRA + Score + Mora)
+          </button>
+          <button id="btn-reprocesar-vacios" onclick="reprocesarVacios()"
+            style="background:linear-gradient(135deg,#0891b2,#0e7490);color:#fff;border:none;border-radius:10px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;letter-spacing:0.2px;box-shadow:0 4px 12px rgba(8,145,178,0.3);">
+            Reprocesar Sin Score
+          </button>
+        </div>
       </div>
       <div id="proceso-integral-wrap" style="display:none;">
         <div style="display:flex;justify-content:space-between;font-size:12px;color:#475569;margin-bottom:4px;">
@@ -4623,6 +4629,53 @@ async function ejecutarProcesoIntegral() {
     alert('Error de red: ' + e.message);
     btn.disabled = false;
     btn.textContent = 'Ejecutar Proceso Integral (BCRA + Score + Mora)';
+  }
+}
+
+async function reprocesarVacios() {
+  var btn = document.getElementById('btn-reprocesar-vacios');
+  if (!confirm('Buscará clientes sin score calculado y los reprocesará con AFIP SDK + BCRA.\n\n¿Continuar?')) return;
+  btn.disabled = true;
+  btn.textContent = 'Buscando...';
+  var _logEl = document.getElementById('pi-log-errores');
+  if (_logEl) { _logEl.innerHTML = ''; _logEl.style.display = 'none'; }
+  ['pi-errores','pi-procesados'].forEach(function(id){ var el=document.getElementById(id); if(el) el.textContent='0'; });
+  var _barEl = document.getElementById('proceso-integral-bar');
+  if (_barEl) { _barEl.style.width='0%'; _barEl.style.background='linear-gradient(90deg,#0891b2,#06b6d4)'; }
+  var _pctEl = document.getElementById('proceso-integral-pct');
+  if (_pctEl) _pctEl.textContent = '0%';
+  try {
+    var r = await fetch('/api/reprocesar_vacios', { method: 'POST' });
+    var d = await r.json();
+    if (!r.ok || d.error) {
+      alert('Error: ' + (d.error || ('HTTP ' + r.status)));
+      btn.disabled = false; btn.textContent = 'Reprocesar Sin Score';
+      return;
+    }
+    if (d.total === 0) {
+      alert(d.mensaje || 'Todos los clientes ya tienen score.');
+      btn.disabled = false; btn.textContent = 'Reprocesar Sin Score';
+      return;
+    }
+    _procesoIntegralTotal = d.total || 0;
+    var wrap = document.getElementById('proceso-integral-wrap');
+    if (wrap) wrap.style.display = 'block';
+    var totEl = document.getElementById('pi-total');
+    if (totEl) totEl.textContent = _procesoIntegralTotal;
+    var msgEl = document.getElementById('proceso-integral-msg');
+    if (msgEl) msgEl.textContent = d.mensaje || ('Reprocesando ' + _procesoIntegralTotal + ' clientes sin score...');
+    if (_procesoIntegralInterval) clearInterval(_procesoIntegralInterval);
+    _procesoIntegralInterval = setInterval(function() {
+      _pollProcesoIntegral().then(function(){
+        // Al terminar, restaurar el botón correcto
+        if (!_procesoIntegralInterval) {
+          btn.disabled = false; btn.textContent = 'Reprocesar Sin Score';
+        }
+      });
+    }, 2000);
+  } catch(e) {
+    alert('Error de red: ' + e.message);
+    btn.disabled = false; btn.textContent = 'Reprocesar Sin Score';
   }
 }
 

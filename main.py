@@ -2935,6 +2935,59 @@ def progreso_proceso_integral():
     return jsonify(_proceso_integral_estado)
 
 
+@app.route("/api/reprocesar_vacios", methods=["POST"])
+def reprocesar_vacios():
+    """Reprocesa solo los clientes de la cartera cuyo score esté ausente o sea nulo.
+    Usa la misma lógica de _ejecutar_proceso_integral (AFIP SDK + BCRA reintentos v60)."""
+    global _proceso_integral_estado
+    if _proceso_integral_estado.get("corriendo"):
+        return jsonify({"error": "Ya hay un proceso corriendo — esperá que termine"}), 400
+
+    _nc = lambda x: str(x or '').replace('-', '').replace(' ', '').strip()
+
+    # Leer score_cache.json para determinar quién ya tiene score real
+    sc = _score_cache_read()
+
+    pendientes = []
+    for c in _cartera_comercial:
+        cuit = _nc(c.get('cuit'))
+        if not cuit or len(cuit) < 10:
+            continue
+        sd = sc.get(cuit)
+        if not sd or not sd.get('score'):
+            pendientes.append({
+                'cuit':   cuit,
+                'nombre': str(c.get('nombre') or '').strip(),
+                'ciudad': str(c.get('ciudad') or '').strip(),
+            })
+
+    if not pendientes:
+        return jsonify({"ok": True, "mensaje": "Todos los clientes ya tienen score calculado.", "total": 0})
+
+    nombres_muestra = [p['nombre'] or p['cuit'] for p in pendientes[:5]]
+    print(f"[reprocesar_vacios] {len(pendientes)} sin score: {nombres_muestra}", flush=True)
+
+    _proceso_integral_estado.update({
+        "corriendo":    True,
+        "total":        len(pendientes),
+        "procesados":   0,
+        "errores":      0,
+        "cliente_actual": "",
+        "mensaje":      f"Reprocesando {len(pendientes)} clientes sin score...",
+        "iniciado_en":  datetime.utcnow().isoformat(),
+        "log_errores":  [],
+    })
+    t = threading.Thread(target=_ejecutar_proceso_integral, args=(pendientes,), daemon=True)
+    t.start()
+    return jsonify({
+        "ok":     True,
+        "total":  len(pendientes),
+        "corriendo": True,
+        "mensaje": f"Iniciado: {len(pendientes)} clientes sin score",
+        "muestra": nombres_muestra,
+    })
+
+
 @app.route("/recalcular-pendientes", methods=["POST"])
 def recalcular_pendientes():
     """Recalcula solo los clientes de cartera_comercial.json sin score o con verificación fallida."""
