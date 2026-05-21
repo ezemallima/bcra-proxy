@@ -1066,6 +1066,7 @@ let wspIndex = null;
 let morasIndex = null;
 let verazData = null;
 let ultimoAnalisis = null;
+let _consultaController = null;   // AbortController activo — se cancela en cada nueva búsqueda
 let historialConsultas = JSON.parse(localStorage.getItem('piat_historial') || '[]');
 
 function getNombreBodega() {
@@ -2746,9 +2747,23 @@ async function autoCargarScoresServidor() {
   } catch(e) { /* graceful degradation */ }
 }
 
+// Señal combinada: cancela en nueva búsqueda Y aplica timeout
+function _abrtSig(ms) {
+  var s = _consultaController ? _consultaController.signal : null;
+  var t = (ms && ms > 0) ? AbortSignal.timeout(ms) : null;
+  if (!s && !t) return undefined;
+  if (!s) return t;
+  if (!t) return s;
+  if (typeof AbortSignal.any === 'function') return AbortSignal.any([s, t]);
+  return s;
+}
+
 async function consultarCliente() {
   const raw = document.getElementById('cuit-input').value.replace(/-/g,'').trim();
   if (!raw || raw.length < 10) { alert('Ingresá un CUIT válido'); return; }
+  // Cancelar búsqueda anterior en vuelo
+  if (_consultaController) { try { _consultaController.abort(); } catch(_){} }
+  _consultaController = new AbortController();
   // ── RESET COMPLETO DE UI antes de nueva consulta ──
   estadoAfipGlobal = '';
   document.getElementById('resultado').style.display = 'none';
@@ -2777,6 +2792,19 @@ async function consultarCliente() {
   document.getElementById('veraz-area').innerHTML = '<div style="font-size:13px;color:#888;">Hacé clic para subir el PDF de Veraz o Nosis</div><div style="font-size:12px;color:#aaa;margin-top:4px;">Extrae automáticamente score, cheques, deudas y más</div>';
   document.getElementById('veraz-datos').style.display = 'none';
   verazData = null;
+  // Limpiar score, IA y globals — evita que datos de consulta anterior persistan en UI
+  var _preScoreEl = document.getElementById('vende-score-container');
+  if (_preScoreEl) _preScoreEl.innerHTML = '';
+  var _preAnalEl = document.getElementById('analisis-resultado');
+  if (_preAnalEl) { _preAnalEl.innerHTML = ''; _preAnalEl.style.display = 'none'; }
+  var _preBtnA = document.getElementById('btn-analizar');
+  if (_preBtnA) _preBtnA.style.display = 'none';
+  ultimoAnalisis = null;
+  window._ultimoBcraData = null;
+  window._ultimoScoreVende = null;
+  window._ultimoHistorial = null;
+  window._saldosCliente = null;
+  window._chequesUltimaConsulta = null;
 
   const mora = buscarEnMoras(raw);
   document.getElementById('mora-alert-container').innerHTML = mora ? `
@@ -2807,33 +2835,38 @@ async function consultarCliente() {
   var nombreFinal = (enCarteraLocal && enCarteraLocal.nombre) ? enCarteraLocal.nombre.split(',')[0].trim() : '';
   var estadoAfip = '';
   var domicilioAfip = '';
+  var afipTieneNombre = false;
   try {
-    var afipR = await fetch('/afip/' + raw, {signal: AbortSignal.timeout(30000)});
+    var afipR = await fetch('/afip/' + raw, {signal: _abrtSig(30000)});
     var afipData = await afipR.json();
     estadoAfip = afipData.estado_afip || '';
     estadoAfipGlobal = estadoAfip;
     domicilioAfip = afipData.domicilio || '';
-    if (!nombreFinal) {
-      var afipNombre = afipData.nombre || '';
-      if (afipNombre && afipNombre !== cuitFmtLocal) nombreFinal = afipNombre;
-    }
-  } catch(e) {}
+    var afipNombre = afipData.nombre || '';
+    // fuente === 'fallback' significa que no hay registro real en AFIP/BCRA/cartera
+    afipTieneNombre = !!afipNombre && afipData.fuente !== 'fallback';
+    if (!nombreFinal && afipNombre && afipNombre !== cuitFmtLocal) nombreFinal = afipNombre;
+  } catch(e) { if (e && e.name === 'AbortError') return; }
 
   // Asegurar que el div resultado esté visible antes de llamar mostrarResultado
   document.getElementById('loading-state').style.display = 'none';
   document.getElementById('resultado').style.display = 'block';
 
   try {
-    var bcraR = await fetch('/deudas/' + raw, {signal: AbortSignal.timeout(30000)});
+    var bcraR = await fetch('/deudas/' + raw, {signal: _abrtSig(30000)});
     var bcraData = await bcraR.json();
     // BCRA denominacion como fuente de verdad si aún no tenemos nombre
     if (!nombreFinal && bcraData.results && bcraData.results.denominacion) {
       nombreFinal = bcraData.results.denominacion;
     }
     if (!nombreFinal) nombreFinal = cuitFmtLocal;
-    // BLOQUEO: BCRA dice que el CUIT no tiene registros Y no hay nombre en AFIP ni cartera
-    // → el CUIT no existe o no está inscripto. No renderizar informe.
-    if (bcraData.sin_deudas === true && /^\d/.test(nombreFinal)) {
+    // ── BLOQUEO CUIT INEXISTENTE ─────────────────────────────────────────────
+    // Condición: BCRA no tiene registros reales (sin_deudas o sin denominación ni periodos)
+    //            Y AFIP tampoco encontró este CUIT (fuente=fallback)
+    //            Y no está en la cartera interna
+    var _bcraVacio = bcraData.sin_deudas === true ||
+      (!((bcraData.results || {}).denominacion) && !((bcraData.results || {}).periodos || []).length);
+    if (_bcraVacio && !afipTieneNombre && !enCarteraLocal) {
       mostrarErrorCuitInexistente(raw);
       return;
     }
@@ -2844,9 +2877,10 @@ async function consultarCliente() {
       mostrarResultado(raw, bcraData, false, estadoAfip, domicilioAfip, nombreFinal);
     }
   } catch(e) {
+    if (e && e.name === 'AbortError') return;
     if (!nombreFinal) nombreFinal = cuitFmtLocal;
-    // Si BCRA lanza excepción y tampoco tenemos nombre → bloquear
-    if (/^\d/.test(nombreFinal)) { mostrarErrorCuitInexistente(raw); return; }
+    // Si BCRA falla y AFIP tampoco tenía datos reales → bloquear
+    if (!afipTieneNombre && !enCarteraLocal) { mostrarErrorCuitInexistente(raw); return; }
     mostrarResultado(raw, null, true, estadoAfip, domicilioAfip, nombreFinal);
   }
 
@@ -2862,8 +2896,9 @@ async function consultarCliente() {
     chequesCard.style.borderLeft = '4px solid #94a3b8';
     chequesEl.innerHTML = '<div style="font-size:13px;color:#64748b;padding:8px 0;">Consultando cheques BCRA...</div>';
   }
+  if (_consultaController.signal.aborted) return;
   try {
-    var chR = await fetch('/deudas/' + raw + '/cheques', {signal: AbortSignal.timeout(30000)});
+    var chR = await fetch('/deudas/' + raw + '/cheques', {signal: _abrtSig(30000)});
     var chData = chR.ok ? await chR.json() : null;
     window._chequesUltimaConsulta = chData;
     var todosChq = [];
@@ -2896,6 +2931,7 @@ async function consultarCliente() {
       setTimeout(function(){ initChequesDonut(_cid, _resc, _nopag); }, 60);
     }
   } catch(e) {
+    if (e && e.name === 'AbortError') return;
     if (chequesCard && chequesEl) {
       chequesCard.style.borderLeft = '4px solid #94a3b8';
       chequesEl.innerHTML = '<div class="chq-clean"><span class="chq-clean-label">Sin antecedentes de cheques rechazados en los últimos 24 meses</span></div>';
@@ -2903,9 +2939,10 @@ async function consultarCliente() {
   }
 
   // Saldos internos Piattelli — cuenta corriente + DSO del cliente
+  if (_consultaController.signal.aborted) return;
   console.log('[saldos] Iniciando fetch para CUIT:', raw);
   try {
-    var saldosR = await fetch('/saldos-cuit/' + raw, {signal: AbortSignal.timeout(15000)});
+    var saldosR = await fetch('/saldos-cuit/' + raw, {signal: _abrtSig(15000)});
     console.log('[saldos] Respuesta HTTP:', saldosR.status, saldosR.ok ? 'OK' : 'ERROR');
     if (saldosR.ok) {
       var saldosData = await saldosR.json();
@@ -3147,14 +3184,23 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
   // ── SCORE VENDE SEGURO — motor unificado v17.1 ──
   var scoreEl = document.getElementById('vende-score-container');
   if (scoreEl) scoreEl.innerHTML = '<div style="padding:12px;color:#94a3b8;font-size:13px;">Calculando score...</div>';
+  // Capturar el controller activo para que el callback detecte si fue cancelado
+  var _mosCtrl = _consultaController;
   // Historial 24m (para gráfico) + score servidor en paralelo
   Promise.all([
-    fetch('/deudas/' + cuit + '/historial', {signal: AbortSignal.timeout(30000)}).then(function(r){ return r.json(); }).catch(function(){ return null; }),
-    fetch('/fetch-score/' + cuit + '?fresh=1', {signal: AbortSignal.timeout(40000)}).then(function(r){ return r.json(); }).catch(function(){ return null; })
+    fetch('/deudas/' + cuit + '/historial', {signal: _mosCtrl ? _mosCtrl.signal : AbortSignal.timeout(30000)}).then(function(r){ return r.json(); }).catch(function(){ return null; }),
+    fetch('/fetch-score/' + cuit + '?fresh=1', {signal: _mosCtrl ? _mosCtrl.signal : AbortSignal.timeout(40000)}).then(function(r){ return r.json(); }).catch(function(){ return null; })
   ]).then(function(resultados) {
+    // Si una nueva búsqueda arrancó mientras estas peticiones estaban en vuelo → ignorar
+    if (_mosCtrl && _mosCtrl.signal.aborted) return;
     var historial     = resultados[0];
     var scoreServidor = resultados[1];
     if (historial) window._ultimoHistorial = historial;
+    // CUIT inexistente detectado por el backend → mostrar error y salir
+    if (scoreServidor && scoreServidor.error === 'cuit_inexistente') {
+      mostrarErrorCuitInexistente(cuit);
+      return;
+    }
     // Fallback local si el servidor no responde
     var scoreObjFinal;
     var _usandoFallback = false;

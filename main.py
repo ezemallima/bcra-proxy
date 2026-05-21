@@ -3289,11 +3289,12 @@ def _calcular_score_handler(cuit: str):
     if len(cuit_limpio) < 10:
         return jsonify({"ok": False, "error": "CUIT inválido"}), 400
 
+    # Siempre eliminar de session cache en queries on-demand — evita data leaking entre usuarios
+    _score_session_cache.pop(cuit_limpio, None)
     if request.args.get('fresh') == '1':
         _fp = os.path.join(DATA_DIR, f'solvency_{cuit_limpio}.json')
         if os.path.exists(_fp):
             os.remove(_fp)
-        _score_session_cache.pop(cuit_limpio, None)
     else:
         # ── Cache persistente en disco (sobrevive reinicios) ──────────────
         _cached = _score_cache_read().get(cuit_limpio)
@@ -3302,6 +3303,14 @@ def _calcular_score_handler(cuit: str):
             return jsonify(_cached)
     try:
         bcra_data, _ = consultar_bcra_cached(cuit_limpio)
+        # CUIT inexistente: BCRA 404 sin denominación Y solvencia/AFIP tampoco lo conoce
+        _bcra_denom = (bcra_data.get('results') or {}).get('denominacion', '').strip()
+        if bcra_data.get('sin_deudas') is True and not _bcra_denom:
+            _solv_chk = get_solvency_data(cuit_limpio)
+            _razon_chk = (_solv_chk.get('razon_social') or _solv_chk.get('nombre') or '').strip()
+            if not _razon_chk:
+                print(f"[fetch-score] {cuit_limpio} CUIT INEXISTENTE — sin datos BCRA/AFIP/solvencia", flush=True)
+                return jsonify({"error": "cuit_inexistente", "cuit": cuit_limpio, "score": None}), 200
         score_data   = calcular_score_servidor(cuit_limpio, bcra_data or {})
         solvency     = get_solvency_data(cuit_limpio)
         _actualizar_score_en_cartera(cuit_limpio, score_data, solvency)
