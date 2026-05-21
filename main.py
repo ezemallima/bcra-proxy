@@ -135,10 +135,15 @@ def consultar_bcra_cached(cuit):
         return _norm_bcra_resp(cached_data), cached_error
     data, error = consultar_bcra(cuit)
     if error or not data:
-        data_cache = {"results": None, "sin_deudas": None, "error_bcra": str(error or "sin_respuesta")}
+        data_cache = {
+            "results": None, "sin_deudas": None,
+            "error_bcra": str(error or "sin_respuesta"),
+            "bcra_disponible": False,
+        }
         cache_set(cuit, data_cache, error)
         print(f"[bcra] {cuit} error: {error}", flush=True)
         return data_cache, error
+    data['bcra_disponible'] = True
     cache_set(cuit, data)
     print(f"[bcra] {cuit} OK desde BCRA", flush=True)
     return data, None
@@ -180,6 +185,45 @@ def _norm_bcra_resp(data) -> dict:
     if isinstance(data, list):
         data = data[0] if data else {}
     return data if isinstance(data, dict) else {}
+
+
+def _consultar_bcra_directo(cuit: str, tipo: str = 'deudas'):
+    """Consulta api.bcra.gob.ar con Session reutilizable, SSL ignore y 3 reintentos.
+    tipo: 'deudas' | 'historial' | 'cheques'"""
+    _urls = {
+        'deudas':    f'https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/{cuit}',
+        'historial': f'https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/{cuit}',
+        'cheques':   f'https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/{cuit}',
+    }
+    url = _urls.get(tipo, _urls['deudas'])
+    ultimo_error = 'sin_respuesta'
+    with requests.Session() as _s:
+        _s.verify = False
+        for intento in range(3):
+            try:
+                r = _s.get(url, timeout=10)
+                if r.status_code == 404:
+                    return {'results': {'denominacion': '', 'periodos': []}, 'sin_deudas': True}, None
+                if r.status_code == 200 and len(r.text.strip()) > 10:
+                    data = _norm_bcra_resp(r.json())
+                    if not data.get('error'):
+                        print(f"[bcra_directo] {cuit}/{tipo} OK intento {intento+1}", flush=True)
+                        return data, None
+                ultimo_error = f'http_{r.status_code}'
+                print(f"[bcra_directo] {cuit}/{tipo} intento {intento+1}: {ultimo_error}", flush=True)
+            except requests.exceptions.SSLError as e:
+                ultimo_error = 'ssl_error'
+                print(f"[bcra_directo] {cuit}/{tipo} SSL intento {intento+1}: {e}", flush=True)
+            except requests.exceptions.Timeout:
+                ultimo_error = 'timeout'
+                print(f"[bcra_directo] {cuit}/{tipo} Timeout intento {intento+1}", flush=True)
+            except Exception as e:
+                ultimo_error = str(e)[:80]
+                print(f"[bcra_directo] {cuit}/{tipo} error intento {intento+1}: {e}", flush=True)
+            if intento < 2:
+                time.sleep(1.5)
+    print(f"[bcra_directo] {cuit}/{tipo} agotó 3 reintentos — {ultimo_error}", flush=True)
+    return None, f'bcra_no_disponible:{ultimo_error}'
 
 def gemini_request(payload, timeout=250):
     if GEMINI_KEY:
@@ -373,6 +417,15 @@ def consultar_bcra(cuit, reintentos=3):
     for ep_url, via in endpoints[:3]:
         try:
             print(f"[bcra] {cuit} consultando via {via}...", flush=True)
+            if via == "directo":
+                data, _err = _consultar_bcra_directo(cuit, 'deudas')
+                if data is not None:
+                    periodos = (data.get('results') or {}).get('periodos') or []
+                    data['sin_deudas'] = len(periodos) == 0
+                    print(f"[bcra] {cuit} OK via directo BCRA", flush=True)
+                    return data, None
+                print(f"[bcra] {cuit} directo agotó reintentos: {_err}", flush=True)
+                continue
             r = requests.get(ep_url, timeout=8, verify=False)
             if r.status_code == 200:
                 text = r.text.strip()
@@ -1783,11 +1836,9 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
     cheq_data = _cache_load(f'cheques_{cuit_limpio}.json')
 
     if not hist_data:
-        urls_h = ([w + "/deudas/" + cuit_limpio + "/historial" for w in BCRA_WORKERS]
-                  + ["https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit_limpio])
-        for u in urls_h[:2]:
+        for _wu in [w + "/deudas/" + cuit_limpio + "/historial" for w in BCRA_WORKERS][:2]:
             try:
-                r = requests.get(u, timeout=5, verify=False)
+                r = requests.get(_wu, timeout=5, verify=False)
                 if r.status_code == 200 and len(r.text.strip()) > 10:
                     hist_data = _norm_bcra_resp(r.json())
                     try:
@@ -1796,14 +1847,20 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
                     except: pass
                     break
             except Exception as eh:
-                print(f"[score wrapper] hist {cuit_limpio}: {eh}", flush=True)
+                print(f"[score wrapper] hist worker {cuit_limpio}: {eh}", flush=True)
+        if not hist_data:
+            _hd, _ = _consultar_bcra_directo(cuit_limpio, 'historial')
+            if _hd:
+                hist_data = _hd
+                try:
+                    with open(os.path.join(DATA_DIR, f'historial_{cuit_limpio}.json'), 'w') as f:
+                        json.dump({'payload': hist_data, 'ts': time.time()}, f)
+                except: pass
 
     if not cheq_data:
-        urls_c = ([w + "/deudas/" + cuit_limpio + "/cheques" for w in BCRA_WORKERS]
-                  + ["https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/" + cuit_limpio])
-        for u in urls_c[:2]:
+        for _wu in [w + "/deudas/" + cuit_limpio + "/cheques" for w in BCRA_WORKERS][:2]:
             try:
-                r = requests.get(u, timeout=5, verify=False)
+                r = requests.get(_wu, timeout=5, verify=False)
                 if r.status_code == 200 and len(r.text.strip()) > 10:
                     cheq_data = _norm_bcra_resp(r.json())
                     try:
@@ -1815,13 +1872,24 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
                     cheq_data = {"results": {"causales": []}, "sin_deudas": True}
                     break
             except Exception as ec:
-                print(f"[score wrapper] cheq {cuit_limpio}: {ec}", flush=True)
+                print(f"[score wrapper] cheq worker {cuit_limpio}: {ec}", flush=True)
+        if not cheq_data:
+            _cd, _ = _consultar_bcra_directo(cuit_limpio, 'cheques')
+            if _cd:
+                cheq_data = _cd
+                try:
+                    with open(os.path.join(DATA_DIR, f'cheques_{cuit_limpio}.json'), 'w') as f:
+                        json.dump({'payload': cheq_data, 'ts': time.time()}, f)
+                except: pass
 
-    return calcular_rating_predictivo(
+    _bcra_disponible = bcra_data.get('bcra_disponible', not bool(bcra_data.get('error_bcra')))
+    resultado = calcular_rating_predictivo(
         cuit=cuit_limpio, bcra_data=bcra_data,
         hist_data=hist_data, cheq_data=cheq_data,
         en_mora=en_mora, ciudad=ciudad,
     )
+    resultado['bcra_disponible'] = _bcra_disponible
+    return resultado
 
 
 # Alias para mantener compatibilidad con código legado
@@ -2961,6 +3029,7 @@ def _score_response(score_data: dict, solvency: dict = None) -> dict:
 
     _safe["ok"]                   = True
     _safe["version"]              = _SCORE_VERSION
+    _safe["bcra_disponible"]      = score_data.get('bcra_disponible', True)
     _safe["inferencia_ingresos"]  = sol.get('ingresos_anuales')
     _safe["fuente_ingresos"]      = sol.get('fuente_ingresos')
     _safe["actividad_principal"]  = sol.get('actividad_principal')
