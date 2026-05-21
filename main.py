@@ -179,12 +179,20 @@ def _pi_safe(v, cast=None, default=None):
 
 
 def _norm_bcra_resp(data) -> dict:
-    """Normaliza respuesta BCRA/worker: si viene como lista, toma el primer elemento.
-    Garantiza que el resultado siempre sea un dict (nunca None ni list).
-    Algunos proxies/workers devuelven [{...}] en lugar de {...}."""
+    """Normaliza respuesta BCRA/worker a dict plano con results como dict.
+    Casos que maneja:
+      - Nivel raíz es lista: [{...}] → toma [0]
+      - Nivel raíz no es dict: → {}
+      - data['results'] es lista: api.bcra.gob.ar devuelve {"results":[{...}]} → unwrap [0]
+    Llamado en todos los puntos de inyección: workers, directo, cache, historial, cheques."""
     if isinstance(data, list):
         data = data[0] if data else {}
-    return data if isinstance(data, dict) else {}
+    if not isinstance(data, dict):
+        return {}
+    r = data.get('results')
+    if isinstance(r, list):
+        data = {**data, 'results': r[0] if r else {}}
+    return data
 
 
 def _consultar_bcra_directo(cuit: str, tipo: str = 'deudas'):
