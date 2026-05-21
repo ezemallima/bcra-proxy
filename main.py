@@ -754,6 +754,29 @@ def get_solvency_data(cuit):
                 print(f"[solvency] {cuit_limpio} BCRA piso aplicado "
                       f"ing≈{data['ingresos_anuales']}", flush=True)
 
+    # ── Post-proceso: campos enriquecidos ─────────────────────────────────────
+    if data is not None:
+        # antiguedad_fiscal: años desde inicio de actividades (0 si no disponible)
+        data.setdefault('antiguedad_fiscal', data.get('antiguedad_anos') or 0)
+
+        # estado_empleo: clasificación laboral basada en fuentes ya consultadas
+        if not data.get('estado_empleo'):
+            _es_emp  = data.get('es_empleador')
+            _tipo    = (data.get('tipo_persona') or '').upper()
+            _cat     = data.get('categoria_monotrib') or ''
+            _af      = data.get('anses_fuente') or ''
+            if _es_emp or any(k in _tipo for k in ('JURIDICA', 'S.A.', 'S.R.L.', 'S.A.S')):
+                data['estado_empleo'] = 'activo'
+            elif _af == 'anses_certneg':
+                data['estado_empleo'] = 'activo'
+            elif _cat:
+                data['estado_empleo'] = 'monotrib'
+            else:
+                data['estado_empleo'] = None
+
+        # juicios_comerciales: desde API de respaldo si viene, default 0
+        data.setdefault('juicios_comerciales', data.get('juicios') or 0)
+
     try:
         with open(cache_path, 'w') as f:
             json.dump({'data': data, 'ts': time.time()}, f, ensure_ascii=False)
