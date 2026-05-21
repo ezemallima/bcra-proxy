@@ -1150,7 +1150,18 @@ function filtrarCartera(filtro, btn) {
 function renderCartera(filtro) {
   const alertaCuits = new Set(ALERTAS.map(a => a.cuit));
   let lista = CARTERA_LOCAL;
-  if (filtro === 'alertas') lista = lista.filter(c => c.alerta || alertaCuits.has(c.cuit));
+  if (filtro === 'alertas') {
+    const hoy45 = new Date(); hoy45.setHours(0,0,0,0);
+    lista = lista.filter(c => {
+      if (!c.alerta && !alertaCuits.has(c.cuit)) return false;
+      const saldos = getSaldos(c.nombre);
+      if (!saldos?.facturas?.length) return false;
+      return saldos.facturas.some(f => {
+        const emision = parseFecha(f.fechaFactura);
+        return emision && (hoy45 - emision) / 86400000 > 45;
+      });
+    });
+  }
   else if (filtro === 'riesgo') lista = lista.filter(c => (c.ultimaSit||1) >= 3);
   else if (filtro === 'buenos') lista = lista.filter(c => (c.score||0) >= 700);
   else if (filtro === 'saldo') lista = lista.filter(c => getSaldos(c.nombre));
@@ -1528,7 +1539,7 @@ function renderFacturas(data, nombre) {
     ${dsoMax > 0 ? `<span class="card-dso-badge ${dsoModalCls}" style="font-size:11px;padding:5px 10px;">${dsoModalLabel}</span>` : ''}
   </div>`;
 
-  sorted.forEach(f => {
+  sorted.forEach((f, idx) => {
     const venc = parseFecha(f.fechaPago);
     const dias = Math.round((venc - hoy) / 86400000);
     let clase = 'vigente', tag = `<span class="tag-vigente">Vigente</span>`;
@@ -1536,11 +1547,17 @@ function renderFacturas(data, nombre) {
     else if (dias <= 7) { clase = 'proxima'; tag = `<span class="tag-proxima">Vence en ${dias}d</span>`; }
 
     const diferencia = f.totalFactura !== f.saldo;
+    const chkId = `fac-chk-${idx}`;
     html += `<div class="factura-item ${clase}">
       <div class="factura-row1">
-        <div>
-          <div class="factura-nro">${esc(f.nroFactura)}</div>
-          ${tag}
+        <div style="display:flex;align-items:center;gap:8px">
+          <input type="checkbox" id="${chkId}" class="fac-chk" data-saldo="${f.saldo}" checked
+            style="width:16px;height:16px;cursor:pointer;accent-color:#25d366;flex-shrink:0"
+            onchange="actualizarTotalSeleccionado()">
+          <div>
+            <div class="factura-nro">${esc(f.nroFactura)}</div>
+            ${tag}
+          </div>
         </div>
         <div class="factura-saldo">$${fmtFull(f.saldo)}</div>
       </div>
@@ -1551,6 +1568,8 @@ function renderFacturas(data, nombre) {
       ${diferencia ? `<div style="font-size:11px;color:var(--text3);margin-top:4px">Total fac: $${fmtFull(f.totalFactura)}</div>` : ''}
     </div>`;
   });
+
+  html += `<div id="total-seleccionado" style="text-align:right;font-size:13px;color:var(--text2);margin:8px 2px 4px;min-height:18px"></div>`;
 
   html += `<button class="btn-wsp" onclick="enviarEstadoCuenta()">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20.52 3.48A11.93 11.93 0 0 0 12 0C5.37 0 0 5.37 0 12c0 2.11.55 4.17 1.6 5.98L0 24l6.18-1.62A11.96 11.96 0 0 0 12 24c6.63 0 12-5.37 12-12 0-3.21-1.25-6.22-3.48-8.52zm-8.52 18.43c-1.8 0-3.56-.48-5.1-1.39l-.37-.22-3.8.99 1.02-3.68-.24-.38A9.93 9.93 0 0 1 2.07 12c0-5.48 4.45-9.93 9.93-9.93 2.65 0 5.14 1.03 7.01 2.9a9.88 9.88 0 0 1 2.92 7.03c0 5.48-4.45 9.93-9.93 9.93zm5.44-7.44c-.3-.15-1.77-.87-2.04-.97-.28-.1-.48-.15-.68.15-.2.3-.77.97-.94 1.17-.17.2-.35.22-.65.07a8.14 8.14 0 0 1-2.4-1.48 9.1 9.1 0 0 1-1.66-2.07c-.17-.3-.02-.46.13-.61.13-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.07-.15-.68-1.63-.93-2.23-.24-.58-.49-.5-.68-.51-.17-.01-.37-.01-.57-.01-.2 0-.52.07-.79.37-.27.3-1.04 1.02-1.04 2.48s1.07 2.88 1.21 3.08c.15.2 2.1 3.2 5.08 4.49.71.31 1.26.49 1.69.63.71.23 1.36.2 1.87.12.57-.08 1.77-.72 2.02-1.42.25-.7.25-1.3.17-1.42-.08-.12-.28-.2-.57-.35z" fill="currentColor"/></svg>
@@ -2209,22 +2228,39 @@ function generarPDF(cuit) {
   setTimeout(() => pw.print(), 600);
 }
 
+function actualizarTotalSeleccionado() {
+  const chks = document.querySelectorAll('#mtab-facturas .fac-chk');
+  let total = 0;
+  chks.forEach(c => { if (c.checked) total += parseFloat(c.dataset.saldo) || 0; });
+  const el = document.getElementById('total-seleccionado');
+  if (!el) return;
+  const n = [...chks].filter(c => c.checked).length;
+  el.textContent = n === 0 ? '' : `${n} factura${n!==1?'s':''} seleccionada${n!==1?'s':''} · Total: $${fmtFull(total)}`;
+}
+
 function enviarEstadoCuenta() {
   const data   = window._modalFacturasData;
   const nombre = window._modalNombre || '';
   if (!data?.facturas?.length) { alert('No hay facturas pendientes para enviar.'); return; }
 
+  // Leer solo las facturas con checkbox marcado
+  const chks = [...document.querySelectorAll('#mtab-facturas .fac-chk')];
+  const sorted = [...data.facturas].sort((a,b) => parseFecha(a.fechaPago)-parseFecha(b.fechaPago));
+  const seleccionadas = sorted.filter((_, i) => chks[i]?.checked);
+
+  if (!seleccionadas.length) { alert('Seleccioná al menos una factura para enviar.'); return; }
+
   const h = new Date().getHours();
   const saludo = h < 13 ? 'Buenos días' : h < 20 ? 'Buenas tardes' : 'Buenas noches';
 
-  const sorted = [...data.facturas].sort((a,b) => parseFecha(a.fechaPago)-parseFecha(b.fechaPago));
-  const detalle = sorted.map(f => `  • ${f.nroFactura}: $${fmtFull(f.saldo)}`).join('\n');
+  const detalle = seleccionadas.map(f => `  • ${f.nroFactura}: $${fmtFull(f.saldo)}`).join('\n');
+  const totalSel = seleccionadas.reduce((acc, f) => acc + (parseFloat(f.saldo) || 0), 0);
 
   const msg =
     `Estimado/a ${nombre}, ${saludo}.\n\n` +
     `Te acerco el detalle de tu cuenta corriente en *Bodega Piattelli*:\n\n` +
     `*Facturas pendientes:*\n${detalle}\n\n` +
-    `*Total pendiente: $${fmtFull(data.total_saldo)}*\n\n` +
+    `*Total pendiente: $${fmtFull(totalSel)}*\n\n` +
     `*Datos de Pago:*\n` +
     `🏦 Banco Galicia - CC $: 10653-1 081-8\n` +
     `📌 CBU: 0070081820000010653188\n` +
