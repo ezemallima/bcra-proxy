@@ -1209,7 +1209,12 @@ function renderCartera(filtro) {
     // esExcedido: deuda Odoo >= límite de crédito asignado (carril comercial)
     const saldosData   = getSaldos(c.nombre, c.cuit);
     const limCred      = c.limite_credito || 0;
-    const saldoActual  = (saldosData && saldosData.total_saldo) || c.total_saldo || 0;
+    // Suma estrictamente desde las facturas individuales del cliente.
+    // Nunca usa total_saldo cacheado, que puede estar desactualizado o cruzado.
+    const _facs        = saldosData?.facturas || [];
+    const saldoActual  = _facs.length
+      ? _facs.reduce((s, f) => s + (parseFloat(f.saldo) || 0), 0)
+      : (c.total_saldo || 0);
     const esExcedido   = limCred > 0 && saldoActual >= limCred;
 
     // tieneAT: alerta temprana del servidor, solo si no hay alerta BCRA real

@@ -3952,30 +3952,39 @@ def _rebuild_saldos_index():
           f"({len(fuente)} registros)", flush=True)
 
 def _buscar_por_nombre_en_idx(nombre: str) -> list:
-    """3-nivel de matching sobre el índice de nombres (ya no itera la lista completa)."""
+    """3-nivel de matching sobre el índice de nombres — devuelve UNA sola clave ganadora."""
     cn = _norm_nombre(nombre)
+
+    # Nivel 1: exacto
     r = _saldos_idx_nombre.get(cn)
     if r:
         return r
+
+    # Nivel 2: primeras 2 palabras (sin sufijos legales)
     cu = _norm_ultra(nombre)
     prim2 = ' '.join(cu.split()[:2])
     if len(prim2) > 3:
         r = _saldos_idx_nombre.get(prim2)
         if r:
             return r
-        # prim2 sobre claves del índice (k clientes únicos, no todos los registros)
         for k, v in _saldos_idx_nombre.items():
             if ' '.join(_norm_ultra(k).split()[:2]) == prim2:
                 return v
-    # Parcial: ≥2 palabras en común (solo itera ~200 claves, no 700 registros)
+
+    # Nivel 3: mayor cantidad de palabras en común — NUNCA mezcla claves distintas
+    # Se elige el índice con el SCORE más alto; si hay empate se toma el primero.
     palabras = [w for w in cn.split() if len(w) > 2]
     if palabras:
-        merged: list = []
-        for k, v in _saldos_idx_nombre.items():
-            if sum(1 for p in palabras if p in k) >= min(2, len(palabras)):
-                merged.extend(v)
-        if merged:
-            return merged
+        best_k   = None
+        best_score = 0
+        for k in _saldos_idx_nombre:
+            score = sum(1 for p in palabras if p in k)
+            if score >= min(2, len(palabras)) and score > best_score:
+                best_score = score
+                best_k = k
+        if best_k:
+            print(f"[idx] parcial '{nombre}' → '{best_k}' (score={best_score})", flush=True)
+            return _saldos_idx_nombre[best_k]
     return []
 
 def _norm_nombre(s):
