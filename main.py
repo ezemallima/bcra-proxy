@@ -179,19 +179,52 @@ def _pi_safe(v, cast=None, default=None):
 
 
 def _norm_bcra_resp(data) -> dict:
-    """Normaliza respuesta BCRA/worker a dict plano con results como dict.
-    Casos que maneja:
-      - Nivel raíz es lista: [{...}] → toma [0]
-      - Nivel raíz no es dict: → {}
-      - data['results'] es lista: api.bcra.gob.ar devuelve {"results":[{...}]} → unwrap [0]
-    Llamado en todos los puntos de inyección: workers, directo, cache, historial, cheques."""
+    """Normaliza cualquier variante de respuesta BCRA a un dict seguro.
+    Capas normalizadas:
+      1. Nivel raíz lista → toma [0]
+      2. results lista    → toma [0]
+      3. results no-dict  → {}
+      4. periodos: items no-dict → descartados; entidades anidadas → aplanadas
+    Llamado en todos los puntos de inyección del codebase."""
+    # Capa 1: raíz
     if isinstance(data, list):
         data = data[0] if data else {}
     if not isinstance(data, dict):
         return {}
+
+    # Capa 2: results
     r = data.get('results')
     if isinstance(r, list):
-        data = {**data, 'results': r[0] if r else {}}
+        r = r[0] if r else {}
+        data = {**data, 'results': r}
+    if r is not None and not isinstance(r, dict):
+        data = {**data, 'results': {}}
+        return data
+    if not isinstance(r, dict):
+        return data
+
+    # Capa 3: periodos y entidades dentro de results
+    periodos = r.get('periodos')
+    if isinstance(periodos, list):
+        limpios = []
+        for p in periodos:
+            if isinstance(p, list):
+                # Worker devolvió periodo como lista de entidades → envolverlo
+                p = {'entidades': [e for e in p if isinstance(e, dict)]}
+            if not isinstance(p, dict):
+                continue
+            ents = p.get('entidades')
+            if isinstance(ents, list):
+                # Aplanar si hay entidades envueltas en lista extra [[{...}]]
+                planas = []
+                for e in ents:
+                    if isinstance(e, list):
+                        planas.extend(x for x in e if isinstance(x, dict))
+                    elif isinstance(e, dict):
+                        planas.append(e)
+                p = {**p, 'entidades': planas}
+            limpios.append(p)
+        data = {**data, 'results': {**r, 'periodos': limpios}}
     return data
 
 
@@ -1374,10 +1407,28 @@ def calcular_rating_predictivo(
     id_cliente  = ''.join(c for c in cuit_limpio if c.isdigit())
     print(f">>> ENTRANDO AL MOTOR - CUIT: {cuit_limpio} | id_cliente: {id_cliente}", flush=True)
 
-    # Blindaje de tipo: algunos workers devuelven lista en lugar de dict
+    # DEBUG: loguear formato raw antes de normalizar (visible en Render logs)
+    print(
+        f"[DEBUG BCRA] cuit={cuit_limpio} "
+        f"bcra_type={type(bcra_data).__name__} "
+        f"results_type={type((bcra_data or {}).get('results') if isinstance(bcra_data, dict) else None).__name__} "
+        f"preview={str(bcra_data)[:300]}",
+        flush=True
+    )
+
+    # Blindaje total: normaliza lista, results-lista, periodos y entidades anidadas
     bcra_data = _norm_bcra_resp(bcra_data)
     if hist_data  is not None: hist_data  = _norm_bcra_resp(hist_data)
     if cheq_data  is not None: cheq_data  = _norm_bcra_resp(cheq_data)
+
+    # Guardia post-norm: si results sigue sin ser dict, forzar vacío
+    for _d_name, _d_ref in [('bcra', bcra_data), ('hist', hist_data), ('cheq', cheq_data)]:
+        if _d_ref is None:
+            continue
+        _r = _d_ref.get('results')
+        if _r is not None and not isinstance(_r, dict):
+            print(f"[NORM WARN] {cuit_limpio} {_d_name}.results={type(_r).__name__} forzado a {{}}", flush=True)
+            _d_ref['results'] = {}
 
     if cuit_limpio in _score_session_cache:
         print(f">>> CACHE HIT - CUIT: {cuit_limpio}", flush=True)
@@ -2975,6 +3026,19 @@ def reprocesar_vacios():
     nombres_muestra = [p['nombre'] or p['cuit'] for p in pendientes[:5]]
     print(f"[reprocesar_vacios] {len(pendientes)} sin score: {nombres_muestra}", flush=True)
 
+    # Limpiar cachés de historial/cheques corruptos para los CUITs a reprocesar
+    _purgados = 0
+    for p in pendientes:
+        for _prefix in ('historial_', 'cheques_'):
+            _fp = os.path.join(DATA_DIR, f"{_prefix}{p['cuit']}.json")
+            if os.path.exists(_fp):
+                try:
+                    os.remove(_fp)
+                    _purgados += 1
+                except: pass
+    if _purgados:
+        print(f"[reprocesar_vacios] Purgados {_purgados} cachés de hist/cheq corruptos", flush=True)
+
     _proceso_integral_estado.update({
         "corriendo":    True,
         "total":        len(pendientes),
@@ -3414,9 +3478,8 @@ def get_cheques(cuit):
                         print(f"[cheques] Vacío via {via} para {cuit}", flush=True)
                         break
                     todos_vacios = False
-                    data = r.json()
-                    results = data.get('results', data) if isinstance(data, dict) else data
-                    payload = {"results": results, "sin_deudas": None, "error_bcra": None}
+                    data = _norm_bcra_resp(r.json())
+                    payload = data if data.get('results') else {"results": {"causales": []}, "sin_deudas": True, "error_bcra": None}
                     _cheques_cache_set(cuit, payload)
                     print(f"[cheques] OK via {via} para {cuit}", flush=True)
                     return jsonify(payload), 200
@@ -3449,7 +3512,7 @@ def get_historial(cuit):
                     text = r.text.strip()
                     if not text or len(text) < 10:
                         break
-                    data = r.json()
+                    data = _norm_bcra_resp(r.json())
                     try:
                         hist_path = os.path.join(DATA_DIR, f'historial_{cuit}.json')
                         with open(hist_path, 'w', encoding='utf-8') as f:
