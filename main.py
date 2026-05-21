@@ -974,18 +974,20 @@ def _layer1_estabilidad_bancaria(
         pts_tend = 65
         tendencia = 'estable'
     else:
-        pool = periodos_hist if periodos_hist else periodos_curr
+        pool = _safe_periodos(periodos_hist if periodos_hist else periodos_curr)
         if pool and len(pool) >= 4:
             def _ms(p):
-                ents = p.get('entidades', [])
-                montos = [float(e.get('monto') or 0) for e in ents]
-                sits   = [float(e.get('situacion') or 1) for e in ents]
-                total  = sum(montos)
-                # Usar media ponderada por monto para que una entidad pequeña
-                # no destruya la tendencia (igual lógica que sit_ponderada)
-                if total > 0:
-                    return sum(s * m for s, m in zip(sits, montos)) / total
-                return max(sits, default=1.0)
+                try:
+                    if not isinstance(p, dict): return 1.0
+                    ents   = [e for e in (p.get('entidades') or []) if isinstance(e, dict)]
+                    montos = [float(e.get('monto') or 0) for e in ents]
+                    sits   = [float(e.get('situacion') or 1) for e in ents]
+                    total  = sum(montos)
+                    if total > 0:
+                        return sum(s * m for s, m in zip(sits, montos)) / total
+                    return max(sits, default=1.0)
+                except Exception:
+                    return 1.0
             r3 = [_ms(p) for p in pool[:3]]
             a9 = [_ms(p) for p in pool[3:12]]
             pr = sum(r3) / len(r3)
@@ -999,10 +1001,15 @@ def _layer1_estabilidad_bancaria(
             pts_sit = pts_sit // 2   # penalización doble solo para deterioro real
 
     alerta_creciente = False
-    pool_a = periodos_curr if periodos_curr else periodos_hist
+    pool_a = _safe_periodos(periodos_curr if periodos_curr else periodos_hist)
     if pool_a and len(pool_a) >= 2:
         def _m(p):
-            return sum((e.get('monto') or 0) for e in p.get('entidades', []))
+            try:
+                if not isinstance(p, dict): return 0
+                ents = [e for e in (p.get('entidades') or []) if isinstance(e, dict)]
+                return sum((e.get('monto') or 0) for e in ents)
+            except Exception:
+                return 0
         m0, m1 = _m(pool_a[0]), _m(pool_a[1])
         if m1 > 0 and m0 / m1 > 1.30:
             alerta_creciente = True
@@ -1090,7 +1097,8 @@ def _evaluar_intencionalidad_mora(
     Default Real: ≥3 meses en Sit.1 y luego cayó → Hard Block D2 ($0).
     Returns: (tipo, pct_adm, aviso)
     """
-    curr_ents = periodos_curr[0].get('entidades', []) if periodos_curr else []
+    _pc0 = periodos_curr[0] if periodos_curr and isinstance(periodos_curr[0], dict) else {}
+    curr_ents = [e for e in (_pc0.get('entidades') or []) if isinstance(e, dict)]
     ents_mora = [
         (str(e.get('entidad') or '').strip().upper(),
          int(e.get('situacion') or 1),
@@ -1102,9 +1110,10 @@ def _evaluar_intencionalidad_mora(
 
     # Construir historial de (situacion, monto) por entidad (todos los períodos)
     hist_sit: dict = {}
-    todos = periodos_hist if periodos_hist else periodos_curr
+    todos = _safe_periodos(periodos_hist if periodos_hist else periodos_curr)
     for p in todos:
-        for e in p.get('entidades', []):
+        if not isinstance(p, dict): continue
+        for e in [e for e in (p.get('entidades') or []) if isinstance(e, dict)]:
             n = str(e.get('entidad') or '').strip().upper()
             if n:
                 hist_sit.setdefault(n, []).append(
@@ -1380,6 +1389,35 @@ def _layer_liquidez(cheq_data: dict, max_sit: int, n_periodos_h: int) -> tuple:
     return pts, False
 
 
+def _safe_periodos(lst) -> list:
+    """Garantiza que cada elemento de una lista de periodos sea un dict
+    con clave 'entidades' que contenga solo dicts. Aplanado total."""
+    if not isinstance(lst, list):
+        return []
+    result = []
+    for p in lst:
+        if isinstance(p, list):
+            ents = [e for e in p if isinstance(e, dict)]
+            if ents:
+                result.append({'entidades': ents})
+            continue
+        if not isinstance(p, dict):
+            continue
+        ents = p.get('entidades')
+        if not isinstance(ents, list):
+            p = {**p, 'entidades': []}
+        else:
+            flat = []
+            for e in ents:
+                if isinstance(e, list):
+                    flat.extend(x for x in e if isinstance(x, dict))
+                elif isinstance(e, dict):
+                    flat.append(e)
+            p = {**p, 'entidades': flat}
+        result.append(p)
+    return result
+
+
 def calcular_rating_predictivo(
     cuit: str,
     bcra_data: dict,
@@ -1436,22 +1474,26 @@ def calcular_rating_predictivo(
 
     # ── Parsear BCRA ──────────────────────────────────────────────────────
     sin_deudas_real = bcra_data.get('sin_deudas', False)
-    periodos_curr   = (bcra_data.get('results') or {}).get('periodos') or []
+    periodos_curr   = _safe_periodos((bcra_data.get('results') or {}).get('periodos') or [])
     max_sit = 1; nro_entidades = 0; monto_total_m = 0.0
-    if periodos_curr:
-        ents = periodos_curr[0].get('entidades', [])
-        nro_entidades = len(ents)
-        if ents:
-            max_sit       = max((e.get('situacion', 1) or 1) for e in ents)
-            monto_total_m = sum((e.get('monto', 0) or 0) for e in ents) / 1000
-    elif sin_deudas_real:
-        max_sit = 1
+    try:
+        if periodos_curr:
+            ents = periodos_curr[0].get('entidades', []) if isinstance(periodos_curr[0], dict) else []
+            ents = [e for e in ents if isinstance(e, dict)]
+            nro_entidades = len(ents)
+            if ents:
+                max_sit       = max((e.get('situacion', 1) or 1) for e in ents)
+                monto_total_m = sum((e.get('monto', 0) or 0) for e in ents) / 1000
+        elif sin_deudas_real:
+            max_sit = 1
+    except Exception as _pe:
+        print(f"[score parse_err] {cuit_limpio} periodos_curr: {_pe}", flush=True)
+        max_sit = 1; nro_entidades = 0; monto_total_m = 0.0
     monto_real = monto_total_m * 1000
 
     # ── Ponderación de mora por monto ─────────────────────────────────────
-    # Evita que $89k en Sit.4 tenga el mismo impacto que $2M en Sit.4.
-    # Unidad de trabajo: las mismas "miles de pesos" que devuelve la API BCRA.
-    _ents_curr    = periodos_curr[0].get('entidades', []) if periodos_curr else []
+    _ents_curr    = (periodos_curr[0].get('entidades', []) if isinstance(periodos_curr[0], dict) else []) if periodos_curr else []
+    _ents_curr    = [e for e in _ents_curr if isinstance(e, dict)]
     _raw_total_m  = monto_total_m * 1000           # miles de pesos (raw BCRA)
     monto_mora_k  = 0.0                            # miles de pesos en Sit.>1
     monto_sit1_k  = 0.0                            # miles de pesos en Sit.1 (limpio)
@@ -1493,16 +1535,23 @@ def calcular_rating_predictivo(
         )
 
     # ── Historial 24m ─────────────────────────────────────────────────────
-    periodos_hist = (hist_data.get('results') or {}).get('periodos') or [] if hist_data else []
+    periodos_hist = _safe_periodos((hist_data.get('results') or {}).get('periodos') or []) if hist_data else []
     if not periodos_hist:
         periodos_hist = periodos_curr
     n_periodos_h = n_periodos_recientes = meses_malos = 0
     sit_grave_6m = False
-    _mm_recientes = 0   # meses malos en ventana 0-6 (usados por Time Decay)
-    _mm_antiguos  = 0   # meses malos en ventana 7-24
+    _mm_recientes = 0
+    _mm_antiguos  = 0
     for idx_p, p in enumerate(periodos_hist[:24]):
-        smax        = max(((e.get('situacion') or 1) for e in p.get('entidades', [])), default=1)
-        tiene_deuda = any((e.get('monto') or 0) > 0 for e in p.get('entidades', []))
+        try:
+            if not isinstance(p, dict):
+                continue
+            ents_h = [e for e in (p.get('entidades') or []) if isinstance(e, dict)]
+            smax        = max((e.get('situacion') or 1 for e in ents_h), default=1)
+            tiene_deuda = any((e.get('monto') or 0) > 0 for e in ents_h)
+        except Exception as _ph:
+            print(f"[score parse_err] {cuit_limpio} p{idx_p} hist: {_ph}", flush=True)
+            smax = 1; tiene_deuda = False
         if tiene_deuda:
             n_periodos_h += 1
             if idx_p < 6: n_periodos_recientes += 1
@@ -1517,10 +1566,13 @@ def calcular_rating_predictivo(
     deterioro_estructural = False
     _periodos_rev = periodos_hist[:24]
     if len(_periodos_rev) >= 6:
-        _max_per_mes = [
-            max(((e.get('situacion') or 1) for e in p.get('entidades', [])), default=1)
-            for p in _periodos_rev
-        ]
+        def _smax_p(p):
+            try:
+                if not isinstance(p, dict): return 1
+                ents = [e for e in (p.get('entidades') or []) if isinstance(e, dict)]
+                return max((e.get('situacion') or 1 for e in ents), default=1)
+            except Exception: return 1
+        _max_per_mes = [_smax_p(p) for p in _periodos_rev]
         _sit_reciente = _max_per_mes[:6]
         _sit_anterior = _max_per_mes[6:]
         _estaba_estable = (
