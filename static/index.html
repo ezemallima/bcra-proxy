@@ -4636,10 +4636,12 @@ var _procesoIntegralInterval = null;
 var _procesoIntegralTotal    = 0;   // total conocido desde el POST
 
 async function ejecutarProcesoIntegral() {
-  var btn = document.getElementById('btn-proceso-integral');
+  var btn  = document.getElementById('btn-proceso-integral');
+  var btn2 = document.getElementById('btn-reprocesar-vacios');
   if (!confirm('Iniciará el proceso completo (BCRA + Score + Mora) para toda la cartera.\n\nEsto puede tardar varios minutos. ¿Continuar?')) return;
   btn.disabled = true;
   btn.textContent = 'Procesando...';
+  if (btn2) { btn2.disabled = true; btn2.textContent = 'Proceso en curso...'; }
   // Reset total del estado visual — borra logs y contadores de la corrida anterior
   var _logEl = document.getElementById('pi-log-errores');
   if (_logEl) { _logEl.innerHTML = ''; _logEl.style.display = 'none'; }
@@ -4654,10 +4656,11 @@ async function ejecutarProcesoIntegral() {
   try {
     var r = await fetch('/proceso-integral', { method: 'POST' });
     var d = await r.json();
-    if (!r.ok || d.error) {
+    if ((!r.ok && r.status !== 202) || d.error) {
       alert('Error: ' + (d.error || ('HTTP ' + r.status)));
       btn.disabled = false;
       btn.textContent = 'Ejecutar Proceso Integral (BCRA + Score + Mora)';
+      if (btn2) { btn2.disabled = false; btn2.textContent = 'Reprocesar Sin Score'; }
       return;
     }
     // Inicializar UI desde la respuesta del POST (antes del primer poll)
@@ -4675,14 +4678,17 @@ async function ejecutarProcesoIntegral() {
     alert('Error de red: ' + e.message);
     btn.disabled = false;
     btn.textContent = 'Ejecutar Proceso Integral (BCRA + Score + Mora)';
+    if (btn2) { btn2.disabled = false; btn2.textContent = 'Reprocesar Sin Score'; }
   }
 }
 
 async function reprocesarVacios() {
-  var btn = document.getElementById('btn-reprocesar-vacios');
+  var btn  = document.getElementById('btn-reprocesar-vacios');
+  var btn2 = document.getElementById('btn-proceso-integral');
   if (!confirm('Buscará clientes sin score calculado y los reprocesará con AFIP SDK + BCRA.\n\n¿Continuar?')) return;
   btn.disabled = true;
   btn.textContent = 'Buscando...';
+  if (btn2) { btn2.disabled = true; btn2.textContent = 'Proceso en curso...'; }
   var _logEl = document.getElementById('pi-log-errores');
   if (_logEl) { _logEl.innerHTML = ''; _logEl.style.display = 'none'; }
   ['pi-errores','pi-procesados'].forEach(function(id){ var el=document.getElementById(id); if(el) el.textContent='0'; });
@@ -4693,14 +4699,16 @@ async function reprocesarVacios() {
   try {
     var r = await fetch('/api/reprocesar_vacios', { method: 'POST' });
     var d = await r.json();
-    if (!r.ok || d.error) {
+    if ((!r.ok && r.status !== 202) || d.error) {
       alert('Error: ' + (d.error || ('HTTP ' + r.status)));
       btn.disabled = false; btn.textContent = 'Reprocesar Sin Score';
+      if (btn2) { btn2.disabled = false; btn2.textContent = 'Ejecutar Proceso Integral (BCRA + Score + Mora)'; }
       return;
     }
     if (d.total === 0) {
       alert(d.mensaje || 'Todos los clientes ya tienen score.');
       btn.disabled = false; btn.textContent = 'Reprocesar Sin Score';
+      if (btn2) { btn2.disabled = false; btn2.textContent = 'Ejecutar Proceso Integral (BCRA + Score + Mora)'; }
       return;
     }
     _procesoIntegralTotal = d.total || 0;
@@ -4711,23 +4719,17 @@ async function reprocesarVacios() {
     var msgEl = document.getElementById('proceso-integral-msg');
     if (msgEl) msgEl.textContent = d.mensaje || ('Reprocesando ' + _procesoIntegralTotal + ' clientes sin score...');
     if (_procesoIntegralInterval) clearInterval(_procesoIntegralInterval);
-    _procesoIntegralInterval = setInterval(function() {
-      _pollProcesoIntegral().then(function(){
-        // Al terminar, restaurar el botón correcto
-        if (!_procesoIntegralInterval) {
-          btn.disabled = false; btn.textContent = 'Reprocesar Sin Score';
-        }
-      });
-    }, 2000);
+    _procesoIntegralInterval = setInterval(_pollProcesoIntegral, 2000);
   } catch(e) {
     alert('Error de red: ' + e.message);
     btn.disabled = false; btn.textContent = 'Reprocesar Sin Score';
+    if (btn2) { btn2.disabled = false; btn2.textContent = 'Ejecutar Proceso Integral (BCRA + Score + Mora)'; }
   }
 }
 
 async function _pollProcesoIntegral() {
   try {
-    var r = await fetch('/proceso-integral/progreso');
+    var r = await fetch('/api/proceso-status', { signal: AbortSignal.timeout(5000) });
     var d = await r.json();
     var total = d.total || _procesoIntegralTotal;  // usar el total conocido si el servidor devuelve 0
     var msg  = document.getElementById('proceso-integral-msg');
@@ -4760,8 +4762,10 @@ async function _pollProcesoIntegral() {
     if (terminado) {
       clearInterval(_procesoIntegralInterval);
       _procesoIntegralInterval = null;
-      var btn = document.getElementById('btn-proceso-integral');
-      if (btn) { btn.disabled = false; btn.textContent = 'Ejecutar Proceso Integral (BCRA + Score + Mora)'; }
+      var btnPI = document.getElementById('btn-proceso-integral');
+      var btnRV = document.getElementById('btn-reprocesar-vacios');
+      if (btnPI) { btnPI.disabled = false; btnPI.textContent = 'Ejecutar Proceso Integral (BCRA + Score + Mora)'; }
+      if (btnRV) { btnRV.disabled = false; btnRV.textContent = 'Reprocesar Sin Score'; }
       if (bar) bar.style.background = 'linear-gradient(90deg,#16a34a,#22c55e)';
       autoCargarScoresServidor();
       _alertasMoraData = null;

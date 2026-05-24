@@ -164,6 +164,7 @@ _proceso_integral_estado: dict = {
 # Locks para evitar escrituras concurrentes sobre archivos compartidos
 _score_cache_lock   = threading.Lock()
 _alertas_file_lock  = threading.Lock()
+_proceso_lock       = threading.Lock()
 
 
 def _pi_safe(v, cast=None, default=None):
@@ -2930,8 +2931,9 @@ def _ejecutar_proceso_integral(cartera_data: list):
             _proceso_integral_estado['procesados'] = i + 1
             continue
 
-        _proceso_integral_estado['cliente_actual'] = nombre or cuit
-        _proceso_integral_estado['mensaje'] = f'Procesando {i+1}/{total}: {nombre or cuit}'
+        with _proceso_lock:
+            _proceso_integral_estado['cliente_actual'] = nombre or cuit
+            _proceso_integral_estado['mensaje'] = f'Procesando {i+1}/{total}: {nombre or cuit}'
 
         try:
             # ── Paso 1: BCRA — try propio con fallback explícito a _consultar_respaldo ──
@@ -2992,13 +2994,15 @@ def _ejecutar_proceso_integral(cartera_data: list):
                 f'  {err_tipo}: {err_msg}\n  {tb_last}',
                 flush=True,
             )
-            _proceso_integral_estado['errores'] += 1
-            _proceso_integral_estado['log_errores'].append({
-                'num': i + 1, 'cuit': cuit, 'nombre': nombre,
-                'tipo': err_tipo, 'mensaje': err_msg, 'linea': tb_last,
-            })
+            with _proceso_lock:
+                _proceso_integral_estado['errores'] += 1
+                _proceso_integral_estado['log_errores'].append({
+                    'num': i + 1, 'cuit': cuit, 'nombre': nombre,
+                    'tipo': err_tipo, 'mensaje': err_msg, 'linea': tb_last,
+                })
 
-        _proceso_integral_estado['procesados'] = i + 1
+        with _proceso_lock:
+            _proceso_integral_estado['procesados'] = i + 1
         time.sleep(random.uniform(1.0, 3.0))
 
     # Persistir cartera al finalizar
@@ -3008,12 +3012,13 @@ def _ejecutar_proceso_integral(cartera_data: list):
     except Exception as _e:
         print(f'[proceso-integral] Error guardando cartera: {_e}', flush=True)
 
-    n_ok = _proceso_integral_estado['procesados'] - _proceso_integral_estado['errores']
-    _proceso_integral_estado['corriendo'] = False
-    _proceso_integral_estado['mensaje'] = (
-        f'Completado — {n_ok} OK, {_proceso_integral_estado["errores"]} errores'
-        f' | {total} clientes procesados'
-    )
+    with _proceso_lock:
+        n_ok = _proceso_integral_estado['procesados'] - _proceso_integral_estado['errores']
+        _proceso_integral_estado['corriendo'] = False
+        _proceso_integral_estado['mensaje'] = (
+            f'Completado — {n_ok} OK, {_proceso_integral_estado["errores"]} errores'
+            f' | {total} clientes procesados'
+        )
     print(f'[proceso-integral] {_proceso_integral_estado["mensaje"]}', flush=True)
 
 
@@ -3029,21 +3034,29 @@ def iniciar_proceso_integral():
         return jsonify({"error": "Cartera vacía — cargá cartera_comercial.json en el servidor"}), 400
     # ── Marcar como corriendo ANTES de lanzar el thread (elimina race condition) ──
     import datetime as _dt
-    _proceso_integral_estado.update({
-        "corriendo": True, "total": len(cartera), "procesados": 0,
-        "errores": 0, "cliente_actual": "", "mensaje": "Iniciando proceso...",
-        "iniciado_en": _dt.datetime.now().strftime("%d/%m/%Y %H:%M"),
-        "log_errores": [],
-    })
+    with _proceso_lock:
+        _proceso_integral_estado.update({
+            "corriendo": True, "total": len(cartera), "procesados": 0,
+            "errores": 0, "cliente_actual": "", "mensaje": "Iniciando proceso...",
+            "iniciado_en": _dt.datetime.now().strftime("%d/%m/%Y %H:%M"),
+            "log_errores": [],
+        })
     t = threading.Thread(target=_ejecutar_proceso_integral, args=(cartera,), daemon=True)
     t.start()
     return jsonify({"ok": True, "total": len(cartera), "corriendo": True,
-                    "mensaje": f"Proceso integral iniciado: {len(cartera)} clientes"})
+                    "mensaje": f"Proceso integral iniciado: {len(cartera)} clientes"}), 202
 
 
 @app.route("/proceso-integral/progreso")
 def progreso_proceso_integral():
-    return jsonify(_proceso_integral_estado)
+    with _proceso_lock:
+        return jsonify(dict(_proceso_integral_estado))
+
+
+@app.route("/api/proceso-status")
+def proceso_status():
+    with _proceso_lock:
+        return jsonify(dict(_proceso_integral_estado))
 
 
 @app.route("/api/reprocesar_vacios", methods=["POST"])
@@ -3091,16 +3104,17 @@ def reprocesar_vacios():
     if _purgados:
         print(f"[reprocesar_vacios] Purgados {_purgados} cachés de hist/cheq corruptos", flush=True)
 
-    _proceso_integral_estado.update({
-        "corriendo":    True,
-        "total":        len(pendientes),
-        "procesados":   0,
-        "errores":      0,
-        "cliente_actual": "",
-        "mensaje":      f"Reprocesando {len(pendientes)} clientes sin score...",
-        "iniciado_en":  datetime.utcnow().isoformat(),
-        "log_errores":  [],
-    })
+    with _proceso_lock:
+        _proceso_integral_estado.update({
+            "corriendo":    True,
+            "total":        len(pendientes),
+            "procesados":   0,
+            "errores":      0,
+            "cliente_actual": "",
+            "mensaje":      f"Reprocesando {len(pendientes)} clientes sin score...",
+            "iniciado_en":  datetime.utcnow().isoformat(),
+            "log_errores":  [],
+        })
     t = threading.Thread(target=_ejecutar_proceso_integral, args=(pendientes,), daemon=True)
     t.start()
     return jsonify({
@@ -3109,7 +3123,7 @@ def reprocesar_vacios():
         "corriendo": True,
         "mensaje": f"Iniciado: {len(pendientes)} clientes sin score",
         "muestra": nombres_muestra,
-    })
+    }), 202
 
 
 @app.route("/recalcular-pendientes", methods=["POST"])
