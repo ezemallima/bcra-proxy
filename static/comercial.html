@@ -998,21 +998,23 @@ async function cargarSaldosCartera(forzar = false) {
   SALDOS_MAP = {};  // wipe — nunca acumular datos fantasma
 
   // Un solo fetch por cliente a /api/facturas/<cuit> — O(1) en el backend
+  // safeFetch con timeout 8s (no retry) — evita bloqueo del worker Gunicorn
   const clientes = CARTERA_LOCAL.filter((c,i,a) =>
     c.cuit && a.findIndex(x => x.cuit === c.cuit) === i
   );
   for (let i = 0; i < clientes.length; i += 20) {
     await Promise.all(clientes.slice(i, i+20).map(async c => {
       try {
-        const r = await fetch(API + '/api/facturas/' + encodeURIComponent(c.cuit) +
-                              '?nombre=' + encodeURIComponent(c.nombre || ''));
-        if (!r.ok) return;
-        const d = await r.json();
-        if (d.facturas && d.facturas.length) {
-          SALDOS_MAP[normNombre(c.nombre)] = d;
-          const nc = String(c.cuit||'').replace(/\D/g,'').trim();
-          if (nc) SALDOS_MAP['__c:'+nc] = d;
-        }
+        const d = await safeFetch(
+          API + '/api/facturas/' + encodeURIComponent(c.cuit) +
+          '?nombre=' + encodeURIComponent(c.nombre || ''),
+          { retries: 0, timeoutMs: 8000 }
+        );
+        if (!d) return;
+        // Siempre almacenar — incluso respuestas vacías reemplazan la entrada stale del BLOQUE 1
+        const nc = String(c.cuit||'').replace(/\D/g,'').trim();
+        SALDOS_MAP[normNombre(c.nombre)] = d;
+        if (nc) SALDOS_MAP['__c:'+nc] = d;
       } catch(e) {}
     }));
   }
@@ -1209,12 +1211,13 @@ function renderCartera(filtro) {
     // esExcedido: deuda Odoo >= límite de crédito asignado (carril comercial)
     const saldosData   = getSaldos(c.nombre, c.cuit);
     const limCred      = c.limite_credito || 0;
-    // Suma estrictamente desde las facturas individuales del cliente.
-    // Nunca usa total_saldo cacheado, que puede estar desactualizado o cruzado.
+    // Σ consolidado de TODAS las facturas abiertas del CUIT (nunca trunca en [0]).
+    // Si el fetch devolvió vacío (saldosData != null pero sin facturas), usa total_saldo del servidor.
+    // Solo como último recurso — si nunca se hizo el fetch — usa c.total_saldo (campo cartera).
     const _facs        = saldosData?.facturas || [];
     const saldoActual  = _facs.length
       ? _facs.reduce((s, f) => s + (parseFloat(f.saldo) || 0), 0)
-      : (c.total_saldo || 0);
+      : (saldosData !== null ? (saldosData.total_saldo ?? 0) : (c.total_saldo || 0));
     const esExcedido   = limCred > 0 && saldoActual >= limCred;
 
     // tieneAT: alerta temprana del servidor, solo si no hay alerta BCRA real
@@ -1477,16 +1480,23 @@ async function abrirModalCliente(cuit, nombre) {
   history.pushState({ modalOpen: true }, '', '#detalle');
 
   // Lanzar TODAS las solicitudes en paralelo con safeFetch
-  const facP  = safeFetch(API + '/api/facturas/' + encodeURIComponent(cuit) + '?nombre=' + encodeURIComponent(nombre));
+  // facP: timeout estricto de 3s — si el servidor tarda más, usa SALDOS_MAP local
+  const facP  = safeFetch(API + '/api/facturas/' + encodeURIComponent(cuit) + '?nombre=' + encodeURIComponent(nombre), { retries: 0, timeoutMs: 3000 });
   const brP   = safeFetch(API + '/deudas/' + cuit);
   const chrP  = safeFetch(API + '/deudas/' + cuit + '/cheques');
   const hrP   = safeFetch(API + '/deudas/' + cuit + '/historial');
-  const scrP  = safeFetch(API + '/fetch-score/' + cuit + '?fresh=1', { timeoutMs: 29000 });
+  // scrP: score desde caché precalculada (sin fresh=1) — respuesta < 100ms si está en disco
+  const scrP  = safeFetch(API + '/fetch-score/' + cuit, { timeoutMs: 20000 });
 
   // ── Facturas: renderiza en cuanto llegan (sin esperar BCRA) ──
   facP.then(sd => {
     const factEl = document.getElementById('mtab-facturas');
     if (!factEl) return;
+    // Fallback: si el servidor tardó > 3s, usar SALDOS_MAP local (cargado por cargarSaldosCartera)
+    if (!sd?.facturas?.length) {
+      const localSd = getSaldos(nombre, cuit);
+      if (localSd?.facturas?.length) sd = localSd;
+    }
     if (sd?.facturas?.length) {
       SALDOS_MAP[normNombre(nombre)] = sd;
       const _nc = String(cuit||'').replace(/\D/g,'').trim();

@@ -4168,7 +4168,7 @@ def api_facturas_por_cuit(cuit):
 @app.route("/upload-saldos-gestion", methods=["POST"])
 def upload_saldos_gestion():
     """Saldos semanales de gestión — actualiza la vista comercial sin tocar el DSO de cierre de mes."""
-    global _saldos_gestion
+    global _saldos_gestion, _saldos_facturas
     try:
         if 'file' not in request.files:
             return jsonify({"error": "Sin archivo"}), 400
@@ -4212,9 +4212,10 @@ def upload_saldos_gestion():
         ts_path = os.path.join(DATA_DIR, 'saldos_timestamp.json')
         with open(ts_path, 'w') as f:
             json.dump({'ts': time.time(), 'fecha': time.strftime('%d/%m/%Y %H:%M'), 'tipo': 'gestion'}, f)
-        _saldos_gestion = saldos
+        _saldos_gestion  = saldos
+        _saldos_facturas = list(saldos)   # sincronizar SSoT para que el índice siempre sea fresco
         _rebuild_saldos_index()
-        print(f"[gestion] {len(saldos)} facturas de gestión importadas (wipe & write)", flush=True)
+        print(f"[gestion] {len(saldos)} facturas de gestión importadas — facturas sincronizado", flush=True)
         return jsonify({"ok": True, "total": len(saldos)})
     except Exception as e:
         import traceback
@@ -4357,7 +4358,7 @@ def get_alertas_mora():
 @app.route("/upload-saldos-facturas", methods=["POST"])
 def upload_saldos_facturas():
     """Recibe Excel Odoo: [Vendedor, Cliente, Nro Factura, Fecha Factura, Fecha Pago, Total, Saldo]"""
-    global _saldos_facturas
+    global _saldos_facturas, _saldos_gestion
     try:
         if 'file' not in request.files:
             return jsonify({"error": "Sin archivo"}), 400
@@ -4407,8 +4408,9 @@ def upload_saldos_facturas():
         with open(ts_path, 'w') as f:
             json.dump({'ts': time.time(), 'fecha': time.strftime('%d/%m/%Y %H:%M')}, f)
         _saldos_facturas = saldos
+        _saldos_gestion  = list(saldos)   # SSoT: facturas siempre sincroniza gestión
         _rebuild_saldos_index()
-        print(f"[saldos] {len(saldos)} facturas importadas (Odoo positional)", flush=True)
+        print(f"[saldos] {len(saldos)} facturas importadas (Odoo positional) — gestión sincronizada", flush=True)
         return jsonify({"ok": True, "total": len(saldos)})
     except Exception as e:
         import traceback
