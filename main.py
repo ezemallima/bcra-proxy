@@ -762,6 +762,11 @@ def get_solvency_data(cuit):
                 cached = json.load(f)
             if time.time() - cached.get('ts', 0) < 86400:
                 cached_data = cached.get('data') or {}
+                # Normalizar: caché antiguo pudo guardar lista en lugar de dict
+                if isinstance(cached_data, list):
+                    cached_data = cached_data[0] if cached_data else {}
+                if not isinstance(cached_data, dict):
+                    cached_data = {}
                 # Sanity: re-inferir si el caché guardó ingresos=0 con tipo/cat válidos
                 if not cached_data.get('ingresos_anuales') and (
                     cached_data.get('categoria_monotrib') or cached_data.get('tipo_persona')
@@ -1025,7 +1030,7 @@ def _layer2_solvencia_federal(solvency_data: dict) -> tuple:
     Empleador/Jurídica → 300 pts. Monotrib A/B → flag cap externo 600.
     Returns (pts: int, es_empleador: bool, es_monotrib_bajo: bool, indice: float)
     """
-    if not solvency_data:
+    if not solvency_data or not isinstance(solvency_data, dict):
         return 120, False, False, 0.40   # graceful degradation: neutral degradado
 
     cat  = (solvency_data.get('categoria_monotrib') or '').strip().upper()
@@ -1612,6 +1617,8 @@ def calcular_rating_predictivo(
     # ── Solvencia AFIP (graceful degradation) ────────────────────────────
     if solvency_data is None:
         solvency_data = get_solvency_data(cuit_limpio)
+    if not isinstance(solvency_data, dict):
+        solvency_data = None
 
     # ── Intencionalidad de mora BCRA (debe ir ANTES de _layer1) ──────────
     tipo_mora_bcra, pct_mora_adm, aviso_mora = _evaluar_intencionalidad_mora(
@@ -1994,6 +2001,8 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
                         json.dump({'payload': cheq_data, 'ts': time.time()}, f)
                 except: pass
 
+    if not isinstance(bcra_data, dict):
+        bcra_data = _norm_bcra_resp(bcra_data) if bcra_data else {}
     _bcra_disponible = bcra_data.get('bcra_disponible', not bool(bcra_data.get('error_bcra')))
     resultado = calcular_rating_predictivo(
         cuit=cuit_limpio, bcra_data=bcra_data,
@@ -2047,9 +2056,9 @@ def _actualizar_score_en_cartera(cuit_limpio: str, score_data: dict, solvency: d
             'alerta_temprana':      score_data.get('alerta_temprana', False),
             'bloquear_oportunidad': score_data.get('bloquear_oportunidad', False),
             'alerta_logistica':     score_data.get('alerta_logistica', ''),
-            'inferencia_ingresos':  (solvency or {}).get('ingresos_anuales'),
-            'fuente_ingresos':      (solvency or {}).get('fuente_ingresos'),
-            'actividad_principal':  (solvency or {}).get('actividad_principal'),
+            'inferencia_ingresos':  (solvency if isinstance(solvency, dict) else {}).get('ingresos_anuales'),
+            'fuente_ingresos':      (solvency if isinstance(solvency, dict) else {}).get('fuente_ingresos'),
+            'actividad_principal':  (solvency if isinstance(solvency, dict) else {}).get('actividad_principal'),
             'ultimaVerif':          time.strftime('%d/%m/%Y'),
             'score_ts':             time.time(),
             'pendiente':            False,
@@ -2924,6 +2933,10 @@ def _ejecutar_proceso_integral(cartera_data: list):
     total = len(cartera_data)
 
     for i, c in enumerate(cartera_data):
+        if not isinstance(c, dict):
+            with _proceso_lock:
+                _proceso_integral_estado['procesados'] = i + 1
+            continue
         cuit   = str(c.get('cuit', '')).replace('-', '').replace(' ', '').strip()
         nombre = str(c.get('nombre') or '').strip()
 
@@ -2960,12 +2973,22 @@ def _ejecutar_proceso_integral(cartera_data: list):
                 else:
                     bcra_data = {}
 
-            # ── Paso 2: Score (usa bcra_data, sea de workers, cache o respaldo) ──────
-            score_data = calcular_score_servidor(cuit, bcra_data or {})
-
-            # ── Paso 3: Solvencia — try separado para no matar el score BCRA ─────────
+            # ── Paso 2: Score (try propio — no mata el ciclo completo si falla) ───────
             try:
-                solvency = get_solvency_data(cuit) or {}
+                score_data = calcular_score_servidor(cuit, bcra_data or {})
+            except Exception as _sce:
+                print(f'[proceso-integral] Score falló {cuit} ({nombre}): {type(_sce).__name__}: {_sce}', flush=True)
+                score_data = {
+                    'score': None, 'rango': 'Error', 'color': '#6b7280', 'emoji': '⚠️',
+                    'max_sit': 1, 'bcra_disponible': False,
+                    'alerta_temprana': False, 'bloquear_oportunidad': False, 'alerta_logistica': '',
+                }
+
+            # ── Paso 3: Solvencia — try separado; normalizar si retorna lista ──────────
+            try:
+                solvency = get_solvency_data(cuit)
+                if not isinstance(solvency, dict):
+                    solvency = {}
             except Exception as _se:
                 print(f'[proceso-integral] Solvencia fallo {cuit}: {_se} — continuando sin AFIP', flush=True)
                 solvency = {}
@@ -3209,7 +3232,7 @@ def limpiar_solvency():
 def _score_response(score_data: dict, solvency: dict = None) -> dict:
     """Pasamanos transparente: devuelve score_data completo + campos de solvencia.
     Usa json.dumps(default=str) para serializar sin excepciones de tipo."""
-    sol = solvency or {}
+    sol = solvency if isinstance(solvency, dict) else {}
     # Serializar y deserializar con default=str para eliminar cualquier tipo
     # Python no serializable (datetime, Decimal, etc.) antes de enviar al frontend.
     try:
@@ -3321,12 +3344,14 @@ def _calcular_score_handler(cuit: str):
         _bcra_denom = (bcra_data.get('results') or {}).get('denominacion', '').strip()
         if bcra_data.get('sin_deudas') is True and not _bcra_denom:
             _solv_chk = get_solvency_data(cuit_limpio)
+            if not isinstance(_solv_chk, dict): _solv_chk = {}
             _razon_chk = (_solv_chk.get('razon_social') or _solv_chk.get('nombre') or '').strip()
             if not _razon_chk:
                 print(f"[fetch-score] {cuit_limpio} CUIT INEXISTENTE — sin datos BCRA/AFIP/solvencia", flush=True)
                 return jsonify({"error": "cuit_inexistente", "cuit": cuit_limpio, "score": None}), 200
         score_data   = calcular_score_servidor(cuit_limpio, bcra_data or {})
         solvency     = get_solvency_data(cuit_limpio)
+        if not isinstance(solvency, dict): solvency = {}
         _actualizar_score_en_cartera(cuit_limpio, score_data, solvency)
         return jsonify(_score_response(score_data, solvency))
     except Exception as e:
