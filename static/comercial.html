@@ -1212,12 +1212,15 @@ function renderCartera(filtro) {
     const saldosData   = getSaldos(c.nombre, c.cuit);
     const limCred      = c.limite_credito || 0;
     // Σ consolidado de TODAS las facturas abiertas del CUIT (nunca trunca en [0]).
+    // Math.round elimina errores de acumulación de punto flotante IEEE 754 antes de comparaciones.
     // Si el fetch devolvió vacío (saldosData != null pero sin facturas), usa total_saldo del servidor.
     // Solo como último recurso — si nunca se hizo el fetch — usa c.total_saldo (campo cartera).
     const _facs        = saldosData?.facturas || [];
-    const saldoActual  = _facs.length
-      ? _facs.reduce((s, f) => s + (parseFloat(f.saldo) || 0), 0)
-      : (saldosData !== null ? (saldosData.total_saldo ?? 0) : (c.total_saldo || 0));
+    const saldoActual  = Math.round(
+      _facs.length
+        ? _facs.reduce((s, f) => s + (parseFloat(f.saldo) || 0), 0)
+        : (saldosData !== null ? (saldosData.total_saldo ?? 0) : (c.total_saldo || 0))
+    );
     const esExcedido   = limCred > 0 && saldoActual >= limCred;
 
     // tieneAT: alerta temprana del servidor, solo si no hay alerta BCRA real
