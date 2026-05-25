@@ -3332,11 +3332,19 @@ def _score_cache_read() -> dict:
 
 
 def _score_cache_write(data: dict):
+    tmp = SCORE_CACHE_FILE + '.tmp'
     try:
-        with open(SCORE_CACHE_FILE, 'w', encoding='utf-8') as f:
+        with open(tmp, 'w', encoding='utf-8') as f:
             json.dump(data, f, default=str)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, SCORE_CACHE_FILE)
     except Exception as e:
         print(f"[score_cache] write error: {e}", flush=True)
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
 
 
 @app.route("/save-score-cache", methods=["POST"])
@@ -3347,10 +3355,11 @@ def save_score_cache():
         if not data:
             return jsonify({"ok": False, "error": "Payload vacío"}), 400
         nc = lambda x: str(x).replace('-', '').replace(' ', '').strip()
-        cache = _score_cache_read()
-        for cuit_k, score_v in data.items():
-            cache[nc(cuit_k)] = score_v
-        _score_cache_write(cache)
+        with _score_cache_lock:
+            cache = _score_cache_read()
+            for cuit_k, score_v in data.items():
+                cache[nc(cuit_k)] = score_v
+            _score_cache_write(cache)
         print(f"[score_cache] guardados {len(data)} CUITs", flush=True)
         return jsonify({"ok": True, "guardados": len(data)})
     except Exception as e:
@@ -3360,7 +3369,8 @@ def save_score_cache():
 @app.route("/score-cache-all", methods=["GET"])
 def score_cache_all():
     """Devuelve todo el contenido de score_cache.json."""
-    return jsonify(_score_cache_read())
+    with _score_cache_lock:
+        return jsonify(_score_cache_read())
 
 
 def _calcular_score_handler(cuit: str):
@@ -3378,7 +3388,8 @@ def _calcular_score_handler(cuit: str):
             os.remove(_fp)
     else:
         # ── Cache persistente en disco (sobrevive reinicios) ──────────────
-        _cached = _score_cache_read().get(cuit_limpio)
+        with _score_cache_lock:
+            _cached = _score_cache_read().get(cuit_limpio)
         if _cached and _cached.get('score'):
             print(f"[fetch-score] {cuit_limpio} → score_cache.json hit ({_cached['score']})", flush=True)
             return jsonify(_cached)
