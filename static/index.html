@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="google" content="notranslate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Vende Seguro">
+<link rel="apple-touch-icon" sizes="180x180" href="/static/logo.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/logo.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/static/logo.png">
 <title>Vende Seguro v22.0 - Motor de Scoring Inteligente</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Syne:wght@700;800&display=swap');
@@ -406,16 +412,29 @@
     .cli-data-grid { grid-template-columns: 1fr 1fr; }
     .buscador-input { font-size: 14px; padding: 12px 14px 12px 42px; }
     #decision-grid { grid-template-columns: 1fr; }
-    /* Tables: horizontal scroll */
+    /* Tables: horizontal scroll wrapper */
+    .bcra-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -4px; padding: 0 4px; }
     .bcra-table { min-width: 480px; }
-    .card { overflow-x: auto; -webkit-overflow-scrolling: touch; }
     /* Primary buttons: larger tap targets */
     button.primary { min-height: 44px; font-size: 14px; padding: 11px 20px; }
+    button { min-height: 40px; }
     /* Stack input rows vertically */
     .input-row { flex-direction: column; }
-    .input-row input { min-width: 0; }
+    .input-row input, .input-row select { min-width: 0; width: 100%; }
+    /* Cartera cards: single column on phone */
+    .cli-data-grid { grid-template-columns: 1fr 1fr; }
+    .ficha-grid { grid-template-columns: 1fr 1fr; }
     /* Page title shrinks */
     .page-title-text { font-size: 15px; }
+    /* ph-actions stack */
+    .ph-actions { gap: 6px; }
+    .page-header { gap: 8px; }
+  }
+
+  @media (max-width: 480px) {
+    .cli-data-grid { grid-template-columns: 1fr; }
+    .ficha-grid { grid-template-columns: 1fr; }
+    .canvas-body { padding: 10px 8px; }
   }
 </style>
 </head>
@@ -1630,7 +1649,7 @@ function renderTablaDSO(datos) {
     document.getElementById('dso-tabla').innerHTML = '<div class="empty-state">Sin datos para mostrar.</div>';
     return;
   }
-  var html = '<table class="bcra-table"><thead><tr><th>Cliente</th><th>DSO</th><th>Estado</th><th>Saldo</th></tr></thead><tbody>';
+  var html = '<div class="bcra-table-wrap"><table class="bcra-table"><thead><tr><th>Cliente</th><th>DSO</th><th>Estado</th><th>Saldo</th></tr></thead><tbody>';
   datos.forEach(function(c) {
     var col = colorDSO(c.dso);
     html += '<tr>';
@@ -1640,7 +1659,7 @@ function renderTablaDSO(datos) {
     html += '<td style="font-size:13px;">$' + Math.round(c.saldo).toLocaleString('es-AR') + '</td>';
     html += '</tr>';
   });
-  html += '</tbody></table>';
+  html += '</tbody></table></div>';
   document.getElementById('dso-tabla').innerHTML = html;
 }
 
@@ -3302,12 +3321,12 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
         ? '<div class="bcra-indicator warn"><span class="bcra-ind-icon">⚠️</span><div><div class="bcra-ind-text">Situación 2 — Atrasos detectados</div><div class="bcra-ind-sub">El cliente registra atrasos en al menos una entidad bancaria.</div></div></div>'
         : '<div class="bcra-indicator ok"><span class="bcra-ind-icon">✅</span><div><div class="bcra-ind-text">Situación normal</div><div class="bcra-ind-sub">Situación 1 en todas las entidades del sistema financiero.</div></div></div>';
     var conMonto = entidades.filter(function(e) { return e.monto > 0; });
-    let t = `<table class="bcra-table"><thead><tr><th>Entidad</th><th>Período</th><th style="text-align:right;">Monto (miles $)</th><th>Situación</th><th style="text-align:right;">Días atraso</th></tr></thead><tbody>`;
+    let t = `<div class="bcra-table-wrap"><table class="bcra-table"><thead><tr><th>Entidad</th><th>Período</th><th style="text-align:right;">Monto (miles $)</th><th>Situación</th><th style="text-align:right;">Días atraso</th></tr></thead><tbody>`;
     entidades.forEach(function(e) {
       var monto = e.monto > 0 ? '$' + (e.monto).toLocaleString('es-AR') : '-';
       t += `<tr><td>${e.entidad||'-'}</td><td>${e.periodo||'-'}</td><td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:600;">${monto}</td><td class="sit-${e.situacion}">${e.situacion} — ${sitNombre(e.situacion)}</td><td style="text-align:right;font-variant-numeric:tabular-nums;">${e.diasAtrasoPago||0}</td></tr>`;
     });
-    t += `</tbody></table>`;
+    t += `</tbody></table></div>`;
     if (conMonto.length) {
       var totalMiles = conMonto.reduce(function(s,e) { return s + (e.monto||0); }, 0);
       t += `<div style="font-size:12px;color:#64748b;margin-top:6px;text-align:right;">Total deuda sistema financiero: <strong>$${totalMiles.toLocaleString('es-AR')}</strong></div>`;
