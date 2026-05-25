@@ -255,40 +255,140 @@ def _bcra_get(url: str, timeout: int = 20) -> requests.Response:
     return requests.get(url, timeout=timeout, verify=False)
 
 
+def _map_detalle_bcra(raw: dict) -> dict:
+    """Convierte respuesta CentralDeInformacion v1.0 al formato interno de periodos.
+
+    Entrada (CDI v1.0):
+      { results: { denominacion, detalle: [{periodo, entidad, situacion, monto, ...}] } }
+
+    Salida (formato interno del motor de scoring):
+      { results: { denominacion, periodos: [{periodo, entidades: [{entidad, situacion, monto}]}] },
+        sin_deudas: bool }
+
+    Los periodos se ordenan con el más reciente primero (coincide con la expectativa
+    de periodos_curr = periodos[0] en calcular_rating_predictivo).
+    """
+    if not isinstance(raw, dict):
+        return {}
+    results = raw.get('results') or {}
+    if not isinstance(results, dict):
+        return {}
+
+    denominacion = str(results.get('denominacion') or results.get('identificacion') or '')
+    detalle      = results.get('detalle') or []
+
+    if not isinstance(detalle, list) or not detalle:
+        return {
+            'results': {'denominacion': denominacion, 'periodos': []},
+            'sin_deudas': True,
+        }
+
+    # Agrupar entidades por periodo — dict {periodo_str: [entidad_dict, ...]}
+    grupos: dict = {}
+    for item in detalle:
+        if not isinstance(item, dict):
+            continue
+        periodo = str(item.get('periodo') or item.get('fechaPeriodo') or '')
+        entidad = {
+            'entidad':   str(item.get('entidad') or item.get('codigoEntidad') or ''),
+            'situacion': int(item.get('situacion') or 1),
+            'monto':     float(item.get('monto') or item.get('deuda') or 0),
+        }
+        grupos.setdefault(periodo, []).append(entidad)
+
+    # Periodos ordenados descendente → más reciente primero
+    periodos = [
+        {'periodo': p, 'entidades': grupos[p]}
+        for p in sorted(grupos.keys(), reverse=True)
+    ]
+
+    print(
+        f"[bcra_cdi] mapeado: {len(periodos)} periodos, "
+        f"max_sit={max((e['situacion'] for ents in grupos.values() for e in ents), default=1)}",
+        flush=True,
+    )
+    return {
+        'results': {'denominacion': denominacion, 'periodos': periodos},
+        'sin_deudas': len(periodos) == 0,
+    }
+
+
 def _consultar_bcra_directo(cuit: str, tipo: str = 'deudas'):
-    """Consulta api.bcra.gob.ar con 3 reintentos.
-    Usa _bcra_get: ScraperAPI si la key está configurada, directo si no.
-    tipo: 'deudas' | 'historial' | 'cheques'"""
-    _urls = {
+    """Consulta api.bcra.gob.ar con hasta 4 intentos distribuidos entre dos endpoints.
+
+    Estrategia de waterfall:
+      1. CentralDeInformacion v1.0 (nuevo oficial) — 2 intentos via _bcra_get
+      2. centraldedeudores v1.0 (legacy)           — 2 intentos via _bcra_get (fallback)
+
+    Detección automática de formato:
+      - Respuesta con 'detalle' en results → _map_detalle_bcra (CDI v1.0)
+      - Respuesta con 'periodos' en results → _norm_bcra_resp (legacy)
+
+    tipo: 'deudas' | 'historial' | 'cheques'
+    """
+    _urls_cdi = {
+        'deudas':    f'https://api.bcra.gob.ar/CentralDeInformacion/v1.0/Deudas/{cuit}',
+        'historial': f'https://api.bcra.gob.ar/CentralDeInformacion/v1.0/Deudas/Historicas/{cuit}',
+        'cheques':   f'https://api.bcra.gob.ar/CentralDeInformacion/v1.0/Deudas/ChequesRechazados/{cuit}',
+    }
+    _urls_legacy = {
         'deudas':    f'https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/{cuit}',
         'historial': f'https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/{cuit}',
         'cheques':   f'https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/{cuit}',
     }
-    url = _urls.get(tipo, _urls['deudas'])
-    via = 'scraperapi' if SCRAPERAPI_KEY else 'directo'
+
+    via         = 'scraperapi' if SCRAPERAPI_KEY else 'directo'
     ultimo_error = 'sin_respuesta'
-    for intento in range(3):
-        try:
-            r = _bcra_get(url, timeout=20)
-            if r.status_code == 404:
-                return {'results': {'denominacion': '', 'periodos': []}, 'sin_deudas': True}, None
-            if r.status_code == 200 and len(r.text.strip()) > 10:
-                data = _norm_bcra_resp(r.json())
-                if not data.get('error'):
-                    print(f"[bcra_directo] {cuit}/{tipo} OK via {via} intento {intento+1}", flush=True)
-                    return data, None
-            ultimo_error = f'http_{r.status_code}'
-            print(f"[bcra_directo] {cuit}/{tipo} via {via} intento {intento+1}: {ultimo_error}", flush=True)
-        except requests.exceptions.Timeout:
-            ultimo_error = 'timeout'
-            print(f"[bcra_directo] {cuit}/{tipo} via {via} Timeout intento {intento+1}", flush=True)
-        except Exception as e:
-            ultimo_error = str(e)[:80]
-            print(f"[bcra_directo] {cuit}/{tipo} via {via} error intento {intento+1}: {e}", flush=True)
-        if intento < 2:
-            # ScraperAPI gestiona throttling en su red — sleep reducido
-            time.sleep(0.5 if SCRAPERAPI_KEY else 1.5)
-    print(f"[bcra_directo] {cuit}/{tipo} agotó 3 reintentos via {via} — {ultimo_error}", flush=True)
+    _sleep      = 0.5 if SCRAPERAPI_KEY else 1.5  # ScraperAPI gestiona throttling
+
+    for url, api_ver in [
+        (_urls_cdi.get(tipo,    _urls_cdi['deudas']),    'cdi_v1'),
+        (_urls_legacy.get(tipo, _urls_legacy['deudas']), 'legacy'),
+    ]:
+        for intento in range(2):
+            try:
+                r = _bcra_get(url, timeout=20)
+                if r.status_code == 404:
+                    return {'results': {'denominacion': '', 'periodos': []}, 'sin_deudas': True}, None
+                if r.status_code == 200 and len(r.text.strip()) > 10:
+                    raw   = r.json()
+                    _res  = raw.get('results') if isinstance(raw, dict) else None
+                    # Elegir mapper según formato detectado en la respuesta
+                    if isinstance(_res, dict) and 'detalle' in _res:
+                        data = _map_detalle_bcra(raw)
+                    else:
+                        data = _norm_bcra_resp(raw)
+                    if not data.get('error') and data.get('results') is not None:
+                        print(
+                            f"[bcra_directo] {cuit}/{tipo} OK via {via}/{api_ver} intento {intento+1}",
+                            flush=True,
+                        )
+                        return data, None
+                ultimo_error = f'http_{r.status_code}'
+                print(
+                    f"[bcra_directo] {cuit}/{tipo} {via}/{api_ver} intento {intento+1}: {ultimo_error}",
+                    flush=True,
+                )
+            except requests.exceptions.Timeout:
+                ultimo_error = 'timeout'
+                print(
+                    f"[bcra_directo] {cuit}/{tipo} {via}/{api_ver} Timeout intento {intento+1}",
+                    flush=True,
+                )
+            except Exception as e:
+                ultimo_error = str(e)[:80]
+                print(
+                    f"[bcra_directo] {cuit}/{tipo} {via}/{api_ver} error intento {intento+1}: {e}",
+                    flush=True,
+                )
+            if intento < 1:
+                time.sleep(_sleep)
+        print(
+            f"[bcra_directo] {cuit}/{tipo} {api_ver} agotó intentos ({ultimo_error}) — probando siguiente",
+            flush=True,
+        )
+
+    print(f"[bcra_directo] {cuit}/{tipo} todos los endpoints agotados", flush=True)
     return None, f'bcra_no_disponible:{ultimo_error}'
 
 def gemini_request(payload, timeout=250):
