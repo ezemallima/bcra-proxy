@@ -444,27 +444,6 @@ function esCuit(val) {
   return /^\d{10,11}$/.test(val.replace(/\D/g, ''));
 }
 
-// ── Redirect si ya hay sesión activa ─────────────────────────────────────────
-(async function redirectIfLoggedIn() {
-  // Camino 1: sesión legacy (sin red)
-  try {
-    const saved = localStorage.getItem('vendeSeguro_session');
-    if (saved) {
-      const sess = JSON.parse(saved);
-      if (sess?.nombre && sess?.cuit) { window.location.replace('/comercial'); return; }
-    }
-  } catch(_) { localStorage.removeItem('vendeSeguro_session'); }
-
-  // Camino 2: sesión Supabase
-  try {
-    const { data: { session } } = await getClient().auth.getSession();
-    if (session) {
-      const perfil = await cargarPerfil();
-      window.location.replace(rutaSegunRol(perfil.rol));
-    }
-  } catch (_) {}
-})();
-
 // ── Login híbrido ─────────────────────────────────────────────────────────────
 async function handleLogin(e) {
   e.preventDefault();
@@ -493,7 +472,7 @@ async function handleLogin(e) {
           body: JSON.stringify({ cuit, password }),
         });
         const json = await res.json();
-        if (json.ok) { window.location.replace('/'); return; }
+        if (json.ok) { window.location.href = '/'; return; }
         btn.disabled = false; btn.classList.remove('loading');
         mostrarError(json.error || 'Credenciales incorrectas.'); return;
       } catch (_) {
