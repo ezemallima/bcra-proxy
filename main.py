@@ -1188,7 +1188,7 @@ def _layer_conducta_interna(
     # ── Filtrar facturas: CUIT directo → nombre vía _cartera_comercial ──
     facturas = [
         f for f in saldos_data
-        if str(f.get('cuit', '')).replace('-', '').replace(' ', '').strip() == cuit_limpio
+        if isinstance(f, dict) and str(f.get('cuit', '')).replace('-', '').replace(' ', '').strip() == cuit_limpio
     ]
     if not facturas:
         nombre_cliente = next(
@@ -1200,8 +1200,10 @@ def _layer_conducta_interna(
         if nombre_cliente:
             facturas = [
                 f for f in saldos_data
-                if str(f.get('cliente', '')).strip().upper() == nombre_cliente
-                or nombre_cliente in str(f.get('cliente', '')).strip().upper()
+                if isinstance(f, dict) and (
+                    str(f.get('cliente', '')).strip().upper() == nombre_cliente
+                    or nombre_cliente in str(f.get('cliente', '')).strip().upper()
+                )
             ]
 
     if not facturas:
@@ -1307,7 +1309,11 @@ def _evaluar_comunidad(cuit_limpio: str, wsp_index: dict) -> tuple:
     NLP sobre menciones en WhatsApp indexadas por CUIT.
     Returns: (pts, es_negativo, menciones_neg, menciones_pos)
     """
+    if not isinstance(wsp_index, dict):
+        return (100, False, 0, 0)
     entry = wsp_index.get(cuit_limpio) or {}
+    if not isinstance(entry, dict):
+        return (100, False, 0, 0)
     if not entry:
         return (100, False, 0, 0)
 
@@ -1340,21 +1346,25 @@ def _detectar_degradacion(score_history: list) -> tuple:
         return ('', 0, '')
 
     try:
-        hist = sorted(score_history, key=lambda x: x.get('fecha', ''), reverse=True)
+        hist = sorted(score_history, key=lambda x: x.get('fecha', '') if isinstance(x, dict) else '', reverse=True)
     except Exception:
         hist = list(reversed(score_history))
+
+    hist = [h for h in hist if isinstance(h, dict)]
+    if not hist:
+        return ('', 0, '')
 
     score_actual = int(hist[0].get('score') or 0)
     if not score_actual:
         return ('', 0, '')
 
     corte_30d = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
-    recientes  = [h for h in hist[1:] if (h.get('fecha') or '') >= corte_30d]
+    recientes  = [h for h in hist[1:] if isinstance(h, dict) and (h.get('fecha') or '') >= corte_30d]
     comparar   = recientes[:4] if recientes else hist[1:5]
     if not comparar:
         return ('', 0, '')
 
-    promedio   = sum(int(h.get('score') or 0) for h in comparar) / len(comparar)
+    promedio   = sum(int((h.get('score') if isinstance(h, dict) else 0) or 0) for h in comparar) / len(comparar)
     delta      = round(promedio - score_actual)
     pct_caida  = delta / promedio if promedio > 0 else 0.0
 
@@ -1386,8 +1396,12 @@ def _layer_liquidez(cheq_data: dict, max_sit: int, n_periodos_h: int) -> tuple:
         causales = res_c.get('causales', []) if isinstance(res_c, dict) else []
         detalles: list = []
         for causal in causales:
-            for ent in causal.get('entidades', []):
-                detalles.extend(ent.get('detalle', []))
+            if not isinstance(causal, dict):
+                continue
+            for ent in (causal.get('entidades') or []):
+                if not isinstance(ent, dict):
+                    continue
+                detalles.extend(x for x in (ent.get('detalle') or []) if isinstance(x, dict))
         total_ch   = len(detalles)
         activos_ch = sum(1 for d in detalles
                          if not d.get('fechaPago') or d.get('estadoMulta') == 'IMPAGA')
@@ -1619,6 +1633,8 @@ def calcular_rating_predictivo(
         with open(WSP_FILE, 'r', encoding='utf-8') as _wf:
             wsp_index = json.load(_wf)
     except: pass
+    if not isinstance(wsp_index, dict):
+        wsp_index = {}
 
     # ── Solvencia AFIP (graceful degradation) ────────────────────────────
     if solvency_data is None:
@@ -2118,6 +2134,8 @@ def ejecutar_verificacion(cartera_data):
             wsp_index = json.load(f)
     except Exception:
         pass
+    if not isinstance(wsp_index, dict):
+        wsp_index = {}
 
     nuevas_alertas = []
     cartera_actualizada = []
