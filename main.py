@@ -234,14 +234,15 @@ def _norm_bcra_resp(data) -> dict:
     return data
 
 
-def _bcra_get(url: str, timeout: int = 20) -> requests.Response:
-    """Transporte HTTP unificado para URLs del BCRA.
+def _bcra_get(url: str, timeout: int = 0) -> requests.Response:
+    """Transporte HTTP unificado para URLs del BCRA y scrapers públicos (AFIP/ANSES).
 
-    Con SCRAPERAPI_KEY configurado: enruta via ScraperAPI (proxy rotativo, IPs
-    argentinas, manejo de SSL/bloqueos de forma transparente).
-    Sin SCRAPERAPI_KEY: conexión directa legacy con SSL ignore (fallback).
+    Con SCRAPERAPI_KEY: enruta via ScraperAPI (timeout estricto 12s, IPs rotativas,
+    SSL gestionado por el proxy — no requiere verify=False).
+    Sin SCRAPERAPI_KEY: conexión directa legacy (timeout 20s, SSL ignore).
     """
     if SCRAPERAPI_KEY:
+        _t = timeout if timeout > 0 else 12   # timeout estricto ScraperAPI
         return requests.get(
             'http://api.scraperapi.com',
             params={
@@ -249,10 +250,10 @@ def _bcra_get(url: str, timeout: int = 20) -> requests.Response:
                 'url':          url,
                 'country_code': 'ar',
             },
-            timeout=timeout,
+            timeout=_t,
         )
-    # Fallback legacy — conexión directa, sin proxy
-    return requests.get(url, timeout=timeout, verify=False)
+    _t = timeout if timeout > 0 else 20
+    return requests.get(url, timeout=_t, verify=False)
 
 
 def _map_detalle_bcra(raw: dict) -> dict:
@@ -290,9 +291,10 @@ def _map_detalle_bcra(raw: dict) -> dict:
             continue
         periodo = str(item.get('periodo') or item.get('fechaPeriodo') or '')
         entidad = {
-            'entidad':   str(item.get('entidad') or item.get('codigoEntidad') or ''),
-            'situacion': int(item.get('situacion') or 1),
-            'monto':     float(item.get('monto') or item.get('deuda') or 0),
+            'entidad':    str(item.get('entidad') or item.get('codigoEntidad') or ''),
+            'situacion':  int(item.get('situacion') or 1),
+            'monto':      float(item.get('monto') or item.get('deuda') or 0),
+            'diasAtraso': int(item.get('diasAtraso') or 0),
         }
         grupos.setdefault(periodo, []).append(entidad)
 
@@ -329,7 +331,7 @@ def _consultar_bcra_directo(cuit: str, tipo: str = 'deudas'):
     _urls_cdi = {
         'deudas':    f'https://api.bcra.gob.ar/CentralDeInformacion/v1.0/Deudas/{cuit}',
         'historial': f'https://api.bcra.gob.ar/CentralDeInformacion/v1.0/Deudas/Historicas/{cuit}',
-        'cheques':   f'https://api.bcra.gob.ar/CentralDeInformacion/v1.0/Deudas/ChequesRechazados/{cuit}',
+        'cheques':   f'https://api.bcra.gob.ar/CentralDeInformacion/v1.0/ChequesRechazados/{cuit}',
     }
     _urls_legacy = {
         'deudas':    f'https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/{cuit}',
@@ -763,9 +765,11 @@ def _scrape_tangofactura_full(cuit, ua):
 
 
 def _scrape_afip_html(cuit, ua):
-    """Scraper HTML de endpoints públicos AFIP como fallback a TangoFactura."""
+    """Scraper HTML de endpoints públicos AFIP/ARCA como fallback a TangoFactura.
+    Con SCRAPERAPI_KEY: usa proxy rotativo (evita bloqueos por IP en Render).
+    Sin SCRAPERAPI_KEY: directo con headers UA personalizados."""
     import re
-    headers = {
+    _headers_direct = {
         'User-Agent': ua,
         'Accept': 'text/html,application/xhtml+xml,*/*;q=0.8',
         'Accept-Language': 'es-AR,es;q=0.9',
@@ -777,7 +781,10 @@ def _scrape_afip_html(cuit, ua):
     ]
     for url in endpoints:
         try:
-            r = requests.get(url, headers=headers, timeout=10, verify=False, allow_redirects=True)
+            if SCRAPERAPI_KEY:
+                r = _bcra_get(url, timeout=12)  # ScraperAPI gestiona UA y bloqueos
+            else:
+                r = requests.get(url, headers=_headers_direct, timeout=10, verify=False, allow_redirects=True)
             if r.status_code != 200 or len(r.text) < 100:
                 continue
             html = r.text
@@ -810,8 +817,9 @@ def _scrape_afip_html(cuit, ua):
 
 def _check_anses_aportes(cuit, ua):
     """Verifica actividad laboral reciente via endpoints públicos ANSES.
-    Retorna dict con capacidad_pago_validada=True si hay respuesta positiva."""
-    headers = {
+    Retorna dict con capacidad_pago_validada=True si hay respuesta positiva.
+    Con SCRAPERAPI_KEY: proxy rotativo (evita timeouts por bloqueo de IP)."""
+    _headers_direct = {
         'User-Agent': ua,
         'Accept': 'application/json, text/html',
         'Origin':   'https://www.anses.gob.ar',
@@ -823,7 +831,10 @@ def _check_anses_aportes(cuit, ua):
     ]
     for url in endpoints:
         try:
-            r = requests.get(url, headers=headers, timeout=8, verify=False)
+            if SCRAPERAPI_KEY:
+                r = _bcra_get(url, timeout=12)
+            else:
+                r = requests.get(url, headers=_headers_direct, timeout=8, verify=False)
             if r.status_code != 200:
                 continue
             body = r.text.lower()
@@ -2461,8 +2472,8 @@ def ejecutar_verificacion(cartera_data):
                     print(f"{tag} ERROR intento {intento+1}/2 — {type(e_bcra).__name__}: {e_bcra}", flush=True)
                     print(f"{tag} Traceback: {tb_short}", flush=True)
                     if intento == 0:
-                        print(f"{tag} Reintentando en 3s...", flush=True)
-                        time.sleep(3)
+                        print(f"{tag} Reintentando...", flush=True)
+                        # Sin sleep — ScraperAPI gestiona throttling
                     else:
                         print(f"{tag} FALLIDO definitivo — continúa con siguiente cliente", flush=True)
                         cliente_actualizado['verificacion_fallida'] = True
@@ -2512,11 +2523,7 @@ def ejecutar_verificacion(cartera_data):
                 except Exception as e_sv:
                     print(f"[verif] Error guardado parcial: {e_sv}", flush=True)
 
-            # Delay aleatorio anti-bloqueo (excepto después del último)
-            if i < total - 1:
-                delay = random.uniform(2.0, 5.0)
-                print(f"{tag} Pausa {delay:.1f}s...", flush=True)
-                time.sleep(delay)
+            # Sin delay inter-cliente — ScraperAPI rota IPs automáticamente
 
         # ── Guardado final ────────────────────────────────────────────────────
         _guardar_alertas(nuevas_alertas, cartera_actualizada, parcial=False)
@@ -3250,7 +3257,7 @@ def _ejecutar_proceso_integral(cartera_data: list):
 
         with _proceso_lock:
             _proceso_integral_estado['procesados'] = i + 1
-        time.sleep(random.uniform(1.0, 3.0))
+        # Sin sleep — ScraperAPI gestiona throttling/rotación de IPs
 
     # Persistir cartera al finalizar
     try:
@@ -3822,9 +3829,6 @@ def get_cheques(cuit):
                     break
             except Exception as e:
                 print(f"[cheques] Error via {via} intento {intento+1} para {cuit}: {e}", flush=True)
-                if intento < 1:
-                    time.sleep(0.5)
-                    continue
                 break
     cached = _cheques_cache_get(cuit)
     if cached:
@@ -3859,9 +3863,6 @@ def get_historial(cuit):
                     break
             except Exception as e:
                 print(f"[historial] Error via {via} intento {intento+1} para {cuit}: {e}", flush=True)
-                if intento < 1:
-                    time.sleep(0.5)
-                    continue
                 break
     try:
         hist_path = os.path.join(DATA_DIR, f'historial_{cuit}.json')
