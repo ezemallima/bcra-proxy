@@ -521,15 +521,21 @@ def analizar_bodegas_server(cuit, nombre, mensajes):
             'Responde SOLO con este JSON sin markdown: {"es_negativo": false, "motivo": "texto descriptivo", "comportamiento_inconsistente": false}'
         )
         payload = {"contents": [{"parts": [{"text": prompt}]}]}
-        texto, error = gemini_request(payload, timeout=30)
+        texto, error = gemini_request(payload, timeout=45)
         if error or not texto:
             return False, ""
-        texto_limpio = texto.strip().replace("```json", "").replace("```", "").strip()
-        import re as re_mod
-        match = re_mod.search(r'\{[\s\S]+\}', texto_limpio)
-        if match:
-            texto_limpio = match.group(0)
-        resultado = json.loads(texto_limpio)
+        import re as _re_mod
+        # Limpiar delimitadores markdown y extraer primer objeto JSON
+        texto_limpio = texto.strip()
+        texto_limpio = texto_limpio.replace("```json", "").replace("```", "").strip()
+        _match = _re_mod.search(r'\{[\s\S]+\}', texto_limpio)
+        if _match:
+            texto_limpio = _match.group(0)
+        try:
+            resultado = json.loads(texto_limpio)
+        except json.JSONDecodeError as _je:
+            print(f"[bodegas] JSONDecodeError ({_je}) — raw: {texto_limpio[:200]}", flush=True)
+            return False, ""
         motivo = resultado.get("motivo", "")
         if resultado.get("comportamiento_inconsistente"):
             motivo = "⚠ Comportamiento Inconsistente: " + motivo
@@ -1715,7 +1721,10 @@ def calcular_rating_predictivo(
 
     # ── Ajuste: ratio de apalancamiento BCRA/AFIP ─────────────────────────
     if solvency_data:
-        _ing_afip = float(solvency_data.get('ingresos_anuales') or 0)
+        try:
+            _ing_afip = float(solvency_data.get('ingresos_anuales') or 0)
+        except (TypeError, ValueError):
+            _ing_afip = 0.0
         if es_mora_administrativa and monto_sit1_k > 0:
             # Criterio Humano: ingreso presunto = deuda Sit.1 × 3 (bancos limpios).
             # Solo evaluar la deuda limpia contra ese ingreso — el outlier no cuenta.
@@ -1726,7 +1735,10 @@ def calcular_rating_predictivo(
                 solvency_data = dict(solvency_data)
                 solvency_data['ingresos_anuales'] = round(monto_total_m * 1_000 * 3)
                 solvency_data['fuente_ingresos']  = 'bcra_floor_scorer'
-            _ing     = float(solvency_data.get('ingresos_anuales') or 0)
+            try:
+                _ing = float(solvency_data.get('ingresos_anuales') or 0)
+            except (TypeError, ValueError):
+                _ing = 0.0
             _deu_chk = monto_total_m * 1000
         # Piso de ingreso: si AFIP reporta menos de $100k anuales para alguien
         # con deuda bancaria real, el dato AFIP es incompleto → usar deuda × 3.
@@ -2977,11 +2989,25 @@ def _ejecutar_proceso_integral(cartera_data: list):
             try:
                 score_data = calcular_score_servidor(cuit, bcra_data or {})
             except Exception as _sce:
-                print(f'[proceso-integral] Score falló {cuit} ({nombre}): {type(_sce).__name__}: {_sce}', flush=True)
+                _tb_full = _tb.format_exc().strip()
+                _err_msg = f"{type(_sce).__name__}: {str(_sce)[:400]}"
+                _err_linea = _tb_full.split('\n')[-1][:200]
+                print(
+                    f'[proceso-integral] Score falló #{i+1} {cuit} ({nombre})\n'
+                    f'  {_err_msg}\n  {_err_linea}\n  traceback:\n{_tb_full}',
+                    flush=True,
+                )
+                with _proceso_lock:
+                    _proceso_integral_estado['errores'] += 1
+                    _proceso_integral_estado['log_errores'].append({
+                        'num': i + 1, 'cuit': cuit, 'nombre': nombre,
+                        'tipo': 'ScoreError', 'mensaje': _err_msg, 'linea': _err_linea,
+                    })
                 score_data = {
                     'score': None, 'rango': 'Error', 'color': '#6b7280', 'emoji': '⚠️',
                     'max_sit': 1, 'bcra_disponible': False,
                     'alerta_temprana': False, 'bloquear_oportunidad': False, 'alerta_logistica': '',
+                    '_error_paso2': _err_msg,
                 }
 
             # ── Paso 3: Solvencia — try separado; normalizar si retorna lista ──────────
