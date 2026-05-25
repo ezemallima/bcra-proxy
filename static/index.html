@@ -4767,6 +4767,7 @@ async function _pollProcesoIntegral() {
       if (btnPI) { btnPI.disabled = false; btnPI.textContent = 'Ejecutar Proceso Integral (BCRA + Score + Mora)'; }
       if (btnRV) { btnRV.disabled = false; btnRV.textContent = 'Reprocesar Sin Score'; }
       if (bar) bar.style.background = 'linear-gradient(90deg,#16a34a,#22c55e)';
+      _alertasLastLoad = 0; // forzar carga inmediata — bypass debounce 30s
       autoCargarScoresServidor();
       _alertasMoraData = null;
       cargarAlertasMora();

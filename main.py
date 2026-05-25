@@ -2104,12 +2104,20 @@ def _actualizar_score_en_cartera(cuit_limpio: str, score_data: dict, solvency: d
         if not found:
             cartera.append({'cuit': cuit_limpio, 'nombre': '', 'ciudad': '', **patch})
         existente['cartera'] = cartera
-        with open(ALERTAS_FILE, 'w', encoding='utf-8') as _f:
-            json.dump(existente, _f, ensure_ascii=False)
+        _tmp_af = ALERTAS_FILE + '.tmp'
+        with open(_tmp_af, 'w', encoding='utf-8') as _f:
+            json.dump(existente, _f, ensure_ascii=False, default=str)
+            _f.flush()
+            os.fsync(_f.fileno())
+        os.replace(_tmp_af, ALERTAS_FILE)
         if deg_tipo:
             print(f"[anti-videla] {cuit_limpio} → {deg_tipo} (−{deg_delta} pts)", flush=True)
     except Exception as _e:
         print(f"[score-update] Error persistiendo {cuit_limpio}: {_e}", flush=True)
+        try:
+            os.remove(ALERTAS_FILE + '.tmp')
+        except OSError:
+            pass
 
 
 def ejecutar_verificacion(cartera_data):
@@ -2728,6 +2736,32 @@ def get_scores_cartera():
         except Exception as e:
             print(f"[scores-cartera] Error {_ruta}: {e}", flush=True)
 
+    # Fallback: score_cache.json — resuelve CUITs cuya escritura en ALERTAS_FILE
+    # falló silenciosamente (ej. datos con tipos no serializables en versiones anteriores).
+    # Solo agrega CUITs que NO aparecieron en ninguna fuente primaria.
+    try:
+        with _score_cache_lock:
+            _sc_fb = _score_cache_read()
+        for _k, _v in _sc_fb.items():
+            _nc_k = _nc2(_k)
+            if _nc_k and _nc_k not in scores_out and isinstance(_v, dict) and _v.get('score'):
+                scores_out[_nc_k] = {
+                    "scoreCompleto":        _v.get('score'),
+                    "scoreRango":           _v.get('rango'),
+                    "scoreColor":           _v.get('color'),
+                    "scoreEmoji":           _v.get('emoji'),
+                    "ultimaSit":            _v.get('max_sit', 1),
+                    "nombre":               _v.get('nombre', ''),
+                    "alerta_temprana":      _v.get('alerta_temprana', False),
+                    "bloquear_oportunidad": _v.get('bloquear_oportunidad', False),
+                    "alerta_logistica":     _v.get('alerta_logistica', ''),
+                    "inferencia_ingresos":  _v.get('inferencia_ingresos'),
+                    "fuente_ingresos":      _v.get('fuente_ingresos'),
+                    "actividad_principal":  _v.get('actividad_principal'),
+                }
+    except Exception as _sc_e:
+        print(f"[scores-cartera] score_cache fallback error: {_sc_e}", flush=True)
+
     print(f"[scores-cartera] {len(scores_out)} scores totales — {archivos_log}", flush=True)
     if scores_out:
         return jsonify({"ok": True, "scores": scores_out, "total": len(scores_out)})
@@ -3036,6 +3070,28 @@ def _ejecutar_proceso_integral(cartera_data: list):
             except Exception as _se:
                 print(f'[proceso-integral] Solvencia fallo {cuit}: {_se} — continuando sin AFIP', flush=True)
                 solvency = {}
+
+            # ── Contingencia: garantizar score numérico en todos los casos ──────────
+            if not score_data.get('score'):
+                _ms_c = 1
+                if isinstance(bcra_data, dict):
+                    _per_c = _safe_periodos((bcra_data.get('results') or {}).get('periodos') or [])
+                    if _per_c and isinstance(_per_c[0], dict):
+                        _ents_c = [e for e in _per_c[0].get('entidades', []) if isinstance(e, dict)]
+                        if _ents_c:
+                            _ms_c = max((e.get('situacion', 1) or 1) for e in _ents_c)
+                if   _ms_c == 1: _sc_c, _rg_c, _cl_c, _em_c = 650, 'Bueno',       '#ca8a04', '🟡'
+                elif _ms_c == 2: _sc_c, _rg_c, _cl_c, _em_c = 480, 'Revisar',     '#ea580c', '🟠'
+                else:            _sc_c, _rg_c, _cl_c, _em_c = 320, 'Alto riesgo', '#dc2626', '🔴'
+                score_data.update({
+                    'score': _sc_c, 'rango': _rg_c, 'color': _cl_c, 'emoji': _em_c,
+                    'max_sit': _ms_c, '_contingencia': True,
+                })
+                print(
+                    f'[proceso-integral] Contingencia BCRA sit={_ms_c} → {_sc_c} {_rg_c} '
+                    f'({cuit} {nombre})',
+                    flush=True,
+                )
 
             # ── Paso 4: Persistencia atómica ──────────────────────────────────────────
             with _alertas_file_lock:
