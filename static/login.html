@@ -482,8 +482,27 @@ async function handleLogin(e) {
   btn.classList.add('loading');
 
   if (esCuit(identifier)) {
-    // ── Camino A: CUIT + PIN (vendedores legacy) ─────────────────────────────
     const cuit = identifier.replace(/\D/g, '');
+
+    // ── Camino C: Admin CUIT — sesión Flask (redirige a /) ───────────────────
+    if (cuit === '30710295022') {
+      try {
+        const res  = await fetch('/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cuit, password }),
+        });
+        const json = await res.json();
+        if (json.ok) { window.location.replace('/'); return; }
+        btn.disabled = false; btn.classList.remove('loading');
+        mostrarError(json.error || 'Credenciales incorrectas.'); return;
+      } catch (_) {
+        btn.disabled = false; btn.classList.remove('loading');
+        mostrarError('Error de conexión. Intentá de nuevo.'); return;
+      }
+    }
+
+    // ── Camino A: CUIT + PIN (vendedores legacy) ─────────────────────────────
     if (password !== PIN_COMERCIAL) {
       btn.disabled = false; btn.classList.remove('loading');
       mostrarError('PIN incorrecto.'); return;

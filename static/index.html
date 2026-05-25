@@ -57,6 +57,9 @@
   .sb-ico svg { width: 15px; height: 15px; stroke: #475569; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: stroke 0.15s; }
   .sb-label { flex: 1; }
   .sb-footer { padding: 10px 14px 14px; border-top: 1px solid rgba(255,255,255,0.06); display: flex; flex-direction: column; gap: 5px; flex-shrink: 0; }
+  .sb-logout-btn { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 7px; color: #64748b; font-size: 12px; font-weight: 500; text-decoration: none; transition: all 0.15s; margin-top: 4px; }
+  .sb-logout-btn:hover { background: rgba(239,68,68,0.12); color: #f87171; }
+  .sb-logout-btn svg { stroke: currentColor; flex-shrink: 0; }
 
   /* ── MAIN CANVAS ── */
   #main-canvas { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--fondo); min-width: 0; }
@@ -393,13 +396,26 @@
     .sb-brand { padding: 12px 8px; justify-content: center; }
     .sb-brand-text { display: none; }
     .sb-nav .tab { padding: 10px; justify-content: center; }
+    .sb-footer { padding: 8px 6px 10px; align-items: center; }
     .sb-footer .proxy-status span { display: none; }
+    .sb-logout-label { display: none; }
+    .sb-logout-btn { padding: 9px; justify-content: center; }
     .canvas-body { padding: 14px 12px; }
     .page-header { padding: 10px 14px; }
     .info-grid, .afip-grid { grid-template-columns: 1fr; }
     .cli-data-grid { grid-template-columns: 1fr 1fr; }
     .buscador-input { font-size: 14px; padding: 12px 14px 12px 42px; }
     #decision-grid { grid-template-columns: 1fr; }
+    /* Tables: horizontal scroll */
+    .bcra-table { min-width: 480px; }
+    .card { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    /* Primary buttons: larger tap targets */
+    button.primary { min-height: 44px; font-size: 14px; padding: 11px 20px; }
+    /* Stack input rows vertically */
+    .input-row { flex-direction: column; }
+    .input-row input { min-width: 0; }
+    /* Page title shrinks */
+    .page-title-text { font-size: 15px; }
   }
 </style>
 </head>
@@ -531,6 +547,10 @@
       <div class="proxy-status"><div class="dot" id="wsp-dot" style="background:#25d366;"></div><span id="wsp-label"></span></div>
       <div class="proxy-status"><div class="dot" id="mora-dot" style="background:#ccc;"></div><span id="mora-label"></span></div>
       <div class="proxy-status"><div class="dot" id="proxy-dot"></div><span id="proxy-label"></span></div>
+      <a href="/logout" class="sb-logout-btn" title="Cerrar sesión">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        <span class="sb-logout-label">Cerrar sesión</span>
+      </a>
     </div>
   </aside>
 

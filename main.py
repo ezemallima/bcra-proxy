@@ -1,4 +1,5 @@
-from flask import Flask, jsonify, send_from_directory, request
+from flask import Flask, jsonify, send_from_directory, request, session, redirect, url_for
+from functools import wraps
 from flask_cors import CORS
 import requests
 import urllib3
@@ -25,12 +26,16 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 app = Flask(__name__, static_folder='static')
 CORS(app)
 app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024
+app.secret_key = os.environ.get('SECRET_KEY', 'vs-artel-2026-key')
 
 GEMINI_KEY      = os.environ.get('GEMINI_API_KEY', '')
 OPENAI_KEY      = os.environ.get('OPENAI_API_KEY', '')
 CUIT_API_KEY    = os.environ.get('API_KEY_CUIT', '')
 CUIT_API_URL    = os.environ.get('API_SOLVENCY_URL', '')
 SCRAPERAPI_KEY  = os.environ.get('SCRAPERAPI_KEY', '')
+
+ADMIN_CUIT = '30710295022'
+ADMIN_PASS = 'Artel2026'
 
 # Topes de facturación Monotributo 2026 — usados como ingreso estimado base
 _MONOTRIB_INGRESOS = {
@@ -1991,6 +1996,16 @@ def calcular_rating_predictivo(
     if es_mora_tecnica and not hard_block_bcra:
         puntos = max(puntos, 700)
 
+    # ── Penalización diasAtraso (CDI v1.0) ────────────────────────────────
+    if _ents_curr:
+        _max_dias = max((e.get('diasAtraso', 0) or 0) for e in _ents_curr)
+        if _max_dias > 180:
+            puntos -= 100
+            print(f"[score] {cuit_limpio} diasAtraso={_max_dias} → −100pts", flush=True)
+        elif _max_dias > 90:
+            puntos -= 50
+            print(f"[score] {cuit_limpio} diasAtraso={_max_dias} → −50pts", flush=True)
+
     score = max(1, min(999, round(puntos)))
 
     if   score >= 750: rango, color, emoji = 'Excelente',   '#16a34a', '🟢'
@@ -2550,9 +2565,20 @@ def ejecutar_verificacion(cartera_data):
         verificacion_estado["corriendo"] = False
         print("[verif] Flag liberado.", flush=True)
 
+# ─── AUTH ─────────────────────────────────────────────────
+
+def require_login(f):
+    @wraps(f)
+    def _wrapped(*args, **kwargs):
+        if not session.get('logged_in'):
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return _wrapped
+
 # ─── ENDPOINTS ───────────────────────────────────────────
 
 @app.route("/")
+@require_login
 def index():
     return send_from_directory('static', 'index.html')
 
@@ -2564,9 +2590,22 @@ def ping():
 def comercial():
     return send_from_directory('static', 'comercial.html')
 
-@app.route("/login")
+@app.route("/login", methods=["GET", "POST"])
 def login():
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        cuit = str(data.get('cuit', '')).replace('-', '').replace(' ', '').strip()
+        pwd  = str(data.get('password', '')).strip()
+        if cuit == ADMIN_CUIT and pwd == ADMIN_PASS:
+            session['logged_in'] = True
+            return jsonify({"ok": True})
+        return jsonify({"error": "Credenciales incorrectas"}), 401
     return send_from_directory('static', 'login.html')
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
 
 @app.route("/supabase-session.js")
 def supabase_session_js():
@@ -3168,6 +3207,19 @@ def _ejecutar_proceso_integral(cartera_data: list):
                 else:
                     bcra_data = {}
 
+            # ── Paso 1.5: CDI Cheques — pre-caching para _layer_liquidez ─────────────
+            try:
+                _cheq_cdi, _ = _consultar_bcra_directo(cuit, 'cheques')
+                if _cheq_cdi and isinstance(_cheq_cdi, dict):
+                    _cheq_path = os.path.join(DATA_DIR, f'cheques_{cuit}.json')
+                    _tmp_cheq  = _cheq_path + '.tmp'
+                    with open(_tmp_cheq, 'w', encoding='utf-8') as _cf:
+                        json.dump({'payload': _cheq_cdi, 'ts': time.time()}, _cf, ensure_ascii=False)
+                        _cf.flush(); os.fsync(_cf.fileno())
+                    os.replace(_tmp_cheq, _cheq_path)
+            except Exception as _cheq_e:
+                print(f'[proceso-integral] Cheques CDI fallo {cuit}: {_cheq_e}', flush=True)
+
             # ── Paso 2: Score (try propio — no mata el ciclo completo si falla) ───────
             try:
                 score_data = calcular_score_servidor(cuit, bcra_data or {})
@@ -3277,6 +3329,7 @@ def _ejecutar_proceso_integral(cartera_data: list):
 
 
 @app.route("/proceso-integral", methods=["POST"])
+@require_login
 def iniciar_proceso_integral():
     global _proceso_integral_estado
     if _proceso_integral_estado.get("corriendo"):
@@ -3314,6 +3367,7 @@ def proceso_status():
 
 
 @app.route("/api/reprocesar_vacios", methods=["POST"])
+@require_login
 def reprocesar_vacios():
     """Reprocesa solo los clientes de la cartera cuyo score esté ausente o sea nulo.
     Usa la misma lógica de _ejecutar_proceso_integral (AFIP SDK + BCRA reintentos v60)."""
