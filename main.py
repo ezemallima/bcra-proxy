@@ -26,10 +26,11 @@ app = Flask(__name__, static_folder='static')
 CORS(app)
 app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024
 
-GEMINI_KEY = os.environ.get('GEMINI_API_KEY', '')
-OPENAI_KEY = os.environ.get('OPENAI_API_KEY', '')
-CUIT_API_KEY = os.environ.get('API_KEY_CUIT', '')
-CUIT_API_URL = os.environ.get('API_SOLVENCY_URL', '')
+GEMINI_KEY      = os.environ.get('GEMINI_API_KEY', '')
+OPENAI_KEY      = os.environ.get('OPENAI_API_KEY', '')
+CUIT_API_KEY    = os.environ.get('API_KEY_CUIT', '')
+CUIT_API_URL    = os.environ.get('API_SOLVENCY_URL', '')
+SCRAPERAPI_KEY  = os.environ.get('SCRAPERAPI_KEY', '')
 
 # Topes de facturación Monotributo 2026 — usados como ingreso estimado base
 _MONOTRIB_INGRESOS = {
@@ -79,6 +80,10 @@ ALERTAS_BCRA_FILE = os.path.join(DATA_DIR, 'alertas_bcra.json')
 DATOS_FILE        = os.path.join(DATA_DIR, 'datos_bodega.json')
 SCORE_CACHE_FILE  = os.path.join(DATA_DIR, 'score_cache.json')
 print(f"[init] Almacenamiento en: {DATA_DIR}", flush=True)
+print(
+    f"[init] ScraperAPI: {'ACTIVO — proxy rotativo habilitado' if SCRAPERAPI_KEY else 'no configurado — modo directo legacy'}",
+    flush=True,
+)
 WSP_FILE = os.path.join(os.getcwd(), 'whatsapp_index.json')
 
 bcra_cache = {}
@@ -229,8 +234,30 @@ def _norm_bcra_resp(data) -> dict:
     return data
 
 
+def _bcra_get(url: str, timeout: int = 20) -> requests.Response:
+    """Transporte HTTP unificado para URLs del BCRA.
+
+    Con SCRAPERAPI_KEY configurado: enruta via ScraperAPI (proxy rotativo, IPs
+    argentinas, manejo de SSL/bloqueos de forma transparente).
+    Sin SCRAPERAPI_KEY: conexión directa legacy con SSL ignore (fallback).
+    """
+    if SCRAPERAPI_KEY:
+        return requests.get(
+            'http://api.scraperapi.com',
+            params={
+                'api_key':      SCRAPERAPI_KEY,
+                'url':          url,
+                'country_code': 'ar',
+            },
+            timeout=timeout,
+        )
+    # Fallback legacy — conexión directa, sin proxy
+    return requests.get(url, timeout=timeout, verify=False)
+
+
 def _consultar_bcra_directo(cuit: str, tipo: str = 'deudas'):
-    """Consulta api.bcra.gob.ar con Session reutilizable, SSL ignore y 3 reintentos.
+    """Consulta api.bcra.gob.ar con 3 reintentos.
+    Usa _bcra_get: ScraperAPI si la key está configurada, directo si no.
     tipo: 'deudas' | 'historial' | 'cheques'"""
     _urls = {
         'deudas':    f'https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/{cuit}',
@@ -238,33 +265,30 @@ def _consultar_bcra_directo(cuit: str, tipo: str = 'deudas'):
         'cheques':   f'https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/{cuit}',
     }
     url = _urls.get(tipo, _urls['deudas'])
+    via = 'scraperapi' if SCRAPERAPI_KEY else 'directo'
     ultimo_error = 'sin_respuesta'
-    with requests.Session() as _s:
-        _s.verify = False
-        for intento in range(3):
-            try:
-                r = _s.get(url, timeout=10)
-                if r.status_code == 404:
-                    return {'results': {'denominacion': '', 'periodos': []}, 'sin_deudas': True}, None
-                if r.status_code == 200 and len(r.text.strip()) > 10:
-                    data = _norm_bcra_resp(r.json())
-                    if not data.get('error'):
-                        print(f"[bcra_directo] {cuit}/{tipo} OK intento {intento+1}", flush=True)
-                        return data, None
-                ultimo_error = f'http_{r.status_code}'
-                print(f"[bcra_directo] {cuit}/{tipo} intento {intento+1}: {ultimo_error}", flush=True)
-            except requests.exceptions.SSLError as e:
-                ultimo_error = 'ssl_error'
-                print(f"[bcra_directo] {cuit}/{tipo} SSL intento {intento+1}: {e}", flush=True)
-            except requests.exceptions.Timeout:
-                ultimo_error = 'timeout'
-                print(f"[bcra_directo] {cuit}/{tipo} Timeout intento {intento+1}", flush=True)
-            except Exception as e:
-                ultimo_error = str(e)[:80]
-                print(f"[bcra_directo] {cuit}/{tipo} error intento {intento+1}: {e}", flush=True)
-            if intento < 2:
-                time.sleep(1.5)
-    print(f"[bcra_directo] {cuit}/{tipo} agotó 3 reintentos — {ultimo_error}", flush=True)
+    for intento in range(3):
+        try:
+            r = _bcra_get(url, timeout=20)
+            if r.status_code == 404:
+                return {'results': {'denominacion': '', 'periodos': []}, 'sin_deudas': True}, None
+            if r.status_code == 200 and len(r.text.strip()) > 10:
+                data = _norm_bcra_resp(r.json())
+                if not data.get('error'):
+                    print(f"[bcra_directo] {cuit}/{tipo} OK via {via} intento {intento+1}", flush=True)
+                    return data, None
+            ultimo_error = f'http_{r.status_code}'
+            print(f"[bcra_directo] {cuit}/{tipo} via {via} intento {intento+1}: {ultimo_error}", flush=True)
+        except requests.exceptions.Timeout:
+            ultimo_error = 'timeout'
+            print(f"[bcra_directo] {cuit}/{tipo} via {via} Timeout intento {intento+1}", flush=True)
+        except Exception as e:
+            ultimo_error = str(e)[:80]
+            print(f"[bcra_directo] {cuit}/{tipo} via {via} error intento {intento+1}: {e}", flush=True)
+        if intento < 2:
+            # ScraperAPI gestiona throttling en su red — sleep reducido
+            time.sleep(0.5 if SCRAPERAPI_KEY else 1.5)
+    print(f"[bcra_directo] {cuit}/{tipo} agotó 3 reintentos via {via} — {ultimo_error}", flush=True)
     return None, f'bcra_no_disponible:{ultimo_error}'
 
 def gemini_request(payload, timeout=250):
