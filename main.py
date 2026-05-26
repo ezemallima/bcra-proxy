@@ -3216,15 +3216,17 @@ def _ejecutar_proceso_integral(cartera_data: list):
     import traceback as _tb
     global _proceso_integral_estado
 
-    total = len(cartera_data)
+    total       = len(cartera_data)
+    _pi_alertas = []   # acumula alertas BCRA detectadas en este proceso
 
     for i, c in enumerate(cartera_data):
         if not isinstance(c, dict):
             with _proceso_lock:
                 _proceso_integral_estado['procesados'] = i + 1
             continue
-        cuit   = str(c.get('cuit', '')).replace('-', '').replace(' ', '').strip()
-        nombre = str(c.get('nombre') or '').strip()
+        cuit         = str(c.get('cuit', '')).replace('-', '').replace(' ', '').strip()
+        nombre       = str(c.get('nombre') or '').strip()
+        sit_anterior = int(c.get('ultimaSit', 1) or 1)  # situación previa del cliente
 
         if not cuit or len(cuit) < 10:
             _proceso_integral_estado['procesados'] = i + 1
@@ -3328,6 +3330,27 @@ def _ejecutar_proceso_integral(cartera_data: list):
                     flush=True,
                 )
 
+            # ── Paso 3.5: Detección de alerta BCRA ───────────────────────────────────
+            # Usa max_sit ya calculado en score_data — sin llamada extra a la API
+            _max_sit_pi = int(score_data.get('max_sit', 1) or 1)
+            if score_data.get('score') and (_max_sit_pi > sit_anterior or _max_sit_pi >= 3):
+                _pi_alertas.append({
+                    'nombre':        nombre,
+                    'cuit':          cuit,
+                    'sitAnterior':   sit_anterior,
+                    'sitActual':     _max_sit_pi,
+                    'fecha':         time.strftime('%d/%m/%Y'),
+                    'tipo':          'bcra',
+                    'scoreCompleto': score_data.get('score'),
+                    'scoreRango':    score_data.get('rango'),
+                    'scoreColor':    score_data.get('color'),
+                    'scoreEmoji':    score_data.get('emoji'),
+                })
+                print(
+                    f'[proceso-integral] ALERTA BCRA: {nombre} sit {sit_anterior}→{_max_sit_pi}',
+                    flush=True,
+                )
+
             # ── Paso 4: Persistencia atómica ──────────────────────────────────────────
             with _alertas_file_lock:
                 _actualizar_score_en_cartera(cuit, score_data, solvency)
@@ -3363,6 +3386,33 @@ def _ejecutar_proceso_integral(cartera_data: list):
             _proceso_integral_estado['procesados'] = i + 1
         # Sin sleep — ScraperAPI gestiona throttling/rotación de IPs
 
+    # ── Merge atómico de alertas BCRA en db_v17_final.json ───────────────────────
+    # Preserva alertas tipo 'bodegas' (WhatsApp) del run anterior; reemplaza las 'bcra'
+    try:
+        with _alertas_file_lock:
+            try:
+                with open(ALERTAS_FILE, 'r', encoding='utf-8') as _af:
+                    _af_data = json.load(_af)
+            except Exception:
+                _af_data = {}
+            _alertas_prev_bodegas = [
+                a for a in _af_data.get('alertas', [])
+                if a.get('tipo') != 'bcra'
+            ]
+            _af_data['alertas'] = _alertas_prev_bodegas + _pi_alertas
+            _tmp_pa = ALERTAS_FILE + '.tmp'
+            with open(_tmp_pa, 'w', encoding='utf-8') as _af:
+                json.dump(_af_data, _af, ensure_ascii=False, default=str)
+                _af.flush(); os.fsync(_af.fileno())
+            os.replace(_tmp_pa, ALERTAS_FILE)
+        print(
+            f'[proceso-integral] {len(_pi_alertas)} alerta(s) BCRA guardadas '
+            f'({len(_alertas_prev_bodegas)} bodegas preservadas)',
+            flush=True,
+        )
+    except Exception as _ae:
+        print(f'[proceso-integral] Error guardando alertas: {_ae}', flush=True)
+
     # Persistir cartera al finalizar
     try:
         with open(_CC_FILE, 'w', encoding='utf-8') as _f:
@@ -3375,7 +3425,7 @@ def _ejecutar_proceso_integral(cartera_data: list):
         _proceso_integral_estado['corriendo'] = False
         _proceso_integral_estado['mensaje'] = (
             f'Completado — {n_ok} OK, {_proceso_integral_estado["errores"]} errores'
-            f' | {total} clientes procesados'
+            f' | {total} clientes · {len(_pi_alertas)} alerta(s) BCRA'
         )
     print(f'[proceso-integral] {_proceso_integral_estado["mensaje"]}', flush=True)
 
