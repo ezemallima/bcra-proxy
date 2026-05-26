@@ -66,6 +66,11 @@
   .sb-logout-btn { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 7px; color: #64748b; font-size: 12px; font-weight: 500; text-decoration: none; transition: all 0.15s; margin-top: 4px; }
   .sb-logout-btn:hover { background: rgba(239,68,68,0.12); color: #f87171; }
   .sb-logout-btn svg { stroke: currentColor; flex-shrink: 0; }
+  /* Tab Copiloto IA — acento especial */
+  .sb-tab-agente { border-left: 2px solid transparent; transition: all 0.15s; }
+  .sb-tab-agente:hover { border-left-color: #60a5fa !important; background: rgba(96,165,250,0.08) !important; color: #93c5fd !important; }
+  .sb-tab-agente.active { border-left-color: #60a5fa !important; background: rgba(96,165,250,0.15) !important; color: #93c5fd !important; }
+  .sb-tab-agente.active .sb-ico svg { stroke: #60a5fa !important; }
 
   /* ── MAIN CANVAS ── */
   #main-canvas { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--fondo); min-width: 0; }
@@ -395,6 +400,138 @@
   .ficha-footer-row { display: flex; gap: 8px; padding-top: 10px; border-top: 1px solid #f1f5f9; flex-wrap: wrap; align-items: center; }
   .ficha-btn-ver { margin-left: auto; font-size: 12px !important; padding: 7px 16px !important; }
 
+  /* ── AGENTE GEMINI IA ── */
+  .agente-hero {
+    background: linear-gradient(145deg, #0d1e3f 0%, #0b1628 55%, #0f2040 100%);
+    border: 1px solid rgba(96,165,250,0.18);
+    border-radius: 20px; padding: 2rem; position: relative; overflow: hidden;
+    box-shadow: 0 0 48px rgba(37,99,235,0.12), 0 4px 24px rgba(0,0,0,0.25);
+    margin-bottom: 1rem;
+  }
+  .agente-hero::before {
+    content:''; position:absolute; top:-70px; right:-70px;
+    width:220px; height:220px; border-radius:50%;
+    background:radial-gradient(circle, rgba(96,165,250,0.1) 0%, transparent 70%);
+    pointer-events:none;
+  }
+  .agente-hero::after {
+    content:''; position:absolute; bottom:-50px; left:-50px;
+    width:180px; height:180px; border-radius:50%;
+    background:radial-gradient(circle, rgba(37,99,235,0.07) 0%, transparent 70%);
+    pointer-events:none;
+  }
+  .agente-toprow {
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:1.5rem; position:relative; z-index:1; flex-wrap:wrap; gap:10px;
+  }
+  .agente-title {
+    font-family:'Syne',sans-serif; font-size:17px; font-weight:800;
+    color:#f1f5f9; letter-spacing:-0.3px;
+  }
+  .agente-badge-online {
+    display:flex; align-items:center; gap:6px;
+    background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.28);
+    border-radius:9999px; padding:4px 12px;
+    font-size:10px; font-weight:700; color:#4ade80;
+    letter-spacing:0.9px; text-transform:uppercase; white-space:nowrap;
+  }
+  .agente-badge-dot {
+    width:6px; height:6px; border-radius:50%; background:#4ade80;
+    box-shadow:0 0 6px #4ade80;
+    animation:agente-pulse 2s ease-in-out infinite;
+    flex-shrink:0;
+  }
+  @keyframes agente-pulse {
+    0%,100% { box-shadow:0 0 5px #4ade80; }
+    50%      { box-shadow:0 0 14px #4ade80, 0 0 24px rgba(74,222,128,0.35); }
+  }
+  .agente-avatar-row {
+    display:flex; align-items:flex-start; gap:14px;
+    position:relative; z-index:1; margin-bottom:1.5rem;
+  }
+  .agente-avatar {
+    width:46px; height:46px; border-radius:12px; flex-shrink:0;
+    background:linear-gradient(135deg,#2563eb,#1d4ed8);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 0 18px rgba(37,99,235,0.45), 0 4px 12px rgba(0,0,0,0.3);
+    font-size:22px; line-height:1;
+  }
+  .agente-bubble {
+    background:rgba(255,255,255,0.045); border:1px solid rgba(255,255,255,0.09);
+    border-radius:0 14px 14px 14px; padding:14px 16px; flex:1;
+  }
+  .agente-bubble-name {
+    font-size:10px; font-weight:700; color:#60a5fa;
+    letter-spacing:0.8px; text-transform:uppercase; margin-bottom:8px;
+  }
+  .agente-bubble-text {
+    font-size:14px; line-height:1.68; color:#94a3b8;
+  }
+  .agente-bubble-text strong { color:#e2e8f0; font-weight:600; }
+  .agente-bubble-text em    { color:#fbbf24; font-style:normal; font-weight:600; }
+  .agente-chips {
+    display:flex; gap:8px; flex-wrap:wrap;
+    position:relative; z-index:1; margin-bottom:1.5rem;
+  }
+  .agente-chip {
+    background:rgba(37,99,235,0.13); border:1px solid rgba(96,165,250,0.22);
+    border-radius:9999px; padding:5px 14px;
+    font-size:12px; color:#93c5fd; font-weight:500;
+    cursor:pointer; transition:all 0.15s; white-space:nowrap;
+  }
+  .agente-chip:hover {
+    background:rgba(37,99,235,0.28); border-color:rgba(96,165,250,0.45); color:#bfdbfe;
+  }
+  .agente-divider {
+    border:none; border-top:1px solid rgba(255,255,255,0.07);
+    margin:0 0 1.25rem; position:relative; z-index:1;
+  }
+  .agente-stats-row {
+    display:flex; gap:10px; position:relative; z-index:1; margin-bottom:1.5rem;
+  }
+  .agente-stat {
+    flex:1; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.07);
+    border-radius:12px; padding:12px 10px; text-align:center;
+  }
+  .agente-stat-val {
+    font-family:'Syne',sans-serif; font-size:22px; font-weight:800;
+    color:#f1f5f9; line-height:1; margin-bottom:4px;
+  }
+  .agente-stat-lbl {
+    font-size:10px; color:#475569; text-transform:uppercase;
+    letter-spacing:0.8px; font-weight:600;
+  }
+  .agente-stat.danger .agente-stat-val { color:#f87171; }
+  .agente-stat.warn   .agente-stat-val { color:#fbbf24; }
+  .agente-stat.ok     .agente-stat-val { color:#4ade80; }
+  .agente-input-row {
+    display:flex; gap:8px; position:relative; z-index:1;
+  }
+  .agente-input {
+    flex:1 !important; min-width:0 !important;
+    background:rgba(255,255,255,0.06) !important;
+    border:1.5px solid rgba(96,165,250,0.18) !important;
+    border-radius:10px !important; color:#f1f5f9 !important;
+    font-size:14px !important; padding:11px 16px !important;
+    transition:border-color 0.15s, box-shadow 0.15s;
+  }
+  .agente-input::placeholder { color:#334155 !important; }
+  .agente-input:focus {
+    border-color:rgba(96,165,250,0.45) !important;
+    box-shadow:0 0 0 3px rgba(96,165,250,0.1) !important;
+    background:rgba(255,255,255,0.08) !important; outline:none !important;
+  }
+  .agente-send {
+    background:linear-gradient(135deg,#2563eb,#1d4ed8) !important;
+    border:none !important; border-radius:10px !important;
+    color:#fff !important; font-size:16px !important;
+    padding:11px 20px !important; min-height:44px;
+    cursor:pointer; flex-shrink:0;
+    box-shadow:0 4px 14px rgba(37,99,235,0.35);
+    transition:box-shadow 0.15s;
+  }
+  .agente-send:hover { box-shadow:0 6px 22px rgba(37,99,235,0.5) !important; }
+
   /* ── RESPONSIVE ── */
   @media (max-width: 768px) {
     /* ── Reset del overflow fijo del shell ─────────────────────────────── */
@@ -467,6 +604,16 @@
     .cli-data-grid { grid-template-columns: 1fr !important; }
     .ficha-grid { grid-template-columns: 1fr !important; }
     .card { padding: 1rem !important; }
+    /* Agente: apilar stats en 2 cols y reducir padding */
+    .agente-hero { padding: 1.25rem !important; border-radius: 14px !important; }
+    .agente-stats-row { flex-wrap: wrap !important; }
+    .agente-stat { min-width: calc(50% - 5px) !important; }
+    .agente-title { font-size: 15px !important; }
+    .agente-avatar-row { gap: 10px !important; }
+    .agente-avatar { width: 38px !important; height: 38px !important; font-size: 18px !important; }
+    .agente-bubble-text { font-size: 13px !important; }
+    .agente-chips { gap: 6px !important; }
+    .agente-chip { font-size: 11px !important; padding: 4px 10px !important; }
   }
 </style>
 </head>
@@ -583,6 +730,10 @@
       <button class="tab" onclick="switchTab('alertas',this)" title="Alertas BCRA">
         <span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
         <span class="sb-label">Alertas</span>
+      </button>
+      <button class="tab sb-tab-agente" onclick="switchTab('agente',this)" title="Copiloto IA · Gemini">
+        <span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z"/><path d="M12 6v6l4 2"/></svg></span>
+        <span class="sb-label">Copiloto IA</span>
       </button>
       <div class="sb-section-label">Comunidad</div>
       <button class="tab" onclick="switchTab('red',this)" title="Red de Bodegas">
@@ -1006,6 +1157,101 @@
     <div id="buscador-count" class="buscador-count"></div>
     <div id="buscador-lista"></div>
   </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!--  AGENTE — Copiloto de Riesgo · Gemini IA                            -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <div id="agente" class="section">
+    <div class="container">
+
+      <!-- Tarjeta principal premium -->
+      <div class="agente-hero">
+
+        <!-- Top row: título + badge online -->
+        <div class="agente-toprow">
+          <div class="agente-title">🤖 Copiloto de Riesgo · Gemini IA</div>
+          <div class="agente-badge-online">
+            <div class="agente-badge-dot"></div>
+            Conectado
+          </div>
+        </div>
+
+        <!-- Stats rápidos de cartera -->
+        <div class="agente-stats-row">
+          <div class="agente-stat danger">
+            <div class="agente-stat-val" id="agente-stat-criticos">2</div>
+            <div class="agente-stat-lbl">Críticos</div>
+          </div>
+          <div class="agente-stat warn">
+            <div class="agente-stat-val" id="agente-stat-alertas">2</div>
+            <div class="agente-stat-lbl">Alertas cheques</div>
+          </div>
+          <div class="agente-stat ok">
+            <div class="agente-stat-val" id="agente-stat-ok">—</div>
+            <div class="agente-stat-lbl">Score prom.</div>
+          </div>
+        </div>
+
+        <hr class="agente-divider">
+
+        <!-- Mensaje del copiloto -->
+        <div class="agente-avatar-row">
+          <div class="agente-avatar">🤖</div>
+          <div class="agente-bubble">
+            <div class="agente-bubble-name">Gemini · Análisis en tiempo real</div>
+            <div class="agente-bubble-text" id="agente-msg">
+              Hola <strong>Ezequiel</strong>. Analizando la cartera vitivinícola actual:
+              detecto <em>2 clientes críticos en Situación 4/5 BCRA</em> y
+              <em>2 advertencias por comportamiento de cheques</em>.
+              Te sugiero ejecutar el <strong>Proceso Integral</strong> para verificar
+              si levantaron las moras antes de autorizar nuevos despachos de vino
+              a crédito desde la bodega.
+            </div>
+          </div>
+        </div>
+
+        <!-- Chips de acciones rápidas -->
+        <div class="agente-chips">
+          <span class="agente-chip" onclick="switchTab('alertas', document.querySelector('[onclick*=alertas]'))">Ver alertas →</span>
+          <span class="agente-chip" onclick="switchTab('cartera', document.querySelector('[onclick*=cartera]'))">Ir a cartera →</span>
+          <span class="agente-chip" onclick="switchTab('consulta', document.querySelector('[onclick*=consulta]'))">Nueva consulta →</span>
+        </div>
+
+        <hr class="agente-divider">
+
+        <!-- Input de chat (placeholder para futura integración) -->
+        <div class="agente-input-row">
+          <input
+            type="text"
+            class="agente-input"
+            id="agente-chat-input"
+            placeholder="Preguntale algo al Copiloto… (próximamente)"
+            disabled
+          >
+          <button class="agente-send" disabled title="Próximamente">→</button>
+        </div>
+
+      </div><!-- /agente-hero -->
+
+      <!-- Card secundaria: sobre Gemini -->
+      <div class="card" style="background:var(--blanco);border:1px solid #e2e8f0;">
+        <div class="card-title">Sobre el Copiloto</div>
+        <p style="font-size:13px;color:var(--texto-suave);line-height:1.7;margin-bottom:10px;">
+          El <strong>Copiloto de Riesgo</strong> está impulsado por <strong>Gemini IA</strong> de Google
+          y tiene acceso en tiempo real a los datos de scoring, alertas BCRA y comportamiento
+          de cheques de tu cartera. Próximamente podrás hacerle preguntas directas sobre clientes
+          específicos y recibir recomendaciones de límite de crédito.
+        </p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <span style="font-size:11px;background:#eff6ff;color:#2563eb;border-radius:9999px;padding:3px 12px;font-weight:600;">Gemini 2.0 Flash</span>
+          <span style="font-size:11px;background:#f0fdf4;color:#166534;border-radius:9999px;padding:3px 12px;font-weight:600;">BCRA en tiempo real</span>
+          <span style="font-size:11px;background:#fff7ed;color:#9a3412;border-radius:9999px;padding:3px 12px;font-weight:600;">Score predictivo</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <!-- /agente -->
 
   <div id="red" class="section">
     <!-- Header -->
