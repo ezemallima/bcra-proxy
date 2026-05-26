@@ -219,6 +219,23 @@
   .search-box {
     display: flex; gap: 8px; align-items: center;
     margin-bottom: 16px;
+    /* Sticky: siempre visible mientras el usuario scrollea resultados */
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: var(--bg);
+    padding: 10px 0 12px;
+    /* Extiende el fondo al ancho del tab-pane (compensa el padding de 16px) */
+    margin-left: -16px;
+    margin-right: -16px;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  @media (min-width: 769px) {
+    .search-box {
+      margin-left: -24px; margin-right: -24px;
+      padding-left: 24px; padding-right: 24px;
+    }
   }
   .search-input {
     flex: 1;
@@ -1806,6 +1823,10 @@ function mostrarErrorCuitInexistente(raw) {
        style="display:inline-block;background:var(--accent);color:#fff;border-radius:8px;padding:10px 20px;font-size:13px;font-weight:700;text-decoration:none">
       Verificar en ARCA →
     </a>
+    <button onclick="document.getElementById('consulta-resultado').innerHTML='';document.getElementById('cuit-input').value='';document.getElementById('cuit-input').focus();"
+      style="display:block;margin:14px auto 0;background:none;border:1.5px solid var(--border);border-radius:8px;padding:9px 20px;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;font-family:'Inter',sans-serif">
+      ← Consultar otro CUIT
+    </button>
   </div>`;
 }
 
@@ -1830,7 +1851,10 @@ async function consultarCuit() {
         <div style="margin-bottom:8px"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
         <div style="font-weight:700;margin:8px 0">Servidor ocupado (502)</div>
         <div style="font-size:12px;color:var(--text2);margin-bottom:12px">Esperá unos segundos e intentá de nuevo.</div>
-        <button onclick="consultarCuit()" style="background:var(--azul);color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg> Forzar Recálculo</button>
+        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+          <button onclick="consultarCuit()" style="background:var(--azul);color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg> Forzar Recálculo</button>
+          <button onclick="document.getElementById('consulta-resultado').innerHTML='';document.getElementById('cuit-input').value='';document.getElementById('cuit-input').focus();" style="background:none;border:1.5px solid var(--border);border-radius:8px;padding:8px 18px;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;font-family:'Inter',sans-serif">← Nuevo CUIT</button>
+        </div>
       </div>`;
       return;
     }
@@ -2156,6 +2180,9 @@ function renderConsulta(cuit, dd, cd, hd, serverScore, afipData) {
     <div class="ia-texto" id="ia-texto" style="display:none"></div></div>`;
 
   document.getElementById('consulta-resultado').innerHTML = html;
+  // Scroll al top: muestra el search-box (sticky) con el input listo para reusar
+  const _tc = document.querySelector('.tab-content');
+  if (_tc) _tc.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 async function lanzarAnalisisIA(cuit, dd, cd) {
