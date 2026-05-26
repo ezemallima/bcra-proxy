@@ -2677,6 +2677,151 @@ def get_vendedores():
     resp.headers['Cache-Control'] = 'no-store'
     return resp
 
+def _cascade_cuit_rename(cuit_old: str, cuit_new: str) -> dict:
+    """Propagación en cascada de un cambio de CUIT a todos los archivos y cachés.
+
+    Archivos actualizados:
+      db_v17_final.json     — alertas[].cuit  +  cartera[].cuit
+      alertas_bcra.json     — clave plana o arrays (ambas ubicaciones)
+      score_cache.json      — clave directa
+      bcra_cache.json       — clave directa
+      historial_{c}.json, cheques_{c}.json, solvency_{c}.json — renombrar
+
+    Memoria actualizada:
+      bcra_cache dict, _score_session_cache dict — clave renombrada
+
+    Todas las escrituras a disco son atómicas: tmp → fsync → os.replace.
+    Usa _alertas_file_lock y _score_cache_lock para evitar race conditions.
+    """
+    global bcra_cache, _score_session_cache
+
+    if cuit_old == cuit_new:
+        return {'ok': True, 'cambios': [], 'errores': []}
+
+    cambios: list = []
+    errores: list = []
+    _nc = lambda x: str(x or '').replace('-', '').replace(' ', '').strip()
+
+    # ── 1. db_v17_final.json  (alertas[] + cartera[]) ────────────────────────
+    try:
+        with _alertas_file_lock:
+            if os.path.exists(ALERTAS_FILE):
+                with open(ALERTAS_FILE, 'r', encoding='utf-8') as _f:
+                    _d = json.load(_f)
+                n_alr = n_car = 0
+                for _a in _d.get('alertas', []):
+                    if _nc(_a.get('cuit')) == cuit_old:
+                        _a['cuit'] = cuit_new
+                        n_alr += 1
+                for _c in _d.get('cartera', []):
+                    if _nc(_c.get('cuit')) == cuit_old:
+                        _c['cuit'] = cuit_new
+                        n_car += 1
+                if n_alr or n_car:
+                    _tmp = ALERTAS_FILE + '.tmp'
+                    with open(_tmp, 'w', encoding='utf-8') as _f:
+                        json.dump(_d, _f, ensure_ascii=False, default=str)
+                        _f.flush(); os.fsync(_f.fileno())
+                    os.replace(_tmp, ALERTAS_FILE)
+                    cambios.append(
+                        f'db_v17_final.json: {n_alr} alerta(s) + {n_car} entrada(s) cartera'
+                    )
+    except Exception as _e:
+        errores.append(f'db_v17_final.json: {_e}')
+
+    # ── 2. alertas_bcra.json  (clave plana o arrays) ─────────────────────────
+    for _bp in list(dict.fromkeys([
+        ALERTAS_BCRA_FILE,
+        os.path.join(os.getcwd(), 'alertas_bcra.json'),
+    ])):
+        try:
+            if not os.path.exists(_bp):
+                continue
+            with open(_bp, 'r', encoding='utf-8') as _f:
+                _bd = json.load(_f)
+            _mod = False
+            # Formato plano: { "30123456789": { score… }, … }
+            if cuit_old in _bd and isinstance(_bd.get(cuit_old), dict):
+                _bd[cuit_new] = _bd.pop(cuit_old)
+                _mod = True
+            # Formato con arrays (alertas[] / cartera[])
+            for _a in _bd.get('alertas', []):
+                if _nc(_a.get('cuit')) == cuit_old:
+                    _a['cuit'] = cuit_new; _mod = True
+            for _c in _bd.get('cartera', []):
+                if _nc(_c.get('cuit')) == cuit_old:
+                    _c['cuit'] = cuit_new; _mod = True
+            if _mod:
+                _tmp = _bp + '.tmp'
+                with open(_tmp, 'w', encoding='utf-8') as _f:
+                    json.dump(_bd, _f, ensure_ascii=False, default=str)
+                    _f.flush(); os.fsync(_f.fileno())
+                os.replace(_tmp, _bp)
+                cambios.append(f'{os.path.basename(_bp)}: CUIT actualizado')
+        except Exception as _e:
+            errores.append(f'{os.path.basename(_bp)}: {_e}')
+
+    # ── 3. score_cache.json ──────────────────────────────────────────────────
+    try:
+        with _score_cache_lock:
+            _sc = _score_cache_read()
+            if cuit_old in _sc:
+                _sc[cuit_new] = _sc.pop(cuit_old)
+                _score_cache_write(_sc)
+                cambios.append('score_cache.json: clave renombrada')
+    except Exception as _e:
+        errores.append(f'score_cache.json: {_e}')
+
+    # ── 4. bcra_cache.json ───────────────────────────────────────────────────
+    try:
+        _bc_path = os.path.join(DATA_DIR, 'bcra_cache.json')
+        if os.path.exists(_bc_path):
+            with open(_bc_path, 'r', encoding='utf-8') as _f:
+                _bc = json.load(_f)
+            if cuit_old in _bc:
+                _bc[cuit_new] = _bc.pop(cuit_old)
+                _tmp = _bc_path + '.tmp'
+                with open(_tmp, 'w', encoding='utf-8') as _f:
+                    json.dump(_bc, _f, ensure_ascii=False, default=str)
+                    _f.flush(); os.fsync(_f.fileno())
+                os.replace(_tmp, _bc_path)
+                cambios.append('bcra_cache.json: clave renombrada')
+    except Exception as _e:
+        errores.append(f'bcra_cache.json: {_e}')
+
+    # ── 5. Archivos per-CUIT (historial, cheques, solvency) ──────────────────
+    for _pfx in ('historial', 'cheques', 'solvency'):
+        _old_f = os.path.join(DATA_DIR, f'{_pfx}_{cuit_old}.json')
+        _new_f = os.path.join(DATA_DIR, f'{_pfx}_{cuit_new}.json')
+        try:
+            if os.path.exists(_old_f):
+                os.replace(_old_f, _new_f)
+                cambios.append(f'{_pfx}_{cuit_old}.json → {_pfx}_{cuit_new}.json')
+        except Exception as _e:
+            errores.append(f'{_pfx}_{cuit_old}.json rename: {_e}')
+
+    # ── 6. Cachés en memoria ─────────────────────────────────────────────────
+    try:
+        if cuit_old in bcra_cache:
+            bcra_cache[cuit_new] = bcra_cache.pop(cuit_old)
+            cambios.append('bcra_cache (RAM): clave renombrada')
+    except Exception as _e:
+        errores.append(f'bcra_cache RAM: {_e}')
+
+    try:
+        if cuit_old in _score_session_cache:
+            _score_session_cache[cuit_new] = _score_session_cache.pop(cuit_old)
+            cambios.append('_score_session_cache (RAM): clave renombrada')
+    except Exception as _e:
+        errores.append(f'_score_session_cache RAM: {_e}')
+
+    _tag = f'[cascade-cuit] {cuit_old} → {cuit_new}'
+    print(f'{_tag}: {len(cambios)} cambio(s), {len(errores)} error(es)', flush=True)
+    for _ch in cambios: print(f'  ✓ {_ch}', flush=True)
+    for _er in errores: print(f'  ✗ {_er}', flush=True)
+    return {'ok': len(errores) == 0, 'cambios': cambios, 'errores': errores}
+
+
 @app.route("/cliente/guardar", methods=["POST"])
 def guardar_cliente():
     global _cartera_comercial
@@ -2711,10 +2856,24 @@ def guardar_cliente():
             _cartera_comercial.append(cliente)
             accion = "agregado"
 
-        with open(_CC_FILE, 'w', encoding='utf-8') as f:
+        # Escritura atómica de cartera_comercial.json
+        _cc_tmp = _CC_FILE + '.tmp'
+        with open(_cc_tmp, 'w', encoding='utf-8') as f:
             json.dump(_cartera_comercial, f, ensure_ascii=False, indent=2)
+            f.flush(); os.fsync(f.fileno())
+        os.replace(_cc_tmp, _CC_FILE)
 
-        return jsonify({"ok": True, "accion": accion, "total": len(_cartera_comercial)})
+        # ── Propagación en cascada si el CUIT cambió ─────────────────────────
+        cascade = None
+        if cuit_orig != cuit:
+            cascade = _cascade_cuit_rename(cuit_orig, cuit)
+
+        resp_data = {"ok": True, "accion": accion, "total": len(_cartera_comercial)}
+        if cascade:
+            resp_data['cascade'] = cascade.get('cambios', [])
+            if cascade.get('errores'):
+                resp_data['cascade_errores'] = cascade['errores']
+        return jsonify(resp_data)
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
