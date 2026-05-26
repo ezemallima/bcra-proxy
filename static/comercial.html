@@ -2159,22 +2159,109 @@ function renderConsulta(cuit, dd, cd, hd, serverScore, afipData) {
 }
 
 async function lanzarAnalisisIA(cuit, dd, cd) {
-  const results=dd.results||{}, periodos=results.periodos||[];
-  let maxSit=1, montoTotal=0, entidades=[];
-  if (periodos.length){entidades=periodos[0].entidades||[];if(entidades.length){maxSit=Math.max(...entidades.map(e=>e.situacion||1));montoTotal=entidades.reduce((s,e)=>s+(e.monto||0),0);}}
-  const causales=cd.results?.causales||[];let chqTotal=0;causales.forEach(ca=>ca.entidades?.forEach(en=>{chqTotal+=(en.detalle||[]).length;}));
-  const scoreActual = window._ultimoScoreComercial || estimarScore(maxSit,dd.sin_deudas,cd);
-  const creditoSug = calcularCredito(scoreActual, maxSit);
-  const _sitLabel = maxSit===1?'Normal':maxSit===2?'Seguimiento':maxSit===3?'Mora grave':maxSit===4?'Alto riesgo':'Irrecuperable';
-  const prompt = maxSit >= 3
-    ? `Sos analista de riesgo crediticio para Bodega Piattelli, Mendoza. ADVERTENCIA SEVERA: Este cliente presenta situación BCRA ${maxSit} (${_sitLabel}) — riesgo de insolvencia confirmado.\nDatos del cliente CUIT ${cuit}:\n- Situación BCRA: ${maxSit} (Crítico)\n- Deuda sistema financiero: $${fmtM(montoTotal*1000)}\n- Entidades: ${entidades.length}\n- Cheques rechazados: ${chqTotal}\n- Score Vende Seguro: ${scoreActual}/999 (${scoreToRango(scoreActual)})\n- Crédito sugerido: ${creditoSug}\n\nRedactá un análisis de riesgo severo (3-4 oraciones) en español informal orientado a un vendedor de vinos. OBLIGATORIO: iniciá con una advertencia crítica de riesgo de impago. Indicá que NO se recomienda otorgar líneas de crédito. El crédito sugerido es EXACTAMENTE ${creditoSug} — no sugerás un monto diferente. Sin listas, sin markdown, solo texto directo.`
-    : `Sos analista de riesgo crediticio para Bodega Piattelli, Mendoza.\nDatos del cliente CUIT ${cuit}:\n- Situación BCRA: ${maxSit} (${_sitLabel})\n- Deuda sistema financiero: $${fmtM(montoTotal*1000)}\n- Entidades: ${entidades.length}\n- Cheques rechazados: ${chqTotal}\n- Score Vende Seguro: ${scoreActual}/999 (${scoreToRango(scoreActual)})\n- Crédito sugerido: ${creditoSug}\n\nRedactá un análisis de riesgo breve (3-4 oraciones) en español informal orientado a un vendedor de vinos. El crédito sugerido es EXACTAMENTE ${creditoSug} — no sugerás un monto diferente. Sin listas, sin markdown, solo texto directo.`;
+  // ── Datos BCRA básicos ──────────────────────────────────────────────────────
+  const results = dd.results || {}, periodos = results.periodos || [];
+  let maxSit = 1, montoTotal = 0, entidades = [];
+  if (periodos.length) {
+    entidades = periodos[0].entidades || [];
+    if (entidades.length) {
+      maxSit     = Math.max(...entidades.map(e => e.situacion || 1));
+      montoTotal = entidades.reduce((s, e) => s + (e.monto || 0), 0);
+    }
+  }
+  const causales = cd.results?.causales || [];
+  let chqTotal = 0;
+  causales.forEach(ca => ca.entidades?.forEach(en => { chqTotal += (en.detalle || []).length; }));
+
+  // ── Score: preferir serverScore completo (tiene .detalle[]) ────────────────
+  // window._ultimoScoreComercial = número puro; el objeto completo está en _ultimaConsulta
+  const _uc      = window._ultimaConsulta;
+  const scoreObj = (_uc && _uc.serverScore && _uc.serverScore.score != null) ? _uc.serverScore : null;
+  const scoreNum = scoreObj?.score ?? window._ultimoScoreComercial ?? estimarScore(maxSit, dd.sin_deudas, cd);
+
+  // Named-label lookup — NUNCA índices posicionales
+  function _dv(label) {
+    if (!scoreObj || !Array.isArray(scoreObj.detalle)) return 'N/D';
+    const item = scoreObj.detalle.find(d => d.label === label);
+    return item ? item.valor : 'N/D';
+  }
+  const dSituacion = _dv('Situación BCRA');
+  const dHistorial = _dv('Historial BCRA 24m');
+  const dCheques   = _dv('Cheques rechazados');
+  const dDSO       = _dv('DSO individual');
+  const dPiattelli = _dv('Historial Piattelli');
+  const dBodegas   = _dv('Red de Bodegas');
+  const dConc      = _dv('Concentración deuda BCRA');
+
+  // Deuda total en texto legible (montoTotal está en miles de pesos)
+  const deudaMillones = montoTotal > 0 ? (montoTotal / 1000).toFixed(1) : null;
+  const deudaLabel    = montoTotal > 0
+    ? montoTotal.toLocaleString('es-AR') + ' miles' + (deudaMillones ? ' ≈ ' + deudaMillones + 'M' : '')
+    : 'Sin deuda registrada en BCRA';
+
+  // ── Mora interna con Piattelli (CARTERA_LOCAL) ─────────────────────────────
+  const _ncFn = x => String(x || '').replace(/\D/g, '').trim();
+  const clienteLocalIA    = CARTERA_LOCAL.find(c => _ncFn(c.cuit) === _ncFn(cuit));
+  const tieneMoraInterna  = (clienteLocalIA?.total_saldo || 0) > 0;
+
+  // ── datosHistorial: mora + perfil Piattelli + bodegas ─────────────────────
+  let datosHistorial = '';
+  if (tieneMoraInterna) {
+    datosHistorial += '⚠ MORA INTERNA ACTIVA CON BODEGA PIATTELLI: $'
+      + fmtFull(clienteLocalIA.total_saldo) + ' pendiente de cobro.\n';
+  }
+  if (dPiattelli && dPiattelli !== 'N/D') datosHistorial += 'Historial Piattelli: ' + dPiattelli + '\n';
+  if (dBodegas   && dBodegas   !== 'N/D') datosHistorial += 'Red de Bodegas: '      + dBodegas   + '\n';
+  if (!datosHistorial) datosHistorial = 'Sin historial comercial registrado con Bodega Piattelli.';
+
+  const scoreLabel = scoreObj
+    ? scoreNum + '/999 — ' + (scoreObj.rango || scoreToRango(scoreNum))
+    : (scoreNum != null ? scoreNum + '/999 — ' + scoreToRango(scoreNum) : 'N/D');
+
+  // ── Prompt corporativo (idéntico criterio al de index.html) ───────────────
+  const prompt =
+`Sos un Gerente Senior de Riesgo Crediticio Corporativo de un banco de primera línea argentino, contratado por Bodega Piattelli para evaluar sus clientes distribuidores con criterio bancario estricto.
+
+═══ SCORE VENDE SEGURO ═══
+Score: ${scoreLabel}
+Situación BCRA actual: ${dSituacion}
+Historial BCRA 24m: ${dHistorial}
+Cheques rechazados: ${dCheques}
+DSO individual: ${dDSO}
+Historial Piattelli: ${dPiattelli}
+Red de Bodegas: ${dBodegas}
+Concentración deuda BCRA: ${dConc}
+Deuda total sistema financiero: ${deudaLabel}
+Peor situación BCRA: ${maxSit} | Entidades involucradas: ${entidades.length} | Cheques rechazados totales: ${chqTotal}
+
+═══ HISTORIAL COMERCIAL (PIATTELLI) ═══
+${datosHistorial}
+
+═══ INSTRUCCIONES ═══
+1. Dictamen 3-4 oraciones. Español directo, sin markdown.
+2. ESCALA DEL CLIENTE: Si la deuda total BCRA supera $50 millones en Situación 1, el crédito sugerido NO puede ser un rango de microempresa. Calculá entre 5% y 10% de su deuda mensual normalizada (puede ser $10M-$50M+ según el caso).
+3. Clientes pequeños/medianos o sin historial masivo → criterio tradicional riguroso basado en Score, historial de mora interna y Situación BCRA.
+4. Mora interna activa con Bodega Piattelli = PRIORIDAD ABSOLUTA → límite de crédito DEBE ser $0, priorizando el resguardo de la caja.
+5. SIEMPRE terminar con: "Límite de crédito sugerido: [monto exacto calculado]"`;
+
   try {
-    const resp=await fetch(API+'/analizar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt})});
-    const data=await resp.json();
-    const iaEl=document.getElementById('ia-texto'),loadEl=document.getElementById('ia-loading');
-    if(iaEl&&loadEl){loadEl.style.display='none';iaEl.style.display='block';iaEl.textContent=data.texto||'No se pudo generar el análisis.';if(!data.texto)iaEl.style.color='var(--text2)';}
-  } catch(e){const l=document.getElementById('ia-loading');if(l)l.innerHTML='<span style="color:var(--text2);font-size:12px">Error generando análisis</span>';}
+    const resp = await fetch(API + '/analizar', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ prompt })
+    });
+    const data = await resp.json();
+    const iaEl = document.getElementById('ia-texto'), loadEl = document.getElementById('ia-loading');
+    if (iaEl && loadEl) {
+      loadEl.style.display = 'none';
+      iaEl.style.display   = 'block';
+      iaEl.textContent     = data.texto || 'No se pudo generar el análisis.';
+      if (!data.texto) iaEl.style.color = 'var(--text2)';
+    }
+  } catch(e) {
+    const l = document.getElementById('ia-loading');
+    if (l) l.innerHTML = '<span style="color:var(--text2);font-size:12px">Error generando análisis</span>';
+  }
 }
 
 function generarPDF(cuit) {
