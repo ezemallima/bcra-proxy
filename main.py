@@ -130,7 +130,7 @@ _ACTIVIDAD_INGRESOS_RI = [
     ('gastronomia',          45_000_000),
 ]
 
-GEMINI_MODEL = "gemini-1.5-flash"
+GEMINI_MODEL = "gemini-2.0-flash"
 DATA_DIR = '/data' if os.path.exists('/data') else os.getcwd()
 ALERTAS_FILE      = os.path.join(DATA_DIR, 'db_v17_final.json')
 ALERTAS_BCRA_FILE = os.path.join(DATA_DIR, 'alertas_bcra.json')
@@ -651,7 +651,7 @@ def consultar_bcra(cuit, reintentos=3):
                     return data, None
                 print(f"[bcra] {cuit} directo agotó reintentos: {_err}", flush=True)
                 continue
-            r = requests.get(ep_url, timeout=8, verify=False)
+            r = requests.get(ep_url, timeout=2.5, verify=False)
             if r.status_code == 200:
                 text = r.text.strip()
                 if not text or len(text) < 10:

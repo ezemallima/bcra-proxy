@@ -3299,6 +3299,9 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
       scoreElF.innerHTML = renderVendeScore(scoreObjFinal) +
         (_usandoFallback ? '<div style="font-size:10px;color:#ca8a04;margin-top:6px;padding:4px 8px;background:#fefce8;border-radius:6px;border:1px solid #fde047;">⚠ Usando datos locales — servidor BCRA no disponible</div>' : '');
       window._ultimoScoreVende = scoreObjFinal;
+      // Restaurar botón de análisis IA (se ocultó al iniciar la búsqueda)
+      var _btnAn = document.getElementById('btn-analizar');
+      if (_btnAn) _btnAn.style.display = '';
       // Cargar solvencia de forma asíncrona (no bloquea el score)
       cargarSolvencia(cuit, scoreElF);
       // Renderizar gráfico BCRA histórico
@@ -3497,83 +3500,97 @@ async function analizarCliente() {
   const cuit = document.getElementById('cuit-input').value.replace(/-/g,'').trim();
   const piatEl = document.getElementById('piattelli-info');
   const piat = piatEl ? piatEl.value : '';
-  const bcraEl = document.getElementById('bcra-data');
-  const bcra = bcraEl ? bcraEl.innerText : '';
   const wspThreads = filtrarWSPReciente(buscarEnWSP(cuit));
   const mora = buscarEnMoras(cuit);
-  // Score para contexto IA — siempre usar el del servidor (ya calculado en consultarCliente)
   var scorePreAnalisis = window._ultimoScoreVende || null;
   const btn = document.getElementById('btn-analizar');
   const resEl = document.getElementById('analisis-resultado');
   btn.disabled = true; btn.textContent = 'Analizando...'; resEl.style.display = 'none';
 
-  // Construir datos para el prompt
+  // ── Lookup por label (robusto: no depende del orden del array detalle) ───────
+  function _dv(label) {
+    if (!scorePreAnalisis || !scorePreAnalisis.detalle) return 'N/D';
+    var item = scorePreAnalisis.detalle.find(function(d) { return d.label === label; });
+    return item ? item.valor : 'N/D';
+  }
+  var dSituacion = _dv('Situación BCRA');
+  var dHistorial = _dv('Historial BCRA 24m');
+  var dCheques   = _dv('Cheques rechazados');
+  var dDSO       = _dv('DSO individual');
+  var dPiattelli = _dv('Historial Piattelli');
+  var dBodegas   = _dv('Red de Bodegas');
+  var dConc      = _dv('Concentración deuda BCRA');
+
+  // ── Deuda total BCRA (miles de $, seteado en mostrarResultadoBCRA) ───────────
+  var deudaMilesTotal = window._bcraMontoUltimo || 0;
+  var deudaMillones   = deudaMilesTotal > 0 ? (deudaMilesTotal / 1000).toFixed(1) : null;
+  var deudaLabel = deudaMilesTotal > 0
+    ? '$' + deudaMilesTotal.toLocaleString('es-AR') + ' miles' + (deudaMillones ? ' ≈ $' + deudaMillones + 'M' : '')
+    : 'Sin deuda registrada en BCRA';
+
+  // ── Informe Veraz/Nosis (INYECTADO — antes se calculaba pero no se usaba) ───
   var datosVeraz = '';
   if (verazData) {
-    datosVeraz += `Score crediticio: ${verazData.score}/9\n`;
-    datosVeraz += `Cheques rechazados: ${verazData.cheques_rechazados}\n`;
-    datosVeraz += `Situación BCRA: ${verazData.situacion_bcra}\n`;
-    datosVeraz += `Saldo vencido: ${verazData.saldo_vencido}\n`;
-    datosVeraz += `Deuda total sistema financiero: ${verazData.deuda_sistema_financiero}\n`;
-    datosVeraz += `Máximo atraso 24 meses: ${verazData.maximo_atraso}\n`;
-    if (verazData.entidades_problema?.length) datosVeraz += `Entidades con problemas: ${verazData.entidades_problema.join(', ')}\n`;
-    if (verazData.socios_directores?.length) {
-      datosVeraz += `\nSOCIOS/DIRECTORES:\n`;
+    datosVeraz += 'Score Veraz/Nosis: ' + verazData.score + '/9\n';
+    datosVeraz += 'Cheques rechazados (Veraz): ' + verazData.cheques_rechazados + '\n';
+    datosVeraz += 'Situación BCRA (Veraz): ' + verazData.situacion_bcra + '\n';
+    datosVeraz += 'Saldo vencido: ' + verazData.saldo_vencido + '\n';
+    datosVeraz += 'Deuda total sistema financiero: ' + verazData.deuda_sistema_financiero + '\n';
+    datosVeraz += 'Máximo atraso 24 meses: ' + verazData.maximo_atraso + '\n';
+    if (verazData.entidades_problema && verazData.entidades_problema.length)
+      datosVeraz += 'Entidades con problemas: ' + verazData.entidades_problema.join(', ') + '\n';
+    if (verazData.socios_directores && verazData.socios_directores.length) {
+      datosVeraz += '\nSOCIOS/DIRECTORES:\n';
       verazData.socios_directores.forEach(function(s) {
-        datosVeraz += `- ${s.nombre} (${s.cargo||'socio'}): Score ${s.score||'N/D'}/9 | Sit: ${s.situacion||'N/D'}\n`;
+        datosVeraz += '- ' + s.nombre + ' (' + (s.cargo||'socio') + '): Score ' + (s.score||'N/D') + '/9 | Sit: ' + (s.situacion||'N/D') + '\n';
       });
     }
   } else {
     datosVeraz = 'No se adjuntó informe Veraz/Nosis.';
   }
 
+  // ── Historial comercial (INYECTADO — antes se calculaba pero no se usaba) ───
   var datosHistorial = '';
-  if (mora) datosHistorial += `⚠ MORA CON ${getNombreBodega().toUpperCase()}: $${(mora.saldo||0).toLocaleString('es-AR')} desde ${mora.fecha_mora} (${mora.estado})\n`;
-  if (piat) datosHistorial += `Historial interno: ${piat}\n`;
-  if (wspThreads?.length) {
-    datosHistorial += `Menciones en grupo bodegas:\n`;
-    wspThreads.forEach(t => t.mensajes.slice(0,5).forEach(m => { datosHistorial += `${m.autor}: ${m.texto}\n`; }));
+  if (mora) datosHistorial += '⚠ MORA CON ' + getNombreBodega().toUpperCase() + ': $' + (mora.saldo||0).toLocaleString('es-AR') + ' desde ' + mora.fecha_mora + ' (' + mora.estado + ')\n';
+  if (piat) datosHistorial += 'Historial interno: ' + piat + '\n';
+  if (wspThreads && wspThreads.length) {
+    datosHistorial += 'Menciones grupo bodegas:\n';
+    wspThreads.forEach(function(t) {
+      (t.mensajes||[]).slice(0,5).forEach(function(m) { datosHistorial += m.autor + ': ' + m.texto + '\n'; });
+    });
   }
   if (!datosHistorial) datosHistorial = 'Sin historial comercial registrado.';
 
+  // ── Condiciones actuales en cartera ─────────────────────────────────────────
   var clienteCartera = cartera.find(function(c) { return c.cuit === cuit; });
   var condicionesActuales = '';
   if (clienteCartera && (clienteCartera.limiteCreditoARS || clienteCartera.plazoDias)) {
-    if (clienteCartera.limiteCreditoARS) condicionesActuales += `Límite actual: $${clienteCartera.limiteCreditoARS.toLocaleString('es-AR')}\n`;
-    if (clienteCartera.plazoDias) condicionesActuales += `Plazo actual: ${clienteCartera.plazoDias} días\n`;
+    if (clienteCartera.limiteCreditoARS) condicionesActuales += 'Límite actual en cartera: $' + Number(clienteCartera.limiteCreditoARS).toLocaleString('es-AR') + '\n';
+    if (clienteCartera.plazoDias) condicionesActuales += 'Plazo actual: ' + clienteCartera.plazoDias + ' días\n';
   }
 
-  var ubicacion = obtenerPromptUbicacion();
+  var prompt = 'Sos un Gerente Senior de Riesgo Crediticio Corporativo de un banco de primera línea argentino especializado en el sector vitivinícola y de distribución de bebidas. Tu dictamen define la política comercial de crédito de la bodega. Sé preciso, directo, y usá criterio de analista senior.\n\n'
+    + '═══ SCORE VENDE SEGURO ═══\n'
+    + 'Score: ' + (scorePreAnalisis ? scorePreAnalisis.score + '/999 — ' + scorePreAnalisis.rango : 'N/D') + '\n'
+    + 'Situación BCRA actual: ' + dSituacion + '\n'
+    + 'Historial BCRA 24m: ' + dHistorial + '\n'
+    + 'Cheques rechazados: ' + dCheques + '\n'
+    + 'DSO (días promedio de cobro): ' + dDSO + '\n'
+    + 'Historial Piattelli: ' + dPiattelli + '\n'
+    + 'Red de Bodegas: ' + dBodegas + '\n'
+    + 'Concentración deuda BCRA: ' + dConc + '\n'
+    + 'Deuda total en sistema financiero: ' + deudaLabel + '\n'
+    + (condicionesActuales ? condicionesActuales : '')
+    + '\n═══ INFORME VERAZ/NOSIS ═══\n' + datosVeraz
+    + '\n═══ HISTORIAL COMERCIAL (BODEGAS + INTERNO) ═══\n' + datosHistorial
+    + '\n═══ INSTRUCCIONES ═══\n'
+    + '1. Redactá un dictamen de riesgo en 3-4 oraciones. Español directo, sin markdown, sin listas.\n'
+    + '2. EVALUÁ LA ESCALA DEL CLIENTE. Si tiene deuda total en Situación 1 (Normal) superior a $50 millones en el sistema financiero, es una corporación de alto volumen (cadena, supermercado, cooperativa, exportadora). En ese caso el límite debe ser PROPORCIONAL: calculá entre el 5% y el 10% de su deuda mensual normalizada, permitiendo sugerir líneas corporativas de $10M, $20M, $50M o más según la escala real del cliente.\n'
+    + '3. Para clientes pequeños/medianos (deuda < $50M o sin deuda registrada), usá criterio tradicional: situación BCRA, historial de pagos, cheques, DSO e informe Veraz si existe.\n'
+    + '4. El historial comercial de bodegas y la mora interna tienen PRIORIDAD ABSOLUTA sobre el score numérico. Si hay mora activa con la bodega, el límite es $0 hasta regularización.\n'
+    + '5. Terminá SIEMPRE con: "Límite de crédito sugerido: [monto calculado]" — sin excepción, en la última línea.';
 
-    // Score normalizado 0-100
-  var scoreNorm = scorePreAnalisis ? Math.round(scorePreAnalisis.score / 10) : 50;
-  var nivelCredito = scoreNorm >= 80 ? 'A' : scoreNorm >= 60 ? 'B' : scoreNorm >= 40 ? 'C' : 'D';
-
-  var prompt = `Sos experto en riesgo crediticio del sector vitivinícola argentino.
-Analizá este cliente y devolvé un dictamen CORTO (máximo 4 oraciones).
-
-DATOS:
-- CUIT: ${cuit} | Score: ${scorePreAnalisis ? scorePreAnalisis.score + '/999' : 'N/D'} (Nivel ${nivelCredito})
-- Situación BCRA: ${scorePreAnalisis ? scorePreAnalisis.detalle?.[0]?.valor || 'Sit.1' : 'N/D'}
-- Historial 24m: ${scorePreAnalisis ? scorePreAnalisis.detalle?.[1]?.valor || 'N/D' : 'N/D'}
-- Cheques: ${scorePreAnalisis ? scorePreAnalisis.detalle?.[2]?.valor || 'N/D' : 'N/D'}
-- DSO: ${scorePreAnalisis ? scorePreAnalisis.detalle?.[3]?.valor || 'Sin datos' : 'N/D'}
-- Mora Piattelli: ${mora ? 'SÍ — $' + (mora.saldoAdeudado||0).toLocaleString('es-AR') : 'No'}
-- Red Bodegas: ${scorePreAnalisis ? scorePreAnalisis.detalle?.[5]?.valor || 'Sin datos' : 'N/D'}
-${condicionesActuales}
-
-INSTRUCCIONES ESTRICTAS:
-1. Dictamen en 3-4 oraciones máximo, español informal para un vendedor de vinos.
-2. Terminá SIEMPRE con: "Límite de crédito sugerido: [monto exacto en pesos]"
-3. El límite máximo absoluto es $2.000.000. Nunca superarlo.
-4. Lógica del límite:
-   - Nivel A (score 800+): hasta $2.000.000
-   - Nivel B (score 600-799): hasta $800.000
-   - Nivel C (score 400-599): hasta $300.000 con garantías
-   - Nivel D (score <400): solo contado, $0 crédito
-5. Sin listas, sin markdown, texto directo.`;
-
-try {
+  try {
     const r = await fetch('/analizar', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ prompt })
@@ -3583,11 +3600,12 @@ try {
     var _sv = window._ultimoScoreVende;
     ultimoAnalisis = { cuit, texto: data.texto, fecha: new Date().toLocaleDateString('es-AR'), score: _sv ? _sv.score : 0, rango: _sv ? _sv.rango : '', color: _sv ? _sv.color : '' };
     resEl.style.display = 'block';
-    resEl.innerHTML = `<div style="font-size:12px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Análisis de riesgo</div><div style="font-size:13px;line-height:1.7;white-space:pre-wrap;color:#333;">${data.texto}</div>`;
+    resEl.innerHTML = '<div style="font-size:12px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Análisis · Gerente Sr. Riesgo Crediticio</div>'
+      + '<div style="font-size:13px;line-height:1.7;white-space:pre-wrap;color:#333;">' + data.texto + '</div>';
     document.getElementById('btn-export').style.display = 'inline-block';
   } catch(e) {
     resEl.style.display = 'block';
-    resEl.innerHTML = `<div style="font-size:13px;color:#888;">No se pudo conectar con el motor de análisis. Intentá de nuevo en unos segundos.</div>`;
+    resEl.innerHTML = '<div style="font-size:13px;color:#888;">No se pudo conectar con el motor de análisis. Intentá de nuevo en unos segundos.</div>';
   }
   btn.disabled = false; btn.textContent = 'Analizar riesgo crediticio →';
 }
