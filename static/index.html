@@ -7,9 +7,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Vende Seguro">
-<link rel="apple-touch-icon" sizes="180x180" href="/static/logo.png">
-<link rel="icon" type="image/png" sizes="32x32" href="/static/logo.png">
-<link rel="icon" type="image/png" sizes="16x16" href="/static/logo.png">
+<link rel="apple-touch-icon" href="/static/logo.png">
+<link rel="icon" type="image/svg+xml" href="/static/logo.svg">
+<link rel="icon" type="image/png" href="/static/logo.png">
 <title>Vende Seguro v22.0 - Motor de Scoring Inteligente</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Syne:wght@700;800&display=swap');
@@ -397,44 +397,76 @@
 
   /* ── RESPONSIVE ── */
   @media (max-width: 768px) {
-    #sidebar { width: 56px; }
-    .sb-name, .sb-ver, .sb-label, .sb-section-label { display: none; }
+    /* ── Reset del overflow fijo del shell ─────────────────────────────── */
+    html, body {
+      height: auto !important; overflow: auto !important;
+      width: 100% !important; max-width: 100% !important; min-width: 0 !important;
+    }
+    #app-shell {
+      height: auto !important; min-height: 100dvh;
+      overflow: visible !important; flex-direction: row;
+    }
+    #main-canvas {
+      height: auto !important; overflow: visible !important;
+      min-width: 0 !important; width: 100% !important;
+    }
+    .canvas-body {
+      overflow: auto !important; height: auto !important;
+      padding: 14px 12px !important;
+    }
+    .container { max-width: 100% !important; width: 100% !important; }
+
+    /* ── Sidebar colapsado a iconos ─────────────────────────────────────── */
+    #sidebar { width: 56px !important; min-width: 56px !important; flex-shrink: 0; }
+    .sb-name, .sb-ver, .sb-label, .sb-section-label { display: none !important; }
     .sb-brand { padding: 12px 8px; justify-content: center; }
-    .sb-brand-text { display: none; }
+    .sb-brand-text { display: none !important; }
     .sb-nav .tab { padding: 10px; justify-content: center; }
     .sb-footer { padding: 8px 6px 10px; align-items: center; }
-    .sb-footer .proxy-status span { display: none; }
-    .sb-logout-label { display: none; }
+    .sb-footer .proxy-status { display: none !important; }
+    .sb-logout-label { display: none !important; }
     .sb-logout-btn { padding: 9px; justify-content: center; }
-    .canvas-body { padding: 14px 12px; }
-    .page-header { padding: 10px 14px; }
-    .info-grid, .afip-grid { grid-template-columns: 1fr; }
-    .cli-data-grid { grid-template-columns: 1fr 1fr; }
-    .buscador-input { font-size: 14px; padding: 12px 14px 12px 42px; }
-    #decision-grid { grid-template-columns: 1fr; }
-    /* Tables: horizontal scroll wrapper */
-    .bcra-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -4px; padding: 0 4px; }
-    .bcra-table { min-width: 480px; }
-    /* Primary buttons: larger tap targets */
-    button.primary { min-height: 44px; font-size: 14px; padding: 11px 20px; }
-    button { min-height: 40px; }
-    /* Stack input rows vertically */
-    .input-row { flex-direction: column; }
-    .input-row input, .input-row select { min-width: 0; width: 100%; }
-    /* Cartera cards: single column on phone */
-    .cli-data-grid { grid-template-columns: 1fr 1fr; }
-    .ficha-grid { grid-template-columns: 1fr 1fr; }
-    /* Page title shrinks */
+
+    /* ── Header y título ────────────────────────────────────────────────── */
+    .page-header { padding: 10px 14px !important; gap: 8px; flex-wrap: wrap; }
     .page-title-text { font-size: 15px; }
-    /* ph-actions stack */
-    .ph-actions { gap: 6px; }
-    .page-header { gap: 8px; }
+    .ph-actions { gap: 6px; flex-wrap: wrap; }
+
+    /* ── Tablas con scroll horizontal ──────────────────────────────────── */
+    .bcra-table-wrap {
+      width: 100% !important; overflow-x: auto !important;
+      display: block !important; -webkit-overflow-scrolling: touch;
+      margin: 0 !important; padding: 0 !important;
+    }
+    .bcra-table { min-width: 480px !important; }
+
+    /* ── Grids y cards ──────────────────────────────────────────────────── */
+    .info-grid, .afip-grid { grid-template-columns: 1fr !important; }
+    .cli-data-grid { grid-template-columns: 1fr 1fr !important; }
+    .ficha-grid { grid-template-columns: 1fr 1fr !important; }
+    #decision-grid { grid-template-columns: 1fr !important; }
+    .buscador-input { font-size: 14px; padding: 12px 14px 12px 42px; }
+
+    /* ── Inputs y botones táctiles ──────────────────────────────────────── */
+    .input-row { flex-direction: column !important; }
+    .input-row input, .input-row select {
+      min-width: 0 !important; width: 100% !important;
+    }
+    button { min-height: 40px; }
+    button.primary {
+      min-height: 44px !important; font-size: 14px !important;
+      padding: 11px 20px !important;
+    }
   }
 
   @media (max-width: 480px) {
-    .cli-data-grid { grid-template-columns: 1fr; }
-    .ficha-grid { grid-template-columns: 1fr; }
-    .canvas-body { padding: 10px 8px; }
+    /* ── Ocultar sidebar completamente en pantallas muy pequeñas ─────────── */
+    #sidebar { display: none !important; }
+    #main-canvas { width: 100vw !important; }
+    .canvas-body { padding: 10px 8px !important; }
+    .cli-data-grid { grid-template-columns: 1fr !important; }
+    .ficha-grid { grid-template-columns: 1fr !important; }
+    .card { padding: 1rem !important; }
   }
 </style>
 </head>

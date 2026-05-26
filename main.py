@@ -37,6 +37,58 @@ SCRAPERAPI_KEY  = os.environ.get('SCRAPERAPI_KEY', '')
 ADMIN_CUIT = '30710295022'
 ADMIN_PASS = 'Artel2026'
 
+# ── Startup: genera static/logo.png usando solo stdlib (sin PIL) ─────────────
+def _generar_logo_png():
+    import struct as _s, zlib as _z, math as _m
+    W = H = 180; CX = CY = 90.0
+
+    def _dseg(px, py, ax, ay, bx, by):
+        dx, dy = bx - ax, by - ay
+        l2 = dx*dx + dy*dy
+        if l2 == 0:
+            return _m.hypot(px - ax, py - ay)
+        t = max(0.0, min(1.0, ((px - ax)*dx + (py - ay)*dy) / l2))
+        return _m.hypot(px - ax - t*dx, py - ay - t*dy)
+
+    def _chunk(tp, d):
+        c = tp.encode('ascii') + d
+        return _s.pack('>I', len(d)) + c + _s.pack('>I', _z.crc32(c) & 0xffffffff)
+
+    rows = []
+    for y in range(H):
+        row = bytearray(1 + W * 3)
+        for x in range(W):
+            d = _m.hypot(x - CX, y - CY)
+            r, g, b = 0x0b, 0x16, 0x28
+            if d <= 76:  r, g, b = 0x25, 0x63, 0xeb
+            if d <= 62:  r, g, b = 0x0b, 0x16, 0x28
+            _e = min(
+                _dseg(x, y,  54, 58, 126, 58),
+                _dseg(x, y,  54, 58,  54, 96),
+                _dseg(x, y, 126, 58, 126, 96),
+                _dseg(x, y,  54, 96,  90, 133),
+                _dseg(x, y, 126, 96,  90, 133),
+            )
+            if _e < 4.5: r, g, b = 0x60, 0xa5, 0xfa
+            _v = min(_dseg(x, y, 72, 68, 90, 106), _dseg(x, y, 108, 68, 90, 106))
+            if _v < 4.0: r, g, b = 0xff, 0xff, 0xff
+            row[1 + x*3], row[1 + x*3+1], row[1 + x*3+2] = r, g, b
+        rows.append(bytes(row))
+
+    cmp  = _z.compress(b''.join(rows), 9)
+    ihdr = _s.pack('>IIBBBBB', W, H, 8, 2, 0, 0, 0)
+    return (b'\x89PNG\r\n\x1a\n' + _chunk('IHDR', ihdr)
+            + _chunk('IDAT', cmp) + _chunk('IEND', b''))
+
+_logo_path = os.path.join(app.static_folder, 'logo.png')
+if not os.path.exists(_logo_path):
+    try:
+        with open(_logo_path, 'wb') as _lf:
+            _lf.write(_generar_logo_png())
+        print('[startup] logo.png generado OK', flush=True)
+    except Exception as _le:
+        print(f'[startup] logo.png error: {_le}', flush=True)
+
 # Topes de facturación Monotributo 2026 — usados como ingreso estimado base
 _MONOTRIB_INGRESOS = {
     'A':   3_500_000, 'B':   7_000_000, 'C':  11_500_000, 'D':  17_000_000,
