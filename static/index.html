@@ -1890,6 +1890,20 @@ function aplicarVerazManual() {
 }
 
 
+// ── REGLA DE MATERIALIDAD ─────────────────────────────────────────────────────
+// Excluye registros residuales (peajes, comisiones bancarias mínimas, etc.) del
+// cálculo de maxSit para evitar que un débito de $335 dispare alerta de insolvencia.
+// Umbral: el MAYOR entre $50.000 fijos (50 miles BCRA) y 0.01% del volumen total.
+// El objeto raw de entidades (con todos los montos) siempre se pasa a la IA.
+function maxSitMaterial(entidades) {
+  if (!entidades || !entidades.length) return 1;
+  var totalMonto = entidades.reduce(function(s, e) { return s + (e.monto || 0); }, 0);
+  var umbral = Math.max(50, totalMonto * 0.0001); // 50 miles = $50.000
+  var materiales = entidades.filter(function(e) { return (e.monto || 0) >= umbral; });
+  if (!materiales.length) return 1; // todos residuales → Sit. 1
+  return materiales.reduce(function(m, e) { return Math.max(m, e.situacion || 1); }, 1);
+}
+
 function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, chequesBCRA) {
   var puntos = 0;
   var detalle = [];
@@ -1912,8 +1926,9 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
   // sin_deudas: null = error técnico BCRA = neutral (no asumir sit 1)
   var sinDeudasReal = bcraData && bcraData.sin_deudas === true;
   var errorTecnico = !bcraData || bcraData.sin_deudas === null || bcraData.error_bcra;
+  // Aplicar Regla de Materialidad: excluir débitos residuales < $50.000 del maxSit
   var maxSit = entidades.length
-    ? entidades.reduce(function(m,e){ return Math.max(m, e.situacion||1); }, 1)
+    ? maxSitMaterial(entidades)
     : sinDeudasReal ? 1 : null;
   // Fantasma crediticio: BCRA respondió "sin deudas" Y no hay ningún banco reportante
   var _sinBancos = sinDeudasReal && entidades.length === 0;
@@ -3221,7 +3236,9 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
   }
   const entidades = todasEntidades;
   const nombre = res?.denominacion || data?.denominacion || '';
-  const maxSit = entidades.length ? entidades.reduce((m,e) => Math.max(m, e.situacion||1), 1) : 1;
+  // Aplicar Regla de Materialidad para colores/veredicto: excluye montos < $50.000
+  // (entidades sin filtrar se siguen mostrando en la tabla BCRA)
+  const maxSit = entidades.length ? maxSitMaterial(entidades) : 1;
   // Guardar monto BCRA para ratio de solvencia (miles de pesos)
   window._bcraMontoUltimo = entidades.reduce(function(s,e){ return s+(e.monto||0); }, 0);
   var cuitFmt2 = cuit.length === 11 ? cuit.slice(0,2)+'-'+cuit.slice(2,10)+'-'+cuit.slice(10) : cuit;

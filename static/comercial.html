@@ -1746,7 +1746,7 @@ function renderBcraModal(bcraData, chData, histData, scoreData, clienteLocal) {
   let maxSit=1, entidades=[], montoTotal=0;
   if (periodos.length) {
     entidades = periodos[0].entidades||[];
-    if (entidades.length) { maxSit=Math.max(...entidades.map(e=>e.situacion||1)); montoTotal=entidades.reduce((s,e)=>s+(e.monto||0),0); }
+    if (entidades.length) { maxSit=maxSitMaterial(entidades); montoTotal=entidades.reduce((s,e)=>s+(e.monto||0),0); }
   }
   // Servidor es fuente primaria; caché de cartera como fallback si hay timeout/error
   const scoreEst    = scoreData?.score ?? clienteLocal?.scoreCompleto ?? null;
@@ -1916,7 +1916,7 @@ function renderConsulta(cuit, dd, cd, hd, serverScore, afipData) {
   if (periodos.length) {
     entidades = periodos[0].entidades||[];
     if (entidades.length) {
-      maxSit = Math.max(...entidades.map(e=>e.situacion||1));
+      maxSit    = maxSitMaterial(entidades); // Regla de Materialidad: ignora montos < $50.000
       montoTotal = entidades.reduce((s,e)=>s+(e.monto||0),0);
     }
   }
@@ -2203,10 +2203,13 @@ async function lanzarAnalisisIA(cuit, dd, cd) {
   if (periodos.length) {
     entidades = periodos[0].entidades || [];
     if (entidades.length) {
+      // maxSit RAW (sin filtrar) → se pasa completo a la IA para que evalúe el riesgo real
       maxSit     = Math.max(...entidades.map(e => e.situacion || 1));
       montoTotal = entidades.reduce((s, e) => s + (e.monto || 0), 0);
     }
   }
+  // maxSitEfectivo (con Regla de Materialidad) → solo para estimarScore() fallback local
+  const maxSitEfectivo = maxSitMaterial(entidades);
   const causales = cd.results?.causales || [];
   let chqTotal = 0;
   causales.forEach(ca => ca.entidades?.forEach(en => { chqTotal += (en.detalle || []).length; }));
@@ -2215,7 +2218,8 @@ async function lanzarAnalisisIA(cuit, dd, cd) {
   // window._ultimoScoreComercial = número puro; el objeto completo está en _ultimaConsulta
   const _uc      = window._ultimaConsulta;
   const scoreObj = (_uc && _uc.serverScore && _uc.serverScore.score != null) ? _uc.serverScore : null;
-  const scoreNum = scoreObj?.score ?? window._ultimoScoreComercial ?? estimarScore(maxSit, dd.sin_deudas, cd);
+  // estimarScore usa maxSitEfectivo (material) para no degradar el fallback por peajes
+  const scoreNum = scoreObj?.score ?? window._ultimoScoreComercial ?? estimarScore(maxSitEfectivo, dd.sin_deudas, cd);
 
   // Named-label lookup — NUNCA índices posicionales
   function _dv(label) {
@@ -2623,6 +2627,20 @@ function calcularScoreCompletoSync(maxSit, sinDeudas, periodos, chData, histData
   return Math.max(1, Math.min(999, Math.round(pts)));
 }
 
+// ── REGLA DE MATERIALIDAD ─────────────────────────────────────────────────────
+// Idéntica a index.html — excluye registros residuales del cálculo de maxSit.
+// Umbral: max($50.000 = 50 miles BCRA, 0.01% del volumen total del cliente).
+// Un peaje de $335 (0.335 miles) no puede disparar una alerta de insolvencia.
+// Las entidades crudas siguen enviándose completas a la IA para análisis real.
+function maxSitMaterial(entidades) {
+  if (!entidades || !entidades.length) return 1;
+  const totalMonto = entidades.reduce((s, e) => s + (e.monto || 0), 0);
+  const umbral = Math.max(50, totalMonto * 0.0001); // 50 miles = $50.000
+  const materiales = entidades.filter(e => (e.monto || 0) >= umbral);
+  if (!materiales.length) return 1; // todos residuales → Sit. 1
+  return materiales.reduce((m, e) => Math.max(m, e.situacion || 1), 1);
+}
+
 function estimarScore(maxSit,sinDeudas,chData) {
   // Cálculo local simplificado — solo se usa como fallback
   // El score real viene del servidor via calcularScoreCompleto()
@@ -2660,7 +2678,7 @@ async function calcularScoreCompleto(cuit) {
       entidades = periodos[0].entidades || [];
       nroEnt = entidades.length;
       if (entidades.length) {
-        maxSit = Math.max(...entidades.map(e => e.situacion||1));
+        maxSit    = maxSitMaterial(entidades); // Regla de Materialidad
         montoTotal = entidades.reduce((s,e) => s+(e.monto||0), 0) / 1000;
       }
     } else if (sinDeudas) { maxSit = 1; }
