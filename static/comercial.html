@@ -164,7 +164,8 @@
   .app-header {
     background: var(--surface);
     border-bottom: 1px solid var(--border);
-    padding: 13px 16px;
+    /* safe-area-inset-top: empuja el header (y el botón Salir) debajo del notch/status-bar */
+    padding: max(13px, env(safe-area-inset-top, 13px)) 16px 13px;
     display: flex; align-items: center; justify-content: space-between;
     position: sticky; top: 0; z-index: 100;
     box-shadow: 0 1px 4px rgba(0,0,0,0.05);
@@ -411,7 +412,8 @@
     background: rgba(255,255,255,0.95);
     backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
     border-bottom: 1px solid var(--border);
-    padding: 13px 16px;
+    /* safe-area-inset-top: empuja el botón ← debajo del notch/status-bar en el modal */
+    padding: max(13px, env(safe-area-inset-top, 13px)) 16px 13px;
     display: flex; align-items: center; gap: 12px;
     position: sticky; top: 0; z-index: 10;
   }
@@ -845,9 +847,16 @@ function doLogin() { /* entrada ahora en login.html */ }
 
 async function doLogout() {
   SESSION = null; CARTERA_LOCAL = []; SALDOS_MAP = {}; SALDOS_TIMESTAMP = 0;
-  document.getElementById('consulta-resultado').innerHTML = '';
+  const _resEl = document.getElementById('consulta-resultado');
+  if (_resEl) _resEl.innerHTML = '';
   localStorage.removeItem('vendeSeguro_session');
-  try { await getClient().auth.signOut(); } catch(_) {}
+  // Timeout 2s: garantiza que la redirección ocurra aunque signOut cuelgue (red lenta)
+  try {
+    await Promise.race([
+      getClient().auth.signOut(),
+      new Promise(r => setTimeout(r, 2000))
+    ]);
+  } catch(_) {}
   window.location.replace('/login');
 }
 
@@ -1508,11 +1517,13 @@ async function abrirModalCliente(cuit, nombre) {
   // Lanzar TODAS las solicitudes en paralelo con safeFetch
   // facP: timeout estricto de 3s — si el servidor tarda más, usa SALDOS_MAP local
   const facP  = safeFetch(API + '/api/facturas/' + encodeURIComponent(cuit) + '?nombre=' + encodeURIComponent(nombre), { retries: 0, timeoutMs: 3000 });
-  const brP   = safeFetch(API + '/deudas/' + cuit);
-  const chrP  = safeFetch(API + '/deudas/' + cuit + '/cheques');
-  const hrP   = safeFetch(API + '/deudas/' + cuit + '/historial');
+  // retries:0 + timeoutMs:8s — workers BCRA tienen 2.5s c/u; backend responde en ≤8s o cae al fallback.
+  // Era default (retries:1, 15s) → peor caso 32s bloqueado. Ahora máximo 8s.
+  const brP   = safeFetch(API + '/deudas/' + cuit,               { retries: 0, timeoutMs: 8000 });
+  const chrP  = safeFetch(API + '/deudas/' + cuit + '/cheques',  { retries: 0, timeoutMs: 8000 });
+  const hrP   = safeFetch(API + '/deudas/' + cuit + '/historial',{ retries: 0, timeoutMs: 8000 });
   // scrP: score desde caché precalculada (sin fresh=1) — respuesta < 100ms si está en disco
-  const scrP  = safeFetch(API + '/fetch-score/' + cuit, { timeoutMs: 20000 });
+  const scrP  = safeFetch(API + '/fetch-score/' + cuit, { retries: 0, timeoutMs: 12000 });
 
   // ── Facturas: renderiza en cuanto llegan (sin esperar BCRA) ──
   facP.then(sd => {
@@ -2630,10 +2641,11 @@ function estimarScore(maxSit,sinDeudas,chData) {
 // Score completo via servidor — igual que la app principal
 async function calcularScoreCompleto(cuit) {
   try {
+    // AbortSignal.timeout(8s): evita que fetch() bloquee indefinidamente si el servidor no responde
     const [deudasR, histR, chequesR] = await Promise.all([
-      fetch(API + '/deudas/' + cuit).catch(() => null),
-      fetch(API + '/deudas/' + cuit + '/historial').catch(() => null),
-      fetch(API + '/deudas/' + cuit + '/cheques').catch(() => null)
+      fetch(API + '/deudas/' + cuit,               { signal: AbortSignal.timeout(8000) }).catch(() => null),
+      fetch(API + '/deudas/' + cuit + '/historial', { signal: AbortSignal.timeout(8000) }).catch(() => null),
+      fetch(API + '/deudas/' + cuit + '/cheques',   { signal: AbortSignal.timeout(8000) }).catch(() => null)
     ]);
     const bcraData  = deudasR  && deudasR.ok  ? await deudasR.json()   : null;
     const histData  = histR    && histR.ok    ? await histR.json()      : null;
