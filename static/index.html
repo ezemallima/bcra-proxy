@@ -92,6 +92,19 @@
   .section { display: none; }
   .section.active { display: block; }
 
+  /* ── BUSCADOR PERSISTENTE (sticky-mode) — se activa al mostrar resultados ── */
+  #consulta-search-hero.sticky-mode {
+    position: sticky; top: 0; z-index: 20;
+    background: var(--fondo);
+    padding: 10px 0 12px;
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    align-items: flex-start;
+  }
+  /* En sticky-mode ocultar icon + título + subtítulo (hijos 1-3), mostrar solo el search row */
+  #consulta-search-hero.sticky-mode > div:nth-child(-n+3) { display: none !important; }
+  #consulta-search-hero.sticky-mode > div:last-child { max-width: 100%; width: 100%; }
+
   /* ── CARDS ── */
   .card { background: var(--blanco); border-radius: 16px; padding: 1.5rem; margin-bottom: 1rem; box-shadow: var(--card-shadow); border: 1px solid rgba(226,232,240,0.6); transition: box-shadow 0.2s; }
   .card-title { font-size: 10px; color: var(--azul-claro); margin-bottom: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.1px; }
@@ -626,9 +639,10 @@
       </div>
       <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--azul-oscuro);margin-bottom:6px;letter-spacing:-0.3px;">Consultar cliente</div>
       <div style="font-size:13px;color:var(--texto-suave);margin-bottom:1.75rem;max-width:340px;line-height:1.5;">BCRA en tiempo real · AFIP · Historial bodegas · Moras</div>
-      <div style="display:flex;gap:8px;width:100%;max-width:480px;">
+      <div style="display:flex;gap:8px;width:100%;max-width:540px;align-items:center;">
         <input type="text" id="cuit-input" placeholder="CUIT — Ej: 20-21310600-8" maxlength="13" onkeydown="if(event.key==='Enter') consultarCliente()" style="flex:1;font-size:15px;padding:13px 18px;border-radius:12px;border:2px solid #e2e8f0;background:#fff;box-shadow:0 2px 8px rgba(37,99,235,0.06);transition:border-color 0.15s,box-shadow 0.15s;" onfocus="this.style.borderColor='#2563eb';this.style.boxShadow='0 0 0 3px rgba(37,99,235,0.12)'" onblur="this.style.borderColor='#e2e8f0';this.style.boxShadow='0 2px 8px rgba(37,99,235,0.06)'" />
         <button class="primary" onclick="consultarCliente()" style="padding:13px 22px;font-size:14px;border-radius:12px;white-space:nowrap;">Consultar →</button>
+        <button id="btn-nueva-consulta" onclick="nuevaConsulta()" title="Nueva consulta" style="display:none;padding:12px 14px;font-size:15px;border-radius:12px;background:#fff;border:1.5px solid #e2e8f0;color:#64748b;cursor:pointer;line-height:1;flex-shrink:0;white-space:nowrap;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='#fff'">&#x2715; Nuevo</button>
       </div>
     </div>
 
@@ -2788,8 +2802,14 @@ function switchTab(tab, el) {
     var _ld = document.getElementById('loading-state');
     if (_hero && _res && _ld) {
       var resVisible = _res.style.display !== 'none';
-      var ldVisible = _ld.style.display !== 'none';
-      _hero.style.display = (resVisible || ldVisible) ? 'none' : 'flex';
+      var ldVisible  = _ld.style.display  !== 'none';
+      if (resVisible || ldVisible) {
+        // Hay un resultado activo → hero en modo compacto sticky
+        _hero.classList.add('sticky-mode'); _hero.style.display = 'flex';
+      } else {
+        // Estado inicial → hero decorativo completo
+        _hero.classList.remove('sticky-mode'); _hero.style.display = '';
+      }
     }
   }
 }
@@ -2857,7 +2877,9 @@ async function consultarCliente() {
   document.getElementById('resultado').style.display = 'none';
   document.getElementById('loading-state').style.display = 'block';
   var _hero = document.getElementById('consulta-search-hero');
-  if (_hero) _hero.style.display = 'none';
+  if (_hero) { _hero.classList.add('sticky-mode'); _hero.style.display = 'flex'; }
+  var _btnNC = document.getElementById('btn-nueva-consulta');
+  if (_btnNC) _btnNC.style.display = '';
   document.getElementById('analisis-resultado').style.display = 'none';
   document.getElementById('btn-export').style.display = 'none';
   // Limpiar todos los contenedores de resultados
@@ -4604,9 +4626,16 @@ function abrirConstanciaARCA() {
 function nuevaConsulta() {
   document.getElementById('resultado').style.display = 'none';
   document.getElementById('loading-state').style.display = 'none';
+  // Restaurar hero decorativo completo
   var hero = document.getElementById('consulta-search-hero');
-  if (hero) hero.style.display = '';
-  document.getElementById('cuit-input').value = '';
+  if (hero) { hero.classList.remove('sticky-mode'); hero.style.display = ''; }
+  // Ocultar botón "Nuevo" (solo visible cuando hay resultado)
+  var btnNC = document.getElementById('btn-nueva-consulta');
+  if (btnNC) btnNC.style.display = 'none';
+  // Limpiar input y enfocar para búsqueda inmediata
+  var inp = document.getElementById('cuit-input');
+  if (inp) { inp.value = ''; inp.focus(); }
+  // Limpiar estado global de la consulta anterior
   window._saldosCliente = null;
   window._ultimoBcraData = null;
   window._chequesUltimaConsulta = null;
