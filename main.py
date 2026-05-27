@@ -7,10 +7,10 @@ import os
 import json
 import time
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 import random
 import traceback
-import gc
 try:
     import boto3
     BOTO3_OK = True
@@ -2322,6 +2322,60 @@ def _actualizar_score_en_cartera(cuit_limpio: str, score_data: dict, solvency: d
             pass
 
 
+def _analizar_bodegas_batch(clientes_batch):
+    """Analiza mensajes de bodegas para un lote de clientes en UNA sola llamada a Gemini.
+    Reduce llamadas IA de N (una por cliente) a N/8 (una por lote).
+    Args: clientes_batch — lista de {cuit, nombre, mensajes: [str]}
+    Returns: {cuit: (es_negativo: bool, motivo: str)}
+    """
+    if not clientes_batch:
+        return {}
+    secciones = []
+    for cli in clientes_batch:
+        msgs_txt = "\n".join(f"- {m}" for m in cli.get('mensajes', [])[:10])
+        secciones.append(f"CUIT: {cli['cuit']} | {cli['nombre']}\n{msgs_txt}")
+    bloque = "\n\n---\n\n".join(secciones)
+    prompt = (
+        "Sos un Analista de Riesgo Crediticio experto en el sector vitivinícola argentino.\n"
+        "Analizá los mensajes de grupo de bodegas para CADA cliente listado.\n\n"
+        "REGLAS:\n"
+        "- Solo negativo si hay deudas impagas NO resueltas, estafas o desaparición del deudor.\n"
+        "- Cheques rechazados pero reemplazados = NO negativo.\n"
+        "- Si distintas bodegas dicen cosas contradictorias → comportamiento_inconsistente: true.\n"
+        "- NUNCA respondas 'sin antecedentes' si el chat tiene mensajes.\n\n"
+        "CLIENTES A ANALIZAR:\n\n" + bloque + "\n\n"
+        "Respondé SOLO con JSON sin markdown. Una clave por CUIT exacto:\n"
+        '{"CUIT1": {"es_negativo": false, "motivo": "...", "comportamiento_inconsistente": false}, '
+        '"CUIT2": {"es_negativo": false, "motivo": "...", "comportamiento_inconsistente": false}}'
+    )
+    payload = {"contents": [{"parts": [{"text": prompt}]}]}
+    fallback = {cli['cuit']: (False, "") for cli in clientes_batch}
+    texto, error = gemini_request(payload, timeout=90)
+    if error or not texto:
+        print(f"[bodegas-batch] Sin respuesta IA — fallback no-negativo para {len(clientes_batch)} clientes", flush=True)
+        return fallback
+    try:
+        import re as _re
+        texto_limpio = texto.strip().replace("```json", "").replace("```", "").strip()
+        _m = _re.search(r'\{[\s\S]+\}', texto_limpio)
+        if not _m:
+            return fallback
+        data = json.loads(_m.group(0))
+        result = {}
+        for cli in clientes_batch:
+            cuit = cli['cuit']
+            entrada = data.get(cuit, {})
+            motivo = entrada.get("motivo", "")
+            if entrada.get("comportamiento_inconsistente"):
+                motivo = "⚠ Comportamiento Inconsistente: " + motivo
+            result[cuit] = (entrada.get("es_negativo", False), motivo)
+        print(f"[bodegas-batch] Lote OK — {len(result)} clientes analizados", flush=True)
+        return result
+    except Exception as _e:
+        print(f"[bodegas-batch] Parse error: {_e} — raw: {texto[:200]}", flush=True)
+        return fallback
+
+
 def ejecutar_verificacion(cartera_data):
     global verificacion_estado
     _score_session_cache.clear()   # reset session cache para esta verificación
@@ -2448,6 +2502,97 @@ def ejecutar_verificacion(cartera_data):
 
     total = len(cartera_data)
     try:
+        # ═══════════════════════════════════════════════════════════════════
+        # FASE 1 — Fetch BCRA en PARALELO (ThreadPoolExecutor, 12 workers)
+        # Tiempo estimado: ~14 min vs ~170 min secuencial para 514 clientes
+        # ═══════════════════════════════════════════════════════════════════
+        bcra_prefetch = {}  # {cuit: (lambda_result_or_None, bcra_data_or_None)}
+
+        def _fetch_cliente_bcra(cliente_f):
+            cuit_f = str(cliente_f.get('cuit', '') or '').strip()
+            try:
+                lr = consultar_bcra_lambda(cuit_f)
+                if lr:
+                    return cuit_f, (lr, lr[0])
+                bd, _ = consultar_bcra_cached(cuit_f)
+                return cuit_f, (None, bd)
+            except Exception as _ef:
+                print(f"[verif-p1] {cuit_f} error: {type(_ef).__name__}", flush=True)
+                return cuit_f, (None, None)
+
+        verificacion_estado["mensaje"] = f"Fase 1/3: Consultando BCRA ({total} clientes, 12 workers)..."
+        print(f"[verif] FASE 1: Fetch BCRA paralelo — {total} clientes, 12 workers", flush=True)
+        with ThreadPoolExecutor(max_workers=12) as _pool:
+            _futures = {_pool.submit(_fetch_cliente_bcra, c): c for c in cartera_data}
+            _done = 0
+            for _fut in as_completed(_futures, timeout=900):
+                try:
+                    _cuit_r, _data_r = _fut.result(timeout=35)
+                    bcra_prefetch[_cuit_r] = _data_r
+                except Exception:
+                    _c = _futures[_fut]
+                    bcra_prefetch[str(_c.get('cuit', '')).strip()] = (None, None)
+                _done += 1
+                verificacion_estado["progreso"] = _done
+                if _done % 30 == 0:
+                    print(f"[verif-p1] {_done}/{total} BCRA fetched", flush=True)
+        print(f"[verif] FASE 1 OK — {len(bcra_prefetch)}/{total} con datos BCRA", flush=True)
+
+        # ═══════════════════════════════════════════════════════════════════
+        # FASE 2 — Análisis bodegas en LOTES (8 clientes por llamada Gemini)
+        # Reduce llamadas IA de N individuales a ceil(N/8) lotes
+        # ═══════════════════════════════════════════════════════════════════
+        verificacion_estado["mensaje"] = "Fase 2/3: Analizando bodegas en lotes..."
+        _BATCH = 8
+        bodegas_prefetch = {}  # {cuit: (es_negativo, motivo)}
+        clientes_para_bodegas = []
+        hace_6m = datetime.now() - timedelta(days=180)
+        for _cli in cartera_data:
+            _cuit_b  = str(_cli.get('cuit', '') or '').strip()
+            _nom_b   = str(_cli.get('nombre', '') or '').strip()
+            _threads = wsp_index.get(_cuit_b, [])
+            _trec = []
+            for _t in _threads:
+                _fs = _t.get('fecha') or (_t.get('mensajes', [{}])[0].get('fecha') if _t.get('mensajes') else None)
+                if _fs:
+                    try:
+                        if datetime.fromisoformat(str(_fs)[:10]) >= hace_6m:
+                            _trec.append(_t)
+                    except Exception:
+                        pass
+            if _trec:
+                _tmsgs, _sosp = [], False
+                for _t in _trec:
+                    for _m in _t.get('mensajes', []):
+                        _txt = _m.get('texto', '')
+                        _tmsgs.append(_m.get('autor', '') + ': ' + _txt)
+                        if any(_p in _txt.lower() for _p in palabras_riesgo):
+                            _sosp = True
+                if _sosp:
+                    clientes_para_bodegas.append({'cuit': _cuit_b, 'nombre': _nom_b, 'mensajes': _tmsgs})
+        if clientes_para_bodegas:
+            _n_lotes = (len(clientes_para_bodegas) + _BATCH - 1) // _BATCH
+            print(f"[verif] FASE 2: {len(clientes_para_bodegas)} clientes sospechosos → {_n_lotes} lote(s) de {_BATCH}", flush=True)
+            for _idx_l in range(0, len(clientes_para_bodegas), _BATCH):
+                _lote = clientes_para_bodegas[_idx_l:_idx_l + _BATCH]
+                try:
+                    bodegas_prefetch.update(_analizar_bodegas_batch(_lote))
+                    print(f"[verif-p2] Lote {_idx_l // _BATCH + 1}/{_n_lotes} OK", flush=True)
+                except Exception as _e_lote:
+                    print(f"[verif-p2] Error lote: {_e_lote}", flush=True)
+                    for _cl in _lote:
+                        bodegas_prefetch[_cl['cuit']] = (False, "")
+        else:
+            print("[verif] FASE 2: Sin mensajes sospechosos — skip", flush=True)
+        print(f"[verif] FASE 2 OK — {len(bodegas_prefetch)} resultados bodegas pre-cacheados", flush=True)
+
+        # ═══════════════════════════════════════════════════════════════════
+        # FASE 3 — Calcular scores con datos pre-fetched (sin I/O BCRA bloqueante)
+        # ═══════════════════════════════════════════════════════════════════
+        verificacion_estado["progreso"] = 0
+        verificacion_estado["mensaje"] = f"Fase 3/3: Calculando scores ({total} clientes)..."
+        print(f"[verif] FASE 3: Scoring con datos pre-fetched...", flush=True)
+
         for i, cliente in enumerate(cartera_data):
             cuit         = str(cliente.get('cuit', '') or '').strip()
             nombre       = str(cliente.get('nombre', '') or '').strip()
@@ -2456,131 +2601,90 @@ def ejecutar_verificacion(cartera_data):
 
             verificacion_estado["progreso"]       = i + 1
             verificacion_estado["cliente_actual"] = nombre
-            verificacion_estado["mensaje"]        = f"Verificando {i+1}/{total}: {nombre}"
+            verificacion_estado["mensaje"]        = f"Fase 3/3: Score {i+1}/{total}: {nombre}"
 
             cliente_actualizado = dict(cliente)
-            bcra_ok = False
 
-            # ── BCRA: 2 intentos con log detallado ───────────────────────────
-            for intento in range(2):
+            # Recuperar datos BCRA pre-fetched en Fase 1
+            _pf           = bcra_prefetch.get(cuit, (None, None))
+            lambda_result = _pf[0] if _pf else None
+            bcra_data     = _pf[1] if _pf else None
+            bcra_ok       = bcra_data is not None
+
+            # Persistir caché historial/cheques si los datos vienen de Lambda (Fase 1)
+            if lambda_result:
                 try:
-                    lambda_result = consultar_bcra_lambda(cuit)
-                    if lambda_result:
-                        bcra_data, hist_lambda, cheq_lambda = lambda_result
-                        try:
-                            with open(os.path.join(DATA_DIR, f'historial_{cuit}.json'), 'w') as _f:
-                                json.dump({'payload': hist_lambda, 'ts': time.time()}, _f)
-                            with open(os.path.join(DATA_DIR, f'cheques_{cuit}.json'), 'w') as _f:
-                                json.dump({'payload': cheq_lambda, 'ts': time.time()}, _f)
-                        except Exception as _e:
-                            print(f"{tag} Advertencia caché Lambda: {_e}", flush=True)
-                    else:
-                        bcra_data, _ = consultar_bcra_cached(cuit)
+                    with open(os.path.join(DATA_DIR, f'historial_{cuit}.json'), 'w') as _f:
+                        json.dump({'payload': lambda_result[1], 'ts': time.time()}, _f)
+                    with open(os.path.join(DATA_DIR, f'cheques_{cuit}.json'), 'w') as _f:
+                        json.dump({'payload': lambda_result[2], 'ts': time.time()}, _f)
+                except Exception as _e:
+                    print(f"{tag} Advertencia caché Lambda: {_e}", flush=True)
 
-                    # Score
-                    score_data = None
-                    _ciudad = str(cliente.get('ciudad', '') or '')
-                    try:
-                        if lambda_result:
-                            score_data = calcular_rating_predictivo(
-                                cuit=cuit, bcra_data=bcra_data or {},
-                                hist_data=hist_lambda, cheq_data=cheq_lambda,
-                                en_mora=None, ciudad=_ciudad,
-                            )
-                        else:
-                            score_data = calcular_score_servidor(
-                                cuit, bcra_data or {}, en_mora=None, ciudad=_ciudad
-                            )
-                        cliente_actualizado['scoreCompleto']        = score_data['score']
-                        cliente_actualizado['scoreRango']           = score_data['rango']
-                        cliente_actualizado['scoreColor']           = score_data['color']
-                        cliente_actualizado['scoreEmoji']           = score_data['emoji']
-                        cliente_actualizado['alerta_temprana']      = score_data.get('alerta_temprana', False)
-                        cliente_actualizado['bloquear_oportunidad'] = score_data.get('bloquear_oportunidad', False)
-                        cliente_actualizado['alerta_logistica']     = score_data.get('alerta_logistica', '')
-                        # Enriquecer con solvencia (ya cacheada por calcular_rating_predictivo)
-                        _sv = get_solvency_data(cuit)
-                        if _sv:
-                            cliente_actualizado['inferencia_ingresos'] = _sv.get('ingresos_anuales')
-                            cliente_actualizado['fuente_ingresos']     = _sv.get('fuente_ingresos')
-                            cliente_actualizado['actividad_principal'] = _sv.get('actividad_principal')
-                        cliente_actualizado['score_ts'] = time.time()
-                        print(f"{tag} score={score_data['score']}", flush=True)
-                    except Exception as e_sc:
-                        print(f"{tag} ERROR score: {type(e_sc).__name__}: {e_sc}", flush=True)
-
-                    # Situación BCRA
-                    if bcra_data and bcra_data.get('results') is not None:
-                        periodos  = (bcra_data.get('results') or {}).get('periodos') or []
-                        entidades = periodos[0].get('entidades', []) if periodos else []
-                        max_sit   = max((e.get('situacion', 1) or 1) for e in entidades) if entidades else 1
-                        cliente_actualizado['ultimaSit']   = max_sit
-                        cliente_actualizado['ultimaVerif'] = time.strftime('%d/%m/%Y')
-                        if max_sit > sit_anterior or max_sit >= 3:
-                            alerta = {
-                                "nombre": nombre, "cuit": cuit,
-                                "sitAnterior": sit_anterior, "sitActual": max_sit,
-                                "fecha": time.strftime('%d/%m/%Y'), "tipo": "bcra"
-                            }
-                            if score_data:
-                                alerta.update({
-                                    "scoreCompleto": score_data["score"], "scoreRango": score_data["rango"],
-                                    "scoreColor": score_data["color"], "scoreEmoji": score_data["emoji"]
-                                })
-                            nuevas_alertas.append(alerta)
-                    else:
-                        cliente_actualizado['ultimaVerif'] = time.strftime('%d/%m/%Y')
-
-                    bcra_ok = True
-                    break  # éxito
-
-                except Exception as e_bcra:
-                    tb_short = ' | '.join(traceback.format_exc().splitlines()[-4:])
-                    print(f"{tag} ERROR intento {intento+1}/2 — {type(e_bcra).__name__}: {e_bcra}", flush=True)
-                    print(f"{tag} Traceback: {tb_short}", flush=True)
-                    if intento == 0:
-                        print(f"{tag} Reintentando...", flush=True)
-                        # Sin sleep — ScraperAPI gestiona throttling
-                    else:
-                        print(f"{tag} FALLIDO definitivo — continúa con siguiente cliente", flush=True)
-                        cliente_actualizado['verificacion_fallida'] = True
-                        cliente_actualizado['ultimaVerif']          = time.strftime('%d/%m/%Y')
-
-            if not bcra_ok:
-                print(f"{tag} Sin datos BCRA — conserva estado anterior (sit={sit_anterior})", flush=True)
-
-            # ── WhatsApp bodegas ──────────────────────────────────────────────
+            # Score — puro Python, usa datos ya en memoria desde Fase 1
+            score_data = None
+            _ciudad = str(cliente.get('ciudad', '') or '')
             try:
-                from datetime import datetime, timedelta
-                threads_cli = wsp_index.get(cuit, [])
-                hace_6m     = datetime.now() - timedelta(days=180)
-                threads_rec = []
-                for t in threads_cli:
-                    fs = t.get('fecha') or (t.get('mensajes', [{}])[0].get('fecha') if t.get('mensajes') else None)
-                    if fs:
-                        try:
-                            if datetime.fromisoformat(str(fs)[:10]) >= hace_6m:
-                                threads_rec.append(t)
-                        except Exception:
-                            pass
-                if threads_rec:
-                    todos_msgs, tiene_sospecha = [], False
-                    for t in threads_rec:
-                        for m in t.get('mensajes', []):
-                            txt = m.get('texto', '')
-                            todos_msgs.append(m.get('autor', '') + ': ' + txt)
-                            if any(p in txt.lower() for p in palabras_riesgo):
-                                tiene_sospecha = True
-                    if tiene_sospecha and not any(a['cuit'] == cuit and a['tipo'] == 'bodegas' for a in nuevas_alertas):
-                        es_neg, motivo = analizar_bodegas_server(cuit, nombre, todos_msgs[:10])
-                        if es_neg:
-                            nuevas_alertas.append({"nombre": nombre, "cuit": cuit,
-                                "fecha": time.strftime('%d/%m/%Y'), "tipo": "bodegas", "mensajes": [motivo]})
-            except Exception:
-                pass
+                if lambda_result:
+                    score_data = calcular_rating_predictivo(
+                        cuit=cuit, bcra_data=bcra_data or {},
+                        hist_data=lambda_result[1], cheq_data=lambda_result[2],
+                        en_mora=None, ciudad=_ciudad,
+                    )
+                elif bcra_data:
+                    score_data = calcular_score_servidor(
+                        cuit, bcra_data, en_mora=None, ciudad=_ciudad
+                    )
+                if score_data:
+                    cliente_actualizado['scoreCompleto']        = score_data['score']
+                    cliente_actualizado['scoreRango']           = score_data['rango']
+                    cliente_actualizado['scoreColor']           = score_data['color']
+                    cliente_actualizado['scoreEmoji']           = score_data['emoji']
+                    cliente_actualizado['alerta_temprana']      = score_data.get('alerta_temprana', False)
+                    cliente_actualizado['bloquear_oportunidad'] = score_data.get('bloquear_oportunidad', False)
+                    cliente_actualizado['alerta_logistica']     = score_data.get('alerta_logistica', '')
+                    _sv = get_solvency_data(cuit)
+                    if _sv:
+                        cliente_actualizado['inferencia_ingresos'] = _sv.get('ingresos_anuales')
+                        cliente_actualizado['fuente_ingresos']     = _sv.get('fuente_ingresos')
+                        cliente_actualizado['actividad_principal'] = _sv.get('actividad_principal')
+                    cliente_actualizado['score_ts'] = time.time()
+                    print(f"{tag} score={score_data['score']}", flush=True)
+            except Exception as e_sc:
+                print(f"{tag} ERROR score: {type(e_sc).__name__}: {e_sc}", flush=True)
+
+            # Situación BCRA
+            if bcra_data and bcra_data.get('results') is not None:
+                periodos  = (bcra_data.get('results') or {}).get('periodos') or []
+                entidades = periodos[0].get('entidades', []) if periodos else []
+                max_sit   = max((e.get('situacion', 1) or 1) for e in entidades) if entidades else 1
+                cliente_actualizado['ultimaSit']   = max_sit
+                cliente_actualizado['ultimaVerif'] = time.strftime('%d/%m/%Y')
+                if max_sit > sit_anterior or max_sit >= 3:
+                    alerta = {
+                        "nombre": nombre, "cuit": cuit,
+                        "sitAnterior": sit_anterior, "sitActual": max_sit,
+                        "fecha": time.strftime('%d/%m/%Y'), "tipo": "bcra"
+                    }
+                    if score_data:
+                        alerta.update({
+                            "scoreCompleto": score_data["score"], "scoreRango": score_data["rango"],
+                            "scoreColor": score_data["color"], "scoreEmoji": score_data["emoji"]
+                        })
+                    nuevas_alertas.append(alerta)
+            else:
+                cliente_actualizado['ultimaVerif'] = time.strftime('%d/%m/%Y')
+                if not bcra_ok:
+                    cliente_actualizado['verificacion_fallida'] = True
+                    print(f"{tag} Sin datos BCRA — conserva estado anterior (sit={sit_anterior})", flush=True)
+
+            # Bodegas: resultado pre-fetched en Fase 2 (sin llamada IA individual por cliente)
+            _es_neg, _motivo = bodegas_prefetch.get(cuit, (False, ""))
+            if _es_neg and not any(a['cuit'] == cuit and a['tipo'] == 'bodegas' for a in nuevas_alertas):
+                nuevas_alertas.append({"nombre": nombre, "cuit": cuit,
+                    "fecha": time.strftime('%d/%m/%Y'), "tipo": "bodegas", "mensajes": [_motivo]})
 
             cartera_actualizada.append(cliente_actualizado)
-            gc.collect()
 
             # Guardado parcial cada 10 clientes
             if (i + 1) % 10 == 0:
