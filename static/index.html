@@ -92,16 +92,19 @@
   .section { display: none; }
   .section.active { display: block; }
 
-  /* ── BUSCADOR PERSISTENTE (sticky-mode) — se activa al mostrar resultados ── */
+  /* ── BUSCADOR COMPACTO — header estático en modo resultados ── */
+  /* NOTA: se eliminó position:sticky — causaba solapamiento inherente (el hero ya está en
+     y:0 del scroll container; el contenido subía por detrás). Solución: layout 2-panel con
+     scroll interno en #resultado. Ver clase .consulta-results-mode más abajo. */
   #consulta-search-hero.sticky-mode {
-    position: sticky; top: 0; z-index: 20;
+    position: relative;
+    flex-shrink: 0;
     background: var(--fondo);
-    padding: 10px 0 12px !important; /* !important: anula el padding inline 3rem/2rem del HTML */
+    padding: 10px 0 12px !important;
     border-bottom: 1px solid var(--border);
     box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-    align-items: flex-start !important; /* !important: anula align-items:center inline */
+    align-items: flex-start !important;
   }
-  /* En sticky-mode ocultar icon + título + subtítulo (hijos 1-3), mostrar solo el search row */
   #consulta-search-hero.sticky-mode > div:nth-child(-n+3) { display: none !important; }
   #consulta-search-hero.sticky-mode > div:last-child { max-width: 100%; width: 100%; }
 
@@ -488,6 +491,38 @@
     .cli-data-grid { grid-template-columns: 1fr !important; }
     .ficha-grid { grid-template-columns: 1fr !important; }
     .card { padding: 1rem !important; }
+  }
+
+  /* ── LAYOUT 2-PANEL (desktop ≥769px): hero fijo + #resultado con scroll interno ── */
+  /* Reemplaza la estrategia sticky que causaba solapamiento. En mobile el flujo normal
+     del body se mantiene — no aplica este layout. */
+  @media (min-width: 769px) {
+    .consulta-results-mode {
+      padding: 0 !important;
+      overflow: hidden !important;
+    }
+    .consulta-results-mode > .container {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+    .consulta-results-mode > .container > #consulta {
+      flex: 1;
+      display: flex !important;
+      flex-direction: column;
+      overflow: hidden;
+      padding: 12px 24px 0;
+    }
+    /* #resultado y #loading-state llenan el espacio restante bajo el hero */
+    .consulta-results-mode #resultado,
+    .consulta-results-mode #loading-state {
+      flex: 1;
+      min-height: 0; /* requerido: flex child debe poder contraerse para scrollear */
+    }
+    .consulta-results-mode #resultado {
+      overflow-y: auto;
+      padding-bottom: 24px;
+    }
   }
 </style>
 </head>
@@ -2819,6 +2854,7 @@ function switchTab(tab, el) {
     if (_bL) { _bL.style.display = 'block'; _bL.innerHTML = ''; }
     cargarCarteraServidor(); autoCargarScoresServidor(); cargarAlertasMora(); // cargarCarteraServidor incluye renderAlertas()
   }
+  var _canvasBody = document.querySelector('.canvas-body');
   if (tab === 'consulta') {
     var _hero = document.getElementById('consulta-search-hero');
     var _res = document.getElementById('resultado');
@@ -2827,13 +2863,16 @@ function switchTab(tab, el) {
       var resVisible = _res.style.display !== 'none';
       var ldVisible  = _ld.style.display  !== 'none';
       if (resVisible || ldVisible) {
-        // Hay un resultado activo → hero en modo compacto sticky
         _hero.classList.add('sticky-mode'); _hero.style.display = 'flex';
+        if (_canvasBody) _canvasBody.classList.add('consulta-results-mode');
       } else {
-        // Estado inicial → hero decorativo completo
         _hero.classList.remove('sticky-mode'); _hero.style.display = '';
+        if (_canvasBody) _canvasBody.classList.remove('consulta-results-mode');
       }
     }
+  } else {
+    // Al salir de consulta, restaurar scroll normal del canvas-body para otras secciones
+    if (_canvasBody) _canvasBody.classList.remove('consulta-results-mode');
   }
 }
 
@@ -2901,6 +2940,8 @@ async function consultarCliente() {
   document.getElementById('loading-state').style.display = 'block';
   var _hero = document.getElementById('consulta-search-hero');
   if (_hero) { _hero.classList.add('sticky-mode'); _hero.style.display = 'flex'; }
+  var _cbody = document.querySelector('.canvas-body');
+  if (_cbody) _cbody.classList.add('consulta-results-mode');
   var _btnNC = document.getElementById('btn-nueva-consulta');
   if (_btnNC) _btnNC.style.display = '';
   document.getElementById('analisis-resultado').style.display = 'none';
@@ -4693,6 +4734,8 @@ function nuevaConsulta() {
   // Restaurar hero decorativo completo
   var hero = document.getElementById('consulta-search-hero');
   if (hero) { hero.classList.remove('sticky-mode'); hero.style.display = ''; }
+  var _cbody2 = document.querySelector('.canvas-body');
+  if (_cbody2) _cbody2.classList.remove('consulta-results-mode');
   // Ocultar botón "Nuevo" (solo visible cuando hay resultado)
   var btnNC = document.getElementById('btn-nueva-consulta');
   if (btnNC) btnNC.style.display = 'none';
