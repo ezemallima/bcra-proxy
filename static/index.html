@@ -2338,7 +2338,7 @@ function renderBcraHistoryChart(periodos) {
   });
   var values = data24.map(function(p) {
     var ents = p.entidades || [];
-    return ents.length ? Math.max.apply(null, ents.map(function(e){ return e.situacion || 1; })) : 1;
+    return ents.length ? maxSitMaterial(ents) : 1; // Regla de Materialidad: ignora montos < $50.000
   });
   var colors = values.map(function(v) {
     return v === 1 ? '#16a34a' : v === 2 ? '#ca8a04' : v === 3 ? '#ea580c' : '#dc2626';
@@ -3701,7 +3701,7 @@ async function buildBcraChartImage() {
   });
   var values = data24.map(function(p) {
     var ents = p.entidades || [];
-    return ents.length ? Math.max.apply(null, ents.map(function(e){ return e.situacion || 1; })) : 1;
+    return ents.length ? maxSitMaterial(ents) : 1; // Regla de Materialidad: ignora montos < $50.000
   });
   var bgColors = values.map(function(v) {
     return v === 1 ? '#16a34a' : v === 2 ? '#ca8a04' : v === 3 ? '#ea580c' : '#dc2626';

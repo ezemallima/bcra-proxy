@@ -1238,7 +1238,10 @@ function renderCartera(filtro) {
     // esAlertaBCRA: SOLO situación BCRA > 1 (Sit 2/3/4/5).
     // c.alerta viene del servidor y puede reflejar criterios internos
     // (logística, límite) que NO son riesgo bancario → NO pisa este flag.
-    const esAlertaBCRA = sit > 1;
+    // _esMoraTecnica: sit>=3 pero score>=400 → scoring ya aplicó materialidad
+    // y consideró al cliente aceptable → probable monto sub-umbral (peaje, etc.)
+    const _esMoraTecnica = sit >= 3 && score !== null && score >= 400;
+    const esAlertaBCRA = sit > 1 && !_esMoraTecnica;
 
     // esExcedido: deuda Odoo >= límite de crédito asignado (carril comercial)
     const saldosData   = getSaldos(c.nombre, c.cuit);
@@ -1262,7 +1265,7 @@ function renderCartera(filtro) {
     const scoreColor   = scoreToColor(score);
     const pctUsado     = limCred > 0 ? Math.min(100, (saldoActual / limCred) * 100) : 0;
     const barColor     = esExcedido ? 'var(--red)' : pctUsado > 80 ? 'var(--orange)' : 'var(--green)';
-    const dotColor     = !score ? 'var(--text2)' : sit === 1 ? 'var(--green)' : sit === 2 ? 'var(--yellow)' : 'var(--red)';
+    const dotColor     = !score ? 'var(--text2)' : sit === 1 ? 'var(--green)' : _esMoraTecnica ? 'var(--yellow)' : sit === 2 ? 'var(--yellow)' : 'var(--red)';
 
     // ── DSO: días de atraso máximo sobre facturas abiertas ──────────
     const dso          = calcDSO(saldosData);
@@ -2330,7 +2333,7 @@ function generarPDF(cuit) {
   if (periodos.length) {
     entidades = periodos[0].entidades || [];
     if (entidades.length) {
-      maxSit = Math.max(...entidades.map(e=>e.situacion||1));
+      maxSit = maxSitMaterial(entidades); // Regla de Materialidad: ignora montos < $50.000
       montoTotal = entidades.reduce((s,e)=>s+(e.monto||0),0);
     }
   }
