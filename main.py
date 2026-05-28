@@ -166,7 +166,7 @@ CREDIT_ANALYSIS_SYSTEM_PROMPT = (
     "(patrón sistémico, monto >= $50.000 en al menos una) "
     "→ fijar límite en $500.000 con revisión en 6 meses, independientemente del score.\n"
     "  · Sit.3 resuelta (entidad volvió a Sit.1 o cerró posición) pero ocurrió dentro de 18m "
-    "→ reducir el límite del tier resultante en un 20%% como prima de riesgo residual.\n"
+    "→ reducir el límite del tier resultante en un 20% como prima de riesgo residual.\n"
     "  · Criterio de materialidad: ignorar entidades con monto < $50.000 al evaluar Sit.3.\n\n"
 
     "REGLA 3 — VERACIDAD DE CIFRAS (cero alucinaciones):\n"
