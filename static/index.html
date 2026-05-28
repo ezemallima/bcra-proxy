@@ -527,20 +527,44 @@
     }
   }
 
-  /* ── BCRA TIMELINE — visualización 24m por entidad ── */
-  .bcra-tl-wrap { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:14px 16px; margin-bottom:8px; overflow-x:auto; }
-  .bcra-tl-title { font-size:11px; font-weight:700; color:#94a3b8; letter-spacing:0.6px; text-transform:uppercase; margin-bottom:10px; }
-  .bcra-tl-row { display:flex; align-items:center; gap:8px; margin-bottom:5px; min-width:480px; }
-  .bcra-tl-name { width:110px; min-width:110px; font-size:11px; color:#475569; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex-shrink:0; }
-  .bcra-tl-dots { display:flex; gap:3px; flex:1; }
-  .bcra-tl-dot { width:14px; height:14px; border-radius:50%; flex-shrink:0; cursor:pointer; transition:transform 0.1s, box-shadow 0.1s; }
-  .bcra-tl-dot:hover { transform:scale(1.35); box-shadow:0 2px 6px rgba(0,0,0,0.25); z-index:1; position:relative; }
-  .bcra-tl-empty { width:14px; height:14px; border-radius:50%; flex-shrink:0; background:#f1f5f9; }
-  .bcra-tl-legend { display:flex; gap:12px; margin-top:10px; padding-top:8px; border-top:1px solid #f1f5f9; flex-wrap:wrap; min-width:480px; }
-  .bcra-tl-leg-item { display:flex; align-items:center; gap:5px; font-size:10px; color:#64748b; }
-  .bcra-tl-leg-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
-  /* Tooltip flotante */
-  #bcra-tl-tip { position:fixed; background:#0f172a; color:#f1f5f9; font-size:11px; line-height:1.6; padding:7px 11px; border-radius:7px; pointer-events:none; z-index:9999; display:none; max-width:220px; box-shadow:0 4px 14px rgba(0,0,0,0.35); white-space:pre; }
+  /* ── BCRA HEATMAP — matriz financiera profesional (estilo Nosis/Veraz) ── */
+  .bcra-hm-wrap { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:14px 0 12px; margin-bottom:8px; overflow:hidden; }
+  .bcra-hm-header { padding:0 16px 10px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .bcra-hm-title { font-size:11px; font-weight:700; color:#94a3b8; letter-spacing:0.6px; text-transform:uppercase; }
+  .bcra-hm-summary { font-size:11px; font-weight:600; }
+  .bcra-hm-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .bcra-hm-scroll::-webkit-scrollbar { height:4px; }
+  .bcra-hm-scroll::-webkit-scrollbar-track { background:transparent; }
+  .bcra-hm-scroll::-webkit-scrollbar-thumb { background:#e2e8f0; border-radius:2px; }
+  .bcra-hm-table { border-collapse:collapse; min-width:100%; }
+  .bcra-hm-table th { padding:5px 6px; font-size:9px; font-weight:700; color:#94a3b8; text-align:center; background:#fff; border-bottom:2px solid #f1f5f9; white-space:nowrap; letter-spacing:0.3px; text-transform:uppercase; }
+  .bcra-hm-th-entity { text-align:left !important; min-width:105px; width:105px; position:sticky; left:0; z-index:3; background:#fff !important; padding-left:16px !important; }
+  .bcra-hm-th-monto { text-align:right !important; width:64px; min-width:64px; padding-right:12px !important; position:sticky; left:105px; z-index:3; background:#fff !important; border-right:1px solid #e8eef4; }
+  .bcra-hm-th-month { min-width:22px; }
+  .bcra-hm-td-entity { font-size:11px; color:#334155; font-weight:600; padding:4px 6px 4px 16px; white-space:nowrap; max-width:105px; overflow:hidden; text-overflow:ellipsis; position:sticky; left:0; background:#fff; z-index:1; border-right:none; }
+  .bcra-hm-td-monto { font-size:11px; color:#64748b; font-weight:500; padding:4px 12px 4px 6px; text-align:right; white-space:nowrap; position:sticky; left:105px; background:#fff; z-index:1; border-right:1px solid #e8eef4; }
+  .bcra-hm-table tr:hover .bcra-hm-td-entity,
+  .bcra-hm-table tr:hover .bcra-hm-td-monto { background:#fafbfc; }
+  .bcra-hm-table tbody tr { border-bottom:1px solid #f8fafc; }
+  .bcra-hm-table tbody tr:last-child { border-bottom:none; }
+  .bcra-hm-cell { width:22px; min-width:22px; height:26px; text-align:center; vertical-align:middle; font-size:10px; font-weight:700; cursor:default; border:1px solid transparent; transition:filter 0.1s; }
+  .bcra-hm-cell:hover { filter:brightness(0.92); border-color:rgba(0,0,0,0.1); }
+  .bcra-hm-cell.s1 { background:#dcfce7; color:#15803d; }
+  .bcra-hm-cell.s2 { background:#fef9c3; color:#854d0e; }
+  .bcra-hm-cell.s3 { background:#ffedd5; color:#9a3412; }
+  .bcra-hm-cell.s45 { background:#fee2e2; color:#991b1b; }
+  .bcra-hm-cell.empty { background:transparent; color:#e2e8f0; font-size:9px; font-weight:400; }
+  .bcra-hm-legend { display:flex; gap:12px; padding:8px 16px 0; border-top:1px solid #f8fafc; margin-top:6px; flex-wrap:wrap; }
+  .bcra-hm-leg-item { display:flex; align-items:center; gap:5px; font-size:10px; color:#64748b; }
+  .bcra-hm-leg-cell { width:12px; height:12px; border-radius:2px; flex-shrink:0; border:1px solid rgba(0,0,0,0.07); }
+  #bcra-hm-tip { position:fixed; background:#0f172a; color:#f1f5f9; font-size:11px; line-height:1.6; padding:7px 11px; border-radius:7px; pointer-events:none; z-index:9999; display:none; max-width:230px; box-shadow:0 4px 14px rgba(0,0,0,0.35); white-space:pre; }
+  @media (max-width:768px) {
+    .bcra-hm-th-entity { min-width:82px; width:82px; }
+    .bcra-hm-th-monto { left:82px; min-width:56px; width:56px; padding-right:8px !important; }
+    .bcra-hm-td-entity { max-width:82px; font-size:10px; padding-left:12px; }
+    .bcra-hm-td-monto { left:82px; font-size:10px; padding-right:8px; }
+    .bcra-hm-cell { width:19px; min-width:19px; height:24px; font-size:9px; }
+  }
 </style>
 </head>
 <body>
@@ -733,7 +757,7 @@
         </div>
       </div>
 
-      <!-- Timeline BCRA 24m por entidad — renderizado por renderBcraTimeline() -->
+      <!-- Heatmap BCRA 24m por entidad — renderizado por renderBcraHeatmap() -->
       <div id="bcra-timeline-container" style="display:none;"></div>
 
       <div id="cheques-rechazados-card" class="card" style="margin-bottom:8px;display:none;">
@@ -2456,105 +2480,129 @@ function renderBcraHistoryChart(periodos) {
   });
 }
 
-// ── BCRA TIMELINE — visualización 24m por entidad con tooltip ──────────────
-// Renderiza una fila por entidad con dots coloreados por situación (Sit1=verde).
-// Los datos de tooltip se guardan en window._bcraTipData para evitar encoding
-// de caracteres especiales en atributos HTML.
-window._bcraTipData = {};
+// ── BCRA HEATMAP — matriz financiera profesional (estilo Nosis/Veraz) ────────
+// Tabla: fila por entidad, columna por período, celdas coloreadas por situación.
+// Fuente: window._ultimoHistorial → periodos[].entidades[] — sin datos artificiales.
+// Tooltip vía window._bcraHmTip (evita encoding de caracteres en atributos HTML).
+window._bcraHmTip = {};
 
-function renderBcraTimeline(periodos) {
+function renderBcraHeatmap(periodos) {
   var container = document.getElementById('bcra-timeline-container');
   if (!container) return;
   if (!periodos || !periodos.length) { container.style.display = 'none'; return; }
 
-  var data24 = periodos.slice(0, 24).reverse(); // cronológico: más antiguo → más reciente
+  // BCRA devuelve períodos más-reciente primero → invertir para cronológico
+  var data24 = periodos.slice(0, 24).reverse();
 
-  // Mapa entidad → {periodo → {sit, monto, dias}}
+  // Construir mapa: entidad → { periodo → {sit, monto, dias} }
+  // Solo se incluyen entradas con monto > 0 (exposición real)
   var entMap = {};
   data24.forEach(function(p) {
+    var per = String(p.periodo || '');
     (p.entidades || []).forEach(function(e) {
-      if ((e.monto || 0) === 0) return;
+      if ((e.monto || 0) <= 0) return;
       var n = (e.entidad || 'Entidad s/d').trim();
       if (!entMap[n]) entMap[n] = {};
-      entMap[n][String(p.periodo)] = {
-        sit: e.situacion || 1,
-        monto: e.monto || 0,
-        dias: e.diasAtraso || 0
-      };
+      entMap[n][per] = { sit: e.situacion || 1, monto: e.monto || 0, dias: e.diasAtraso || 0 };
     });
   });
 
   var entities = Object.keys(entMap);
   if (!entities.length) { container.style.display = 'none'; return; }
 
-  var monthLabels = data24.map(function(p) {
-    var per = String(p.periodo || '');
-    return per.length === 6 ? per.slice(4, 6) + '/' + per.slice(2, 4) : per;
-  });
   var periodKeys = data24.map(function(p) { return String(p.periodo || ''); });
 
-  function sitColor(s) {
-    return s === 1 ? '#16a34a' : s === 2 ? '#ca8a04' : s === 3 ? '#ea580c' : '#dc2626';
+  // "202501" → "01/25"
+  function perLabel(per) {
+    return per.length === 6 ? per.slice(4, 6) + '/' + per.slice(2, 4) : per;
   }
 
-  window._bcraTipData = {};
-  var dotIdx = 0;
+  // Último monto con exposición real (período más reciente → más antiguo)
+  function ultimoMonto(ent) {
+    for (var i = periodKeys.length - 1; i >= 0; i--) {
+      var d = entMap[ent][periodKeys[i]];
+      if (d) {
+        var m = d.monto * 1000; // miles → pesos
+        return m >= 1e6 ? '$' + (m / 1e6).toFixed(1) + 'M' : '$' + Math.round(m / 1000) + 'k';
+      }
+    }
+    return '–';
+  }
 
-  // Header con labels de meses
-  var html = '<div class="bcra-tl-wrap">'
-    + '<div class="bcra-tl-title">Línea de tiempo BCRA — 24 meses por entidad</div>'
-    + '<div class="bcra-tl-row" style="margin-bottom:2px;">'
-    + '<div class="bcra-tl-name"></div><div class="bcra-tl-dots">';
-  monthLabels.forEach(function(lbl) {
-    html += '<div style="width:14px;font-size:7px;color:#94a3b8;text-align:center;flex-shrink:0;">' + lbl + '</div>';
+  function sitClass(s) { return s === 1 ? 's1' : s === 2 ? 's2' : s === 3 ? 's3' : 's45'; }
+  var sitName = { 1: 'Normal', 2: 'Riesgo bajo', 3: 'Irregular', 4: 'Mora', 5: 'Irrecuperable' };
+
+  // Peor situación global → badge de resumen
+  var peorSit = 1;
+  entities.forEach(function(ent) {
+    var emap = entMap[ent];
+    Object.keys(emap).forEach(function(per) { if (emap[per].sit > peorSit) peorSit = emap[per].sit; });
   });
-  html += '</div></div>';
+  var summaryColors = { 1:'#15803d', 2:'#854d0e', 3:'#9a3412', 4:'#991b1b', 5:'#991b1b' };
+  var summaryLabels = { 1:'Sin irregularidades', 2:'Riesgo bajo detectado', 3:'Irregularidad detectada', 4:'Mora activa', 5:'Deuda irrecuperable' };
 
-  // Filas por entidad
+  window._bcraHmTip = {};
+  var tipIdx = 0;
+
+  // ── Construcción de la tabla ───────────────────────────────────────────────
+  var html = '<div class="bcra-hm-wrap">'
+    + '<div class="bcra-hm-header">'
+    + '<div class="bcra-hm-title">Historial BCRA — 24 meses</div>'
+    + '<div class="bcra-hm-summary" style="color:' + (summaryColors[peorSit] || '#15803d') + ';">'
+    + entities.length + ' entidad' + (entities.length !== 1 ? 'es' : '')
+    + ' &nbsp;·&nbsp; ' + (summaryLabels[peorSit] || 'Sin irregularidades')
+    + '</div></div>'
+    + '<div class="bcra-hm-scroll"><table class="bcra-hm-table"><thead><tr>'
+    + '<th class="bcra-hm-th-entity">Entidad</th>'
+    + '<th class="bcra-hm-th-monto">Último</th>';
+
+  periodKeys.forEach(function(per) {
+    html += '<th class="bcra-hm-th-month">' + perLabel(per) + '</th>';
+  });
+  html += '</tr></thead><tbody>';
+
   entities.forEach(function(entName) {
     var entData = entMap[entName];
-    html += '<div class="bcra-tl-row"><div class="bcra-tl-name" title="' + entName + '">' + entName + '</div><div class="bcra-tl-dots">';
+    html += '<tr>'
+      + '<td class="bcra-hm-td-entity" title="' + entName + '">' + entName + '</td>'
+      + '<td class="bcra-hm-td-monto">' + ultimoMonto(entName) + '</td>';
+
     periodKeys.forEach(function(per, i) {
       var d = entData[per];
       if (d) {
-        var tipId = 'btl' + (dotIdx++);
-        window._bcraTipData[tipId] = {
-          period: monthLabels[i],
-          entity: entName,
-          sit: d.sit,
-          dias: d.dias,
+        var tid = 'hm' + (tipIdx++);
+        window._bcraHmTip[tid] = {
+          period: perLabel(per), entity: entName,
+          sit: d.sit, dias: d.dias,
           monto: '$' + (d.monto * 1000).toLocaleString('es-AR')
         };
-        html += '<div class="bcra-tl-dot" id="' + tipId + '"'
-          + ' style="background:' + sitColor(d.sit) + '"'
-          + ' onmouseenter="showBcraTip(event,\'' + tipId + '\')"'
-          + ' onmouseleave="hideBcraTip()"></div>';
+        html += '<td class="bcra-hm-cell ' + sitClass(d.sit) + '"'
+          + ' onmouseenter="showBcraHmTip(event,\'' + tid + '\')"'
+          + ' onmouseleave="hideBcraHmTip()">' + d.sit + '</td>';
       } else {
-        html += '<div class="bcra-tl-empty"></div>';
+        html += '<td class="bcra-hm-cell empty">–</td>';
       }
     });
-    html += '</div></div>';
+    html += '</tr>';
   });
 
-  // Leyenda
-  var legItems = [
-    { label: 'Sit. 1 — Normal', color: '#16a34a' },
-    { label: 'Sit. 2 — Riesgo bajo', color: '#ca8a04' },
-    { label: 'Sit. 3 — Irregular', color: '#ea580c' },
-    { label: 'Sit. 4–5 — Mora/Irrecuperable', color: '#dc2626' }
-  ];
-  html += '<div class="bcra-tl-legend">';
-  legItems.forEach(function(li) {
-    html += '<div class="bcra-tl-leg-item">'
-      + '<div class="bcra-tl-leg-dot" style="background:' + li.color + '"></div>'
-      + li.label + '</div>';
+  html += '</tbody></table></div>'
+    + '<div class="bcra-hm-legend">';
+
+  [
+    { cls:'s1', bg:'#dcfce7', label:'Sit. 1 — Normal' },
+    { cls:'s2', bg:'#fef9c3', label:'Sit. 2 — Riesgo bajo' },
+    { cls:'s3', bg:'#ffedd5', label:'Sit. 3 — Irregular' },
+    { cls:'s45', bg:'#fee2e2', label:'Sit. 4–5 — Mora' }
+  ].forEach(function(li) {
+    html += '<div class="bcra-hm-leg-item"><div class="bcra-hm-leg-cell" style="background:' + li.bg + '"></div>' + li.label + '</div>';
   });
   html += '</div></div>';
 
-  // Tooltip singleton (se crea una sola vez en el DOM)
-  if (!document.getElementById('bcra-tl-tip')) {
+  // Tooltip singleton
+  if (!document.getElementById('bcra-hm-tip')) {
     var tipEl = document.createElement('div');
-    tipEl.id = 'bcra-tl-tip';
+    tipEl.id = 'bcra-hm-tip';
     document.body.appendChild(tipEl);
   }
 
@@ -2562,24 +2610,24 @@ function renderBcraTimeline(periodos) {
   container.style.display = 'block';
 }
 
-function showBcraTip(evt, id) {
-  var d = window._bcraTipData && window._bcraTipData[id];
-  var tip = document.getElementById('bcra-tl-tip');
+function showBcraHmTip(evt, id) {
+  var d = window._bcraHmTip && window._bcraHmTip[id];
+  var tip = document.getElementById('bcra-hm-tip');
   if (!d || !tip) return;
+  var sitNames = { 1:'Normal', 2:'Riesgo bajo', 3:'Irregular', 4:'Mora', 5:'Irrecuperable' };
   tip.textContent = d.period + ' — ' + d.entity + '\n'
-    + 'Situación ' + d.sit + (d.dias > 0 ? '  ·  ' + d.dias + ' días atraso' : '') + '\n'
-    + d.monto;
+    + 'Situación ' + d.sit + ' · ' + (sitNames[d.sit] || '')
+    + (d.dias > 0 ? '\n' + d.dias + ' días de atraso' : '') + '\n' + d.monto;
   tip.style.display = 'block';
-  var x = evt.clientX + 14;
-  var y = evt.clientY - 36;
-  if (x + 230 > window.innerWidth) x = evt.clientX - 240;
+  var x = evt.clientX + 14, y = evt.clientY - 40;
+  if (x + 240 > window.innerWidth) x = evt.clientX - 250;
   if (y < 0) y = evt.clientY + 14;
   tip.style.left = x + 'px';
   tip.style.top = y + 'px';
 }
 
-function hideBcraTip() {
-  var tip = document.getElementById('bcra-tl-tip');
+function hideBcraHmTip() {
+  var tip = document.getElementById('bcra-hm-tip');
   if (tip) tip.style.display = 'none';
 }
 
@@ -3572,7 +3620,7 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
       if (historial && historial.results && historial.results.periodos) _periHist = historial.results.periodos;
       else if (window._ultimoBcraData && window._ultimoBcraData.results && window._ultimoBcraData.results.periodos) _periHist = window._ultimoBcraData.results.periodos;
       renderBcraHistoryChart(_periHist);
-      renderBcraTimeline(_periHist);
+      renderBcraHeatmap(_periHist);
     }
     // Guardar score correcto — tanto en alertas como en cartera local
     var alertaIdx = alertas.findIndex(function(a){ return a.cuit === cuit; });
@@ -4905,11 +4953,11 @@ function nuevaConsulta() {
   window._saldosCliente = null;
   window._ultimoBcraData = null;
   window._chequesUltimaConsulta = null;
-  window._bcraTipData = {};
+  window._bcraHmTip = {};
   ultimoAnalisis = null;
   var _tlEl = document.getElementById('bcra-timeline-container');
   if (_tlEl) { _tlEl.innerHTML = ''; _tlEl.style.display = 'none'; }
-  hideBcraTip();
+  hideBcraHmTip();
 }
 
 async function verificarTodos(forzar) {
