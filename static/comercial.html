@@ -1967,8 +1967,9 @@ function renderConsulta(cuit, dd, cd, hd, serverScore, afipData) {
   const _ingAnual  = serverScore?.inferencia_ingresos;
   const _fuenteIng = serverScore?.fuente_ingresos || '';
   const _activ     = serverScore?.actividad_principal || '';
-  const _ingValido = _ingAnual && _ingAnual > 0;
-  const ingStr     = _ingValido ? '$' + fmtM(_ingAnual) : 'Pendiente de validación fiscal';
+  const _esBcraFallback = _fuenteIng === 'bcra_inferido' || _fuenteIng === 'bcra_fallback';
+  const _ingValido = _ingAnual && _ingAnual > 0 && !_esBcraFallback;
+  const ingStr     = _ingValido ? fmtM(_ingAnual) : 'Sin datos verificados';
   const ingColor   = _ingValido ? 'var(--azul)' : 'var(--texto2)';
   const ingSize    = _ingValido ? '14px' : '11px';
 
@@ -2048,7 +2049,7 @@ function renderConsulta(cuit, dd, cd, hd, serverScore, afipData) {
       </div>
       <div style="text-align:center">
         <div style="font-size:${ingSize};font-weight:700;color:${ingColor};font-family:'Syne',sans-serif">${ingStr}</div>
-        <div style="font-size:10px;color:var(--texto2)">Ingresos est. ${_fuenteIng ? '(' + _fuenteIng + ')' : ''}</div>
+        <div style="font-size:10px;color:var(--texto2)">Ingresos estimados</div>
       </div>
     </div>
     <div style="margin-top:10px">
