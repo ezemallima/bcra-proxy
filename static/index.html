@@ -526,6 +526,21 @@
       padding-bottom: 24px;
     }
   }
+
+  /* ── BCRA TIMELINE — visualización 24m por entidad ── */
+  .bcra-tl-wrap { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:14px 16px; margin-bottom:8px; overflow-x:auto; }
+  .bcra-tl-title { font-size:11px; font-weight:700; color:#94a3b8; letter-spacing:0.6px; text-transform:uppercase; margin-bottom:10px; }
+  .bcra-tl-row { display:flex; align-items:center; gap:8px; margin-bottom:5px; min-width:480px; }
+  .bcra-tl-name { width:110px; min-width:110px; font-size:11px; color:#475569; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex-shrink:0; }
+  .bcra-tl-dots { display:flex; gap:3px; flex:1; }
+  .bcra-tl-dot { width:14px; height:14px; border-radius:50%; flex-shrink:0; cursor:pointer; transition:transform 0.1s, box-shadow 0.1s; }
+  .bcra-tl-dot:hover { transform:scale(1.35); box-shadow:0 2px 6px rgba(0,0,0,0.25); z-index:1; position:relative; }
+  .bcra-tl-empty { width:14px; height:14px; border-radius:50%; flex-shrink:0; background:#f1f5f9; }
+  .bcra-tl-legend { display:flex; gap:12px; margin-top:10px; padding-top:8px; border-top:1px solid #f1f5f9; flex-wrap:wrap; min-width:480px; }
+  .bcra-tl-leg-item { display:flex; align-items:center; gap:5px; font-size:10px; color:#64748b; }
+  .bcra-tl-leg-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+  /* Tooltip flotante */
+  #bcra-tl-tip { position:fixed; background:#0f172a; color:#f1f5f9; font-size:11px; line-height:1.6; padding:7px 11px; border-radius:7px; pointer-events:none; z-index:9999; display:none; max-width:220px; box-shadow:0 4px 14px rgba(0,0,0,0.35); white-space:pre; }
 </style>
 </head>
 <body>
@@ -717,6 +732,9 @@
           </div>
         </div>
       </div>
+
+      <!-- Timeline BCRA 24m por entidad — renderizado por renderBcraTimeline() -->
+      <div id="bcra-timeline-container" style="display:none;"></div>
 
       <div id="cheques-rechazados-card" class="card" style="margin-bottom:8px;display:none;">
         <div class="card-title" style="color:#991b1b;">Cheques en el BCRA</div>
@@ -2438,6 +2456,133 @@ function renderBcraHistoryChart(periodos) {
   });
 }
 
+// ── BCRA TIMELINE — visualización 24m por entidad con tooltip ──────────────
+// Renderiza una fila por entidad con dots coloreados por situación (Sit1=verde).
+// Los datos de tooltip se guardan en window._bcraTipData para evitar encoding
+// de caracteres especiales en atributos HTML.
+window._bcraTipData = {};
+
+function renderBcraTimeline(periodos) {
+  var container = document.getElementById('bcra-timeline-container');
+  if (!container) return;
+  if (!periodos || !periodos.length) { container.style.display = 'none'; return; }
+
+  var data24 = periodos.slice(0, 24).reverse(); // cronológico: más antiguo → más reciente
+
+  // Mapa entidad → {periodo → {sit, monto, dias}}
+  var entMap = {};
+  data24.forEach(function(p) {
+    (p.entidades || []).forEach(function(e) {
+      if ((e.monto || 0) === 0) return;
+      var n = (e.entidad || 'Entidad s/d').trim();
+      if (!entMap[n]) entMap[n] = {};
+      entMap[n][String(p.periodo)] = {
+        sit: e.situacion || 1,
+        monto: e.monto || 0,
+        dias: e.diasAtraso || 0
+      };
+    });
+  });
+
+  var entities = Object.keys(entMap);
+  if (!entities.length) { container.style.display = 'none'; return; }
+
+  var monthLabels = data24.map(function(p) {
+    var per = String(p.periodo || '');
+    return per.length === 6 ? per.slice(4, 6) + '/' + per.slice(2, 4) : per;
+  });
+  var periodKeys = data24.map(function(p) { return String(p.periodo || ''); });
+
+  function sitColor(s) {
+    return s === 1 ? '#16a34a' : s === 2 ? '#ca8a04' : s === 3 ? '#ea580c' : '#dc2626';
+  }
+
+  window._bcraTipData = {};
+  var dotIdx = 0;
+
+  // Header con labels de meses
+  var html = '<div class="bcra-tl-wrap">'
+    + '<div class="bcra-tl-title">Línea de tiempo BCRA — 24 meses por entidad</div>'
+    + '<div class="bcra-tl-row" style="margin-bottom:2px;">'
+    + '<div class="bcra-tl-name"></div><div class="bcra-tl-dots">';
+  monthLabels.forEach(function(lbl) {
+    html += '<div style="width:14px;font-size:7px;color:#94a3b8;text-align:center;flex-shrink:0;">' + lbl + '</div>';
+  });
+  html += '</div></div>';
+
+  // Filas por entidad
+  entities.forEach(function(entName) {
+    var entData = entMap[entName];
+    html += '<div class="bcra-tl-row"><div class="bcra-tl-name" title="' + entName + '">' + entName + '</div><div class="bcra-tl-dots">';
+    periodKeys.forEach(function(per, i) {
+      var d = entData[per];
+      if (d) {
+        var tipId = 'btl' + (dotIdx++);
+        window._bcraTipData[tipId] = {
+          period: monthLabels[i],
+          entity: entName,
+          sit: d.sit,
+          dias: d.dias,
+          monto: '$' + (d.monto * 1000).toLocaleString('es-AR')
+        };
+        html += '<div class="bcra-tl-dot" id="' + tipId + '"'
+          + ' style="background:' + sitColor(d.sit) + '"'
+          + ' onmouseenter="showBcraTip(event,\'' + tipId + '\')"'
+          + ' onmouseleave="hideBcraTip()"></div>';
+      } else {
+        html += '<div class="bcra-tl-empty"></div>';
+      }
+    });
+    html += '</div></div>';
+  });
+
+  // Leyenda
+  var legItems = [
+    { label: 'Sit. 1 — Normal', color: '#16a34a' },
+    { label: 'Sit. 2 — Riesgo bajo', color: '#ca8a04' },
+    { label: 'Sit. 3 — Irregular', color: '#ea580c' },
+    { label: 'Sit. 4–5 — Mora/Irrecuperable', color: '#dc2626' }
+  ];
+  html += '<div class="bcra-tl-legend">';
+  legItems.forEach(function(li) {
+    html += '<div class="bcra-tl-leg-item">'
+      + '<div class="bcra-tl-leg-dot" style="background:' + li.color + '"></div>'
+      + li.label + '</div>';
+  });
+  html += '</div></div>';
+
+  // Tooltip singleton (se crea una sola vez en el DOM)
+  if (!document.getElementById('bcra-tl-tip')) {
+    var tipEl = document.createElement('div');
+    tipEl.id = 'bcra-tl-tip';
+    document.body.appendChild(tipEl);
+  }
+
+  container.innerHTML = html;
+  container.style.display = 'block';
+}
+
+function showBcraTip(evt, id) {
+  var d = window._bcraTipData && window._bcraTipData[id];
+  var tip = document.getElementById('bcra-tl-tip');
+  if (!d || !tip) return;
+  tip.textContent = d.period + ' — ' + d.entity + '\n'
+    + 'Situación ' + d.sit + (d.dias > 0 ? '  ·  ' + d.dias + ' días atraso' : '') + '\n'
+    + d.monto;
+  tip.style.display = 'block';
+  var x = evt.clientX + 14;
+  var y = evt.clientY - 36;
+  if (x + 230 > window.innerWidth) x = evt.clientX - 240;
+  if (y < 0) y = evt.clientY + 14;
+  tip.style.left = x + 'px';
+  tip.style.top = y + 'px';
+}
+
+function hideBcraTip() {
+  var tip = document.getElementById('bcra-tl-tip');
+  if (tip) tip.style.display = 'none';
+}
+
 async function cargarSolvencia(cuit, contenedor) {
   var el = document.getElementById('solvencia-body');
   if (!el) return;
@@ -3427,6 +3572,7 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
       if (historial && historial.results && historial.results.periodos) _periHist = historial.results.periodos;
       else if (window._ultimoBcraData && window._ultimoBcraData.results && window._ultimoBcraData.results.periodos) _periHist = window._ultimoBcraData.results.periodos;
       renderBcraHistoryChart(_periHist);
+      renderBcraTimeline(_periHist);
     }
     // Guardar score correcto — tanto en alertas como en cartera local
     var alertaIdx = alertas.findIndex(function(a){ return a.cuit === cuit; });
@@ -3738,13 +3884,13 @@ async function analizarCliente() {
     + '2. Detectá patrones: degradación recurrente, situaciones ≥3, tendencia general. Los saltos en bancos de primera línea son el núcleo.\n'
     + '3. Score: 800+ = Sit 1 constante (24m); 600-799 = incidentes aislados; <600 = inestabilidad o mora recurrente.\n'
     + '4. Si el historial BCRA está presente, nunca respondas que falta información.\n'
-    + '5. Límite basado en CAPACIDAD DEMOSTRADA: identificá el monto máximo que el cliente sostuvo en Sit.1 (PICO_SIT1) y usá las reglas de negocio para fijar el límite. Piso operativo: $800.000 para Score > 600 + Sit.1.\n'
-    + '6. El historial comercial (bodegas, WhatsApp) y la mora interna tienen PRIORIDAD ABSOLUTA. Mora activa = límite $0.\n'
+    + '5. Evaluá el perfil de pago histórico: comportamiento en Sit.1, incidentes de degradación, tendencia general. Determiná el límite según perfil observado. No menciones fórmulas ni cálculos en el informe.\n'
+    + '6. El historial comercial (bodegas) y la mora interna tienen PRIORIDAD ABSOLUTA. Mora activa = crédito denegado.\n'
     + '\n═══ ESTRUCTURA DE RESPUESTA (RESPETAR EXACTAMENTE ESTOS TÍTULOS) ═══\n'
-    + 'ANÁLISIS DE RIESGO CREDITICIO: [Comportamiento 24m por entidad + DSO + pagos internos + tendencia de riesgo]\n'
-    + 'ANÁLISIS CUALITATIVO (WhatsApp - 6m): [Hallazgos en mensajes de red de bodegas: advertencias, rebotes, inconsistencias. Si no hay: "Sin alertas detectadas en la red de bodegas."]\n'
+    + 'ANÁLISIS DE RIESGO CREDITICIO: [Comportamiento 24m por entidad + situaciones observadas + pagos internos + tendencia de riesgo]\n'
+    + 'OBSERVACIONES DE MERCADO: [Hallazgos relevantes de la red de bodegas. Si no hay: "Sin observaciones de mercado en los últimos 6 meses."]\n'
     + 'DIAGNÓSTICO FINANCIERO: [Evaluación de salud crediticia consolidada del cliente]\n'
-    + 'RECOMENDACIÓN ESTRATÉGICA: [PICO_SIT1 observado + límite justificado en lenguaje de negocio + monitoreo + cláusula de suspensión ante Situación >= 2]\n'
+    + 'RECOMENDACIÓN ESTRATÉGICA: [Límite propuesto + justificación en lenguaje de negocio + cláusula de suspensión ante Situación >= 2]\n'
     + 'Redacción en español corporativo y directo. Sin markdown, sin asteriscos.';
 
   try {
@@ -4759,7 +4905,11 @@ function nuevaConsulta() {
   window._saldosCliente = null;
   window._ultimoBcraData = null;
   window._chequesUltimaConsulta = null;
+  window._bcraTipData = {};
   ultimoAnalisis = null;
+  var _tlEl = document.getElementById('bcra-timeline-container');
+  if (_tlEl) { _tlEl.innerHTML = ''; _tlEl.style.display = 'none'; }
+  hideBcraTip();
 }
 
 async function verificarTodos(forzar) {
