@@ -2736,7 +2736,10 @@ def require_login(f):
 @app.route("/")
 @require_login
 def index():
-    return send_from_directory('static', 'index.html')
+    resp = send_from_directory('static', 'index.html')
+    resp.headers['Cache-Control'] = 'no-store, must-revalidate'
+    resp.headers['Pragma'] = 'no-cache'
+    return resp
 
 @app.route("/ping")
 def ping():
@@ -2744,7 +2747,10 @@ def ping():
 
 @app.route("/comercial")
 def comercial():
-    return send_from_directory('static', 'comercial.html')
+    resp = send_from_directory('static', 'comercial.html')
+    resp.headers['Cache-Control'] = 'no-store, must-revalidate'
+    resp.headers['Pragma'] = 'no-cache'
+    return resp
 
 @app.route("/login", methods=["GET", "POST"])
 def login():

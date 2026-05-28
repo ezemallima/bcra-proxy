@@ -428,8 +428,9 @@
     }
     .canvas-body {
       overflow: auto !important; height: auto !important;
+      -webkit-overflow-scrolling: touch !important; /* iOS momentum scroll */
       padding: 14px 12px !important;
-      scroll-padding-top: 0 !important; /* sin sticky en mobile, no aplica offset */
+      scroll-padding-top: 0 !important;
     }
     .container { max-width: 100% !important; width: 100% !important; }
     /* En mobile no hay scroll container con altura fija → sticky es inservible y causa solapamiento */
@@ -521,12 +522,21 @@
     }
     .consulta-results-mode #resultado {
       overflow-y: auto;
+      -webkit-overflow-scrolling: touch; /* iOS Safari: scroll con momentum */
       padding-bottom: 24px;
     }
   }
 </style>
 </head>
 <body>
+
+<noscript>
+  <div style="position:fixed;inset:0;z-index:99999;background:#0f2d52;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;padding:24px;text-align:center">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    <p style="color:#fff;font-family:sans-serif;font-size:16px;font-weight:700;margin:0">Vende Seguro requiere JavaScript</p>
+    <p style="color:#94a3b8;font-family:sans-serif;font-size:13px;margin:0;max-width:320px">Por favor habilitá JavaScript en tu navegador y recargá la página. Si estás en modo ahorro de datos, desactivalo temporalmente.</p>
+  </div>
+</noscript>
 
 <!-- PANTALLA DE CARGA -->
 <div id="splash-screen" style="
@@ -1186,9 +1196,12 @@
   </main><!-- /#main-canvas -->
 </div><!-- /#app-shell -->
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"
+  onerror="console.warn('[VS] jsPDF no cargó — exportar PDF no disponible')"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"
+  onerror="console.warn('[VS] XLSX no cargó — exportar Excel no disponible')"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"
+  onerror="window._chartJSUnavailable=true; console.warn('[VS] Chart.js no cargó — gráficos no disponibles')"></script>
 <script>
 let wspIndex = null;
 let morasIndex = null;
@@ -5617,12 +5630,27 @@ async function obtenerNombre(cuit) {
   return '';
 }
 
-init().then(function() {
-  setTimeout(function() {
+// Timeout de emergencia: si init() tarda más de 10s o falla, el splash se oculta igual.
+// Previene la "pantalla en blanco" donde el splash queda bloqueando el contenido.
+var _splashSafetyTimer = setTimeout(function() {
+  var splash = document.getElementById('splash-screen');
+  if (splash) splash.classList.add('hidden');
+}, 10000);
+
+init()
+  .then(function() {
+    clearTimeout(_splashSafetyTimer);
+    setTimeout(function() {
+      var splash = document.getElementById('splash-screen');
+      if (splash) splash.classList.add('hidden');
+    }, 2800);
+  })
+  .catch(function(err) {
+    clearTimeout(_splashSafetyTimer);
+    console.error('[VS] Error en init():', err);
     var splash = document.getElementById('splash-screen');
     if (splash) splash.classList.add('hidden');
-  }, 2800);
-});
+  });
 </script>
 </body>
 </html>
