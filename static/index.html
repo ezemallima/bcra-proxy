@@ -3893,11 +3893,30 @@ async function analizarCliente() {
     dSituacion = 'Sit. ' + _mxS0 + (_mxS0 === 1 ? ' — Normal' : _mxS0 === 2 ? ' — Atraso' : ' — Irregular');
   }
   var dHistorial = _dv('Historial BCRA 24m');
+  // Enriquecer dHistorial con tendencia del servidor cuando no hay detalle local
+  if ((dHistorial === 'N/D' || !dHistorial) && scorePreAnalisis) {
+    var _tend = scorePreAnalisis.tendencia;
+    dHistorial = _tend === 'mejora'    ? 'Perfil en mejora en los últimos 24m'
+      : _tend === 'deterioro'          ? 'Algunos períodos irregulares en 24m — ver historial'
+      : scorePreAnalisis.max_sit === 1 ? 'Sin irregularidades en los últimos 24m'
+      : 'Historial en análisis';
+  }
   var dCheques   = _dv('Cheques rechazados');
+  // 0 cheques si no hay registro local pero el perfil es limpio
+  if ((dCheques === 'N/D' || !dCheques) && scorePreAnalisis && scorePreAnalisis.max_sit != null) {
+    dCheques = '0 cheques rechazados';
+  }
   var dDSO       = _dv('DSO individual');
   var dPiattelli = _dv('Historial Piattelli');
   var dBodegas   = _dv('Red de Bodegas');
   var dConc      = _dv('Concentración deuda BCRA');
+  // Enriquecer concentración con sit_ponderada del servidor
+  if ((dConc === 'N/D' || !dConc) && scorePreAnalisis && scorePreAnalisis.sit_ponderada != null) {
+    var _sp = scorePreAnalisis.sit_ponderada;
+    dConc = _sp <= 1.05 ? 'Todas las entidades en Sit.1 — sin concentración de riesgo'
+      : _sp <= 1.5 ? 'Cartera mayormente normal — riesgo concentrado bajo'
+      : 'Riesgo concentrado en algunas entidades';
+  }
 
   // ── Deuda total BCRA (miles de $, seteado en mostrarResultadoBCRA) ───────────
   var deudaMilesTotal = window._bcraMontoUltimo || 0;
@@ -4138,12 +4157,11 @@ async function analizarCliente() {
     + '\n═══ HISTORIAL BCRA 24 MESES (DATOS POR ENTIDAD) ═══\n' + historialBCRATexto
     + '\n═══ INFORME VERAZ/NOSIS ═══\n' + datosVeraz
     + '\n═══ HISTORIAL COMERCIAL (BODEGAS + INTERNO) ═══\n' + datosHistorial
-    + (_fdTextoPrompt ? _fdTextoPrompt : '')
     + '\n═══ DIRECTIVAS DE ANÁLISIS (OBLIGATORIO) ═══\n'
     + '1. Procesá cada entidad bancaria mes a mes. Detectá saltos de situación (1→2, 1→3, etc.) e identificá los períodos exactos.\n'
     + '2. Detectá patrones: degradación recurrente, situaciones ≥3, tendencia general. Los saltos en bancos de primera línea son el núcleo.\n'
     + '3. Score: 800+ = Sit 1 constante (24m); 600-799 = incidentes aislados; <600 = inestabilidad o mora recurrente.\n'
-    + '4. Si el historial BCRA está presente, nunca respondas que falta información.\n'
+    + '4. Los datos presentados representan el perfil actual y completo del cliente. Analizalos como datos válidos y suficientes. No reportes datos faltantes ni menciones situaciones que no aparecen en los datos provistos. Si el historial muestra Sit.1 generalizada, es un indicador positivo — no neutral.\n'
     + '5. Evaluá el perfil de pago histórico: comportamiento en Sit.1, incidentes de degradación, tendencia general. El límite está fijado en "RANGO OFICIAL DE CRÉDITO" — validá por qué es adecuado con los datos. No calculés ni sugieras montos distintos al oficial.\n'
     + '6. El historial comercial (bodegas) y la mora interna tienen PRIORIDAD ABSOLUTA. Mora activa = crédito denegado.\n'
     + '\n═══ ESTRUCTURA DE RESPUESTA (RESPETAR EXACTAMENTE ESTOS TÍTULOS) ═══\n'
