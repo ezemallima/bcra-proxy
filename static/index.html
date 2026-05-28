@@ -3907,7 +3907,10 @@ async function analizarCliente() {
   var historialBCRATexto = '';
   var _rawHist = window._ultimoHistorial;
   if (_rawHist && _rawHist.results && _rawHist.results.periodos && _rawHist.results.periodos.length > 0) {
-    var _periodos = _rawHist.results.periodos.slice(0, 24);
+    var _periodos = _rawHist.results.periodos.slice()
+      .filter(function(p){ return /^\d{6}$/.test(String(p.periodo||'').trim()); })
+      .sort(function(a,b){ return (parseInt(b.periodo,10)||0)-(parseInt(a.periodo,10)||0); })
+      .slice(0,24);
     var _mapaEnt = {};
     _periodos.forEach(function(p) {
       (p.entidades || []).forEach(function(e) {
@@ -4215,22 +4218,36 @@ async function exportarReporte() {
     doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(30,41,59);
     doc.text('Historial Crediticio BCRA — Últimos 24 meses', 10, y); y += 6;
 
-    var ENT_W  = 50;
-    var AVAIL_W = W - 20 - ENT_W;
-    var nCols  = hmDisplayKeys.length;
-    var COL_W  = AVAIL_W / nCols;
-    var ROW_H  = 5;
-    var HDR_H  = 8;
-    var x0     = 10;
+    var ENT_W   = 38;
+    var DEUDA_W = 22;
+    var AVAIL_W = W - 20 - ENT_W - DEUDA_W;
+    var nCols   = hmDisplayKeys.length;
+    var COL_W   = AVAIL_W / nCols;
+    var ROW_H   = 5;
+    var HDR_H   = 8;
+    var x0      = 10;
 
-    // Header row background
+    // Most recent debt per entity (periodKeys is chronological asc; last = newest)
+    function hmUltimoMonto(ent) {
+      for (var i = hmPeriodKeys.length - 1; i >= 0; i--) {
+        var d = hmEntMap[ent][hmPeriodKeys[i]];
+        if (d) {
+          var m = d.monto * 1000;
+          return m >= 1e6 ? '$' + (m/1e6).toFixed(1) + 'M' : '$' + Math.round(m/1000) + 'k';
+        }
+      }
+      return '—';
+    }
+
+    // Header row
     doc.setFillColor(30, 41, 59);
-    doc.rect(x0, y, ENT_W + AVAIL_W, HDR_H, 'F');
+    doc.rect(x0, y, ENT_W + DEUDA_W + AVAIL_W, HDR_H, 'F');
     doc.setFontSize(5.5); doc.setFont('helvetica','bold'); doc.setTextColor(255,255,255);
     doc.text('Entidad', x0+2, y+5.5);
+    doc.text('Deuda actual', x0+ENT_W+DEUDA_W/2, y+5.5, {align:'center'});
     hmDisplayKeys.forEach(function(per, i){
       var lbl = per.length===6 ? per.slice(4,6)+'/'+per.slice(2,4) : per;
-      doc.text(lbl, x0+ENT_W + i*COL_W + COL_W/2, y+5.5, {align:'center'});
+      doc.text(lbl, x0+ENT_W+DEUDA_W + i*COL_W + COL_W/2, y+5.5, {align:'center'});
     });
     y += HDR_H;
 
@@ -4239,16 +4256,18 @@ async function exportarReporte() {
 
     hmEntities.forEach(function(ent, ri){
       if (y + ROW_H > 272) { doc.addPage(); y = 15; }
-      // Alternating row bg
       if (ri%2===0) { doc.setFillColor(248,250,252); } else { doc.setFillColor(255,255,255); }
-      doc.rect(x0, y, ENT_W+AVAIL_W, ROW_H, 'F');
+      doc.rect(x0, y, ENT_W+DEUDA_W+AVAIL_W, ROW_H, 'F');
       // Entity name
       doc.setFontSize(6); doc.setFont('helvetica','normal'); doc.setTextColor(30,41,59);
-      doc.text(ent.substring(0,24), x0+1.5, y+3.5);
+      doc.text(ent.substring(0,20), x0+1.5, y+3.5);
+      // Debt amount
+      doc.setFont('helvetica','bold'); doc.setTextColor(15,45,82);
+      doc.text(hmUltimoMonto(ent), x0+ENT_W+DEUDA_W/2, y+3.5, {align:'center'});
       // Period cells
       hmDisplayKeys.forEach(function(per, ci){
         var cell = hmEntMap[ent][per];
-        var cx = x0 + ENT_W + ci*COL_W;
+        var cx = x0 + ENT_W + DEUDA_W + ci*COL_W;
         if (cell) {
           var s = cell.sit;
           var f = sitFillPdf[s]||sitFillPdf[1];
@@ -4266,9 +4285,9 @@ async function exportarReporte() {
       y += ROW_H;
     });
 
-    // Grid border around the whole table
+    // Grid border
     doc.setDrawColor(203,213,225); doc.setLineWidth(0.3);
-    doc.rect(x0, y - hmEntities.length*ROW_H - HDR_H, ENT_W+AVAIL_W, hmEntities.length*ROW_H + HDR_H);
+    doc.rect(x0, y - hmEntities.length*ROW_H - HDR_H, ENT_W+DEUDA_W+AVAIL_W, hmEntities.length*ROW_H + HDR_H);
 
     // Legend
     y += 4;
