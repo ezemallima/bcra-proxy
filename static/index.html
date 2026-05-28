@@ -3929,11 +3929,23 @@ async function analizarCliente() {
     var _ents = Object.keys(_mapaEnt);
     if (_ents.length > 0) {
       historialBCRATexto = 'Período cubierto: ' + _periodos.length + ' meses\n';
+      // Sección autoritativa: un único valor vigente por entidad — la IA cita SOLO estos
+      historialBCRATexto += '\nMONTO VIGENTE POR ENTIDAD (citar SOLO estos valores en el informe):\n';
+      _ents.forEach(function(ent) {
+        var _cur = _mapaEnt[ent][0]; // primer elemento = más reciente (array desc)
+        var _ms = _cur.periodo.slice(4,6) + '/' + _cur.periodo.slice(0,4);
+        historialBCRATexto += '  ' + ent + ': ' + '$' + (_cur.monto * 1000).toLocaleString('es-AR') + ' — Sit.' + _cur.sit + ' (' + _ms + ')\n';
+      });
+      // Detalle cronológico: montos solo en período más reciente y en Sit>=2 (para REGLA 2B)
+      historialBCRATexto += '\nDETALLE CRONOLÓGICO:\n';
       _ents.forEach(function(ent) {
         historialBCRATexto += '\n' + ent + ':\n';
-        _mapaEnt[ent].forEach(function(r) {
-          var ms = r.periodo.slice(4,6) + '/' + r.periodo.slice(0,4);
-          historialBCRATexto += '  ' + ms + ': Sit ' + r.sit + ' | $' + (r.monto * 1000).toLocaleString('es-AR') + (r.dias > 0 ? ' | ' + r.dias + 'd atraso' : '') + '\n';
+        _mapaEnt[ent].forEach(function(r, ri) {
+          var _ms2 = r.periodo.slice(4,6) + '/' + r.periodo.slice(0,4);
+          var _showMonto = ri === 0 || r.sit >= 2;
+          var _montoStr = _showMonto ? ' | ' + '$' + (r.monto * 1000).toLocaleString('es-AR') : '';
+          var _diasStr  = r.dias > 0 ? ' | ' + r.dias + 'd atraso' : '';
+          historialBCRATexto += '  ' + _ms2 + ': Sit ' + r.sit + _montoStr + _diasStr + '\n';
         });
       });
     } else {
@@ -4742,24 +4754,21 @@ async function agregarCliente() {
     limiteCreditoARS: limite ? parseFloat(limite) : null,
     plazoDias: plazo ? parseInt(plazo) : null
   };
-  var _guardadoOk = false;
+  var _serverSaved = false;
   try {
     var _gr = await fetch('/cliente/guardar', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(nuevo)
     });
     var _gd = await _gr.json();
-    _guardadoOk = !!(_gd && _gd.ok);
-    if (!_guardadoOk) { console.warn('[cartera] Error al guardar:', _gd && _gd.error); }
-  } catch(e) { console.warn('[cartera] No se pudo persistir en servidor:', e); }
-  if (_guardadoOk) {
-    cartera.push(nuevo);
-    localStorage.setItem('piat_cartera', JSON.stringify(cartera));
-    sincronizarServidor();
-  } else {
-    alert('No se pudo guardar en el servidor. Verifica la conexion e intentalo de nuevo.');
-    return;
-  }
+    _serverSaved = !!(_gd && _gd.ok);
+    if (!_serverSaved) console.warn('[cartera] Servidor rechazó:', _gd && _gd.error);
+  } catch(e) { console.warn('[cartera] Sin conexión al servidor:', e); }
+  // Local-first: siempre persistir localmente
+  cartera.push(nuevo);
+  localStorage.setItem('piat_cartera', JSON.stringify(cartera));
+  // Sync del servidor solo si el save fue confirmado (evita sobreescribir cartera local)
+  if (_serverSaved) { sincronizarServidor(); } else { renderCartera(); renderAlertas(); }
   ['nuevo-cuit','nuevo-nombre','nuevo-limite','nuevo-plazo','nuevo-vendedor','nuevo-ciudad'].forEach(id => {
     document.getElementById(id).value = '';
   });
