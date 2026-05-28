@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es" translate="no">
 <head>
 <meta charset="UTF-8">
@@ -2521,7 +2521,10 @@ function renderBcraHeatmap(periodos) {
   var entities = Object.keys(entMap);
   if (!entities.length) { container.style.display = 'none'; return; }
 
+  // periodKeys: cronológico asc — para lookups internos (ultimoMonto, etc.)
   var periodKeys = data24.map(function(p) { return String(p.periodo || '').trim(); });
+  // displayKeys: más reciente primero → más antiguo a la derecha (orden visual de la tabla)
+  var displayKeys = periodKeys.slice().reverse();
 
   // "202501" → "01/25"
   function perLabel(per) {
@@ -2535,11 +2538,8 @@ function renderBcraHeatmap(periodos) {
     for (var i = periodKeys.length - 1; i >= 0; i--) {
       var d = entMap[ent][periodKeys[i]];
       if (d) {
-        var m = d.monto * 1000; // miles → pesos
-        var mStr = m >= 1e6 ? '$' + (m / 1e6).toFixed(1) + 'M' : '$' + Math.round(m / 1000) + 'k';
-        // Si no es el período más reciente del dataset → indicar la fecha (es histórico)
-        if (i < periodKeys.length - 1) return mStr + ' (' + perLabel(periodKeys[i]) + ')';
-        return mStr;
+        var m = d.monto * 1000;
+        return m >= 1e6 ? '$' + (m / 1e6).toFixed(1) + 'M' : '$' + Math.round(m / 1000) + 'k';
       }
     }
     return '–';
@@ -2572,7 +2572,7 @@ function renderBcraHeatmap(periodos) {
     + '<th class="bcra-hm-th-entity">Entidad</th>'
     + '<th class="bcra-hm-th-monto">Último</th>';
 
-  periodKeys.forEach(function(per) {
+  displayKeys.forEach(function(per) {
     html += '<th class="bcra-hm-th-month">' + perLabel(per) + '</th>';
   });
   html += '</tr></thead><tbody>';
@@ -2583,7 +2583,7 @@ function renderBcraHeatmap(periodos) {
       + '<td class="bcra-hm-td-entity" title="' + entName + '">' + entName + '</td>'
       + '<td class="bcra-hm-td-monto">' + ultimoMonto(entName) + '</td>';
 
-    periodKeys.forEach(function(per, i) {
+    displayKeys.forEach(function(per, i) {
       var d = entData[per];
       if (d) {
         var tid = 'hm' + (tipIdx++);
