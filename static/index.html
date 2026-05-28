@@ -2429,9 +2429,10 @@ function renderBcraHistoryChart(periodos) {
   var canvas = document.getElementById('bcra-history-chart');
   if (!canvas || typeof Chart === 'undefined') return;
   if (!periodos || !periodos.length) { canvas.style.display = 'none'; return; }
-  // Mismo pre-sort que el heatmap: orden BCRA no garantizado
+  // Pre-sort aritmético: locale-independiente (mismo criterio que heatmap)
   var data24 = periodos.slice()
-    .sort(function(a, b) { return (b.periodo || '').localeCompare(a.periodo || ''); })
+    .filter(function(p) { return /^\d{6}$/.test(String(p.periodo || '').trim()); })
+    .sort(function(a, b) { return (parseInt(b.periodo, 10) || 0) - (parseInt(a.periodo, 10) || 0); })
     .slice(0, 24)
     .reverse();
   var labels = data24.map(function(p) {
@@ -2495,11 +2496,12 @@ function renderBcraHeatmap(periodos) {
   if (!container) return;
   if (!periodos || !periodos.length) { container.style.display = 'none'; return; }
 
-  // Pre-sort defensivo: la API BCRA NO garantiza orden de períodos.
-  // El motor de scoring (línea ~2013) aplica el mismo sort — esto alinea ambos.
-  // sort() desc → slice(24 más recientes) → reverse() → cronológico asc para display.
+  // Pre-sort: comparación aritmética (parseInt) — locale-independiente.
+  // localeCompare sin locale explícito varía por SO/browser; parseInt es determinístico.
+  // filter: solo períodos con formato YYYYMM válido (6 dígitos) — descarta entradas corruptas.
   var data24 = periodos.slice()
-    .sort(function(a, b) { return (b.periodo || '').localeCompare(a.periodo || ''); })
+    .filter(function(p) { return /^\d{6}$/.test(String(p.periodo || '').trim()); })
+    .sort(function(a, b) { return (parseInt(b.periodo, 10) || 0) - (parseInt(a.periodo, 10) || 0); })
     .slice(0, 24)
     .reverse();
 
@@ -3488,9 +3490,9 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
   // Juntar entidades de todos los periodos, quedarse con la mas reciente por entidad
   var todasEntidades = [];
   if (res?.periodos?.length) {
-    // Ordenar periodos de mas reciente a mas antiguo
+    // Ordenar periodos de mas reciente a mas antiguo — parseInt: locale-independiente
     var periodosOrdenados = res.periodos.slice().sort(function(a, b) {
-      return (b.periodo||'').localeCompare(a.periodo||'');
+      return (parseInt(b.periodo, 10) || 0) - (parseInt(a.periodo, 10) || 0);
     });
     var entidadesVistas = {};
     periodosOrdenados.forEach(function(p) {
@@ -4003,9 +4005,10 @@ async function buildBcraChartImage() {
   else if (window._ultimoBcraData && window._ultimoBcraData.results && window._ultimoBcraData.results.periodos) periodos = window._ultimoBcraData.results.periodos;
   if (!periodos.length) return null;
 
-  // Pre-sort: mismo criterio que heatmap y bar chart
+  // Pre-sort aritmético: locale-independiente (mismo criterio que heatmap y bar chart)
   var data24 = periodos.slice()
-    .sort(function(a, b) { return (b.periodo || '').localeCompare(a.periodo || ''); })
+    .filter(function(p) { return /^\d{6}$/.test(String(p.periodo || '').trim()); })
+    .sort(function(a, b) { return (parseInt(b.periodo, 10) || 0) - (parseInt(a.periodo, 10) || 0); })
     .slice(0, 24)
     .reverse();
   var labels = data24.map(function(p) {
@@ -4193,7 +4196,7 @@ async function exportarReporte() {
   // ── TABLA ENTIDADES BCRA ──────────────────────────────────────────────────
   var bcraRes = window._ultimoBcraData && window._ultimoBcraData.results;
   if (bcraRes && bcraRes.periodos && bcraRes.periodos.length) {
-    var perOrden = bcraRes.periodos.slice().sort(function(a,b){ return (b.periodo||'').localeCompare(a.periodo||''); });
+    var perOrden = bcraRes.periodos.slice().sort(function(a,b){ return (parseInt(b.periodo,10)||0) - (parseInt(a.periodo,10)||0); });
     var entVistas = {}, entidades = [];
     perOrden.forEach(function(p){
       (p.entidades||[]).forEach(function(e){
