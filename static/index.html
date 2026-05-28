@@ -3865,10 +3865,12 @@ async function analizarCliente() {
 
   // ── Deuda total BCRA (miles de $, seteado en mostrarResultadoBCRA) ───────────
   var deudaMilesTotal = window._bcraMontoUltimo || 0;
-  var deudaMillones   = deudaMilesTotal > 0 ? (deudaMilesTotal / 1000).toFixed(1) : null;
-  var deudaLabel = deudaMilesTotal > 0
-    ? '$' + deudaMilesTotal.toLocaleString('es-AR') + ' miles' + (deudaMillones ? ' ≈ $' + deudaMillones + 'M' : '')
-    : 'Sin deuda registrada en BCRA';
+  var deudaPesos = deudaMilesTotal * 1000;
+  var deudaLabel = deudaMilesTotal <= 0
+    ? 'Sin deuda registrada en BCRA'
+    : (deudaPesos >= 1e6
+        ? '$' + (deudaPesos / 1e6).toFixed(1) + 'M'
+        : '$' + deudaPesos.toLocaleString('es-AR'));
 
   // ── Informe Veraz/Nosis (INYECTADO — antes se calculaba pero no se usaba) ───
   var datosVeraz = '';

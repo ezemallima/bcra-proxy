@@ -192,6 +192,13 @@ CREDIT_ANALYSIS_SYSTEM_PROMPT = (
     "Toda recomendación DEBE cerrar con: 'Ante cualquier nueva degradación bancaria "
     "(Situación >= 2), suspender venta a crédito automáticamente.'\n\n"
 
+    "REGLA 7B — COMUNICACIÓN DE MONTOS (lenguaje ejecutivo):\n"
+    "Al mencionar deuda en el sistema financiero: usá siempre pesos con formato claro. "
+    "Para montos < $1.000.000: escribí '$XX.XXX' (p.ej. '$60.000', '$500.000'). "
+    "Para montos >= $1.000.000: escribí '$X,XM' (p.ej. '$1,2M', '$3,5M'). "
+    "NUNCA uses '$0.1M', '$0.5M' ni notaciones fraccionarias para montos en miles. "
+    "Deuda baja en el sistema (< $500.000) es indicador de bajo apalancamiento — "
+    "no lo interpretes como 'capacidad restringida'. Interpretalo como perfil conservador.\n\n"
     "REGLA 7 — FORMATO Y EXTENSIÓN:\n"
     "Español corporativo. Sin markdown, sin asteriscos. Máximo 280 palabras. "
     "Estructura de salida OBLIGATORIA (respetar exactamente estos títulos y orden):\n"
