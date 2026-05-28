@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es" translate="no">
 <head>
 <meta charset="UTF-8">
@@ -2659,15 +2659,17 @@ async function cargarSolvencia(cuit, contenedor) {
       return;
     }
     var data = d.data;
-    var ingresos = data.ingresos_anuales || 0;
+    var esBcraFallback = (data.fuente === 'bcra_fallback');
+    var ingresos = (!esBcraFallback && data.ingresos_anuales > 0) ? data.ingresos_anuales : 0;
     var cat = data.categoria_monotrib || '';
     var tipo = data.tipo_persona || '';
-    var ingM = ingresos > 0 ? '$' + (ingresos/1e6).toFixed(1) + 'M/año' : 'No disponible';
+    var ingM = ingresos > 0 ? '$' + (ingresos/1e6).toFixed(1) + 'M/año' : 'Sin datos verificados';
+    var ingColor = ingresos > 0 ? '#0f2d52' : '#94a3b8';
     var catLabel = cat ? ' — Cat. ' + cat : (tipo === 'JURIDICA' ? ' — Sociedad' : '');
     el.innerHTML =
       '<div style="display:flex;gap:24px;flex-wrap:wrap;">' +
       '<div><span style="font-size:11px;color:#94a3b8;display:block;">Ingresos estimados</span>' +
-        '<span style="font-size:15px;font-weight:700;color:#0f2d52;">' + ingM + catLabel + '</span></div>' +
+        '<span style="font-size:15px;font-weight:700;color:' + ingColor + ';">' + ingM + (ingresos > 0 ? catLabel : '') + '</span></div>' +
       (ingresos > 0 && window._bcraMontoUltimo > 0 ? (function(){
         var ratio = (window._bcraMontoUltimo * 1000) / ingresos;
         var ok = ratio <= 0.5;
@@ -2676,6 +2678,7 @@ async function cargarSolvencia(cuit, contenedor) {
           (ratio*100).toFixed(0) + '% ' + (ok?'✓ OK':'⚠ Alto') + '</span></div>';
       })() : '') +
       '</div>';
+
   } catch(e) {
     if (el) el.innerHTML = '<span style="color:#94a3b8;">Datos de solvencia temporalmente no disponibles</span>';
   }
