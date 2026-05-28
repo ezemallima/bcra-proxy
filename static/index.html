@@ -5026,7 +5026,7 @@ async function abrirModalAgregarCliente(cuit, nombre) {
   _modalAgregarNombre = nombre;
   var vendedores = await _cargarVendedores();
   var sel = document.getElementById('agregar-vendedor');
-  sel.innerHTML = '<option value=''''>-- Seleccioná un vendedor --</option>' +
+  sel.innerHTML = '<option value="">-- Seleccioná un vendedor --</option>' +
     vendedores.map(function(vn){ return '<option value="' + vn + '">' + vn + '</option>'; }).join('');
   document.getElementById('agregar-limite').value = '';
   document.getElementById('agregar-plazo').value = '';
@@ -5049,7 +5049,7 @@ async function confirmarAgregarCliente() {
   var plazo = document.getElementById('agregar-plazo').value;
   var ciudad = document.getElementById('agregar-ciudad').value.trim();
   if (!vendedor) { errEl.textContent = 'Seleccioná un vendedor asignado.'; errEl.style.display = 'block'; return; }
-  if (!limite || parseFloat(limite) <= 0) { errEl.textContent = 'Ingresá un límite de crédito mayor a \.'; errEl.style.display = 'block'; return; }
+  if (!limite || parseFloat(limite) <= 0) { errEl.textContent = 'Ingresá un límite de crédito mayor a $0.'; errEl.style.display = 'block'; return; }
   if (!plazo || parseInt(plazo) <= 0) { errEl.textContent = 'Ingresá el plazo de pago en días.'; errEl.style.display = 'block'; return; }
   btn.disabled = true; btn.textContent = 'Guardando...';
   errEl.style.display = 'none';
