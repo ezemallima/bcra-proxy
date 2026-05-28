@@ -4095,6 +4095,94 @@ async function exportarReporte() {
   const btn = document.getElementById('btn-export');
   if (btn) { btn.disabled = true; btn.textContent = 'Generando…'; }
 
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const W = 210, H = 297;
+
+  const raw  = document.getElementById('cuit-input').value.trim().replace(/\D/g,'');
+  const cuitFmt = raw.length === 11 ? raw.slice(0,2)+'-'+raw.slice(2,10)+'-'+raw.slice(10) : raw;
+  const mora = buscarEnMoras ? buscarEnMoras(raw) : null;
+  const bodega = getNombreBodega();
+
+  var nombre = '';
+  if (verazData && verazData.nombre) nombre = verazData.nombre;
+  if (!nombre) { var nomEl = document.querySelector('#cliente-header .nombre-cliente'); if (nomEl) nombre = nomEl.textContent.trim(); }
+  if (!nombre) { var enCar = cartera.find(function(c){ return c.cuit.replace(/-/g,'') === raw; }); if (enCar) nombre = enCar.nombre; }
+  if (!nombre) nombre = raw;
+
+  var scoreVal = ultimoAnalisis.score || 0;
+  if (!scoreVal && window._ultimoScoreVende) scoreVal = window._ultimoScoreVende.score || 0;
+  var scoreRango = ultimoAnalisis.rango || '';
+  var scoreRGB = [100,116,139];
+  if (!scoreRango) {
+    if      (scoreVal >= 750) { scoreRango = 'Excelente';   scoreRGB = [22,101,52]; }
+    else if (scoreVal >= 600) { scoreRango = 'Bueno';       scoreRGB = [161,98,7]; }
+    else if (scoreVal >= 400) { scoreRango = 'Revisar';     scoreRGB = [154,52,18]; }
+    else if (scoreVal >= 200) { scoreRango = 'Alto riesgo'; scoreRGB = [185,28,28]; }
+    else if (scoreVal > 0)    { scoreRango = 'Rechazar';    scoreRGB = [127,29,29]; }
+  } else {
+    if      (scoreRango === 'Excelente')   scoreRGB = [22,101,52];
+    else if (scoreRango === 'Bueno')       scoreRGB = [161,98,7];
+    else if (scoreRango === 'Revisar')     scoreRGB = [154,52,18];
+    else if (scoreRango === 'Alto riesgo') scoreRGB = [185,28,28];
+    else if (scoreRango === 'Rechazar')    scoreRGB = [127,29,29];
+  }
+
+  // ── HEADER ────────────────────────────────────────────────────────────────
+  doc.setFillColor(10, 34, 64);
+  doc.rect(0, 0, W, 30, 'F');
+  doc.setFillColor(...scoreRGB);
+  doc.rect(0, 0, 4, 30, 'F');
+
+  doc.setFontSize(13); doc.setFont('helvetica','bold'); doc.setTextColor(255,255,255);
+  doc.text('Informe de Riesgo Financiero', 10, 11);
+  doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(147,197,253);
+  doc.text(bodega, 10, 19);
+  doc.setFontSize(7.5); doc.setFont('helvetica','italic'); doc.setTextColor(180,200,240);
+  doc.text('Vende Seguro · ' + ultimoAnalisis.fecha, 10, 27);
+  doc.setFontSize(7.5); doc.setFont('helvetica','bold'); doc.setTextColor(220,60,60);
+  doc.text('CONFIDENCIAL — USO INTERNO', W-10, 27, {align:'right'});
+
+  // ── NOMBRE CLIENTE + SCORE HERO ───────────────────────────────────────────
+  var y = 40;
+  doc.setFontSize(15); doc.setFont('helvetica','bold'); doc.setTextColor(10,34,64);
+  doc.text(nombre.substring(0, 38), 10, y);
+  doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(100,116,139);
+  doc.text('CUIT ' + cuitFmt, 10, y+7);
+
+  var sbX = 144, sbY = 33, sbW = 56, sbH = 26, sbR = 4;
+  doc.setFillColor(scoreRGB[0]*0.6, scoreRGB[1]*0.6, scoreRGB[2]*0.6);
+  doc.roundedRect(sbX+1, sbY+1.5, sbW, sbH, sbR, sbR, 'F');
+  doc.setFillColor(...scoreRGB);
+  doc.roundedRect(sbX, sbY, sbW, sbH, sbR, sbR, 'F');
+  doc.setDrawColor(255,255,255,60);
+  doc.setLineWidth(0.5);
+  doc.roundedRect(sbX, sbY, sbW, sbH, sbR, sbR, 'S');
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(24); doc.setFont('helvetica','bold');
+  doc.text(scoreVal > 0 ? String(scoreVal) : '—', sbX + sbW/2, sbY + 14, {align:'center'});
+  doc.setFontSize(7.5); doc.setFont('helvetica','bold');
+  doc.text(scoreRango.toUpperCase(), sbX + sbW/2, sbY + 21, {align:'center'});
+  doc.setFontSize(6.5); doc.setFont('helvetica','normal'); doc.setTextColor(220,235,255);
+  doc.text('escala 1–999', sbX + sbW/2, sbY + 27, {align:'center'});
+
+  y = 63;
+  doc.setDrawColor(210,220,240); doc.setLineWidth(0.4); doc.line(10, y, W-10, y);
+  y += 6;
+
+  // ── MORA — BLOQUE ROJO CRÍTICO ───────────────────────────────────────────
+  if (mora) {
+    doc.setFillColor(220,38,38);
+    doc.rect(10, y, W-20, 18, 'F');
+    doc.setTextColor(255,255,255);
+    doc.setFontSize(11); doc.setFont('helvetica','bold');
+    doc.text('MORA REGISTRADA — RIESGO ALTO', 15, y+8);
+    doc.setFontSize(9); doc.setFont('helvetica','normal');
+    var moraLinea = (mora.nombre||nombre) + ' · Saldo: $' + (mora.saldo||mora.saldoAdeudado||0).toLocaleString('es-AR') + '  desde ' + (mora.fecha_mora||mora.fechaMora||'');
+    doc.text(String(moraLinea).substring(0, 80), 15, y+15);
+    y += 23;
+  }
+
   // ── HISTORIAL CREDITICIO BCRA — HEATMAP MATRICIAL ────────────────────────────
   var hmHist = window._ultimoHistorial;
   var hmPeriSrc = [];
