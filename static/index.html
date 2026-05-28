@@ -3872,6 +3872,10 @@ async function analizarCliente() {
   const wspThreads = filtrarWSPReciente(buscarEnWSP(cuit));
   const mora = buscarEnMoras(cuit);
   var scorePreAnalisis = window._ultimoScoreVende || null;
+  // Extraer exclusiones ANTES de construir historialBCRATexto y _calcRango
+  var _fd = (scorePreAnalisis && scorePreAnalisis.falsas_deudas) || { excluidas: [], razones: {} };
+  var _fdExcluidas = _fd.excluidas || [];
+  var _fdRazones   = _fd.razones   || {};
   const btn = document.getElementById('btn-analizar');
   const resEl = document.getElementById('analisis-resultado');
   btn.disabled = true; btn.textContent = 'Analizando...'; resEl.style.display = 'none';
@@ -3883,6 +3887,11 @@ async function analizarCliente() {
     return item ? item.valor : 'N/D';
   }
   var dSituacion = _dv('Situación BCRA');
+  // Preferir max_sit del servidor (ya filtrado por detectar_falsas_deudas)
+  if ((dSituacion === 'N/D' || !dSituacion) && scorePreAnalisis && scorePreAnalisis.max_sit != null) {
+    var _mxS0 = scorePreAnalisis.max_sit;
+    dSituacion = 'Sit. ' + _mxS0 + (_mxS0 === 1 ? ' — Normal' : _mxS0 === 2 ? ' — Atraso' : ' — Irregular');
+  }
   var dHistorial = _dv('Historial BCRA 24m');
   var dCheques   = _dv('Cheques rechazados');
   var dDSO       = _dv('DSO individual');
@@ -3949,7 +3958,7 @@ async function analizarCliente() {
         _mapaEnt[_n].push({ periodo: p.periodo, sit: e.situacion || 1, monto: e.monto || 0, dias: e.diasAtraso || 0 });
       });
     });
-    var _ents = Object.keys(_mapaEnt);
+    var _ents = Object.keys(_mapaEnt).filter(function(e) { return _fdExcluidas.indexOf(e) === -1; });
     if (_ents.length > 0) {
       historialBCRATexto = 'Período cubierto: ' + _periodos.length + ' meses\n';
       // Sección autoritativa: un único valor vigente por entidad — la IA cita SOLO estos
@@ -4000,8 +4009,10 @@ async function analizarCliente() {
   function _calcRango() {
     var _sc = scorePreAnalisis ? scorePreAnalisis.score : 0;
     if (mora) return { min: 0, max: 0, decision: 'denegado', nota: 'mora vigente con la distribuidora' };
-    var _sitM = (dSituacion || '').match(/Sit\.?\s*(\d)/i);
-    var _maxS = _sitM ? parseInt(_sitM[1], 10) : 1;
+    // Usar max_sit del servidor (post-filtrado) — fuente de verdad para el rango
+    var _maxS = (scorePreAnalisis && scorePreAnalisis.max_sit != null)
+      ? scorePreAnalisis.max_sit
+      : (((dSituacion || '').match(/Sit\.?\s*(\d)/i) || [])[1] | 0) || 1;
     if (_maxS >= 4) return { min: 0, max: 0, decision: 'denegado', nota: 'Situación ' + _maxS + ' activa en BCRA' };
     var _chqA = false;
     var _chqD = window._chequesUltimaConsulta;
@@ -4027,6 +4038,7 @@ async function analizarCliente() {
         (p.entidades || []).forEach(function(e) {
           if ((e.monto || 0) < 50) return;
           var _n = e.entidad || 'unk';
+          if (_fdExcluidas.indexOf(_n) !== -1) return;  // respetar exclusiones del motor
           if (!_em[_n]) _em[_n] = { maxS: 1, latS: 1, h3: false };
           var _s2 = e.situacion || 1;
           if (pi === 0) _em[_n].latS = _s2;
@@ -4081,10 +4093,7 @@ async function analizarCliente() {
       ? 'Límite de crédito sugerido: ' + _fmtPesos(rangoCredito.min)
       : 'Límite de crédito sugerido: ' + _fmtPesos(rangoCredito.min) + ' – ' + _fmtPesos(rangoCredito.max);
 
-  // ── Falsas deudas — exclusiones del servidor (misma lógica para admin y comercial) ─
-  var _fd = (scorePreAnalisis && scorePreAnalisis.falsas_deudas) || { excluidas: [], razones: {} };
-  var _fdExcluidas = _fd.excluidas || [];
-  var _fdRazones   = _fd.razones   || {};
+  // _fd, _fdExcluidas, _fdRazones ya extraídos al inicio de analizarCliente
   var _fdTextoPrompt = '';
   if (_fdExcluidas.length > 0) {
     _fdTextoPrompt = '\n═══ DEUDAS EXCLUIDAS DEL ANÁLISIS (SISTEMA) ═══\n';
@@ -4093,7 +4102,7 @@ async function analizarCliente() {
       var r = _fdRazones[ent] || {};
       _fdTextoPrompt += '  • ' + ent + ': $' + (r.monto || 0).toLocaleString('es-AR') + ' en Sit.' + (r.sit || '?') + ' — ' + (r.criterio || 'anomalía aislada') + '\n';
     });
-    _fdTextoPrompt += 'Score, rango crediticio y límite ya reflejan el perfil filtrado. Mencioná brevemente la exclusión en DIAGNÓSTICO FINANCIERO.\n';
+    _fdTextoPrompt += 'INSTRUCCIÓN CRÍTICA: No menciones estas entidades en ninguna sección del análisis. No las uses para justificar ningún veredicto negativo. Analizá el perfil como si estas entidades no existieran.\n';
   }
 
   function _renderExclusionBadge() {

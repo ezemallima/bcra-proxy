@@ -1943,7 +1943,9 @@ function renderConsulta(cuit, dd, cd, hd, serverScore, afipData) {
   causales.forEach(ca=>ca.entidades?.forEach(en=>dchq.push(...(en.detalle||[]))));
   const activos = dchq.filter(d=>!d.fechaPago||d.estadoMulta==='IMPAGA');
   const montoImpagos = activos.reduce((s,d)=>s+(d.monto||0),0);
-  let verd = veredictoRapido(scoreEst, activos.length, maxSit);
+  // Usar el max_sit del servidor (ya filtrado post-detectar_falsas_deudas)
+  const maxSitEff = (serverScore?.max_sit != null) ? serverScore.max_sit : maxSit;
+  let verd = veredictoRapido(scoreEst, activos.length, maxSitEff);
   if (serverScore?.mora_tecnica) {
     // Mora técnica pisa cualquier veredicto basado en maxSit puro
     verd = {
@@ -1989,20 +1991,7 @@ function renderConsulta(cuit, dd, cd, hd, serverScore, afipData) {
     </div>`;
   }
 
-  // Badge de deuda excluida (misma lógica de backend que en app admin — solo difiere el render)
-  const _fdExclCom = serverScore?.falsas_deudas?.excluidas || [];
-  const _fdRazCom  = serverScore?.falsas_deudas?.razones   || {};
-  let falsaDeudaHtml = '';
-  if (_fdExclCom.length > 0) {
-    const _fdItems = _fdExclCom.map(e => {
-      const r = _fdRazCom[e] || {};
-      return `${esc(e)}: $${fmtM(r.monto||0)} Sit.${r.sit||'?'}`;
-    }).join(' · ');
-    falsaDeudaHtml = `<div style="margin-top:8px;background:rgba(14,165,233,0.08);border:1px solid rgba(14,165,233,0.3);border-radius:6px;padding:8px 12px;font-size:12px;color:#0369a1;text-align:left">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      <strong>Deuda excluida del análisis:</strong> ${_fdItems}
-    </div>`;
-  }
+  let falsaDeudaHtml = '';  // información interna del motor — no se muestra al vendedor
 
   let moraTecHtml      = '';
   if (_moraTecnica && !_overrideAdmin) {
