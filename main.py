@@ -221,7 +221,7 @@ print(
 WSP_FILE = os.path.join(os.getcwd(), 'whatsapp_index.json')
 
 bcra_cache = {}
-CACHE_TTL = 60 * 60 * 2
+CACHE_TTL = 60 * 60 * 24   # 24 horas — reduce consultas al BCRA y mejora latencia
 CACHE_TTL_ERROR = 300
 BCRA_VACIO = {"results": None, "sin_deudas": None, "error_bcra": None}
 
@@ -373,7 +373,7 @@ def _bcra_get(url: str, timeout: int = 0) -> requests.Response:
 
     Con SCRAPERAPI_KEY: enruta via ScraperAPI (timeout estricto 12s, IPs rotativas,
     SSL gestionado por el proxy — no requiere verify=False).
-    Sin SCRAPERAPI_KEY: conexión directa legacy (timeout 20s, SSL ignore).
+    Sin SCRAPERAPI_KEY: conexión directa legacy (timeout 5s, SSL ignore).
     """
     if SCRAPERAPI_KEY:
         _t = timeout if timeout > 0 else 12   # timeout estricto ScraperAPI
@@ -386,7 +386,7 @@ def _bcra_get(url: str, timeout: int = 0) -> requests.Response:
             },
             timeout=_t,
         )
-    _t = timeout if timeout > 0 else 20
+    _t = timeout if timeout > 0 else 5   # timeout directo: 5s con fallback a caché
     return requests.get(url, timeout=_t, verify=False)
 
 
@@ -1717,6 +1717,124 @@ def _safe_periodos(lst) -> list:
     return result
 
 
+# ── Detección de falsas deudas ──────────────────────────────────────────────
+# Umbral y ventana configurables sin reescribir código.
+FALSE_DEBT_CONFIG: dict = {
+    'umbral_monto_ars':          500_000,  # Monto máx para considerar deuda no representativa
+    'ventana_degradacion_meses': 6,        # Meses máx desde sit.1 → sit≥2 para validar degradación
+    'min_entidades_normales':    1,        # Entidades en sit.1 requeridas para aislar la anomalía
+}
+
+
+def detectar_falsas_deudas(
+    bcra_data: dict,
+    historial_data: dict = None,
+    cheques_data: dict   = None,
+    cuit: str            = '',
+    config: dict         = None,
+) -> dict:
+    """
+    Detecta entidades con deuda no representativa del perfil real del cliente.
+    Una entidad se excluye cuando se cumplen TODOS estos criterios:
+      1. Situación >= 2 (irregular) en el período actual
+      2. Monto <= umbral_monto_ars (deuda simbólica — default $500k)
+      3. Al menos 1 otra entidad en Sit.1 en el mismo período (perfil global limpio)
+      4. La entidad estuvo en Sit.1 dentro de los últimos ventana_degradacion_meses
+         (degradación reciente, no mora estructural)
+      5. Sin cheques rechazados activos
+      6. Anomalía aislada: exactamente 1 entidad irregular en el período actual
+
+    No modifica datos originales del BCRA; solo informa qué excluir del cómputo.
+
+    Returns:
+        {'excluidas': [str], 'razones': {str: {'sit': int, 'monto': int, 'criterio': str}}}
+    """
+    cfg = {**FALSE_DEBT_CONFIG, **(config or {})}
+    excluidas: list = []
+    razones:   dict = {}
+
+    if not bcra_data:
+        return {'excluidas': excluidas, 'razones': razones}
+
+    periodos = _safe_periodos((bcra_data.get('results') or {}).get('periodos') or [])
+    if not periodos or not isinstance(periodos[0], dict):
+        return {'excluidas': excluidas, 'razones': razones}
+
+    ents_actual = [e for e in periodos[0].get('entidades', []) if isinstance(e, dict)]
+    if not ents_actual:
+        return {'excluidas': excluidas, 'razones': razones}
+
+    # Criterio 5: sin cheques impagos activos — si los hay, ninguna exclusión aplica
+    if cheques_data:
+        cheq_n = _norm_bcra_resp(cheques_data)
+        for _ca in (cheq_n.get('results') or {}).get('causales', []):
+            for _en in (_ca.get('entidades') or []):
+                for _d in (_en.get('detalle') or []):
+                    if isinstance(_d, dict) and not _d.get('fechaLevantamiento'):
+                        return {'excluidas': excluidas, 'razones': razones}
+
+    ents_irreg = [
+        e for e in ents_actual
+        if (e.get('situacion') or 1) >= 2 and (e.get('monto') or 0) > 0
+    ]
+    ents_norm = [e for e in ents_actual if (e.get('situacion') or 1) == 1]
+
+    # Criterio 6: exactamente 1 entidad irregular (anomalía aislada)
+    if len(ents_irreg) != 1:
+        return {'excluidas': excluidas, 'razones': razones}
+
+    # Criterio 3: al menos min_entidades_normales en Sit.1
+    if len(ents_norm) < cfg['min_entidades_normales']:
+        return {'excluidas': excluidas, 'razones': razones}
+
+    ent = ents_irreg[0]
+    nombre    = ent.get('entidad', '?')
+    monto_k   = float(ent.get('monto') or 0)   # miles de pesos (formato BCRA)
+    monto_ars = monto_k * 1000
+    sit       = int(ent.get('situacion') or 2)
+
+    # Criterio 2: monto <= umbral
+    if monto_ars > cfg['umbral_monto_ars']:
+        return {'excluidas': excluidas, 'razones': razones}
+
+    # Criterio 4: la entidad estuvo en Sit.1 dentro de la ventana de degradación
+    degradacion_verificada = False
+    hist_periodos: list = []
+    if historial_data:
+        hist_n = _norm_bcra_resp(historial_data)
+        hist_periodos = _safe_periodos((hist_n.get('results') or {}).get('periodos') or [])
+
+    # Si no hay historial separado, usar períodos anteriores del bcra_data
+    ventana_src = hist_periodos[:cfg['ventana_degradacion_meses']] or periodos[1:cfg['ventana_degradacion_meses']+1]
+    for ph in ventana_src:
+        if not isinstance(ph, dict):
+            continue
+        for eh in ph.get('entidades', []):
+            if isinstance(eh, dict) and eh.get('entidad') == nombre and (eh.get('situacion') or 1) == 1:
+                degradacion_verificada = True
+                break
+        if degradacion_verificada:
+            break
+
+    if not degradacion_verificada:
+        return {'excluidas': excluidas, 'razones': razones}
+
+    # Todos los criterios cumplidos — marcar como falsa deuda
+    criterio = (
+        f"deuda aislada ${round(monto_ars):,} ARS en Sit.{sit} con degradación reciente "
+        f"dentro de {cfg['ventana_degradacion_meses']}m — "
+        f"{len(ents_norm)} entidad(es) en Sit.1"
+    )
+    excluidas.append(nombre)
+    razones[nombre] = {'sit': sit, 'monto': round(monto_ars), 'criterio': criterio}
+    print(
+        f"[falsas_deudas] {cuit} excluida: {nombre} | Sit.{sit} | "
+        f"${round(monto_ars):,} | {criterio}",
+        flush=True
+    )
+    return {'excluidas': excluidas, 'razones': razones}
+
+
 def calcular_rating_predictivo(
     cuit: str,
     bcra_data: dict,
@@ -1789,6 +1907,29 @@ def calcular_rating_predictivo(
         print(f"[score parse_err] {cuit_limpio} periodos_curr: {_pe}", flush=True)
         max_sit = 1; nro_entidades = 0; monto_total_m = 0.0
     monto_real = monto_total_m * 1000
+
+    # ── Detección de falsas deudas — recalibrar score antes de ponderar ───
+    # Criterios: deuda aislada, monto<=500k, degradación reciente, sin cheques.
+    # No modifica bcra_data original; filtra solo periodos_curr[0] para el cómputo.
+    _fd: dict = detectar_falsas_deudas(bcra_data, hist_data, cheq_data, cuit_limpio)
+    if _fd['excluidas'] and periodos_curr and isinstance(periodos_curr[0], dict):
+        _ents_fd_limpias = [
+            e for e in periodos_curr[0].get('entidades', [])
+            if e.get('entidad') not in _fd['excluidas']
+        ]
+        periodos_curr[0] = dict(periodos_curr[0], entidades=_ents_fd_limpias)
+        if _ents_fd_limpias:
+            max_sit       = max((e.get('situacion', 1) or 1) for e in _ents_fd_limpias)
+            nro_entidades = len(_ents_fd_limpias)
+            monto_total_m = sum((e.get('monto', 0) or 0) for e in _ents_fd_limpias) / 1000
+        else:
+            max_sit = 1; nro_entidades = 0; monto_total_m = 0.0
+        monto_real = monto_total_m * 1000
+        print(
+            f"[falsas_deudas] {cuit_limpio} recalibrado: max_sit={max_sit} "
+            f"monto={monto_real:.0f}ARS | excluidas={_fd['excluidas']}",
+            flush=True
+        )
 
     # ── Ponderación de mora por monto ─────────────────────────────────────
     _ents_curr    = (periodos_curr[0].get('entidades', []) if isinstance(periodos_curr[0], dict) else []) if periodos_curr else []
@@ -2236,6 +2377,7 @@ def calcular_rating_predictivo(
         ) if es_mora_administrativa else None,
         # Campos v20.0
         'semaforo': 'verde' if score >= 700 else ('amarillo' if score >= 400 else 'rojo'),
+        'falsas_deudas': _fd,   # entidades excluidas + razones para UI y análisis IA
     }
     _score_session_cache[cuit_limpio] = resultado
     return resultado
