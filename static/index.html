@@ -655,7 +655,7 @@
       </div>
       <div class="sb-brand-text">
         <div class="sb-name">Vende Seguro</div>
-        <div class="sb-ver">v31.0 · Risk Intelligence</div>
+        <div class="sb-ver" id="app-version">v77.8 · Risk Intelligence</div>
       </div>
     </div>
     <nav class="sb-nav">
@@ -2845,6 +2845,10 @@ function mismoCliente(a, b) {
 
 async function init() {
   checkProxy();
+  fetch('/version').then(function(r){return r.json();}).then(function(v){
+    var el = document.getElementById('app-version');
+    if (el && v && v.version) el.textContent = v.version + ' · Risk Intelligence (' + (v.commit||'?') + ')';
+  }).catch(function(){});
   // Cargar datos persistentes del servidor (sincroniza entre dispositivos)
   await cargarDesdServidor();
 
@@ -2943,7 +2947,7 @@ async function cargarCarteraServidor() {
 
   // Siempre recargar cartera del servidor (fuente de verdad = cartera_comercial.json)
   try {
-    const r = await fetch('/cartera_inicial.json');
+    const r = await fetch('/cartera_inicial.json?_=' + Date.now());
     const data = await r.json();
     if (data && data.length > 0) {
       // Preservar ultimaSit y ultimaVerif del localStorage si existen
@@ -4738,15 +4742,24 @@ async function agregarCliente() {
     limiteCreditoARS: limite ? parseFloat(limite) : null,
     plazoDias: plazo ? parseInt(plazo) : null
   };
+  var _guardadoOk = false;
   try {
-    await fetch('/cliente/guardar', {
+    var _gr = await fetch('/cliente/guardar', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(nuevo)
     });
+    var _gd = await _gr.json();
+    _guardadoOk = !!(_gd && _gd.ok);
+    if (!_guardadoOk) { console.warn('[cartera] Error al guardar:', _gd && _gd.error); }
   } catch(e) { console.warn('[cartera] No se pudo persistir en servidor:', e); }
-  cartera.push(nuevo);
-  localStorage.setItem('piat_cartera', JSON.stringify(cartera));
-  sincronizarServidor();
+  if (_guardadoOk) {
+    cartera.push(nuevo);
+    localStorage.setItem('piat_cartera', JSON.stringify(cartera));
+    sincronizarServidor();
+  } else {
+    alert('No se pudo guardar en el servidor. Verifica la conexion e intentalo de nuevo.');
+    return;
+  }
   ['nuevo-cuit','nuevo-nombre','nuevo-limite','nuevo-plazo','nuevo-vendedor','nuevo-ciudad'].forEach(id => {
     document.getElementById(id).value = '';
   });

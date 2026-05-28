@@ -3453,7 +3453,22 @@ def upload_moras():
 @app.route("/cartera_inicial.json")
 def cartera_inicial():
     # cartera_comercial.json es la fuente única de verdad (514 clientes con vendedor)
-    return send_from_directory(os.getcwd(), 'cartera_comercial.json')
+    resp = send_from_directory(os.getcwd(), 'cartera_comercial.json')
+    resp.headers['Cache-Control'] = 'no-store, must-revalidate'
+    resp.headers['Pragma'] = 'no-cache'
+    return resp
+
+
+@app.route("/version")
+def version():
+    import subprocess
+    try:
+        commit = subprocess.check_output(
+            ['git', 'rev-parse', '--short', 'HEAD'], stderr=subprocess.DEVNULL
+        ).decode().strip()
+    except Exception:
+        commit = 'unknown'
+    return jsonify({"version": "v77.8", "commit": commit})
 
 @app.route("/datos-bodega", methods=["GET"])
 def get_datos_bodega():
