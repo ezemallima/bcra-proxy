@@ -1002,7 +1002,7 @@ def _inferir_desde_bcra(cuit):
             'actividad_principal': '',
             'es_empleador':        False,
             'antiguedad_anos':     0,
-            'ingresos_anuales':    round(monto_total * 3),
+            'ingresos_anuales':    round(monto_total * 1_000 * 3),
             'fuente_ingresos':     'bcra_inferido',
             'fuente':              'bcra_fallback',
         }
