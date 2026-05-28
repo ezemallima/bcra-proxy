@@ -2420,7 +2420,7 @@ function renderVendeScore(scoreObj) {
     '<canvas id="bcra-history-chart" style="width:100%;max-height:100px;display:block;"></canvas>' +
   '</div>' +
   '<div id="solvencia-card" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;margin-bottom:8px;">' +
-    '<div style="font-size:12px;font-weight:700;color:#334155;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px;">Capacidad de Pago</div>' +
+    '<div style="font-size:12px;font-weight:700;color:#334155;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px;">Exposición en Sistema Financiero</div>' +
     '<div id="solvencia-body" style="font-size:13px;color:#64748b;">Consultando solvencia...</div>' +
   '</div>';
 }
@@ -2647,42 +2647,53 @@ function hideBcraHmTip() {
   if (tip) tip.style.display = 'none';
 }
 
-async function cargarSolvencia(cuit, contenedor) {
+function renderExposicionSistema() {
   var el = document.getElementById('solvencia-body');
   if (!el) return;
-  try {
-    var r = await fetch('/solvencia/' + cuit.replace(/-/g,''));
-    if (!r.ok) throw new Error();
-    var d = await r.json();
-    if (!d.ok || !d.data) {
-      el.innerHTML = '<span style="color:#94a3b8;">Datos de solvencia temporalmente no disponibles</span>';
-      return;
-    }
-    var data = d.data;
-    var esBcraFallback = (data.fuente === 'bcra_fallback');
-    var ingresos = (!esBcraFallback && data.ingresos_anuales > 0) ? data.ingresos_anuales : 0;
-    var cat = data.categoria_monotrib || '';
-    var tipo = data.tipo_persona || '';
-    var ingM = ingresos > 0 ? '$' + (ingresos/1e6).toFixed(1) + 'M/año' : 'Sin datos verificados';
-    var ingColor = ingresos > 0 ? '#0f2d52' : '#94a3b8';
-    var catLabel = cat ? ' — Cat. ' + cat : (tipo === 'JURIDICA' ? ' — Sociedad' : '');
-    el.innerHTML =
-      '<div style="display:flex;gap:24px;flex-wrap:wrap;">' +
-      '<div><span style="font-size:11px;color:#94a3b8;display:block;">Ingresos estimados</span>' +
-        '<span style="font-size:15px;font-weight:700;color:' + ingColor + ';">' + ingM + (ingresos > 0 ? catLabel : '') + '</span></div>' +
-      (ingresos > 0 && window._bcraMontoUltimo > 0 ? (function(){
-        var ratio = (window._bcraMontoUltimo * 1000) / ingresos;
-        var ok = ratio <= 0.5;
-        return '<div><span style="font-size:11px;color:#94a3b8;display:block;">Ratio apalancamiento</span>' +
-          '<span style="font-size:15px;font-weight:700;color:' + (ok?'#166534':'#991b1b') + ';">' +
-          (ratio*100).toFixed(0) + '% ' + (ok?'✓ OK':'⚠ Alto') + '</span></div>';
-      })() : '') +
-      '</div>';
-
-  } catch(e) {
-    if (el) el.innerHTML = '<span style="color:#94a3b8;">Datos de solvencia temporalmente no disponibles</span>';
+  var hist = window._ultimoHistorial;
+  var periSrc = [];
+  if (hist && hist.results && hist.results.periodos) periSrc = hist.results.periodos;
+  else if (window._ultimoBcraData && window._ultimoBcraData.results && window._ultimoBcraData.results.periodos) periSrc = window._ultimoBcraData.results.periodos;
+  if (!periSrc.length) {
+    el.innerHTML = '<span style="color:#94a3b8;">Sin datos de exposición disponibles</span>';
+    return;
   }
+  var data24 = periSrc.slice()
+    .filter(function(p){ return /^\d{6}$/.test(String(p.periodo||'').trim()); })
+    .sort(function(a,b){ return (parseInt(b.periodo,10)||0)-(parseInt(a.periodo,10)||0); })
+    .slice(0,24);
+  if (!data24.length) { el.innerHTML = '<span style="color:#94a3b8;">Sin historial BCRA disponible</span>'; return; }
+  // Métricas del período más reciente
+  var entLatest = (data24[0].entidades||[]).filter(function(e){ return (e.monto||0) > 0; });
+  var numEnt = entLatest.length;
+  var worstSit = entLatest.length ? Math.max.apply(null, entLatest.map(function(e){ return e.situacion||1; })) : 1;
+  var totalDeuda = (window._bcraMontoUltimo||0) * 1000;
+  var deudaFmt = totalDeuda >= 1e6 ? '$' + (totalDeuda/1e6).toFixed(1) + 'M' : totalDeuda >= 1000 ? '$' + Math.round(totalDeuda/1000) + 'k' : (totalDeuda > 0 ? '$' + Math.round(totalDeuda) : '—');
+  // Tendencia: situación más reciente vs 6 meses atrás
+  var per6 = data24[Math.min(5, data24.length-1)];
+  var ent6 = (per6.entidades||[]).filter(function(e){ return (e.monto||0) > 0; });
+  var sit6 = ent6.length ? Math.max.apply(null, ent6.map(function(e){ return e.situacion||1; })) : 1;
+  var trend, trendColor;
+  if (worstSit < sit6)      { trend = '↑ Mejorando';     trendColor = '#166534'; }
+  else if (worstSit > sit6) { trend = '↓ Deteriorando';  trendColor = '#991b1b'; }
+  else                      { trend = '→ Estable';        trendColor = '#334155'; }
+  // Situación badge
+  var sitLabel = ['','Normal','Atraso >90d','Irregular','Dudoso','Irrecuperable'];
+  var sitColor = ['','#166534','#854d0e','#9a3412','#991b1b','#7f1d1d'];
+  var sitBg    = ['','#dcfce7','#fef9c3','#ffedd5','#fee2e2','#fee2e2'];
+  el.innerHTML =
+    '<div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start;">' +
+    '<div><span style="font-size:11px;color:#94a3b8;display:block;margin-bottom:2px;">Deuda en sistema</span>' +
+      '<span style="font-size:16px;font-weight:700;color:#0f2d52;">' + deudaFmt + '</span></div>' +
+    '<div><span style="font-size:11px;color:#94a3b8;display:block;margin-bottom:2px;">Entidades acreedoras</span>' +
+      '<span style="font-size:16px;font-weight:700;color:#0f2d52;">' + (numEnt||'—') + '</span></div>' +
+    '<div><span style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Situación actual</span>' +
+      '<span style="font-size:12px;font-weight:700;padding:2px 9px;border-radius:20px;background:' + sitBg[worstSit] + ';color:' + sitColor[worstSit] + ';">Sit. ' + worstSit + ' — ' + (sitLabel[worstSit]||'') + '</span></div>' +
+    '<div><span style="font-size:11px;color:#94a3b8;display:block;margin-bottom:2px;">Tendencia 6m</span>' +
+      '<span style="font-size:14px;font-weight:700;color:' + trendColor + ';">' + trend + '</span></div>' +
+    '</div>';
 }
+
 
 
 // Normalizar nombre para comparación — ignora puntuación, tildes, mayúsculas
@@ -3633,7 +3644,7 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
       var _btnAn = document.getElementById('btn-analizar');
       if (_btnAn) _btnAn.style.display = '';
       // Cargar solvencia de forma asíncrona (no bloquea el score)
-      cargarSolvencia(cuit, scoreElF);
+      renderExposicionSistema();
       // Renderizar gráfico BCRA histórico
       var _periHist = [];
       if (historial && historial.results && historial.results.periodos) _periHist = historial.results.periodos;
@@ -4084,163 +4095,117 @@ async function exportarReporte() {
   const btn = document.getElementById('btn-export');
   if (btn) { btn.disabled = true; btn.textContent = 'Generando…'; }
 
-  const chartImg = await buildBcraChartImage();
+  // ── HISTORIAL CREDITICIO BCRA — HEATMAP MATRICIAL ────────────────────────────
+  var hmHist = window._ultimoHistorial;
+  var hmPeriSrc = [];
+  if (hmHist && hmHist.results && hmHist.results.periodos) hmPeriSrc = hmHist.results.periodos;
+  else if (window._ultimoBcraData && window._ultimoBcraData.results && window._ultimoBcraData.results.periodos) hmPeriSrc = window._ultimoBcraData.results.periodos;
 
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  const W = 210, H = 297;
+  var hmData24 = hmPeriSrc.slice()
+    .filter(function(p){ return /^\d{6}$/.test(String(p.periodo||'').trim()); })
+    .sort(function(a,b){ return (parseInt(b.periodo,10)||0)-(parseInt(a.periodo,10)||0); })
+    .slice(0,24).reverse();
 
-  const raw  = document.getElementById('cuit-input').value.trim().replace(/\D/g,'');
-  const cuitFmt = raw.length === 11 ? raw.slice(0,2)+'-'+raw.slice(2,10)+'-'+raw.slice(10) : raw;
-  const mora = buscarEnMoras ? buscarEnMoras(raw) : null;
-  const bodega = getNombreBodega();
-
-  var nombre = '';
-  if (verazData && verazData.nombre) nombre = verazData.nombre;
-  if (!nombre) { var nomEl = document.querySelector('#cliente-header .nombre-cliente'); if (nomEl) nombre = nomEl.textContent.trim(); }
-  if (!nombre) { var enCar = cartera.find(function(c){ return c.cuit.replace(/-/g,'') === raw; }); if (enCar) nombre = enCar.nombre; }
-  if (!nombre) nombre = raw;
-
-  var scoreVal = ultimoAnalisis.score || 0;
-  if (!scoreVal && window._ultimoScoreVende) scoreVal = window._ultimoScoreVende.score || 0;
-  var scoreRango = ultimoAnalisis.rango || '';
-  var scoreRGB = [100,116,139];
-  if (!scoreRango) {
-    if      (scoreVal >= 750) { scoreRango = 'Excelente';   scoreRGB = [22,101,52]; }
-    else if (scoreVal >= 600) { scoreRango = 'Bueno';       scoreRGB = [161,98,7]; }
-    else if (scoreVal >= 400) { scoreRango = 'Revisar';     scoreRGB = [154,52,18]; }
-    else if (scoreVal >= 200) { scoreRango = 'Alto riesgo'; scoreRGB = [185,28,28]; }
-    else if (scoreVal > 0)    { scoreRango = 'Rechazar';    scoreRGB = [127,29,29]; }
-  } else {
-    if      (scoreRango === 'Excelente')   scoreRGB = [22,101,52];
-    else if (scoreRango === 'Bueno')       scoreRGB = [161,98,7];
-    else if (scoreRango === 'Revisar')     scoreRGB = [154,52,18];
-    else if (scoreRango === 'Alto riesgo') scoreRGB = [185,28,28];
-    else if (scoreRango === 'Rechazar')    scoreRGB = [127,29,29];
-  }
-
-  // ── HEADER ────────────────────────────────────────────────────────────────
-  // Franja oscura principal
-  doc.setFillColor(10, 34, 64);
-  doc.rect(0, 0, W, 30, 'F');
-  // Acento de color en la izquierda (3mm)
-  doc.setFillColor(...scoreRGB);
-  doc.rect(0, 0, 4, 30, 'F');
-
-  // Header — título principal
-  doc.setFontSize(13); doc.setFont('helvetica','bold'); doc.setTextColor(255,255,255);
-  doc.text('Informe de Riesgo Financiero', 10, 11);
-  doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(147,197,253);
-  doc.text(bodega, 10, 19);
-  doc.setFontSize(7.5); doc.setFont('helvetica','italic'); doc.setTextColor(180,200,240);
-  doc.text('Vende Seguro · ' + ultimoAnalisis.fecha, 10, 27);
-  doc.setFontSize(7.5); doc.setFont('helvetica','bold'); doc.setTextColor(220,60,60);
-  doc.text('CONFIDENCIAL — USO INTERNO', W-10, 27, {align:'right'});
-
-  // ── NOMBRE CLIENTE + SCORE HERO ───────────────────────────────────────────
-  var y = 40;
-  doc.setFontSize(15); doc.setFont('helvetica','bold'); doc.setTextColor(10,34,64);
-  doc.text(nombre.substring(0, 38), 10, y);
-  doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(100,116,139);
-  doc.text('CUIT ' + cuitFmt, 10, y+7);
-
-  // Score hero — caja derecha, estética moderna
-  var sbX = 144, sbY = 33, sbW = 56, sbH = 26, sbR = 4;
-  // Sombra suave (rect levemente desplazado, color oscurecido)
-  doc.setFillColor(scoreRGB[0]*0.6, scoreRGB[1]*0.6, scoreRGB[2]*0.6);
-  doc.roundedRect(sbX+1, sbY+1.5, sbW, sbH, sbR, sbR, 'F');
-  // Caja principal
-  doc.setFillColor(...scoreRGB);
-  doc.roundedRect(sbX, sbY, sbW, sbH, sbR, sbR, 'F');
-  // Línea inferior de acento (borde inferior más claro)
-  doc.setDrawColor(255,255,255,60);
-  doc.setLineWidth(0.5);
-  doc.roundedRect(sbX, sbY, sbW, sbH, sbR, sbR, 'S');
-  // Valor del score
-  doc.setTextColor(255,255,255);
-  doc.setFontSize(24); doc.setFont('helvetica','bold');
-  doc.text(scoreVal > 0 ? String(scoreVal) : '—', sbX + sbW/2, sbY + 14, {align:'center'});
-  // Rango
-  doc.setFontSize(7.5); doc.setFont('helvetica','bold');
-  doc.text(scoreRango.toUpperCase(), sbX + sbW/2, sbY + 21, {align:'center'});
-  // "/ 999" discreto debajo
-  doc.setFontSize(6.5); doc.setFont('helvetica','normal'); doc.setTextColor(220,235,255);
-  doc.text('escala 1–999', sbX + sbW/2, sbY + 27, {align:'center'});
-
-  y = 63;
-  doc.setDrawColor(210,220,240); doc.setLineWidth(0.4); doc.line(10, y, W-10, y);
-  y += 6;
-
-  // ── MORA — BLOQUE ROJO CRÍTICO ───────────────────────────────────────────
-  if (mora) {
-    doc.setFillColor(220,38,38);
-    doc.rect(10, y, W-20, 18, 'F');
-    doc.setTextColor(255,255,255);
-    doc.setFontSize(11); doc.setFont('helvetica','bold');
-    doc.text('MORA REGISTRADA — RIESGO ALTO', 15, y+8);
-    doc.setFontSize(9); doc.setFont('helvetica','normal');
-    var moraLinea = (mora.nombre||nombre) + ' · Saldo: $' + (mora.saldo||mora.saldoAdeudado||0).toLocaleString('es-AR') + '  desde ' + (mora.fecha_mora||mora.fechaMora||'');
-    doc.text(String(moraLinea).substring(0, 80), 15, y+15);
-    y += 23;
-  }
-
-  // ── HISTORIAL BCRA ────────────────────────────────────────────────────────
-  doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(30,41,59);
-  doc.text('Historial BCRA — ultimos 24 meses', 10, y); y += 4;
-  if (chartImg) {
-    doc.addImage(chartImg, 'PNG', 10, y, W-20, 42);
-    y += 46;
-  } else {
-    doc.setFontSize(9); doc.setFont('helvetica','italic'); doc.setTextColor(148,163,184);
-    doc.text('Historial no disponible para este periodo.', 10, y+8);
-    y += 16;
-  }
-
-  // ── TABLA ENTIDADES BCRA ──────────────────────────────────────────────────
-  var bcraRes = window._ultimoBcraData && window._ultimoBcraData.results;
-  if (bcraRes && bcraRes.periodos && bcraRes.periodos.length) {
-    var perOrden = bcraRes.periodos.slice().sort(function(a,b){ return (parseInt(b.periodo,10)||0) - (parseInt(a.periodo,10)||0); });
-    var entVistas = {}, entidades = [];
-    perOrden.forEach(function(p){
-      (p.entidades||[]).forEach(function(e){
-        var k = e.entidad||e.codigo;
-        if (!entVistas[k]) { entVistas[k]=true; entidades.push(Object.assign({periodo:p.periodo},e)); }
-      });
+  var hmEntMap = {};
+  hmData24.forEach(function(p){
+    var per = String(p.periodo||'').trim();
+    (p.entidades||[]).forEach(function(e){
+      if ((e.monto||0) <= 0) return;
+      var n = (e.entidad||'Entidad s/d').trim();
+      if (!hmEntMap[n]) hmEntMap[n] = {};
+      hmEntMap[n][per] = { sit: e.situacion||1, monto: e.monto||0 };
     });
-    if (entidades.length) {
-      if (y > 240) { doc.addPage(); y = 15; }
-      var sitNombrePdf = function(s){ return s===1?'Normal':s===2?'Atraso':s===3?'Irregular':s===4?'Dudoso':s===5?'Irrecuperable':'—'; };
-      doc.setDrawColor(210,220,240); doc.line(10,y,W-10,y); y+=5;
-      doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(30,41,59);
-      doc.text('Entidades reportadas en BCRA', 10, y); y+=5;
-      // Cabecera tabla
-      doc.setFillColor(237,242,250); doc.rect(10,y,W-20,6,'F');
-      doc.setFontSize(7.5); doc.setFont('helvetica','bold'); doc.setTextColor(71,85,105);
-      doc.text('Entidad', 12, y+4.2);
-      doc.text('Periodo', 90, y+4.2);
-      doc.text('Monto ($)', 120, y+4.2, {align:'right'});
-      doc.text('Situacion', 130, y+4.2);
-      doc.text('Dias atraso', W-12, y+4.2, {align:'right'});
-      y += 7;
-      doc.setFont('helvetica','normal'); doc.setTextColor(51,65,85);
-      entidades.slice(0,8).forEach(function(e, i){
-        if (y > 265) { doc.addPage(); y = 15; }
-        if (i%2===0) { doc.setFillColor(248,250,252); doc.rect(10,y-1,W-20,6,'F'); }
-        var monto = e.monto > 0 ? '$' + e.monto.toLocaleString('es-AR') : '-';
-        var sit = e.situacion || 1;
-        var sitColor = sit === 1 ? [22,101,52] : sit === 2 ? [133,77,14] : [185,28,28];
-        doc.setTextColor(51,65,85);
-        doc.text(String(e.entidad||'-').substring(0,28), 12, y+3.5);
-        doc.text(String(e.periodo||'-'), 90, y+3.5);
-        doc.setTextColor(...sitColor); doc.setFont('helvetica','bold');
-        doc.text(monto, 120, y+3.5, {align:'right'});
-        doc.text('Sit.' + sit + ' ' + sitNombrePdf(sit), 130, y+3.5);
-        doc.setTextColor(51,65,85); doc.setFont('helvetica','normal');
-        doc.text(String(e.diasAtrasoPago||0), W-12, y+3.5, {align:'right'});
-        y += 6;
+  });
+
+  var hmEntities = Object.keys(hmEntMap);
+  var hmPeriodKeys = hmData24.map(function(p){ return String(p.periodo||'').trim(); });
+  var hmDisplayKeys = hmPeriodKeys.slice().reverse();
+
+  if (hmEntities.length && hmDisplayKeys.length) {
+    if (y > 220) { doc.addPage(); y = 15; }
+    doc.setDrawColor(210,220,240); doc.setLineWidth(0.4); doc.line(10, y, W-10, y); y += 5;
+    doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(30,41,59);
+    doc.text('Historial Crediticio BCRA — Últimos 24 meses', 10, y); y += 6;
+
+    var ENT_W  = 50;
+    var AVAIL_W = W - 20 - ENT_W;
+    var nCols  = hmDisplayKeys.length;
+    var COL_W  = AVAIL_W / nCols;
+    var ROW_H  = 5;
+    var HDR_H  = 8;
+    var x0     = 10;
+
+    // Header row background
+    doc.setFillColor(30, 41, 59);
+    doc.rect(x0, y, ENT_W + AVAIL_W, HDR_H, 'F');
+    doc.setFontSize(5.5); doc.setFont('helvetica','bold'); doc.setTextColor(255,255,255);
+    doc.text('Entidad', x0+2, y+5.5);
+    hmDisplayKeys.forEach(function(per, i){
+      var lbl = per.length===6 ? per.slice(4,6)+'/'+per.slice(2,4) : per;
+      doc.text(lbl, x0+ENT_W + i*COL_W + COL_W/2, y+5.5, {align:'center'});
+    });
+    y += HDR_H;
+
+    var sitFillPdf = {1:[220,252,231],2:[254,249,195],3:[255,237,213],4:[254,226,226],5:[254,226,226]};
+    var sitTextPdf = {1:[22,101,52],2:[133,77,14],3:[154,52,18],4:[153,27,27],5:[127,29,29]};
+
+    hmEntities.forEach(function(ent, ri){
+      if (y + ROW_H > 272) { doc.addPage(); y = 15; }
+      // Alternating row bg
+      if (ri%2===0) { doc.setFillColor(248,250,252); } else { doc.setFillColor(255,255,255); }
+      doc.rect(x0, y, ENT_W+AVAIL_W, ROW_H, 'F');
+      // Entity name
+      doc.setFontSize(6); doc.setFont('helvetica','normal'); doc.setTextColor(30,41,59);
+      doc.text(ent.substring(0,24), x0+1.5, y+3.5);
+      // Period cells
+      hmDisplayKeys.forEach(function(per, ci){
+        var cell = hmEntMap[ent][per];
+        var cx = x0 + ENT_W + ci*COL_W;
+        if (cell) {
+          var s = cell.sit;
+          var f = sitFillPdf[s]||sitFillPdf[1];
+          doc.setFillColor(f[0],f[1],f[2]);
+          doc.rect(cx+0.4, y+0.5, COL_W-0.8, ROW_H-1, 'F');
+          var t = sitTextPdf[s]||sitTextPdf[1];
+          doc.setTextColor(t[0],t[1],t[2]);
+          doc.setFontSize(5); doc.setFont('helvetica','bold');
+          doc.text(String(s), cx+COL_W/2, y+3.5, {align:'center'});
+        } else {
+          doc.setFillColor(241,245,249);
+          doc.rect(cx+0.4, y+0.5, COL_W-0.8, ROW_H-1, 'F');
+        }
       });
-      y += 4;
-    }
+      y += ROW_H;
+    });
+
+    // Grid border around the whole table
+    doc.setDrawColor(203,213,225); doc.setLineWidth(0.3);
+    doc.rect(x0, y - hmEntities.length*ROW_H - HDR_H, ENT_W+AVAIL_W, hmEntities.length*ROW_H + HDR_H);
+
+    // Legend
+    y += 4;
+    if (y > 278) { doc.addPage(); y = 15; }
+    var legendData = [
+      [1,'Normal',       [220,252,231],[22,101,52]],
+      [2,'Atraso >90d',  [254,249,195],[133,77,14]],
+      [3,'Irregular',    [255,237,213],[154,52,18]],
+      [4,'Dudoso/Irrec.',[254,226,226],[153,27,27]]
+    ];
+    legendData.forEach(function(ld, li){
+      var lx = x0 + li*47;
+      doc.setFillColor(ld[2][0],ld[2][1],ld[2][2]);
+      doc.rect(lx, y, 5, 3, 'F');
+      doc.setDrawColor(180,190,210); doc.setLineWidth(0.2);
+      doc.rect(lx, y, 5, 3, 'S');
+      doc.setFontSize(6); doc.setFont('helvetica','normal');
+      doc.setTextColor(ld[3][0],ld[3][1],ld[3][2]);
+      doc.text('Sit.'+ld[0]+' — '+ld[1], lx+6.5, y+2.4);
+    });
+    y += 8;
+  } else {
+    doc.setFontSize(8); doc.setFont('helvetica','italic'); doc.setTextColor(148,163,184);
+    doc.text('Historial BCRA no disponible para este período.', 10, y+5);
+    y += 12;
   }
 
   // ── CHEQUES BCRA ──────────────────────────────────────────────────────────
