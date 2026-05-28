@@ -914,6 +914,33 @@
         </div>
       </div>
     </div>
+    <!-- Modal agregar cliente desde consulta (alta completa con vendedor + limite + plazo) -->
+    <div id="modal-agregar-cliente" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;align-items:center;justify-content:center;">
+      <div style="background:#fff;border-radius:14px;padding:24px;width:92%;max-width:480px;box-shadow:0 20px 60px rgba(0,0,0,0.3);max-height:90vh;overflow-y:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <h3 style="margin:0;font-size:16px;font-weight:700;color:#0f2d52;">Agregar a seguimiento</h3>
+          <button onclick="cerrarModalAgregar()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#64748b;line-height:1;">&#215;</button>
+        </div>
+        <div style="font-size:12px;color:#64748b;margin-bottom:18px;" id="modal-agregar-subtitulo"></div>
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Vendedor asignado *</label>
+            <select id="agregar-vendedor" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;background:#fff;color:#1e293b;"></select></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">L&iacute;mite de cr&eacute;dito ($) *</label>
+              <input id="agregar-limite" type="number" min="0" placeholder="ej. 600000" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" /></div>
+            <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Plazo de pago (d&iacute;as) *</label>
+              <input id="agregar-plazo" type="number" min="0" placeholder="ej. 30" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" /></div>
+          </div>
+          <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Ciudad</label>
+            <input id="agregar-ciudad" type="text" placeholder="Ciudad / Localidad" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" /></div>
+        </div>
+        <div id="agregar-error" style="display:none;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 12px;font-size:13px;color:#991b1b;margin-top:12px;"></div>
+        <div style="display:flex;gap:10px;margin-top:20px;">
+          <button onclick="confirmarAgregarCliente()" class="primary" style="flex:1;padding:11px;" id="btn-confirmar-agregar">Confirmar alta</button>
+          <button onclick="cerrarModalAgregar()" style="flex:1;padding:11px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;cursor:pointer;font-size:14px;font-weight:600;">Cancelar</button>
+        </div>
+      </div>
+    </div>
     <div class="buscador-wrap">
       <svg class="buscador-ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       <input type="text" id="buscar-cartera-admin" class="buscador-input" placeholder="Buscar cliente por nombre o CUIT..." oninput="filtrarListaCartera(this.value)" translate="no" autocomplete="off" spellcheck="false" />
@@ -3492,12 +3519,8 @@ async function _loadCtaCteCard(cuit, targetId) {
 }
 
 function agregarDesdConsulta(cuit, nombre) {
-  if (cartera.some(function(c) { return c.cuit === cuit; })) { return; }
-  cartera.push({cuit: cuit, nombre: nombre, fechaAlta: new Date().toLocaleDateString('es-AR'), ultimaSit: null, ultimaVerif: null});
-  localStorage.setItem('piat_cartera', JSON.stringify(cartera));
-  var acEl = document.getElementById('cli-acciones');
-  if (acEl) acEl.innerHTML = '<span style="font-size:11px;color:var(--verde);padding:4px 10px;background:var(--verde-bg);border-radius:6px;font-weight:600;">Agregado a cartera ✓</span>';
-  renderCartera();
+  // Abre modal de alta completa — reemplaza add directo que no persistia en servidor
+  abrirModalAgregarCliente(cuit, nombre);
 }
 
 function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nombreExterno) {
@@ -4991,6 +5014,74 @@ async function poblarVendedoresNuevo() {
   var vendedores = await _cargarVendedores();
   var dl = document.getElementById('vend-datalist-nuevo');
   if (dl) dl.innerHTML = vendedores.map(function(v){ return '<option value="' + v + '">'; }).join('');
+}
+
+// ─── MODAL AGREGAR CLIENTE DESDE CONSULTA ───────────────────────────────
+var _modalAgregarCuit = '';
+var _modalAgregarNombre = '';
+
+async function abrirModalAgregarCliente(cuit, nombre) {
+  if (cartera.some(function(c){ return c.cuit === cuit; })) { return; }
+  _modalAgregarCuit = cuit;
+  _modalAgregarNombre = nombre;
+  var vendedores = await _cargarVendedores();
+  var sel = document.getElementById('agregar-vendedor');
+  sel.innerHTML = '<option value=''''>-- Seleccioná un vendedor --</option>' +
+    vendedores.map(function(vn){ return '<option value="' + vn + '">' + vn + '</option>'; }).join('');
+  document.getElementById('agregar-limite').value = '';
+  document.getElementById('agregar-plazo').value = '';
+  document.getElementById('agregar-ciudad').value = '';
+  document.getElementById('agregar-error').style.display = 'none';
+  var sub = document.getElementById('modal-agregar-subtitulo');
+  if (sub) sub.textContent = nombre + ' · CUIT ' + (cuit.length === 11 ? cuit.slice(0,2)+'-'+cuit.slice(2,10)+'-'+cuit.slice(10) : cuit);
+  document.getElementById('modal-agregar-cliente').style.display = 'flex';
+}
+
+function cerrarModalAgregar() {
+  document.getElementById('modal-agregar-cliente').style.display = 'none';
+}
+
+async function confirmarAgregarCliente() {
+  var btn = document.getElementById('btn-confirmar-agregar');
+  var errEl = document.getElementById('agregar-error');
+  var vendedor = document.getElementById('agregar-vendedor').value;
+  var limite = document.getElementById('agregar-limite').value;
+  var plazo = document.getElementById('agregar-plazo').value;
+  var ciudad = document.getElementById('agregar-ciudad').value.trim();
+  if (!vendedor) { errEl.textContent = 'Seleccioná un vendedor asignado.'; errEl.style.display = 'block'; return; }
+  if (!limite || parseFloat(limite) <= 0) { errEl.textContent = 'Ingresá un límite de crédito mayor a \.'; errEl.style.display = 'block'; return; }
+  if (!plazo || parseInt(plazo) <= 0) { errEl.textContent = 'Ingresá el plazo de pago en días.'; errEl.style.display = 'block'; return; }
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  errEl.style.display = 'none';
+  var nuevo = {
+    cuit: _modalAgregarCuit, nombre: _modalAgregarNombre,
+    vendedor: vendedor, ciudad: ciudad,
+    fechaAlta: new Date().toLocaleDateString('es-AR'),
+    limiteCredito: parseFloat(limite), limiteCreditoARS: parseFloat(limite),
+    plazoDias: parseInt(plazo), ultimaSit: null, ultimaVerif: null
+  };
+  try {
+    var _gr = await fetch('/cliente/guardar', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(nuevo)
+    });
+    var _gd = await _gr.json();
+    if (!_gd.ok) { errEl.textContent = _gd.error || 'Error al guardar.'; errEl.style.display = 'block'; return; }
+    var idx = cartera.findIndex(function(c){ return c.cuit === _modalAgregarCuit; });
+    if (idx >= 0) cartera[idx] = Object.assign({}, cartera[idx], nuevo);
+    else cartera.push(nuevo);
+    _vendedoresCache = null;
+    localStorage.setItem('piat_cartera', JSON.stringify(cartera));
+    cerrarModalAgregar();
+    var acEl = document.getElementById('cli-acciones');
+    if (acEl) acEl.innerHTML = '<span style="font-size:11px;color:var(--verde);padding:4px 10px;background:var(--verde-bg);border-radius:6px;font-weight:600;">Agregado a cartera ✓</span>';
+    renderCartera(); actualizarMetricas(); sincronizarServidor();
+  } catch(e) {
+    errEl.textContent = 'Error de conexión: ' + e.message;
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Confirmar alta';
+  }
 }
 
 function verCliente(cuit) {

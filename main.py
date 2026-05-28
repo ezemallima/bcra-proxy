@@ -3452,8 +3452,10 @@ def upload_moras():
 
 @app.route("/cartera_inicial.json")
 def cartera_inicial():
-    # cartera_comercial.json es la fuente única de verdad (514 clientes con vendedor)
-    resp = send_from_directory(os.getcwd(), 'cartera_comercial.json')
+    # Sirve _cartera_comercial en memoria — misma fuente que guardar_cliente() escribe.
+    # ANTES leía del repo (os.getcwd()) mientras guardar_cliente() escribía en DATA_DIR (/data):
+    # eso causaba que los clientes nuevos desaparecieran al recargar.
+    resp = jsonify(_cartera_comercial)
     resp.headers['Cache-Control'] = 'no-store, must-revalidate'
     resp.headers['Pragma'] = 'no-cache'
     return resp
