@@ -2429,7 +2429,11 @@ function renderBcraHistoryChart(periodos) {
   var canvas = document.getElementById('bcra-history-chart');
   if (!canvas || typeof Chart === 'undefined') return;
   if (!periodos || !periodos.length) { canvas.style.display = 'none'; return; }
-  var data24 = periodos.slice(0, 24).reverse();
+  // Mismo pre-sort que el heatmap: orden BCRA no garantizado
+  var data24 = periodos.slice()
+    .sort(function(a, b) { return (b.periodo || '').localeCompare(a.periodo || ''); })
+    .slice(0, 24)
+    .reverse();
   var labels = data24.map(function(p) {
     var per = String(p.periodo || '');
     return per.length === 6 ? per.slice(4,6) + '/' + per.slice(2,4) : per;
@@ -2491,14 +2495,19 @@ function renderBcraHeatmap(periodos) {
   if (!container) return;
   if (!periodos || !periodos.length) { container.style.display = 'none'; return; }
 
-  // BCRA devuelve períodos más-reciente primero → invertir para cronológico
-  var data24 = periodos.slice(0, 24).reverse();
+  // Pre-sort defensivo: la API BCRA NO garantiza orden de períodos.
+  // El motor de scoring (línea ~2013) aplica el mismo sort — esto alinea ambos.
+  // sort() desc → slice(24 más recientes) → reverse() → cronológico asc para display.
+  var data24 = periodos.slice()
+    .sort(function(a, b) { return (b.periodo || '').localeCompare(a.periodo || ''); })
+    .slice(0, 24)
+    .reverse();
 
   // Construir mapa: entidad → { periodo → {sit, monto, dias} }
   // Solo se incluyen entradas con monto > 0 (exposición real)
   var entMap = {};
   data24.forEach(function(p) {
-    var per = String(p.periodo || '');
+    var per = String(p.periodo || '').trim();
     (p.entidades || []).forEach(function(e) {
       if ((e.monto || 0) <= 0) return;
       var n = (e.entidad || 'Entidad s/d').trim();
@@ -2510,20 +2519,25 @@ function renderBcraHeatmap(periodos) {
   var entities = Object.keys(entMap);
   if (!entities.length) { container.style.display = 'none'; return; }
 
-  var periodKeys = data24.map(function(p) { return String(p.periodo || ''); });
+  var periodKeys = data24.map(function(p) { return String(p.periodo || '').trim(); });
 
   // "202501" → "01/25"
   function perLabel(per) {
     return per.length === 6 ? per.slice(4, 6) + '/' + per.slice(2, 4) : per;
   }
 
-  // Último monto con exposición real (período más reciente → más antiguo)
+  // "Último" = monto vigente en el período más reciente del dataset (no el último histórico).
+  // Si la entidad no tiene exposición en el período más reciente → buscar el más cercano
+  // y etiquetarlo con su fecha para evitar apariencia de deuda activa cuando no la hay.
   function ultimoMonto(ent) {
     for (var i = periodKeys.length - 1; i >= 0; i--) {
       var d = entMap[ent][periodKeys[i]];
       if (d) {
         var m = d.monto * 1000; // miles → pesos
-        return m >= 1e6 ? '$' + (m / 1e6).toFixed(1) + 'M' : '$' + Math.round(m / 1000) + 'k';
+        var mStr = m >= 1e6 ? '$' + (m / 1e6).toFixed(1) + 'M' : '$' + Math.round(m / 1000) + 'k';
+        // Si no es el período más reciente del dataset → indicar la fecha (es histórico)
+        if (i < periodKeys.length - 1) return mStr + ' (' + perLabel(periodKeys[i]) + ')';
+        return mStr;
       }
     }
     return '–';
@@ -3989,7 +4003,11 @@ async function buildBcraChartImage() {
   else if (window._ultimoBcraData && window._ultimoBcraData.results && window._ultimoBcraData.results.periodos) periodos = window._ultimoBcraData.results.periodos;
   if (!periodos.length) return null;
 
-  var data24 = periodos.slice(0, 24).reverse();
+  // Pre-sort: mismo criterio que heatmap y bar chart
+  var data24 = periodos.slice()
+    .sort(function(a, b) { return (b.periodo || '').localeCompare(a.periodo || ''); })
+    .slice(0, 24)
+    .reverse();
   var labels = data24.map(function(p) {
     var per = String(p.periodo || '');
     return per.length === 6 ? per.slice(4,6) + '/' + per.slice(2,4) : per;
