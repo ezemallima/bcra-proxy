@@ -131,6 +131,37 @@ _ACTIVIDAD_INGRESOS_RI = [
 ]
 
 GEMINI_MODEL = "gemini-2.0-flash"
+
+# ── System prompt autoritativo — módulo de análisis de riesgo crediticio ──────
+# Inyectado vía systemInstruction (Gemini) / role:system (OpenAI).
+# Procesado por el modelo ANTES del prompt del usuario: garantiza tono corporativo,
+# calibración real de límites de crédito y eliminación de terminología incorrecta.
+CREDIT_ANALYSIS_SYSTEM_PROMPT = (
+    "Sos un analista senior de riesgo crediticio de una distribuidora vitivinícola argentina. "
+    "Emitís dictámenes técnicos y corporativos sobre la capacidad crediticia de clientes "
+    "comerciales, basados en datos bancarios del BCRA y comportamiento comercial.\n\n"
+    "REGLAS IRRENUNCIABLES:\n"
+    "1. TERMINOLOGÍA: Nunca uses 'análisis forense', 'forense', 'CRO' ni 'Director de Riesgos'. "
+    "El informe es siempre un 'Análisis de Riesgo Crediticio'.\n"
+    "2. CALIBRACIÓN DEL LÍMITE DE CRÉDITO — LEY FUNDAMENTAL: El monto sugerido DEBE ser "
+    "proporcional al volumen de deuda real del cliente en el sistema financiero argentino.\n"
+    "   · Deuda total > $50M en Sit. 1 estable → límite entre 5% y 10% de la deuda mensual "
+    "promedio (ejemplo: deuda $100M → límite entre $500.000 y $1.000.000).\n"
+    "   · Deuda total $5M-$50M en Sit. 1 → límite entre 10% y 20% del promedio mensual.\n"
+    "   · Deuda total < $5M o situaciones degradadas → criterio conservador basado en DSO y score.\n"
+    "   · Un límite de $10.000 o $15.000 para un cliente con deuda de $100M es INCOHERENTE. "
+    "No sugieras montos irrisorios ni desproporcionados al volumen operado.\n"
+    "3. DATOS INSUFICIENTES: Si no hay historial BCRA suficiente para calcular un límite "
+    "coherente (empresa nueva, primer crédito o sin historial), respondé exactamente: "
+    "'Crédito inicial sujeto a revisión tras 3 meses de operatoria comercial.' "
+    "No inventes cifras.\n"
+    "4. CLÁUSULA DE SUSPENSIÓN OBLIGATORIA: Toda recomendación de crédito DEBE incluir: "
+    "'Ante cualquier nueva degradación bancaria (Situación >= 2), suspender venta a crédito "
+    "automáticamente.'\n"
+    "5. FORMATO: Español corporativo y directo. Sin markdown, sin asteriscos, sin guiones "
+    "decorativos. Párrafos concisos. Máximo 280 palabras en total."
+)
+
 DATA_DIR = '/data' if os.path.exists('/data') else os.getcwd()
 ALERTAS_FILE      = os.path.join(DATA_DIR, 'db_v17_final.json')
 ALERTAS_BCRA_FILE = os.path.join(DATA_DIR, 'alertas_bcra.json')
@@ -450,7 +481,7 @@ def _consultar_bcra_directo(cuit: str, tipo: str = 'deudas'):
     print(f"[bcra_directo] {cuit}/{tipo} todos los endpoints agotados", flush=True)
     return None, f'bcra_no_disponible:{ultimo_error}'
 
-def gemini_request(payload, timeout=250):
+def gemini_request(payload, timeout=250, system_prompt=None):
     if GEMINI_KEY:
         url = "https://generativelanguage.googleapis.com/v1beta/models/" + GEMINI_MODEL + ":generateContent?key=" + GEMINI_KEY
         for intento in range(2):
@@ -490,9 +521,13 @@ def gemini_request(payload, timeout=250):
                 "Content-Type": "application/json",
                 "Authorization": "Bearer " + OPENAI_KEY
             }
+            _msgs_oai = []
+            if system_prompt:
+                _msgs_oai.append({"role": "system", "content": system_prompt})
+            _msgs_oai.append({"role": "user", "content": prompt_text})
             body_oai = {
                 "model": "gpt-4o-mini",
-                "messages": [{"role": "user", "content": prompt_text}],
+                "messages": _msgs_oai,
                 "max_tokens": 2000,
                 "temperature": 0.3
             }
@@ -4307,8 +4342,14 @@ def analizar():
     try:
         body = request.get_json()
         prompt = body.get('prompt', '')
-        payload = {"contents": [{"parts": [{"text": prompt}]}]}
-        texto, error = gemini_request(payload, timeout=90)
+        # systemInstruction: procesado por Gemini antes del prompt del usuario.
+        # Garantiza tono corporativo y calibración de límites sin depender del frontend.
+        payload = {
+            "systemInstruction": {"parts": [{"text": CREDIT_ANALYSIS_SYSTEM_PROMPT}]},
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.15, "maxOutputTokens": 1024}
+        }
+        texto, error = gemini_request(payload, timeout=90, system_prompt=CREDIT_ANALYSIS_SYSTEM_PROMPT)
         if error:
             return jsonify({"error": error}), 500
         return jsonify({"texto": texto})
