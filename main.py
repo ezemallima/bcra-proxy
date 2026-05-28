@@ -150,24 +150,16 @@ CREDIT_ANALYSIS_SYSTEM_PROMPT = (
     "'promedio mensual', 'promedio de deuda', 'DSO no disponible', 'DSO no reportado', "
     "'no hay datos de DSO', ni ninguna referencia a cómo se calculó el límite.\n\n"
 
-    "REGLA 2 — POLÍTICA DE LÍMITE DE CRÉDITO (lógica interna, no exponer):\n"
-    "Determiná el límite según esta escala. No cites la escala ni la lógica en el informe. "
-    "Justificá el límite únicamente con: "
-    "'Perfil de riesgo y comportamiento histórico observado.'\n"
-    "  · Score >= 800 + Sit.1 sostenida en 24m + sin Sit.3 en 18m → $1.000.000 a $3.000.000\n"
-    "  · Score 600-799 + sin episodios Sit.3 en últimos 18m → $600.000 a $1.000.000\n"
-    "  · Score 400-599 → $500.000, revisión en 3 meses\n"
-    "  · Sit.4/5, cheques impagos activos o mora vigente → crédito denegado\n\n"
-    "REGLA 2B — DEGRADACIÓN DE LÍMITE POR HISTORIAL IRREGULAR (lógica interna):\n"
-    "Aplicá estas correcciones ANTES de fijar el límite final. No las menciones en el informe.\n"
-    "  · Sit.3 detectada en 1 entidad dentro de los últimos 18 meses (monto >= $50.000) "
-    "→ aplicar el tier inmediatamente inferior al que corresponde por score puro.\n"
-    "  · Sit.3 detectada en 2 o más entidades dentro de los últimos 18 meses "
-    "(patrón sistémico, monto >= $50.000 en al menos una) "
-    "→ fijar límite en $500.000 con revisión en 6 meses, independientemente del score.\n"
-    "  · Sit.3 resuelta (entidad volvió a Sit.1 o cerró posición) pero ocurrió dentro de 18m "
-    "→ reducir el límite del tier resultante en un 20% como prima de riesgo residual.\n"
-    "  · Criterio de materialidad: ignorar entidades con monto < $50.000 al evaluar Sit.3.\n\n"
+    "REGLA 2 — LÍMITE DE CRÉDITO (DEFINITIVO — NO RECALCULAR):\n"
+    "El prompt incluye una sección 'RANGO OFICIAL DE CRÉDITO' con el límite ya determinado "
+    "por el sistema crediticio. Este valor es DEFINITIVO e INAPELABLE — el sistema ya aplicó "
+    "todos los ajustes de riesgo (score, historial BCRA, mora, cheques, degradaciones).\n"
+    "Tu tarea es VALIDAR ese rango con los datos del cliente y EXPLICAR por qué es adecuado. "
+    "En RECOMENDACIÓN ESTRATÉGICA debés citar EXACTAMENTE la frase del rango oficial "
+    "tal como aparece en el prompt, sin modificarla en ningún aspecto.\n"
+    "PROHIBIDO: calcular, inferir, sugerir o mencionar cualquier monto de crédito diferente "
+    "al oficial. Si detectás riesgos adicionales, usá 'se recomienda seguimiento activo' — "
+    "nunca reduciendo ni alterando el límite.\n\n"
 
     "REGLA 3 — VERACIDAD Y FOCO DE CIFRAS:\n"
     "El historial incluye una sección 'MONTO VIGENTE POR ENTIDAD' con el valor actual "
@@ -181,9 +173,9 @@ CREDIT_ANALYSIS_SYSTEM_PROMPT = (
     "(Sit.2 o peor) — y en ese caso, citá el monto del período afectado, no el rango.\n\n"
 
     "REGLA 4 — HISTORIAL INSUFICIENTE:\n"
-    "Si no hay montos concretos en el historial BCRA, usá: "
-    "'Crédito sujeto a revisión inicial: $500.000 — requiere 3 meses de historial operativo.' "
-    "No inventes cifras ni menciones datos ausentes.\n\n"
+    "Si no hay montos concretos en el historial BCRA, señalá que el cliente es nuevo "
+    "en el sistema financiero. No inventes cifras. "
+    "El rango oficial del sistema ya contempla esta condición.\n\n"
 
     "REGLA 5 — OBSERVACIONES DE MERCADO:\n"
     "El prompt puede incluir mensajes bajo 'Menciones grupo bodegas'. "
@@ -202,6 +194,7 @@ CREDIT_ANALYSIS_SYSTEM_PROMPT = (
     "NUNCA uses '$0.1M', '$0.5M' ni notaciones fraccionarias para montos en miles. "
     "Deuda baja en el sistema (< $500.000) es indicador de bajo apalancamiento — "
     "no lo interpretes como 'capacidad restringida'. Interpretalo como perfil conservador.\n\n"
+
     "REGLA 7 — FORMATO Y EXTENSIÓN:\n"
     "Español corporativo. Sin markdown, sin asteriscos. Máximo 280 palabras. "
     "Estructura de salida OBLIGATORIA (respetar exactamente estos títulos y orden):\n"
@@ -212,7 +205,7 @@ CREDIT_ANALYSIS_SYSTEM_PROMPT = (
     "DIAGNÓSTICO FINANCIERO: "
     "[evaluación de salud crediticia consolidada del cliente]\n"
     "RECOMENDACIÓN ESTRATÉGICA: "
-    "[límite propuesto + justificación en lenguaje de negocio + cláusula de suspensión]"
+    "[citar el rango oficial exacto del prompt + validar con perfil observado + cláusula de suspensión]"
 )
 
 DATA_DIR = '/data' if os.path.exists('/data') else os.getcwd()
@@ -4412,8 +4405,30 @@ def analizar():
     try:
         body = request.get_json()
         prompt = body.get('prompt', '')
-        # systemInstruction: procesado por Gemini antes del prompt del usuario.
-        # Garantiza tono corporativo y calibración de límites sin depender del frontend.
+        rango_min = int(body.get('rangoMin') or 0)
+        rango_max = int(body.get('rangoMax') or 0)
+        rango_decision = str(body.get('rangoDecision') or 'denegado')
+
+        def _fmt_pesos(v):
+            if v <= 0:
+                return '$0'
+            s = str(int(v))
+            parts, tmp = [], s
+            while len(tmp) > 3:
+                parts.append(tmp[-3:])
+                tmp = tmp[:-3]
+            parts.append(tmp)
+            return '$' + '.'.join(reversed(parts))
+
+        if rango_decision == 'denegado' or (rango_min == 0 and rango_max == 0):
+            rango_label = 'Crédito denegado'
+        elif rango_min == rango_max:
+            rango_label = f'Límite de crédito sugerido: {_fmt_pesos(rango_min)}'
+        else:
+            rango_label = f'Límite de crédito sugerido: {_fmt_pesos(rango_min)} – {_fmt_pesos(rango_max)}'
+
+        # El frontend ya incluyó el rango en el prompt; el backend lo refuerza
+        # como bloque autorizado para que el system prompt lo tome como referencia.
         payload = {
             "systemInstruction": {"parts": [{"text": CREDIT_ANALYSIS_SYSTEM_PROMPT}]},
             "contents": [{"parts": [{"text": prompt}]}],
@@ -4422,7 +4437,17 @@ def analizar():
         texto, error = gemini_request(payload, timeout=90, system_prompt=CREDIT_ANALYSIS_SYSTEM_PROMPT)
         if error:
             return jsonify({"error": error}), 500
-        return jsonify({"texto": texto})
+
+        # Corrección de seguridad: si la IA omitió o cambió el rango en RECOMENDACIÓN,
+        # inyectar el valor oficial al inicio de esa sección.
+        if rango_label != 'Crédito denegado' and rango_label not in texto:
+            marker = 'RECOMENDACIÓN ESTRATÉGICA:'
+            if marker in texto:
+                idx = texto.find(marker) + len(marker)
+                tail = texto[idx:].lstrip(' \n')
+                texto = texto[:texto.find(marker) + len(marker)] + ' ' + rango_label + '. ' + tail
+
+        return jsonify({"texto": texto, "rangoMin": rango_min, "rangoMax": rango_max, "rangoDecision": rango_decision})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

@@ -3986,7 +3986,105 @@ async function analizarCliente() {
     if (clienteCartera.plazoDias) condicionesActuales += 'Plazo actual: ' + clienteCartera.plazoDias + ' días\n';
   }
 
+  // ── Motor crediticio determinista — REGLA 2 + 2B (autoridad sobre la IA) ─────
+  function _fmtPesos(v) {
+    if (v <= 0) return '$0';
+    var _s = String(Math.round(v)), _r = '';
+    for (var _i = _s.length - 1, _k = 0; _i >= 0; _i--, _k++) {
+      if (_k > 0 && _k % 3 === 0) _r = '.' + _r;
+      _r = _s[_i] + _r;
+    }
+    return '$' + _r;
+  }
+
+  function _calcRango() {
+    var _sc = scorePreAnalisis ? scorePreAnalisis.score : 0;
+    if (mora) return { min: 0, max: 0, decision: 'denegado', nota: 'mora vigente con la distribuidora' };
+    var _sitM = (dSituacion || '').match(/Sit\.?\s*(\d)/i);
+    var _maxS = _sitM ? parseInt(_sitM[1], 10) : 1;
+    if (_maxS >= 4) return { min: 0, max: 0, decision: 'denegado', nota: 'Situación ' + _maxS + ' activa en BCRA' };
+    var _chqA = false;
+    var _chqD = window._chequesUltimaConsulta;
+    if (_chqD && _chqD.results && _chqD.results.causales) {
+      _chqD.results.causales.forEach(function(ca) {
+        (ca.entidades || []).forEach(function(en) {
+          (en.detalle || []).forEach(function(d) {
+            if (!d.fechaLevantamiento || String(d.fechaLevantamiento).trim() === '') _chqA = true;
+          });
+        });
+      });
+    }
+    if (_chqA) return { min: 0, max: 0, decision: 'denegado', nota: 'cheques impagos sin levantar' };
+    var _s3Act = 0, _s3Res = 0;
+    var _rH = window._ultimoHistorial;
+    if (_rH && _rH.results && _rH.results.periodos) {
+      var _pp = _rH.results.periodos.slice()
+        .filter(function(p){ return /^\d{6}$/.test(String(p.periodo||'').trim()); })
+        .sort(function(a,b){ return (parseInt(b.periodo,10)||0)-(parseInt(a.periodo,10)||0); })
+        .slice(0, 18);
+      var _em = {};
+      _pp.forEach(function(p, pi) {
+        (p.entidades || []).forEach(function(e) {
+          if ((e.monto || 0) < 50) return;
+          var _n = e.entidad || 'unk';
+          if (!_em[_n]) _em[_n] = { maxS: 1, latS: 1, h3: false };
+          var _s2 = e.situacion || 1;
+          if (pi === 0) _em[_n].latS = _s2;
+          if (_s2 > _em[_n].maxS) _em[_n].maxS = _s2;
+          if (_s2 >= 3) _em[_n].h3 = true;
+        });
+      });
+      Object.keys(_em).forEach(function(n) {
+        var _ii = _em[n]; if (_ii.h3) { if (_ii.latS <= 1) _s3Res++; else _s3Act++; }
+      });
+    }
+    var _min, _max, _dec = 'aprobado', _nota = '';
+    if (_sc >= 800)      { _min = 1000000; _max = 3000000; }
+    else if (_sc >= 600) { _min = 600000;  _max = 1000000; }
+    else if (_sc >= 400) { _min = 500000;  _max = 500000;  _dec = 'revisar'; _nota = 'revisión en 3 meses recomendada'; }
+    else                 { return { min: 0, max: 0, decision: 'denegado', nota: 'perfil de riesgo alto' }; }
+    if (_s3Act >= 2)     { _min = 500000; _max = 500000; _dec = 'revisar'; _nota = 'patrón sistémico — revisión en 6 meses'; }
+    else if (_s3Act === 1) {
+      if (_sc >= 800) { _min = 600000; _max = 1000000; }
+      else { _min = 500000; _max = 500000; _dec = 'revisar'; _nota = 'historial irregular — revisión en 3 meses'; }
+    } else if (_s3Res > 0 && _dec === 'aprobado') {
+      _min = Math.round(_min * 0.8); _max = Math.round(_max * 0.8); _nota = 'ajuste por antecedente resuelto';
+    }
+    return { min: _min, max: _max, decision: _dec, nota: _nota };
+  }
+
+  function _renderCreditoHeader(rg) {
+    if (rg.decision === 'denegado') {
+      return '<div style="background:#fff1f2;border:1.5px solid #fca5a5;border-radius:10px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:flex-start;gap:10px;">' +
+        '<span style="font-size:20px;flex-shrink:0;">&#9940;</span>' +
+        '<div><div style="font-size:11px;font-weight:700;color:#991b1b;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:3px;">Cr&#233;dito denegado</div>' +
+        '<div style="font-size:13px;color:#7f1d1d;line-height:1.5;">' + (rg.nota || 'Condiciones incompatibles con extensi&#243;n de cr&#233;dito.') + '</div></div></div>';
+    }
+    var _rev = rg.decision === 'revisar';
+    var _bg = _rev ? '#fefce8' : '#f0fdf4', _bd = _rev ? '#fde047' : '#86efac';
+    var _tc = _rev ? '#92400e' : '#166534', _ts = _rev ? '#78350f' : '#14532d';
+    var _ic = _rev ? '&#9888;' : '&#10003;', _lb = _rev ? 'L&#237;mite sujeto a seguimiento' : 'Cr&#233;dito aprobado';
+    var _ms = rg.min === rg.max ? _fmtPesos(rg.min) : _fmtPesos(rg.min) + ' – ' + _fmtPesos(rg.max);
+    return '<div style="background:' + _bg + ';border:1.5px solid ' + _bd + ';border-radius:10px;padding:14px 16px;margin-bottom:14px;">' +
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">' +
+        '<span style="font-size:16px;">' + _ic + '</span>' +
+        '<span style="font-size:11px;font-weight:700;color:' + _tc + ';letter-spacing:0.8px;text-transform:uppercase;">' + _lb + '</span>' +
+      '</div>' +
+      '<div style="font-size:22px;font-weight:800;color:' + _tc + ';letter-spacing:-0.5px;line-height:1.1;">' + _ms + '</div>' +
+      (_rev && rg.nota ? '<div style="font-size:11px;color:' + _ts + ';margin-top:5px;">' + rg.nota + '</div>' : '') +
+      '</div>';
+  }
+
+  var rangoCredito = _calcRango();
+  var _rangoLabel = rangoCredito.decision === 'denegado' ? 'Crédito denegado'
+    : rangoCredito.min === rangoCredito.max
+      ? 'Límite de crédito sugerido: ' + _fmtPesos(rangoCredito.min)
+      : 'Límite de crédito sugerido: ' + _fmtPesos(rangoCredito.min) + ' – ' + _fmtPesos(rangoCredito.max);
+
   var prompt = 'Sos un analista senior de riesgo crediticio especializado en el mercado vitivinícola argentino. Emitís dictámenes técnicos y corporativos sobre la capacidad crediticia de clientes comerciales, con base en datos bancarios del BCRA y comportamiento comercial.\n\n'
+    + '═══ RANGO OFICIAL DE CRÉDITO (SISTEMA — DEFINITIVO) ═══\n'
+    + _rangoLabel + '\n'
+    + 'Este valor es definitivo. Citar exactamente en RECOMENDACIÓN ESTRATÉGICA.\n\n'
     + '═══ IDENTIFICACIÓN ═══\n'
     + 'CUIT: ' + cuit + '\n'
     + 'Score Vende Seguro: ' + (scorePreAnalisis ? scorePreAnalisis.score + '/999 — ' + scorePreAnalisis.rango : 'N/D') + '\n'
@@ -4006,31 +4104,33 @@ async function analizarCliente() {
     + '2. Detectá patrones: degradación recurrente, situaciones ≥3, tendencia general. Los saltos en bancos de primera línea son el núcleo.\n'
     + '3. Score: 800+ = Sit 1 constante (24m); 600-799 = incidentes aislados; <600 = inestabilidad o mora recurrente.\n'
     + '4. Si el historial BCRA está presente, nunca respondas que falta información.\n'
-    + '5. Evaluá el perfil de pago histórico: comportamiento en Sit.1, incidentes de degradación, tendencia general. Determiná el límite según perfil observado. No menciones fórmulas ni cálculos en el informe.\n'
+    + '5. Evaluá el perfil de pago histórico: comportamiento en Sit.1, incidentes de degradación, tendencia general. El límite está fijado en "RANGO OFICIAL DE CRÉDITO" — validá por qué es adecuado con los datos. No calculés ni sugieras montos distintos al oficial.\n'
     + '6. El historial comercial (bodegas) y la mora interna tienen PRIORIDAD ABSOLUTA. Mora activa = crédito denegado.\n'
     + '\n═══ ESTRUCTURA DE RESPUESTA (RESPETAR EXACTAMENTE ESTOS TÍTULOS) ═══\n'
     + 'ANÁLISIS DE RIESGO CREDITICIO: [Comportamiento 24m por entidad + situaciones observadas + pagos internos + tendencia de riesgo]\n'
     + 'OBSERVACIONES DE MERCADO: [Hallazgos relevantes de la red de bodegas. Si no hay: "Sin observaciones de mercado en los últimos 6 meses."]\n'
     + 'DIAGNÓSTICO FINANCIERO: [Evaluación de salud crediticia consolidada del cliente]\n'
-    + 'RECOMENDACIÓN ESTRATÉGICA: [Límite propuesto + justificación en lenguaje de negocio + cláusula de suspensión ante Situación >= 2]\n'
+    + 'RECOMENDACIÓN ESTRATÉGICA: [Citar el rango oficial exacto + validar con el perfil observado + cláusula de suspensión]\n'
     + 'Redacción en español corporativo y directo. Sin markdown, sin asteriscos.';
 
   try {
     const r = await fetch('/analizar', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ prompt })
+      body: JSON.stringify({ prompt, rangoMin: rangoCredito.min, rangoMax: rangoCredito.max, rangoDecision: rangoCredito.decision })
     });
     const data = await r.json();
     if (data.error) throw new Error(data.error);
     var _sv = window._ultimoScoreVende;
     ultimoAnalisis = { cuit, texto: data.texto, fecha: new Date().toLocaleDateString('es-AR'), score: _sv ? _sv.score : 0, rango: _sv ? _sv.rango : '', color: _sv ? _sv.color : '' };
     resEl.style.display = 'block';
-    resEl.innerHTML = '<div style="font-size:11px;color:#2563eb;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;padding-bottom:10px;border-bottom:2px solid #eff6ff;">Análisis de Riesgo Crediticio</div>'
+    resEl.innerHTML = _renderCreditoHeader(rangoCredito)
+      + '<div style="font-size:11px;color:#2563eb;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;padding-bottom:10px;border-bottom:2px solid #eff6ff;">Análisis de Riesgo Crediticio</div>'
       + '<div style="font-size:13px;line-height:1.75;white-space:pre-wrap;color:#1e293b;">' + data.texto + '</div>';
     document.getElementById('btn-export').style.display = 'inline-block';
   } catch(e) {
     resEl.style.display = 'block';
-    resEl.innerHTML = '<div style="font-size:13px;color:#888;">No se pudo conectar con el motor de análisis. Intentá de nuevo en unos segundos.</div>';
+    resEl.innerHTML = _renderCreditoHeader(rangoCredito)
+      + '<div style="font-size:13px;color:#64748b;margin-top:8px;">Análisis no disponible — verificá la conexión e intentá de nuevo.</div>';
   }
   btn.disabled = false; btn.textContent = 'Analizar riesgo crediticio →';
 }
