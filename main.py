@@ -4580,14 +4580,34 @@ def analizar():
         if error:
             return jsonify({"error": error}), 500
 
-        # Corrección de seguridad: si la IA omitió o cambió el rango en RECOMENDACIÓN,
-        # inyectar el valor oficial al inicio de esa sección.
-        if rango_label != 'Crédito denegado' and rango_label not in texto:
+        # ── Corrección de seguridad post-IA ──────────────────────────────────────
+        # Garantiza que RECOMENDACIÓN ESTRATÉGICA siempre cita el rango oficial.
+        # Cubre dos casos:
+        #   1. El rango oficial no aparece en la sección (IA lo omitió o cambió)
+        #   2. La sección contiene "$0" o expresiones de crédito cero/nulo (IA se equivocó)
+        if rango_label != 'Crédito denegado' and rango_min > 0:
+            import re as _re
             marker = 'RECOMENDACIÓN ESTRATÉGICA:'
             if marker in texto:
-                idx = texto.find(marker) + len(marker)
-                tail = texto[idx:].lstrip(' \n')
-                texto = texto[:texto.find(marker) + len(marker)] + ' ' + rango_label + '. ' + tail
+                pre, _, section = texto.partition(marker)
+                section_clean = section.lstrip(' \n')
+                _tiene_cero = bool(_re.search(
+                    r'\$\s*0\b'                          # $0 literal
+                    r'|\bcero\s+(?:peso|cr[eé]dito|limit)'  # cero pesos/crédito
+                    r'|\blímite\b[^.]{0,60}\$\s*0',     # límite ... $0
+                    section_clean[:400], _re.IGNORECASE
+                ))
+                _sin_rango = rango_label not in section_clean
+                if _sin_rango or _tiene_cero:
+                    # Evitar duplicar si el rango ya encabeza la sección
+                    if section_clean.startswith(rango_label):
+                        section_clean = section_clean[len(rango_label):].lstrip('. \n')
+                    texto = pre + marker + ' ' + rango_label + '. ' + section_clean
+                    print(
+                        f"[analizar] corrección post-IA: {rango_label} "
+                        f"(sin_rango={_sin_rango} cero={_tiene_cero})",
+                        flush=True
+                    )
 
         return jsonify({"texto": texto, "rangoMin": rango_min, "rangoMax": rango_max, "rangoDecision": rango_decision})
     except Exception as e:
