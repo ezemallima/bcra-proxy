@@ -753,7 +753,30 @@ def consultar_bcra(cuit, reintentos=3):
         except Exception as e:
             print(f"[bcra] Error via {via} para {cuit}: {e}", flush=True)
             continue
-    # Todos los workers fallaron → intentar API de respaldo antes de rendirnos
+    # Workers fallaron — llamada directa a la API oficial del BCRA (CDI v1.0 → legacy)
+    for _bu, _bv in [
+        (f'https://api.bcra.gob.ar/CentralDeInformacion/v1.0/Deudas/{cuit}', 'bcra_cdi'),
+        (f'https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/{cuit}',    'bcra_legacy'),
+    ]:
+        try:
+            print(f"[bcra] {cuit} fallback directo {_bv}...", flush=True)
+            _br = requests.get(_bu, timeout=15, verify=False)
+            if _br.status_code == 404:
+                return {"results": {"denominacion": "", "periodos": []}, "sin_deudas": True}, None
+            if _br.status_code == 200 and len(_br.text.strip()) > 10:
+                _braw = _br.json()
+                _bres = _braw.get('results') if isinstance(_braw, dict) else None
+                _bd = (_map_detalle_bcra(_braw)
+                       if isinstance(_bres, dict) and 'detalle' in _bres
+                       else _norm_bcra_resp(_braw))
+                if not _bd.get('error') and _bd.get('results') is not None:
+                    _bd['sin_deudas'] = len((_bd.get('results') or {}).get('periodos') or []) == 0
+                    print(f"[bcra] {cuit} OK via {_bv}", flush=True)
+                    return _bd, None
+        except Exception as _be:
+            print(f"[bcra] {cuit} {_bv} error: {_be}", flush=True)
+
+    # Último recurso: API de respaldo externa
     data_rb, err_rb = _consultar_respaldo(cuit)
     if data_rb is not None:
         return data_rb, None
@@ -4472,72 +4495,73 @@ def _cheques_cache_set(cuit, payload):
 
 @app.route("/deudas/<cuit>/cheques")
 def get_cheques(cuit):
-    urls = [w + "/deudas/" + cuit + "/cheques" for w in BCRA_WORKERS] +            ["https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/" + cuit]
-    todos_vacios = True
-    for url_idx, url in enumerate(urls):
-        via = "Worker1" if url_idx == 0 else "Worker2" if url_idx == 1 else "directo"
-        for intento in range(2):
-            try:
-                r = requests.get(url, timeout=25, verify=False)
-                if r.status_code == 200:
-                    text = r.text.strip()
-                    if not text or len(text) < 10:
-                        print(f"[cheques] Vacío via {via} para {cuit}", flush=True)
-                        break
-                    todos_vacios = False
-                    data = _norm_bcra_resp(r.json())
-                    payload = data if data.get('results') else {"results": {"causales": []}, "sin_deudas": True, "error_bcra": None}
-                    _cheques_cache_set(cuit, payload)
-                    print(f"[cheques] OK via {via} para {cuit}", flush=True)
-                    return jsonify(payload), 200
-                if r.status_code in [520, 521, 522, 523, 524]:
-                    break
-            except Exception as e:
-                print(f"[cheques] Error via {via} intento {intento+1} para {cuit}: {e}", flush=True)
-                break
-    cached = _cheques_cache_get(cuit)
+    cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
+    # Caché primero (24h) — evita consulta innecesaria al BCRA
+    cached = _cheques_cache_get(cuit_limpio)
     if cached:
-        print(f"[cheques] {cuit} desde caché (BCRA no disponible)", flush=True)
+        print(f"[cheques] {cuit_limpio} desde caché", flush=True)
         return jsonify(cached), 200
-    if todos_vacios:
-        print(f"[cheques] Sin cheques para {cuit}", flush=True)
-        return jsonify({"results": {"causales": []}, "sin_deudas": True, "error_bcra": None}), 200
-    return jsonify({"results": None, "sin_deudas": None, "error_bcra": "sin_respuesta"}), 200
+    # Orden de consulta: 2 workers rápidos → CDI v1.0 → legacy
+    urls_via = (
+        [(w + "/deudas/" + cuit_limpio + "/cheques", f"Worker{i+1}", 5)
+         for i, w in enumerate(BCRA_WORKERS[:2])] +
+        [(f"https://api.bcra.gob.ar/CentralDeInformacion/v1.0/ChequesRechazados/{cuit_limpio}", "bcra_cdi",    12),
+         (f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/{cuit_limpio}", "bcra_legacy", 12)]
+    )
+    for url, via, tmt in urls_via:
+        try:
+            r = requests.get(url, timeout=tmt, verify=False)
+            if r.status_code == 404:
+                payload = {"results": {"causales": []}, "sin_deudas": True, "error_bcra": None}
+                _cheques_cache_set(cuit_limpio, payload)
+                return jsonify(payload), 200
+            if r.status_code == 200 and len(r.text.strip()) > 10:
+                data = _norm_bcra_resp(r.json())
+                payload = data if data.get('results') else {"results": {"causales": []}, "sin_deudas": True, "error_bcra": None}
+                _cheques_cache_set(cuit_limpio, payload)
+                print(f"[cheques] {cuit_limpio} OK via {via}", flush=True)
+                return jsonify(payload), 200
+        except Exception as e:
+            print(f"[cheques] {via} error para {cuit_limpio}: {e}", flush=True)
+    print(f"[cheques] {cuit_limpio} sin respuesta — devolviendo vacío", flush=True)
+    return jsonify({"results": {"causales": []}, "sin_deudas": True, "error_bcra": None}), 200
 
 @app.route("/deudas/<cuit>/historial")
 def get_historial(cuit):
-    urls = [w + "/deudas/" + cuit + "/historial" for w in BCRA_WORKERS] +            ["https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit]
-    for url_idx, url in enumerate(urls):
-        via = "Worker1" if url_idx == 0 else "Worker2" if url_idx == 1 else "directo"
-        for intento in range(2):
-            try:
-                r = requests.get(url, timeout=25, verify=False)
-                if r.status_code == 200:
-                    text = r.text.strip()
-                    if not text or len(text) < 10:
-                        break
-                    data = _norm_bcra_resp(r.json())
-                    try:
-                        hist_path = os.path.join(DATA_DIR, f'historial_{cuit}.json')
-                        with open(hist_path, 'w', encoding='utf-8') as f:
-                            json.dump({'payload': data, 'ts': time.time()}, f, ensure_ascii=False)
-                    except: pass
-                    print(f"[historial] OK via {via} para {cuit}", flush=True)
-                    return jsonify(data), 200
-                if r.status_code in [520, 521, 522, 523, 524]:
-                    break
-            except Exception as e:
-                print(f"[historial] Error via {via} intento {intento+1} para {cuit}: {e}", flush=True)
-                break
+    cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
+    # Caché disco primero (24h)
     try:
-        hist_path = os.path.join(DATA_DIR, f'historial_{cuit}.json')
+        hist_path = os.path.join(DATA_DIR, f'historial_{cuit_limpio}.json')
         if os.path.exists(hist_path):
             with open(hist_path, 'r', encoding='utf-8') as f:
                 cached = json.load(f)
             if time.time() - cached.get('ts', 0) < 86400:
-                print(f"[historial] {cuit} desde caché disco", flush=True)
+                print(f"[historial] {cuit_limpio} desde caché disco", flush=True)
                 return jsonify(cached['payload']), 200
     except: pass
+    # Orden de consulta: 2 workers rápidos → CDI v1.0 → legacy
+    urls_via = (
+        [(w + "/deudas/" + cuit_limpio + "/historial", f"Worker{i+1}", 5)
+         for i, w in enumerate(BCRA_WORKERS[:2])] +
+        [(f"https://api.bcra.gob.ar/CentralDeInformacion/v1.0/Deudas/Historicas/{cuit_limpio}", "bcra_cdi",    12),
+         (f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/{cuit_limpio}",    "bcra_legacy", 12)]
+    )
+    for url, via, tmt in urls_via:
+        try:
+            r = requests.get(url, timeout=tmt, verify=False)
+            if r.status_code == 404:
+                return jsonify({"results": {"periodos": []}, "sin_deudas": True, "error_bcra": None}), 200
+            if r.status_code == 200 and len(r.text.strip()) > 10:
+                data = _norm_bcra_resp(r.json())
+                if data.get('results') is not None:
+                    try:
+                        with open(hist_path, 'w', encoding='utf-8') as f:
+                            json.dump({'payload': data, 'ts': time.time()}, f, ensure_ascii=False)
+                    except: pass
+                    print(f"[historial] {cuit_limpio} OK via {via}", flush=True)
+                    return jsonify(data), 200
+        except Exception as e:
+            print(f"[historial] {via} error para {cuit_limpio}: {e}", flush=True)
     return jsonify({"results": None, "sin_deudas": None, "error_bcra": "sin_respuesta"}), 200
 
 @app.route("/analizar", methods=["POST"])
