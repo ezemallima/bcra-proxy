@@ -716,71 +716,59 @@ def _consultar_respaldo(cuit: str):
 
 
 def consultar_bcra(cuit, reintentos=3):
-    # Máximo 3 endpoints para no superar el timeout de Render (30s)
-    # Workers primero (más rápidos), BCRA directo como último recurso
-    endpoints = [(w + "/deudas/" + cuit, f"Worker{i+1}") for i, w in enumerate(BCRA_WORKERS)]
-    endpoints.append(("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit, "directo"))
-    for ep_url, via in endpoints[:3]:
-        try:
-            print(f"[bcra] {cuit} consultando via {via}...", flush=True)
-            if via == "directo":
-                data, _err = _consultar_bcra_directo(cuit, 'deudas')
-                if data is not None:
-                    periodos = (data.get('results') or {}).get('periodos') or []
-                    data['sin_deudas'] = len(periodos) == 0
-                    print(f"[bcra] {cuit} OK via directo BCRA", flush=True)
-                    return data, None
-                print(f"[bcra] {cuit} directo agotó reintentos: {_err}", flush=True)
-                continue
-            r = requests.get(ep_url, timeout=2.5, verify=False)
-            if r.status_code == 200:
-                text = r.text.strip()
-                if not text or len(text) < 10:
-                    print(f"[bcra] Vacío via {via} para {cuit}", flush=True)
-                    continue
-                data = _norm_bcra_resp(r.json())
-                if data.get('error'):
-                    continue
-                results = data.get('results') or {}
-                periodos = results.get('periodos') or []
-                data['sin_deudas'] = len(periodos) == 0
-                print(f"[bcra] {cuit} OK via {via}", flush=True)
-                return data, None
-            elif r.status_code == 404:
-                return {"results": {"denominacion": "", "periodos": []}, "sin_deudas": True}, None
-            else:
-                print(f"[bcra] HTTP {r.status_code} via {via} para {cuit}", flush=True)
-        except Exception as e:
-            print(f"[bcra] Error via {via} para {cuit}: {e}", flush=True)
-            continue
-    # Workers fallaron — llamada directa a la API oficial del BCRA (CDI v1.0 → legacy)
+    """Orden: API oficial BCRA primero (CDI v1.0 → legacy), workers como plan B."""
+
+    def _parse_bcra(raw):
+        _res = raw.get('results') if isinstance(raw, dict) else None
+        d = (_map_detalle_bcra(raw)
+             if isinstance(_res, dict) and 'detalle' in _res
+             else _norm_bcra_resp(raw))
+        if not d.get('error') and d.get('results') is not None:
+            d['sin_deudas'] = len((d.get('results') or {}).get('periodos') or []) == 0
+            return d
+        return None
+
+    # 1. API oficial del BCRA — CDI v1.0 luego legacy (timeout 12s c/u)
     for _bu, _bv in [
         (f'https://api.bcra.gob.ar/CentralDeInformacion/v1.0/Deudas/{cuit}', 'bcra_cdi'),
         (f'https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/{cuit}',    'bcra_legacy'),
     ]:
         try:
-            print(f"[bcra] {cuit} fallback directo {_bv}...", flush=True)
-            _br = requests.get(_bu, timeout=15, verify=False)
+            print(f"[bcra] {cuit} {_bv}...", flush=True)
+            _br = requests.get(_bu, timeout=12, verify=False)
             if _br.status_code == 404:
                 return {"results": {"denominacion": "", "periodos": []}, "sin_deudas": True}, None
             if _br.status_code == 200 and len(_br.text.strip()) > 10:
-                _braw = _br.json()
-                _bres = _braw.get('results') if isinstance(_braw, dict) else None
-                _bd = (_map_detalle_bcra(_braw)
-                       if isinstance(_bres, dict) and 'detalle' in _bres
-                       else _norm_bcra_resp(_braw))
-                if not _bd.get('error') and _bd.get('results') is not None:
-                    _bd['sin_deudas'] = len((_bd.get('results') or {}).get('periodos') or []) == 0
+                _d = _parse_bcra(_br.json())
+                if _d:
                     print(f"[bcra] {cuit} OK via {_bv}", flush=True)
-                    return _bd, None
-        except Exception as _be:
-            print(f"[bcra] {cuit} {_bv} error: {_be}", flush=True)
+                    return _d, None
+        except Exception as _e:
+            print(f"[bcra] {cuit} {_bv} error: {_e}", flush=True)
 
-    # Último recurso: API de respaldo externa
+    # 2. Workers Cloudflare como respaldo (2.5s c/u — si hay BCRA disponible esto no debería usarse)
+    for i, w in enumerate(BCRA_WORKERS[:3]):
+        ep_url = w + "/deudas/" + cuit
+        via    = f"Worker{i+1}"
+        try:
+            print(f"[bcra] {cuit} fallback {via}...", flush=True)
+            r = requests.get(ep_url, timeout=2.5, verify=False)
+            if r.status_code == 404:
+                return {"results": {"denominacion": "", "periodos": []}, "sin_deudas": True}, None
+            if r.status_code == 200 and len(r.text.strip()) > 10:
+                data = _norm_bcra_resp(r.json())
+                if not data.get('error') and data.get('results') is not None:
+                    data['sin_deudas'] = len((data.get('results') or {}).get('periodos') or []) == 0
+                    print(f"[bcra] {cuit} OK via {via}", flush=True)
+                    return data, None
+        except Exception as e:
+            print(f"[bcra] {cuit} {via} error: {e}", flush=True)
+
+    # 3. API de respaldo externa (si está configurada)
     data_rb, err_rb = _consultar_respaldo(cuit)
     if data_rb is not None:
         return data_rb, None
-    print(f"[bcra] {cuit} sin respuesta en todos los endpoints (respaldo: {err_rb})", flush=True)
+    print(f"[bcra] {cuit} sin respuesta en todos los endpoints", flush=True)
     return None, "sin_respuesta"
 
 def analizar_bodegas_server(cuit, nombre, mensajes):
@@ -4501,13 +4489,12 @@ def get_cheques(cuit):
     if cached:
         print(f"[cheques] {cuit_limpio} desde caché", flush=True)
         return jsonify(cached), 200
-    # Orden de consulta: 2 workers rápidos → CDI v1.0 → legacy
-    urls_via = (
-        [(w + "/deudas/" + cuit_limpio + "/cheques", f"Worker{i+1}", 5)
-         for i, w in enumerate(BCRA_WORKERS[:2])] +
-        [(f"https://api.bcra.gob.ar/CentralDeInformacion/v1.0/ChequesRechazados/{cuit_limpio}", "bcra_cdi",    12),
-         (f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/{cuit_limpio}", "bcra_legacy", 12)]
-    )
+    # Orden: BCRA oficial primero (CDI v1.0 → legacy), workers como plan B
+    urls_via = [
+        (f"https://api.bcra.gob.ar/CentralDeInformacion/v1.0/ChequesRechazados/{cuit_limpio}", "bcra_cdi",    12),
+        (f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/{cuit_limpio}", "bcra_legacy", 12),
+    ] + [(w + "/deudas/" + cuit_limpio + "/cheques", f"Worker{i+1}", 5)
+         for i, w in enumerate(BCRA_WORKERS[:2])]
     for url, via, tmt in urls_via:
         try:
             r = requests.get(url, timeout=tmt, verify=False)
@@ -4539,13 +4526,12 @@ def get_historial(cuit):
                 print(f"[historial] {cuit_limpio} desde caché disco", flush=True)
                 return jsonify(cached['payload']), 200
     except: pass
-    # Orden de consulta: 2 workers rápidos → CDI v1.0 → legacy
-    urls_via = (
-        [(w + "/deudas/" + cuit_limpio + "/historial", f"Worker{i+1}", 5)
-         for i, w in enumerate(BCRA_WORKERS[:2])] +
-        [(f"https://api.bcra.gob.ar/CentralDeInformacion/v1.0/Deudas/Historicas/{cuit_limpio}", "bcra_cdi",    12),
-         (f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/{cuit_limpio}",    "bcra_legacy", 12)]
-    )
+    # Orden: BCRA oficial primero (CDI v1.0 → legacy), workers como plan B
+    urls_via = [
+        (f"https://api.bcra.gob.ar/CentralDeInformacion/v1.0/Deudas/Historicas/{cuit_limpio}", "bcra_cdi",    12),
+        (f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/{cuit_limpio}",    "bcra_legacy", 12),
+    ] + [(w + "/deudas/" + cuit_limpio + "/historial", f"Worker{i+1}", 5)
+         for i, w in enumerate(BCRA_WORKERS[:2])]
     for url, via, tmt in urls_via:
         try:
             r = requests.get(url, timeout=tmt, verify=False)
