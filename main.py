@@ -4487,8 +4487,22 @@ def get_afip(cuit):
 
 @app.route("/deudas/<cuit>")
 def get_deudas(cuit):
+    cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
+    if request.args.get('fresh') == '1':
+        try:
+            _bc_path = os.path.join(DATA_DIR, 'bcra_cache.json')
+            if os.path.exists(_bc_path):
+                with open(_bc_path, 'r', encoding='utf-8') as _f:
+                    _bc = json.load(_f)
+                if cuit_limpio in _bc:
+                    del _bc[cuit_limpio]
+                    with open(_bc_path, 'w', encoding='utf-8') as _f:
+                        json.dump(_bc, _f)
+                    print(f"[deudas] {cuit_limpio} bcra_cache invalidado (fresh=1)", flush=True)
+        except Exception:
+            pass
     try:
-        data, error = consultar_bcra_cached(cuit)
+        data, error = consultar_bcra_cached(cuit_limpio)
         return jsonify(data), 200
     except Exception as e:
         import traceback

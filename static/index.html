@@ -3294,7 +3294,7 @@ async function consultarCliente() {
   document.getElementById('resultado').style.display = 'block';
 
   try {
-    var bcraR = await fetch('/deudas/' + raw, {signal: _abrtSig(30000)});
+    var bcraR = await fetch('/deudas/' + raw + '?fresh=1', {signal: _abrtSig(30000)});
     var bcraData = await bcraR.json();
     // BCRA denominacion como fuente de verdad si aún no tenemos nombre
     if (!nombreFinal && bcraData.results && bcraData.results.denominacion) {
