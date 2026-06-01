@@ -3302,12 +3302,11 @@ async function consultarCliente() {
     }
     if (!nombreFinal) nombreFinal = cuitFmtLocal;
     // ── BLOQUEO CUIT INEXISTENTE ─────────────────────────────────────────────
-    // Condición: BCRA no tiene registros reales (sin_deudas o sin denominación ni periodos)
-    //            Y AFIP tampoco encontró este CUIT (fuente=fallback)
-    //            Y no está en la cartera interna
-    var _bcraVacio = bcraData.sin_deudas === true ||
-      (!((bcraData.results || {}).denominacion) && !((bcraData.results || {}).periodos || []).length);
-    if (_bcraVacio && !afipTieneNombre && !enCarteraLocal) {
+    // Solo cuando BCRA devolvió error real (results=null) — NO cuando devuelve
+    // "sin deudas" (sin_deudas=true con results vacío), que es un CUIT válido sin
+    // historial bancario. Y solo si además AFIP falla y no está en cartera interna.
+    var _bcraError = !bcraData.results || !!bcraData.error_bcra;
+    if (_bcraError && !afipTieneNombre && !enCarteraLocal) {
       mostrarErrorCuitInexistente(raw);
       return;
     }
