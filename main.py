@@ -3751,6 +3751,27 @@ def _ejecutar_proceso_integral(cartera_data: list):
     total       = len(cartera_data)
     _pi_alertas = []   # acumula alertas BCRA detectadas en este proceso
 
+    # Limpiar bcra_cache para todos los clientes de la cartera en un solo write —
+    # garantiza que el proceso use datos BCRA frescos, no stale de 24h.
+    try:
+        _bc_path = os.path.join(DATA_DIR, 'bcra_cache.json')
+        if os.path.exists(_bc_path):
+            with open(_bc_path, 'r', encoding='utf-8') as _f:
+                _bc = json.load(_f)
+            _cartera_cuits = {
+                str(c.get('cuit', '')).replace('-', '').replace(' ', '').strip()
+                for c in cartera_data if isinstance(c, dict)
+            }
+            _invalidados = [k for k in list(_bc.keys()) if k in _cartera_cuits]
+            for _k in _invalidados:
+                del _bc[_k]
+            if _invalidados:
+                with open(_bc_path, 'w', encoding='utf-8') as _f:
+                    json.dump(_bc, _f)
+                print(f"[proceso-integral] bcra_cache invalidado para {len(_invalidados)} CUITs", flush=True)
+    except Exception as _bce:
+        print(f"[proceso-integral] Error limpiando bcra_cache: {_bce}", flush=True)
+
     for i, c in enumerate(cartera_data):
         if not isinstance(c, dict):
             with _proceso_lock:

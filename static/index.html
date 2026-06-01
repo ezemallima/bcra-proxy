@@ -1048,23 +1048,25 @@
 
   <div id="alertas" class="section">
 
-    <!-- ── BOTÓN MAESTRO — Proceso Integral ── -->
+    <!-- ── ACTUALIZAR CARTERA — acción única que reemplaza todos los botones anteriores ── -->
     <div class="card" style="border-left:4px solid #2563eb;background:linear-gradient(135deg,#eff6ff,#fff);margin-bottom:12px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:10px;">
-        <div>
-          <div class="card-title" style="color:#1d4ed8;margin-bottom:2px;">Proceso Integral Nocturno</div>
-          <div style="font-size:11px;color:#64748b;">BCRA + Score + Mora por cliente — guarda en servidor tras cada registro</div>
-        </div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap">
-          <button id="btn-proceso-integral" onclick="ejecutarProcesoIntegral()"
-            style="background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;border:none;border-radius:10px;padding:10px 22px;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:0.2px;box-shadow:0 4px 12px rgba(37,99,235,0.3);">
-            Ejecutar Proceso Integral (BCRA + Score + Mora)
-          </button>
-          <button id="btn-reprocesar-vacios" onclick="reprocesarVacios()"
-            style="background:linear-gradient(135deg,#0891b2,#0e7490);color:#fff;border:none;border-radius:10px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;letter-spacing:0.2px;box-shadow:0 4px 12px rgba(8,145,178,0.3);">
-            Reprocesar Sin Score
-          </button>
-        </div>
+      <div class="card-title" style="color:#1d4ed8;margin-bottom:4px;">Actualizar Cartera</div>
+      <div style="font-size:12px;color:#64748b;margin-bottom:12px;line-height:1.5;">
+        Consulta BCRA, recalcula scores con datos frescos y detecta cambios de situación para todos los clientes. Recomendado: una vez por semana.
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+        <button id="btn-proceso-integral" onclick="ejecutarProcesoIntegral()"
+          style="background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;border:none;border-radius:10px;padding:10px 22px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(37,99,235,0.3);">
+          Actualizar toda la cartera →
+        </button>
+        <button onclick="limpiarAlertas()"
+          style="font-size:13px;color:#991b1b;padding:9px 16px;border-radius:8px;border:1px solid #fecaca;background:#fff5f5;cursor:pointer;font-weight:600;">
+          Limpiar alertas
+        </button>
+        <label style="font-size:13px;cursor:pointer;padding:9px 14px;background:var(--bg2);border-radius:8px;border:1px solid var(--border);display:inline-flex;align-items:center;gap:5px;font-weight:600;">
+          📂 Actualizar moras
+          <input type="file" accept=".xlsx,.xls" style="display:none;" onchange="subirMoras(this)">
+        </label>
       </div>
       <div id="proceso-integral-wrap" style="display:none;">
         <div style="display:flex;justify-content:space-between;font-size:12px;color:#475569;margin-bottom:4px;">
@@ -1080,23 +1082,6 @@
           <span>Total: <b id="pi-total">0</b></span>
         </div>
         <div id="pi-log-errores" style="display:none;margin-top:10px;max-height:160px;overflow-y:auto;border:1px solid #fecaca;border-radius:6px;padding:6px 8px;background:#fff5f5;font-size:11px;font-family:monospace;color:#991b1b;"></div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Monitoreo BCRA — Cartera activa</div>
-      <p style="font-size:13px;color:#666;line-height:1.6;margin-bottom:8px;">
-        Verificá la situación BCRA de todos tus clientes. Se hacen pausas entre consultas para no ser bloqueado por el BCRA. Ejecutá una vez por mes.
-      </p>
-      <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
-        <button class="primary" onclick="verificarTodos()" id="btn-verificar" style="flex:1;">Verificar toda la cartera →</button>
-        <button onclick="limpiarAlertas()" style="font-size:13px;color:#991b1b;">Limpiar alertas</button>
-        <button onclick="resetVerificacion()" style="font-size:13px;color:#6b7280;" title="Limpia localStorage y recarga desde cartera_comercial.json">↺ Reset caché</button>
-        <button onclick="actualizarScoresAlertas()" style="font-size:13px;color:#1d4ed8;">↻ Actualizar scores</button>
-        <label style="font-size:13px;cursor:pointer;padding:6px 12px;background:var(--bg2);border-radius:8px;border:1px solid var(--border);display:inline-flex;align-items:center;gap:4px;">
-          📂 Actualizar moras
-          <input type="file" accept=".xlsx,.xls" style="display:none;" onchange="subirMoras(this)">
-        </label>
       </div>
       <div class="progress-msg" id="verificar-progress"></div>
     </div>
