@@ -716,7 +716,7 @@ def _consultar_respaldo(cuit: str):
 
 
 def consultar_bcra(cuit, reintentos=3):
-    """Orden: API oficial BCRA primero (CDI v1.0 → legacy), workers como plan B."""
+    """Workers primero (2.5s — respuesta rápida), BCRA oficial como respaldo (5s c/u)."""
 
     def _parse_bcra(raw):
         _res = raw.get('results') if isinstance(raw, dict) else None
@@ -728,30 +728,12 @@ def consultar_bcra(cuit, reintentos=3):
             return d
         return None
 
-    # 1. API oficial del BCRA — CDI v1.0 luego legacy (timeout 12s c/u)
-    for _bu, _bv in [
-        (f'https://api.bcra.gob.ar/CentralDeInformacion/v1.0/Deudas/{cuit}', 'bcra_cdi'),
-        (f'https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/{cuit}',    'bcra_legacy'),
-    ]:
-        try:
-            print(f"[bcra] {cuit} {_bv}...", flush=True)
-            _br = requests.get(_bu, timeout=12, verify=False)
-            if _br.status_code == 404:
-                return {"results": {"denominacion": "", "periodos": []}, "sin_deudas": True}, None
-            if _br.status_code == 200 and len(_br.text.strip()) > 10:
-                _d = _parse_bcra(_br.json())
-                if _d:
-                    print(f"[bcra] {cuit} OK via {_bv}", flush=True)
-                    return _d, None
-        except Exception as _e:
-            print(f"[bcra] {cuit} {_bv} error: {_e}", flush=True)
-
-    # 2. Workers Cloudflare como respaldo (2.5s c/u — si hay BCRA disponible esto no debería usarse)
+    # 1. Workers Cloudflare — rápidos (2.5s), respuesta total <8s
     for i, w in enumerate(BCRA_WORKERS[:3]):
         ep_url = w + "/deudas/" + cuit
         via    = f"Worker{i+1}"
         try:
-            print(f"[bcra] {cuit} fallback {via}...", flush=True)
+            print(f"[bcra] {cuit} {via}...", flush=True)
             r = requests.get(ep_url, timeout=2.5, verify=False)
             if r.status_code == 404:
                 return {"results": {"denominacion": "", "periodos": []}, "sin_deudas": True}, None
@@ -763,6 +745,24 @@ def consultar_bcra(cuit, reintentos=3):
                     return data, None
         except Exception as e:
             print(f"[bcra] {cuit} {via} error: {e}", flush=True)
+
+    # 2. API oficial BCRA — CDI v1.0 luego legacy (timeout 5s c/u para no superar el límite de Render)
+    for _bu, _bv in [
+        (f'https://api.bcra.gob.ar/CentralDeInformacion/v1.0/Deudas/{cuit}', 'bcra_cdi'),
+        (f'https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/{cuit}',    'bcra_legacy'),
+    ]:
+        try:
+            print(f"[bcra] {cuit} {_bv}...", flush=True)
+            _br = requests.get(_bu, timeout=5, verify=False)
+            if _br.status_code == 404:
+                return {"results": {"denominacion": "", "periodos": []}, "sin_deudas": True}, None
+            if _br.status_code == 200 and len(_br.text.strip()) > 10:
+                _d = _parse_bcra(_br.json())
+                if _d:
+                    print(f"[bcra] {cuit} OK via {_bv}", flush=True)
+                    return _d, None
+        except Exception as _e:
+            print(f"[bcra] {cuit} {_bv} error: {_e}", flush=True)
 
     # 3. API de respaldo externa (si está configurada)
     data_rb, err_rb = _consultar_respaldo(cuit)
@@ -4489,12 +4489,15 @@ def get_cheques(cuit):
     if cached:
         print(f"[cheques] {cuit_limpio} desde caché", flush=True)
         return jsonify(cached), 200
-    # Orden: BCRA oficial primero (CDI v1.0 → legacy), workers como plan B
-    urls_via = [
-        (f"https://api.bcra.gob.ar/CentralDeInformacion/v1.0/ChequesRechazados/{cuit_limpio}", "bcra_cdi",    12),
-        (f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/{cuit_limpio}", "bcra_legacy", 12),
-    ] + [(w + "/deudas/" + cuit_limpio + "/cheques", f"Worker{i+1}", 5)
+    # Workers primero (rápidos), BCRA oficial como respaldo (5s c/u)
+    urls_via = (
+        [(w + "/deudas/" + cuit_limpio + "/cheques", f"Worker{i+1}", 2.5)
          for i, w in enumerate(BCRA_WORKERS[:2])]
+        + [
+            (f"https://api.bcra.gob.ar/CentralDeInformacion/v1.0/ChequesRechazados/{cuit_limpio}", "bcra_cdi",    5),
+            (f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/{cuit_limpio}", "bcra_legacy", 5),
+        ]
+    )
     for url, via, tmt in urls_via:
         try:
             r = requests.get(url, timeout=tmt, verify=False)
@@ -4516,9 +4519,9 @@ def get_cheques(cuit):
 @app.route("/deudas/<cuit>/historial")
 def get_historial(cuit):
     cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
+    hist_path = os.path.join(DATA_DIR, f'historial_{cuit_limpio}.json')
     # Caché disco primero (24h)
     try:
-        hist_path = os.path.join(DATA_DIR, f'historial_{cuit_limpio}.json')
         if os.path.exists(hist_path):
             with open(hist_path, 'r', encoding='utf-8') as f:
                 cached = json.load(f)
@@ -4526,12 +4529,15 @@ def get_historial(cuit):
                 print(f"[historial] {cuit_limpio} desde caché disco", flush=True)
                 return jsonify(cached['payload']), 200
     except: pass
-    # Orden: BCRA oficial primero (CDI v1.0 → legacy), workers como plan B
-    urls_via = [
-        (f"https://api.bcra.gob.ar/CentralDeInformacion/v1.0/Deudas/Historicas/{cuit_limpio}", "bcra_cdi",    12),
-        (f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/{cuit_limpio}",    "bcra_legacy", 12),
-    ] + [(w + "/deudas/" + cuit_limpio + "/historial", f"Worker{i+1}", 5)
+    # Workers primero (rápidos), BCRA oficial como respaldo (5s c/u)
+    urls_via = (
+        [(w + "/deudas/" + cuit_limpio + "/historial", f"Worker{i+1}", 2.5)
          for i, w in enumerate(BCRA_WORKERS[:2])]
+        + [
+            (f"https://api.bcra.gob.ar/CentralDeInformacion/v1.0/Deudas/Historicas/{cuit_limpio}", "bcra_cdi",    5),
+            (f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/{cuit_limpio}",    "bcra_legacy", 5),
+        ]
+    )
     for url, via, tmt in urls_via:
         try:
             r = requests.get(url, timeout=tmt, verify=False)
