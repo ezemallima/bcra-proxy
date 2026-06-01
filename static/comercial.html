@@ -1790,7 +1790,7 @@ function renderBcraModal(bcraData, chData, histData, scoreData, clienteLocal) {
       </div>
     </div>
     <div><div class="score-rango" style="color:${_scoreColor}">${_scorePending ? 'Calculando...' : (moraTecnica ? 'Revisar' : scoreToRango(scoreEst))}</div>
-    <div style="font-size:11px;color:var(--text2);margin-top:2px">Sin historial Piattelli</div></div></div>
+    <div style="font-size:11px;color:var(--text2);margin-top:2px">Score crediticio BCRA</div></div></div>
     <div class="score-bar-wrap"><div class="score-bar" style="width:${_scorePending ? 0 : scoreEst/10}%;background:${_scoreColor}"></div></div>
     ${_scorePending
       ? `<div style="margin-top:8px;background:rgba(100,116,139,0.07);border:1px solid rgba(100,116,139,0.2);border-radius:7px;padding:7px 11px;font-size:11px;color:#64748b">
