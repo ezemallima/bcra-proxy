@@ -3196,7 +3196,7 @@ function _abrtSig(ms) {
 }
 
 async function consultarCliente() {
-  const raw = document.getElementById('cuit-input').value.replace(/-/g,'').trim();
+  const raw = document.getElementById('cuit-input').value.replace(/[^0-9]/g,'');
   if (!raw || raw.length < 10) { alert('Ingresá un CUIT válido'); return; }
   // Cancelar búsqueda anterior en vuelo
   if (_consultaController) { try { _consultaController.abort(); } catch(_){} }

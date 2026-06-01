@@ -4403,31 +4403,7 @@ def get_afip(cuit):
     cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
     cuit_fmt = cuit_limpio[:2] + '-' + cuit_limpio[2:10] + '-' + cuit_limpio[10:] if len(cuit_limpio) == 11 else cuit
 
-    # 1. Caché BCRA local (O(1), sin red)
-    try:
-        data, _ = consultar_bcra_cached(cuit_limpio)
-        den = (data.get('results') or {}).get('denominacion', '').strip()
-        if den:
-            return jsonify({"nombre": den, "fuente": "bcra_cache"})
-    except Exception: pass
-
-    # 2. API BCRA — historial (suele tener denominacion aunque no haya deuda vigente)
-    try:
-        r = requests.get("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit_limpio, timeout=10, verify=False)
-        if r.status_code == 200:
-            den2 = _norm_bcra_resp(r.json()).get('results', {}).get('denominacion', '').strip()
-            if den2: return jsonify({"nombre": den2, "fuente": "bcra_hist"})
-    except Exception: pass
-
-    # 3. API BCRA — deudas vigentes
-    try:
-        r = requests.get("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit_limpio, timeout=10, verify=False)
-        if r.status_code == 200:
-            den3 = _norm_bcra_resp(r.json()).get('results', {}).get('denominacion', '').strip()
-            if den3: return jsonify({"nombre": den3, "fuente": "bcra_live"})
-    except Exception: pass
-
-    # 4. Cartera comercial Piattelli (interno)
+    # 1. Cartera comercial Piattelli (O(1), sin red) — respuesta garantizada para clientes propios
     nombre_cc = next(
         (str(c.get('nombre', '')).strip() for c in _cartera_comercial
          if str(c.get('cuit', '')).replace('-', '').replace(' ', '').strip() == cuit_limpio),
@@ -4436,7 +4412,7 @@ def get_afip(cuit):
     if nombre_cc:
         return jsonify({"nombre": nombre_cc, "fuente": "cartera"})
 
-    # 5. Saldos / Facturas (Odoo export)
+    # 2. Saldos / Facturas (Odoo export) — también O(1), sin red
     fuente_sf = _saldos_gestion if _saldos_gestion else _saldos_facturas
     nombre_sf = next(
         (str(f.get('cliente', '')).strip() for f in fuente_sf
@@ -4445,6 +4421,31 @@ def get_afip(cuit):
     )
     if nombre_sf:
         return jsonify({"nombre": nombre_sf, "fuente": "saldos"})
+
+    # 3. Caché BCRA local (solo lectura de disco — sin trigger de consulta BCRA)
+    try:
+        cached_data, _ = cache_get(cuit_limpio)
+        if cached_data:
+            den = _norm_bcra_resp(cached_data).get('results', {}).get('denominacion', '').strip()
+            if den:
+                return jsonify({"nombre": den, "fuente": "bcra_cache"})
+    except Exception: pass
+
+    # 4. API BCRA — historial (solo si los datos internos no alcanzaron)
+    try:
+        r = requests.get("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit_limpio, timeout=5, verify=False)
+        if r.status_code == 200:
+            den2 = _norm_bcra_resp(r.json()).get('results', {}).get('denominacion', '').strip()
+            if den2: return jsonify({"nombre": den2, "fuente": "bcra_hist"})
+    except Exception: pass
+
+    # 5. API BCRA — deudas vigentes
+    try:
+        r = requests.get("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit_limpio, timeout=5, verify=False)
+        if r.status_code == 200:
+            den3 = _norm_bcra_resp(r.json()).get('results', {}).get('denominacion', '').strip()
+            if den3: return jsonify({"nombre": den3, "fuente": "bcra_live"})
+    except Exception: pass
 
     print(f"[afip] Sin nombre para CUIT {cuit_limpio} — devolviendo formato", flush=True)
     return jsonify({"nombre": cuit_fmt, "fuente": "fallback"})
