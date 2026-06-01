@@ -1505,9 +1505,13 @@ def _layer_conducta_interna(
     if not facturas:
         return (120, 0.0, False, True, 0.0, False, False, 0.0)
 
-    hoy = datetime.now()
+    # Fecha de corte = última fechaFactura del cliente (no la fecha del sistema).
+    # Así el score usa el mes del upload, no el día de hoy.
+    _fechas_cliente = [_parse(f.get('fechaFactura')) for f in facturas]
+    _fechas_cliente = [d for d in _fechas_cliente if d]
+    hoy = max(_fechas_cliente) if _fechas_cliente else datetime.now()
 
-    # ── DSO individual: media 60d reciente vs 60d anterior ───────────────
+    # ── DSO individual: condición de pago vs fecha de corte ──────────────
     cutoff_rec = hoy - timedelta(days=60)
     cutoff_ant = hoy - timedelta(days=120)
     dsos_rec, dsos_ant = [], []
@@ -1532,16 +1536,16 @@ def _layer_conducta_interna(
             dso_deteriorando = True
 
     # ── Regularidad de pago (0-200 pts) ──────────────────────────────────
-    total_f  = len(facturas)
-    pagadas  = sum(1 for f in facturas if (f.get('saldo') or 0) == 0)
-    vencidas = 0
-    for f in facturas:
-        if float(f.get('saldo') or 0) > 0:
-            ff = _parse(f.get('fechaFactura'))
-            if ff and (hoy - ff).days > 30:
-                vencidas += 1
+    # Solo tenemos facturas abiertas (saldo>0). Métrica correcta:
+    # % de facturas cuya fecha de vencimiento (fechaPago) NO ha llegado → "al día".
+    total_f = len(facturas)
+    al_dia  = sum(1 for f in facturas if _parse(f.get('fechaPago')) and _parse(f.get('fechaPago')) >= hoy)
+    vencidas = sum(1 for f in facturas
+                   if float(f.get('saldo') or 0) > 0
+                   and _parse(f.get('fechaPago'))
+                   and _parse(f.get('fechaPago')) < hoy)
 
-    ratio = pagadas / total_f if total_f > 0 else 0.0
+    ratio = al_dia / total_f if total_f > 0 else 0.0
     if   ratio >= 0.95: pts_reg = 200
     elif ratio >= 0.85: pts_reg = 160
     elif ratio >= 0.70: pts_reg = 120
@@ -5350,33 +5354,69 @@ def get_saldos_timestamp():
 
 @app.route("/dso-global-saldos")
 def get_dso_global_saldos():
-    """DSO global y por vendedor desde saldos_facturas.json — fuente única de verdad."""
+    """DSO global desde saldos_facturas.json.
+    Fórmula estándar: (Saldos / Ventas_4m) × 120.
+    Fecha de corte = última fechaFactura del upload, no la fecha del sistema."""
     from datetime import datetime
     if not _saldos_facturas:
         return jsonify({"dso": None, "saldo_total": 0, "clientes_count": 0, "facturas_count": 0})
-    hoy = datetime.now()
-    # DSO solo sobre facturas con saldo pendiente > 0 (las pagas no distorsionan)
+
+    # Fecha de corte = max(fechaFactura) del archivo subido
+    fechas_obj = []
+    for f in _saldos_facturas:
+        try:
+            d, m, y = f['fechaFactura'].split('/')
+            fechas_obj.append(datetime(int(y), int(m), int(d)))
+        except:
+            pass
+    fecha_corte = max(fechas_obj) if fechas_obj else datetime.now()
+
     facturas_pendientes = [f for f in _saldos_facturas if (f.get('saldo') or 0) > 0]
     saldo_total = sum(f.get('saldo', 0) for f in facturas_pendientes)
-    suma_pond = 0.0
     vencidas = 0
     for f in facturas_pendientes:
         try:
-            d, m, y = f['fechaFactura'].split('/')
-            fe = datetime(int(y), int(m), int(d))
-            suma_pond += f['saldo'] * max(0, (hoy - fe).days)
-        except:
-            continue
-        try:
             dp, mp, yp = f['fechaPago'].split('/')
-            if datetime(int(yp), int(mp), int(dp)) < hoy:
+            if datetime(int(yp), int(mp), int(dp)) < fecha_corte:
                 vencidas += 1
         except:
             pass
-    dso = round(suma_pond / saldo_total) if saldo_total > 0 else None
+
+    # Ventas 4 meses anteriores a la fecha de corte (dso_ventas_historico.json)
+    ventas_4m = 0.0
+    cutoff_4m = fecha_corte - timedelta(days=120)
+    formula_usada = 'dias_pendientes'
+    try:
+        v_path = os.path.join(DATA_DIR, 'dso_ventas_historico.json')
+        if os.path.exists(v_path):
+            with open(v_path, 'r', encoding='utf-8') as _fv:
+                ventas_hist = json.load(_fv)
+            for v in ventas_hist:
+                fms = v.get('fechaMs', 0)
+                if fms:
+                    fv_dt = datetime.fromtimestamp(fms / 1000)
+                    if cutoff_4m <= fv_dt <= fecha_corte:
+                        ventas_4m += float(v.get('total', 0))
+    except Exception as _ve:
+        print(f"[dso-global] ventas error: {_ve}", flush=True)
+
+    # Fórmula estándar: (Saldos / Ventas_4m) × 120 días
+    if ventas_4m > 0:
+        dso = round((saldo_total / ventas_4m) * 120)
+        formula_usada = 'estandar'
+    else:
+        # Fallback: promedio ponderado de días pendientes (sin ventas disponibles)
+        suma_pond = sum(
+            f['saldo'] * max(0, (fecha_corte - datetime(*[int(x) for x in f['fechaFactura'].split('/')][::-1])).days)
+            for f in facturas_pendientes
+            if f.get('fechaFactura') and '/' in f['fechaFactura']
+        )
+        dso = round(suma_pond / saldo_total) if saldo_total > 0 else None
+
     print(
-        f"[dso-global] facturas_pendientes={len(facturas_pendientes)} "
-        f"saldo_total={saldo_total:.0f} suma_pond={suma_pond:.0f} dso={dso}",
+        f"[dso-global] corte={fecha_corte.strftime('%d/%m/%Y')} "
+        f"pendientes={len(facturas_pendientes)} saldo={saldo_total:.0f} "
+        f"ventas_4m={ventas_4m:.0f} dso={dso} formula={formula_usada}",
         flush=True
     )
     clientes_unicos = len({f.get('cliente', '') for f in _saldos_facturas if f.get('cliente')})
@@ -5386,6 +5426,9 @@ def get_dso_global_saldos():
         "clientes_count": clientes_unicos,
         "facturas_count": len(_saldos_facturas),
         "facturas_vencidas": vencidas,
+        "fecha_corte": fecha_corte.strftime('%d/%m/%Y'),
+        "ventas_4m": ventas_4m,
+        "formula": formula_usada,
         "ultima_actualizacion": time.strftime('%d/%m/%Y')
     })
 
@@ -5517,9 +5560,17 @@ def upload_saldos_facturas():
         sf_path = os.path.join(DATA_DIR, 'saldos_facturas.json')
         with open(sf_path, 'w', encoding='utf-8') as f:
             json.dump(saldos, f, ensure_ascii=False, indent=2)
+        # Calcular fecha_corte = max(fechaFactura) del archivo subido
+        _fc_objs = []
+        for _s in saldos:
+            try:
+                _d, _m, _y = _s['fechaFactura'].split('/')
+                _fc_objs.append(datetime(int(_y), int(_m), int(_d)))
+            except: pass
+        _fecha_corte_str = max(_fc_objs).strftime('%d/%m/%Y') if _fc_objs else time.strftime('%d/%m/%Y')
         ts_path = os.path.join(DATA_DIR, 'saldos_timestamp.json')
         with open(ts_path, 'w') as f:
-            json.dump({'ts': time.time(), 'fecha': time.strftime('%d/%m/%Y %H:%M')}, f)
+            json.dump({'ts': time.time(), 'fecha': time.strftime('%d/%m/%Y %H:%M'), 'fecha_corte': _fecha_corte_str}, f)
         _saldos_facturas = saldos
         _saldos_gestion  = list(saldos)   # SSoT: facturas siempre sincroniza gestión
         _rebuild_saldos_index()

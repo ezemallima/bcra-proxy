@@ -1492,10 +1492,25 @@ async function procesarDSO() {
 
     // parseMonto y parseFecha son globales
 
-    // ── VENTAS ── rolling 4-month localStorage (no acumulación desde server)
+    // ── VENTAS ── rolling 4 meses desde fecha_corte del saldos (no desde hoy)
+    // fecha_corte = max(fechaFactura) del archivo de saldos → si subís datos
+    // del 31/05 el 03/06, la ventana retrocede desde el 31/05, no desde hoy.
     var ROLLING_KEY = 'piat_ventas_rolling';
     var CUT_MS = 120 * 24 * 60 * 60 * 1000;
-    var hoyMs = Date.now();
+
+    // Determinar fecha_corte desde el archivo de saldos antes de procesar ventas
+    var fechaCorteMs = null;
+    if (rowsSaldos.length > 0) {
+      var _hS0 = Object.keys(rowsSaldos[0]);
+      var _colFC = mapearColumna(_hS0, ['Fecha de factura','fecha_factura','Fecha factura','fecha']);
+      if (_colFC) {
+        var _fcsMs = rowsSaldos.map(function(r){ return parseFecha ? parseFecha(r[_colFC]) : null; })
+                               .filter(function(f){ return f && !isNaN(f); })
+                               .map(function(f){ return f.getTime(); });
+        if (_fcsMs.length) fechaCorteMs = Math.max.apply(null, _fcsMs);
+      }
+    }
+    var hoyMs    = fechaCorteMs || Date.now();
     var corteVentas = hoyMs - CUT_MS;
 
     var rollingExistente = [];
