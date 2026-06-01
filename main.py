@@ -4258,9 +4258,22 @@ def _calcular_score_handler(cuit: str):
     # Siempre eliminar de session cache en queries on-demand — evita data leaking entre usuarios
     _score_session_cache.pop(cuit_limpio, None)
     if request.args.get('fresh') == '1':
+        # Borrar caché de solvency Y de BCRA para forzar re-consulta completa
         _fp = os.path.join(DATA_DIR, f'solvency_{cuit_limpio}.json')
         if os.path.exists(_fp):
             os.remove(_fp)
+        try:
+            _bc_path = os.path.join(DATA_DIR, 'bcra_cache.json')
+            if os.path.exists(_bc_path):
+                with open(_bc_path, 'r', encoding='utf-8') as _f:
+                    _bc = json.load(_f)
+                if cuit_limpio in _bc:
+                    del _bc[cuit_limpio]
+                    with open(_bc_path, 'w', encoding='utf-8') as _f:
+                        json.dump(_bc, _f)
+                    print(f"[fetch-score] {cuit_limpio} bcra_cache invalidado", flush=True)
+        except Exception:
+            pass
     else:
         # ── Cache persistente en disco (sobrevive reinicios) ──────────────
         with _score_cache_lock:
