@@ -3634,10 +3634,13 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
     var historial     = resultados[0];
     var scoreServidor = resultados[1];
     if (historial) window._ultimoHistorial = historial;
-    // CUIT inexistente detectado por el backend → mostrar error y salir
+    // CUIT inexistente detectado por el backend — solo bloquear si además
+    // el cliente NO está en la cartera local (clientes propios sin historial
+    // BCRA son válidos aunque AFIP no los devuelva)
     if (scoreServidor && scoreServidor.error === 'cuit_inexistente') {
-      mostrarErrorCuitInexistente(cuit);
-      return;
+      var _citEnCartera = cartera.find(function(c){ return (c.cuit||'').replace(/[^0-9]/g,'') === cuit; });
+      if (!_citEnCartera) { mostrarErrorCuitInexistente(cuit); return; }
+      scoreServidor = null; // continúa con fallback local
     }
     // Fallback local si el servidor no responde
     var scoreObjFinal;

@@ -4259,14 +4259,24 @@ def _calcular_score_handler(cuit: str):
     try:
         bcra_data, _ = consultar_bcra_cached(cuit_limpio)
         # CUIT inexistente: BCRA 404 sin denominación Y solvencia/AFIP tampoco lo conoce
+        # Y además no está en ninguna fuente interna (cartera propia o saldos)
         _bcra_denom = (bcra_data.get('results') or {}).get('denominacion', '').strip()
         if bcra_data.get('sin_deudas') is True and not _bcra_denom:
             _solv_chk = get_solvency_data(cuit_limpio)
             if not isinstance(_solv_chk, dict): _solv_chk = {}
             _razon_chk = (_solv_chk.get('razon_social') or _solv_chk.get('nombre') or '').strip()
             if not _razon_chk:
-                print(f"[fetch-score] {cuit_limpio} CUIT INEXISTENTE — sin datos BCRA/AFIP/solvencia", flush=True)
-                return jsonify({"error": "cuit_inexistente", "cuit": cuit_limpio, "score": None}), 200
+                # Verificar en cartera y saldos internos antes de descartar
+                _nc = lambda x: str(x).replace('-', '').replace(' ', '').strip()
+                _en_interna = (
+                    any(_nc(c.get('cuit', '')) == cuit_limpio for c in _cartera_comercial)
+                    or any(_nc(f.get('cuit', '')) == cuit_limpio
+                           for f in (_saldos_gestion if _saldos_gestion else _saldos_facturas))
+                )
+                if not _en_interna:
+                    print(f"[fetch-score] {cuit_limpio} CUIT INEXISTENTE — sin datos BCRA/AFIP/solvencia", flush=True)
+                    return jsonify({"error": "cuit_inexistente", "cuit": cuit_limpio, "score": None}), 200
+                print(f"[fetch-score] {cuit_limpio} sin BCRA/AFIP pero presente en cartera interna — calculando score", flush=True)
         score_data   = calcular_score_servidor(cuit_limpio, bcra_data or {})
         solvency     = get_solvency_data(cuit_limpio)
         if not isinstance(solvency, dict): solvency = {}
