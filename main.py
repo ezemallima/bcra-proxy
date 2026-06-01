@@ -732,7 +732,8 @@ def consultar_bcra(cuit, reintentos=3):
 
     def _fetch(url, tmt, via):
         try:
-            r = requests.get(url, timeout=tmt, verify=False)
+            # BCRA oficial: usar _bcra_get (ScraperAPI si hay key → IPs argentinas, evita bloqueos)
+            r = _bcra_get(url, timeout=tmt) if 'bcra.gob.ar' in url else requests.get(url, timeout=tmt, verify=False)
             if r.status_code == 404:
                 return 'NOT_FOUND', via
             if r.status_code == 200 and len(r.text.strip()) > 10:
@@ -4514,7 +4515,7 @@ def get_cheques(cuit):
     # Workers + BCRA en paralelo — el primero que responda gana
     def _fetch_chq(url, tmt, via):
         try:
-            r = requests.get(url, timeout=tmt, verify=False)
+            r = _bcra_get(url, timeout=tmt) if 'bcra.gob.ar' in url else requests.get(url, timeout=tmt, verify=False)
             if r.status_code == 404:
                 return 'NOT_FOUND', via
             if r.status_code == 200 and len(r.text.strip()) > 10:
@@ -4570,7 +4571,7 @@ def get_historial(cuit):
     # Workers + BCRA en paralelo — el primero que responda gana
     def _fetch_hist(url, tmt, via):
         try:
-            r = requests.get(url, timeout=tmt, verify=False)
+            r = _bcra_get(url, timeout=tmt) if 'bcra.gob.ar' in url else requests.get(url, timeout=tmt, verify=False)
             if r.status_code == 404:
                 return 'NOT_FOUND', via
             if r.status_code == 200 and len(r.text.strip()) > 10:
