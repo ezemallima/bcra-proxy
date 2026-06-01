@@ -1522,11 +1522,11 @@ async function abrirModalCliente(cuit, nombre) {
   // Lanzar TODAS las solicitudes en paralelo con safeFetch
   // facP: timeout estricto de 3s — si el servidor tarda más, usa SALDOS_MAP local
   const facP  = safeFetch(API + '/api/facturas/' + encodeURIComponent(cuit) + '?nombre=' + encodeURIComponent(nombre), { retries: 0, timeoutMs: 3000 });
-  // retries:0 + timeoutMs:8s — workers BCRA tienen 2.5s c/u; backend responde en ≤8s o cae al fallback.
-  // Era default (retries:1, 15s) → peor caso 32s bloqueado. Ahora máximo 8s.
-  const brP   = safeFetch(API + '/deudas/' + cuit,               { retries: 0, timeoutMs: 8000 });
-  const chrP  = safeFetch(API + '/deudas/' + cuit + '/cheques',  { retries: 0, timeoutMs: 8000 });
-  const hrP   = safeFetch(API + '/deudas/' + cuit + '/historial',{ retries: 0, timeoutMs: 8000 });
+  // retries:0 + timeoutMs:13s — workers (2.5s) + BCRA oficial (10s) corren en paralelo;
+  // peor caso cuando workers están caídos: ~10s. 13s da margen holgado.
+  const brP   = safeFetch(API + '/deudas/' + cuit,               { retries: 0, timeoutMs: 13000 });
+  const chrP  = safeFetch(API + '/deudas/' + cuit + '/cheques',  { retries: 0, timeoutMs: 13000 });
+  const hrP   = safeFetch(API + '/deudas/' + cuit + '/historial',{ retries: 0, timeoutMs: 13000 });
   // scrP: score desde caché precalculada (sin fresh=1) — respuesta < 100ms si está en disco
   const scrP  = safeFetch(API + '/fetch-score/' + cuit, { retries: 0, timeoutMs: 12000 });
 
