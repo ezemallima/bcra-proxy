@@ -3073,48 +3073,87 @@ def director():
 @app.route("/api/director-data")
 @require_director
 def api_director_data():
-    """Panel Dirección Comercial: saldos, aging, score y DSO por cliente."""
+    """Panel Dirección Comercial: saldos, aging, score y DSO por cliente.
+    Aging: días desde fecha de emisión hasta HOY (no desde fechaPago)."""
     _parse_f = lambda s: (
         datetime(int(s.split('/')[2]), int(s.split('/')[1]), int(s.split('/')[0]))
         if s and '/' in str(s) else None
     )
 
-    # Fecha de corte = max(fechaFactura) del archivo de saldos
-    fechas_obj = [_parse_f(f.get('fechaFactura', '')) for f in _saldos_facturas]
-    fechas_obj = [d for d in fechas_obj if d]
-    fecha_corte = max(fechas_obj) if fechas_obj else datetime.now()
+    _nc = lambda x: str(x).replace('-','').replace(' ','').strip()
+    hoy = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
+    # Aging por días desde fechaFactura hasta hoy (no usa fechaPago)
     def _bucket(dias):
-        if dias <= 0:   return 'corriente'
         if dias <= 30:  return 'd30'
         if dias <= 60:  return 'd60'
         if dias <= 90:  return 'd90'
         if dias <= 120: return 'd120'
         return 'd120plus'
 
-    # Agrupar facturas por cliente (clave = nombre normalizado)
-    _nc = lambda x: str(x).replace('-','').replace(' ','').strip()
+    # Índice nombre→cuit desde _cartera_comercial para cruzar cuando saldos no trae CUIT
+    nombre_a_cuit: dict = {}
+    for _cc in _cartera_comercial:
+        _cn = str(_cc.get('nombre') or '').strip().upper()
+        _ck = _nc(str(_cc.get('cuit') or ''))
+        if _cn and _ck:
+            nombre_a_cuit[_cn] = _ck
+
+    # Cargar scores desde alertas_cartera.json (CUIT como clave)
+    scores_map: dict = {}
+    try:
+        if os.path.exists(ALERTAS_FILE):
+            with open(ALERTAS_FILE, 'r', encoding='utf-8') as _fa:
+                _ad = json.load(_fa)
+            for _ce in (_ad.get('cartera') or []):
+                _cuit_e = _nc(str(_ce.get('cuit') or ''))
+                if _cuit_e and _ce.get('scoreCompleto'):
+                    scores_map[_cuit_e] = {
+                        'score':  _ce.get('scoreCompleto'),
+                        'rango':  _ce.get('scoreRango') or '—',
+                        'color':  _ce.get('scoreColor') or '#6b7280',
+                        'bloquear': bool(_ce.get('bloquear_oportunidad')),
+                    }
+    except Exception: pass
+
+    # También cargar desde score_cache.json como segunda fuente
+    try:
+        sc_cache_path = os.path.join(DATA_DIR, 'score_cache.json')
+        if os.path.exists(sc_cache_path):
+            with open(sc_cache_path, 'r', encoding='utf-8') as _scf:
+                _scc = json.load(_scf)
+            for _cuit_sc, _sc_v in _scc.items():
+                if _cuit_sc not in scores_map and isinstance(_sc_v, dict) and _sc_v.get('score'):
+                    scores_map[_nc(_cuit_sc)] = {
+                        'score':  _sc_v.get('score'),
+                        'rango':  _sc_v.get('rango') or '—',
+                        'color':  _sc_v.get('color') or '#6b7280',
+                        'bloquear': bool(_sc_v.get('bloquear_oportunidad')),
+                    }
+    except Exception: pass
+
+    # Agrupar facturas por cliente
     clientes_map: dict = {}
     for f in _saldos_facturas:
         saldo = float(f.get('saldo') or 0)
         if saldo <= 0:
             continue
-        nombre  = str(f.get('cliente') or '').strip()
-        cuit    = _nc(str(f.get('cuit') or ''))
+        nombre   = str(f.get('cliente') or '').strip()
+        cuit_raw = _nc(str(f.get('cuit') or ''))
+        # Si no viene CUIT en los saldos, buscarlo en cartera comercial por nombre
+        if not cuit_raw:
+            cuit_raw = nombre_a_cuit.get(nombre.upper(), '')
         vendedor = str(f.get('vendedor') or '').strip()
-        key = cuit if cuit else nombre.upper()
+        key = cuit_raw if cuit_raw else nombre.upper()
         if key not in clientes_map:
             clientes_map[key] = {
-                'nombre': nombre, 'cuit': cuit, 'vendedor': vendedor,
+                'nombre': nombre, 'cuit': cuit_raw, 'vendedor': vendedor,
                 'facturas': [], 'saldo_total': 0.0,
-                'buckets': {'corriente': 0.0, 'd30': 0.0, 'd60': 0.0,
-                            'd90': 0.0, 'd120': 0.0, 'd120plus': 0.0},
+                'buckets': {'d30': 0.0, 'd60': 0.0, 'd90': 0.0, 'd120': 0.0, 'd120plus': 0.0},
             }
-        fp = _parse_f(f.get('fechaPago', ''))
-        dias_venc = max(0, (fecha_corte - fp).days) if fp else 0
-        # días desde la fecha de corte: si fechaPago >= corte → corriente (0 días vencido)
-        dias_vencido = max(0, (fecha_corte - fp).days) if fp and fp < fecha_corte else 0
-        bucket = _bucket(dias_vencido)
+        ff = _parse_f(f.get('fechaFactura', ''))
+        dias = max(0, (hoy - ff).days) if ff else 0
+        bucket = _bucket(dias)
         clientes_map[key]['saldo_total']     += saldo
         clientes_map[key]['buckets'][bucket] += saldo
         clientes_map[key]['facturas'].append({
@@ -3123,76 +3162,59 @@ def api_director_data():
             'fecha_pago':    f.get('fechaPago', ''),
             'total':         float(f.get('totalFactura') or 0),
             'saldo':         saldo,
-            'dias_vencido':  dias_vencido,
+            'dias':          dias,
             'bucket':        bucket,
         })
 
-    # Cargar scores desde alertas_cartera.json
-    scores_map: dict = {}
-    try:
-        if os.path.exists(ALERTAS_FILE):
-            with open(ALERTAS_FILE, 'r', encoding='utf-8') as _fa:
-                _ad = json.load(_fa)
-            for _ce in (_ad.get('cartera') or []):
-                _cuit_e = _nc(str(_ce.get('cuit') or ''))
-                if _cuit_e:
-                    scores_map[_cuit_e] = {
-                        'score':  _ce.get('scoreCompleto'),
-                        'rango':  _ce.get('scoreRango'),
-                        'color':  _ce.get('scoreColor') or '#6b7280',
-                        'bloquear': _ce.get('bloquear_oportunidad', False),
-                        'alerta_temprana': _ce.get('alerta_temprana', False),
-                    }
-    except Exception: pass
-
-    # Construir lista de clientes con DSO individual
+    # Construir lista de clientes
     clientes_list = []
     for key, c in clientes_map.items():
-        sc = scores_map.get(c['cuit']) if c['cuit'] else {}
+        sc = scores_map.get(c['cuit']) if c['cuit'] else None
         saldo_total = c['saldo_total']
-        # DSO individual ponderado: Σ(saldo × días_vencido) / saldo_total
-        suma_pond = sum(f['saldo'] * f['dias_vencido'] for f in c['facturas'])
+        suma_pond = sum(f['saldo'] * f['dias'] for f in c['facturas'])
         dso = round(suma_pond / saldo_total) if saldo_total > 0 else 0
         clientes_list.append({
-            'nombre':    c['nombre'],
-            'cuit':      c['cuit'],
-            'vendedor':  c['vendedor'],
+            'nombre':      c['nombre'],
+            'cuit':        c['cuit'],
+            'vendedor':    c['vendedor'],
             'saldo_total': round(saldo_total),
-            'dso':       dso,
-            'score':     (sc or {}).get('score'),
-            'rango':     (sc or {}).get('rango', '—'),
-            'score_color': (sc or {}).get('color', '#6b7280'),
-            'bloquear':  (sc or {}).get('bloquear', False),
-            'buckets':   {k: round(v) for k, v in c['buckets'].items()},
-            'facturas':  sorted(c['facturas'], key=lambda x: x['dias_vencido'], reverse=True),
+            'dso':         dso,
+            'score':       sc['score']  if sc else None,
+            'rango':       sc['rango']  if sc else '—',
+            'score_color': sc['color']  if sc else '#6b7280',
+            'bloquear':    sc['bloquear'] if sc else False,
+            'buckets':     {k: round(v) for k, v in c['buckets'].items()},
+            'facturas':    sorted(c['facturas'], key=lambda x: x['dias'], reverse=True),
         })
 
     clientes_list.sort(key=lambda x: x['saldo_total'], reverse=True)
 
     # Totales globales
     total_saldo = sum(c['saldo_total'] for c in clientes_list)
-    total_b: dict = {'corriente': 0, 'd30': 0, 'd60': 0, 'd90': 0, 'd120': 0, 'd120plus': 0}
+    total_b: dict = {'d30': 0, 'd60': 0, 'd90': 0, 'd120': 0, 'd120plus': 0}
     for c in clientes_list:
         for bk in total_b:
             total_b[bk] += c['buckets'].get(bk, 0)
     total_b = {k: round(v) for k, v in total_b.items()}
 
-    suma_pond_g = sum(f['saldo'] * f['dias_vencido'] for c in clientes_list for f in c['facturas'])
+    suma_pond_g = sum(f['saldo'] * f['dias'] for c in clientes_list for f in c['facturas'])
     dso_global  = round(suma_pond_g / total_saldo) if total_saldo > 0 else 0
 
-    n_riesgo  = sum(1 for c in clientes_list if (c.get('score') or 1000) < 400)
-    n_vencido = sum(1 for c in clientes_list
-                    if c['buckets']['d30'] + c['buckets']['d60'] +
-                       c['buckets']['d90'] + c['buckets']['d120'] +
-                       c['buckets']['d120plus'] > 0)
-    n_critico = sum(1 for c in clientes_list if c['buckets']['d90'] + c['buckets']['d120plus'] > 0)
+    n_con_score = sum(1 for c in clientes_list if c.get('score'))
+    n_riesgo    = sum(1 for c in clientes_list if c.get('score') and c['score'] < 400)
+    n_vencido   = sum(1 for c in clientes_list
+                      if sum(c['buckets'].get(bk, 0) for bk in ['d60','d90','d120','d120plus']) > 0)
+    n_critico   = sum(1 for c in clientes_list
+                      if c['buckets'].get('d90', 0) + c['buckets'].get('d120', 0)
+                         + c['buckets'].get('d120plus', 0) > 0)
 
     return jsonify({
-        'fecha_corte':   fecha_corte.strftime('%d/%m/%Y'),
+        'fecha_hoy':     hoy.strftime('%d/%m/%Y'),
         'total_saldo':   round(total_saldo),
         'total_buckets': total_b,
         'dso_global':    dso_global,
         'n_clientes':    len(clientes_list),
+        'n_con_score':   n_con_score,
         'n_riesgo':      n_riesgo,
         'n_vencido':     n_vencido,
         'n_critico':     n_critico,

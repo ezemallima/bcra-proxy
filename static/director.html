@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Panel Dirección Comercial · Piattelli</title>
+<title>Vende Seguro · Panel Dirección Comercial</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Syne:wght@700;800&family=Roboto+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
@@ -507,8 +507,8 @@
 <!-- ── HEADER ── -->
 <header class="header">
   <div class="header-left">
-    <div class="header-logo">Piattelli <span>·</span> Dirección</div>
-    <div class="header-badge">Panel Comercial</div>
+    <div class="header-logo">Vende Seguro <span style="font-size:13px;font-weight:400;color:#64748b;margin-left:4px;">· Piattelli</span></div>
+    <div class="header-badge">Panel Dirección Comercial</div>
   </div>
   <div class="header-right">
     <span class="header-date" id="header-fecha">—</span>
@@ -531,22 +531,22 @@
 </main>
 
 <script>
-const BUCKETS = ['corriente','d30','d60','d90','d120','d120plus'];
+// Aging: días desde fecha de factura hasta hoy
+// 0-30 → d30 | 31-60 → d60 | 61-90 → d90 | 91-120 → d120 | 120+ → d120plus
+const BUCKETS = ['d30','d60','d90','d120','d120plus'];
 const BUCKET_LABELS = {
-  corriente: 'Corriente',
-  d30:       '1–30 d',
-  d60:       '31–60 d',
-  d90:       '61–90 d',
-  d120:      '91–120 d',
-  d120plus:  '+120 d',
+  d30:      '0–30 d',
+  d60:      '31–60 d',
+  d90:      '61–90 d',
+  d120:     '91–120 d',
+  d120plus: '+120 d',
 };
 const BUCKET_COLORS = {
-  corriente: '#10b981',
-  d30:       '#3b82f6',
-  d60:       '#f59e0b',
-  d90:       '#f97316',
-  d120:      '#ef4444',
-  d120plus:  '#7f1d1d',
+  d30:      '#3b82f6',
+  d60:      '#f59e0b',
+  d90:      '#f97316',
+  d120:     '#ef4444',
+  d120plus: '#7f1d1d',
 };
 
 var _data = null;
@@ -599,7 +599,7 @@ async function cargarDatos() {
     const r = await fetch('/api/director-data');
     if (!r.ok) throw new Error('HTTP ' + r.status);
     _data = await r.json();
-    document.getElementById('header-fecha').textContent = 'Corte: ' + _data.fecha_corte;
+    document.getElementById('header-fecha').textContent = 'Al día: ' + _data.fecha_hoy;
     renderApp();
   } catch(e) {
     document.getElementById('main-content').innerHTML =
@@ -607,61 +607,88 @@ async function cargarDatos() {
   }
 }
 
-function renderApp() {
-  if (!_data) return;
-  const d = _data;
-  const total = d.total_saldo || 1;
-  const tb = d.total_buckets || {};
+// Calcular totales a partir de la lista filtrada
+function calcTotales(lista) {
+  var ts = 0, tb = {d30:0,d60:0,d90:0,d120:0,d120plus:0};
+  var n_vencido = 0, n_critico = 0, n_riesgo = 0;
+  var suma_pond = 0;
+  lista.forEach(function(c) {
+    ts += c.saldo_total;
+    BUCKETS.forEach(function(bk){ tb[bk] += (c.buckets[bk]||0); });
+    if ((c.buckets.d60||0)+(c.buckets.d90||0)+(c.buckets.d120||0)+(c.buckets.d120plus||0) > 0) n_vencido++;
+    if ((c.buckets.d90||0)+(c.buckets.d120||0)+(c.buckets.d120plus||0) > 0) n_critico++;
+    if (c.score && c.score < 400) n_riesgo++;
+    c.facturas.forEach(function(f){ suma_pond += f.saldo * (f.dias||0); });
+  });
+  return {
+    total_saldo: ts, total_buckets: tb,
+    dso_global: ts > 0 ? Math.round(suma_pond/ts) : 0,
+    n_clientes: lista.length, n_vencido: n_vencido,
+    n_critico: n_critico, n_riesgo: n_riesgo
+  };
+}
+
+function renderKPIsAndAging(stats) {
+  var total = stats.total_saldo || 1;
+  var tb = stats.total_buckets || {};
+  var d30_60 = (tb.d60||0);
+  var d60_90 = (tb.d90||0);
+  var critico = (tb.d120||0)+(tb.d120plus||0);
 
   // KPI cards
-  const kpis = [
-    { label:'Saldo Total', value: fmt(d.total_saldo), sub: fmtFull(d.total_saldo), color:'#3b82f6', icon:'💰' },
-    { label:'Corriente', value: fmt(tb.corriente||0), sub: pct(tb.corriente,total) + '% del total', color:'#10b981', icon:'✅' },
-    { label:'Vencido 1–30 d', value: fmt(tb.d30||0), sub: pct(tb.d30,total) + '% del total', color:'#3b82f6', icon:'📅' },
-    { label:'Vencido 31–90 d', value: fmt((tb.d60||0)+(tb.d90||0)), sub: pct((tb.d60||0)+(tb.d90||0),total) + '% del total', color:'#f59e0b', icon:'⚠️' },
-    { label:'Crítico +90 d', value: fmt((tb.d120||0)+(tb.d120plus||0)), sub: pct((tb.d120||0)+(tb.d120plus||0),total) + '% del total', color:'#ef4444', icon:'🚨' },
-    { label:'DSO Global', value: d.dso_global + 'd', sub: 'días promedio ponderado', color: colorDSO(d.dso_global), icon:'📊' },
-    { label:'Clientes', value: d.n_clientes, sub: d.n_vencido + ' con deuda vencida', color:'#8b5cf6', icon:'👥' },
-    { label:'En Riesgo', value: d.n_riesgo, sub: d.n_critico + ' deuda crítica +90d', color:'#f97316', icon:'⚡' },
+  var kpis = [
+    { label:'Saldo Total',    value: fmt(stats.total_saldo), sub: fmtFull(stats.total_saldo), color:'#3b82f6', icon:'💰' },
+    { label:'0–30 días',      value: fmt(tb.d30||0),  sub: pct(tb.d30,total)+'% del total',        color:'#60a5fa', icon:'📋' },
+    { label:'31–60 días',     value: fmt(d30_60),      sub: pct(d30_60,total)+'% del total',        color:'#f59e0b', icon:'📅' },
+    { label:'61–90 días',     value: fmt(d60_90),      sub: pct(d60_90,total)+'% del total',        color:'#f97316', icon:'⚠️' },
+    { label:'Crítico +90 d',  value: fmt(critico),     sub: pct(critico,total)+'% del total',       color:'#ef4444', icon:'🚨' },
+    { label:'DSO Promedio',   value: stats.dso_global+'d', sub:'días ponderado por saldo',          color: colorDSO(stats.dso_global), icon:'📊' },
+    { label:'Clientes',       value: stats.n_clientes, sub: stats.n_vencido+' con vencimiento >30d', color:'#8b5cf6', icon:'👥' },
+    { label:'Críticos +90d',  value: stats.n_critico,  sub: stats.n_riesgo+' con score < 400',      color:'#f97316', icon:'⚡' },
   ];
 
-  let kpiHtml = '<div class="kpi-grid">';
+  var kpiHtml = '<div class="kpi-grid" id="kpi-grid">';
   kpis.forEach(function(k) {
-    kpiHtml += '<div class="kpi-card" style="--kpi-color:' + k.color + '">'
-      + '<div class="kpi-label">' + esc(k.label) + '</div>'
-      + '<div class="kpi-value" style="color:' + k.color + '">' + k.value + '</div>'
-      + '<div class="kpi-sub">' + k.sub + '</div>'
-      + '<div class="kpi-icon">' + k.icon + '</div>'
-      + '</div>';
+    kpiHtml += '<div class="kpi-card" style="--kpi-color:'+k.color+'">'
+      +'<div class="kpi-label">'+esc(k.label)+'</div>'
+      +'<div class="kpi-value" style="color:'+k.color+'">'+k.value+'</div>'
+      +'<div class="kpi-sub">'+k.sub+'</div>'
+      +'<div class="kpi-icon">'+k.icon+'</div>'
+      +'</div>';
   });
   kpiHtml += '</div>';
 
   // Aging bar
-  let agingHtml = '<div class="aging-section"><div class="aging-title">Distribución de Aging — Cartera Total</div>';
-  agingHtml += '<div class="aging-bar-wrap">';
+  var agingHtml = '<div class="aging-section" id="aging-section">'
+    +'<div class="aging-title">Distribución de Aging — Antigüedad desde fecha de factura</div>'
+    +'<div class="aging-bar-wrap">';
   BUCKETS.forEach(function(bk) {
-    const v = tb[bk] || 0;
-    const w = total > 0 ? (v/total*100).toFixed(1) : 0;
-    if (w > 0) {
-      agingHtml += '<div class="aging-seg" style="width:' + w + '%;background:' + BUCKET_COLORS[bk] + ';"></div>';
-    }
+    var v = tb[bk]||0, w = total > 0 ? (v/total*100).toFixed(1) : 0;
+    if (w > 0) agingHtml += '<div class="aging-seg" style="width:'+w+'%;background:'+BUCKET_COLORS[bk]+'"></div>';
   });
-  agingHtml += '</div>';
-  agingHtml += '<div class="aging-legend">';
+  agingHtml += '</div><div class="aging-legend">';
   BUCKETS.forEach(function(bk) {
-    const v = tb[bk] || 0;
-    const w = pct(v, total);
+    var v = tb[bk]||0;
     agingHtml += '<div class="aging-leg-item">'
-      + '<div class="aging-leg-dot" style="background:' + BUCKET_COLORS[bk] + '"></div>'
-      + BUCKET_LABELS[bk] + ': ' + fmt(v)
-      + ' <span class="aging-leg-pct">' + w + '%</span>'
-      + '</div>';
+      +'<div class="aging-leg-dot" style="background:'+BUCKET_COLORS[bk]+'"></div>'
+      +BUCKET_LABELS[bk]+': '+fmt(v)
+      +' <span class="aging-leg-pct">'+pct(v,total)+'%</span>'
+      +'</div>';
   });
   agingHtml += '</div></div>';
+  return kpiHtml + agingHtml;
+}
+
+function renderApp() {
+  if (!_data) return;
+  const d = _data;
+
+  // Calcular totales globales iniciales
+  var stats = calcTotales(_data.clientes || []);
 
   // Controls
-  const vendedores = [...new Set((_data.clientes||[]).map(c=>c.vendedor).filter(Boolean))].sort();
-  let controlsHtml = '<div class="controls">'
+  var vendedores = [...new Set((_data.clientes||[]).map(function(c){return c.vendedor;}).filter(Boolean))].sort();
+  var controlsHtml = '<div class="controls">'
     + '<div class="search-wrap">'
     + '<svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>'
     + '<input class="search-box" id="search-input" placeholder="Buscar cliente o CUIT..." oninput="onSearch(this.value)" value="' + esc(_search) + '">'
@@ -689,7 +716,9 @@ function renderApp() {
     + '<div id="clientes-body"></div>'
     + '</div>';
 
-  document.getElementById('main-content').innerHTML = kpiHtml + agingHtml + controlsHtml + tableHtml;
+  var statsInitial = calcTotales(_data.clientes||[]);
+  document.getElementById('main-content').innerHTML =
+    renderKPIsAndAging(statsInitial) + controlsHtml + tableHtml;
   renderTabla();
 }
 
@@ -698,14 +727,26 @@ function renderTabla() {
   var lista = (_data.clientes || []).slice();
 
   // Filtros
-  if (_filterVend) lista = lista.filter(c => c.vendedor === _filterVend);
+  if (_filterVend) lista = lista.filter(function(c){ return c.vendedor === _filterVend; });
   if (_search) {
     var q = _search.toLowerCase();
-    lista = lista.filter(c =>
-      (c.nombre||'').toLowerCase().includes(q) ||
-      (c.cuit||'').includes(q) ||
-      (c.vendedor||'').toLowerCase().includes(q)
-    );
+    lista = lista.filter(function(c) {
+      return (c.nombre||'').toLowerCase().includes(q) ||
+             (c.cuit||'').includes(q) ||
+             (c.vendedor||'').toLowerCase().includes(q);
+    });
+  }
+
+  // Actualizar KPIs y aging según los datos filtrados
+  var statsFiltered = calcTotales(lista);
+  var kpiEl   = document.getElementById('kpi-grid');
+  var agingEl = document.getElementById('aging-section');
+  if (kpiEl && agingEl) {
+    var newHtml = renderKPIsAndAging(statsFiltered);
+    var tmp = document.createElement('div');
+    tmp.innerHTML = newHtml;
+    kpiEl.replaceWith(tmp.querySelector('#kpi-grid'));
+    agingEl.replaceWith(tmp.querySelector('#aging-section'));
   }
 
   // Ordenar
@@ -773,8 +814,8 @@ function renderClientRow(c, idx) {
   // Invoice detail
   var facturas = c.facturas || [];
   var invoiceRows = facturas.map(function(f) {
-    var cd = colorDias(f.dias_vencido);
-    var diasLabel = f.dias_vencido === 0 ? 'Corriente' : f.dias_vencido + ' días';
+    var cd = colorDias(f.dias||0);
+    var diasLabel = (f.dias||0) === 0 ? '0 días' : (f.dias||0) + ' días';
     return '<tr>'
       + '<td><div class="invoice-nro">' + esc(f.nro || '—') + '</div></td>'
       + '<td>' + esc(f.fecha_factura||'—') + '</td>'
