@@ -610,7 +610,7 @@ async function cargarDSODir() {
     subEl.textContent = 'al ' + (d.fecha_corte || '—');
     wrap.style.opacity = '1';
     const formula = d.formula === 'estandar' ? '(Saldo/Ventas 4m)×120' : 'Promedio ponderado';
-    wrap.title = formula + ' · Ventas 4m: $' + Math.round(d.ventas_4m||0).toLocaleString('es-AR');
+    wrap.title = 'Método de agotamiento 3m · Ventas: $' + Math.round(d.ventas_3m||d.ventas_4m||0).toLocaleString('es-AR');
     // Actualizar también el kpi-card "DSO Promedio" si está visible
     var kpiGrid = document.getElementById('kpi-grid');
     if (kpiGrid) {

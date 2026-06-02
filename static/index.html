@@ -1932,18 +1932,31 @@ async function cargarDSOActual() {
     var d = await r.json();
     var card = document.getElementById('dso-actual-card');
     if (!card) return;
-    if (!d || d.dso == null) { card.style.display = 'none'; return; }
+    if (!d || d.dso == null) {
+      if (d && d.saldo_total === 0) card.style.display = 'none';
+      return;
+    }
     var color = d.dso <= 45 ? '#16a34a' : d.dso <= 65 ? '#d97706' : '#dc2626';
     var label = d.dso <= 45 ? 'Normal' : d.dso <= 65 ? 'Atención' : 'Crítico';
     document.getElementById('dso-actual-num').textContent = d.dso;
     document.getElementById('dso-actual-num').style.color = color;
     document.getElementById('dso-actual-label').innerHTML =
       'días · <span style="padding:2px 10px;border-radius:12px;font-size:11px;font-weight:700;background:' + color + '22;color:' + color + ';">' + label + '</span>';
-    var ventas = d.ventas_4m > 0 ? '$' + Math.round(d.ventas_4m).toLocaleString('es-AR') : 'sin datos de ventas';
-    document.getElementById('dso-actual-detalle').innerHTML =
+    // Línea de datos + breakdown mensual
+    var ar = '$' + Math.round(d.saldo_total || 0).toLocaleString('es-AR');
+    var detalleHtml =
       'Corte: <strong>' + (d.fecha_corte || '—') + '</strong> &nbsp;·&nbsp; '
-      + 'Saldo AR: <strong>$' + Math.round(d.saldo_total || 0).toLocaleString('es-AR') + '</strong> &nbsp;·&nbsp; '
-      + 'Ventas 4m: <strong>' + ventas + '</strong>';
+      + 'AR total: <strong>' + ar + '</strong>';
+    if (d.breakdown && d.breakdown.length) {
+      detalleHtml += '<div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;">';
+      d.breakdown.forEach(function(b) {
+        var v = b.ventas > 0 ? '$' + Math.round(b.ventas).toLocaleString('es-AR') : 'sin datos';
+        detalleHtml += '<span style="font-size:10px;padding:2px 8px;border-radius:8px;background:#f1f5f9;color:#475569;">'
+          + b.mes + ': ' + v + (b.dias_dso > 0 ? ' → <strong>' + b.dias_dso + 'd</strong>' : '') + '</span>';
+      });
+      detalleHtml += '</div>';
+    }
+    document.getElementById('dso-actual-detalle').innerHTML = detalleHtml;
     card.style.display = 'block';
   } catch(e) {}
 }

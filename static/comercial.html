@@ -1037,7 +1037,7 @@ async function cargarDSOHeader() {
     numEl.textContent = d.dso + 'd';
     numEl.style.color = color;
     wrap.style.opacity = '1';
-    wrap.title = 'DSO al ' + (d.fecha_corte || '—') + ' · (Saldo/Ventas 4m)×120';
+    wrap.title = 'DSO al ' + (d.fecha_corte || '—') + ' · Método de agotamiento 3 meses';
     // También actualiza el banner de cartera si existe
     const bannerEl = document.getElementById('cartera-dso-banner');
     if (bannerEl) actualizarBannerDSO(d);

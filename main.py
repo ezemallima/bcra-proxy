@@ -5670,97 +5670,134 @@ def get_saldos_timestamp():
     except:
         return jsonify({"ts": 0, "fecha": None})
 
+def _parsear_fecha_dso(s):
+    """Parsea fecha en formato ISO (YYYY-MM-DD) o argentino (DD/MM/YYYY)."""
+    from datetime import datetime
+    s = (s or '')[:10].strip()
+    if not s:
+        return None
+    try:
+        return datetime.fromisoformat(s) if '-' in s else datetime(int(s[6:]), int(s[3:5]), int(s[:2]))
+    except Exception:
+        return None
+
 @app.route("/dso-global-saldos")
 def get_dso_global_saldos():
-    """DSO global usando dso_saldos_actual.json + dso_cheques_actual.json (lo que el usuario sube
-    por el DSO tool) y dso_ventas_historico.json (4 meses acumulados).
-    Fórmula: (AR / Ventas_4m) × 120."""
+    """DSO global — método de agotamiento (exhaustion method) sobre 3 meses.
+    AR = saldos pendientes + cheques (dso_saldos_actual + dso_cheques_actual).
+    Ventas = historial mensual agrupado desde dso_ventas_historico.json.
+    Algoritmo: restar mes a mes (más reciente primero) hasta agotar el AR."""
+    import calendar
     from datetime import datetime
 
-    # ── AR: saldos del upload DSO actual ──────────────────────────────────────
+    # ── 1. AR: saldos + cheques del último upload DSO ─────────────────────────
     saldos_lista = []
     s_path = os.path.join(DATA_DIR, 'dso_saldos_actual.json')
     if os.path.exists(s_path):
         try:
             with open(s_path, 'r', encoding='utf-8') as _fs:
-                s_data = json.load(_fs)
-            saldos_lista = s_data.get('saldos', [])
+                saldos_lista = json.load(_fs).get('saldos', [])
         except Exception as _se:
-            print(f"[dso-global] error leyendo saldos: {_se}", flush=True)
+            print(f"[dso-global] error saldos: {_se}", flush=True)
 
     if not saldos_lista:
         return jsonify({"dso": None, "saldo_total": 0, "clientes_count": 0,
-                        "ventas_4m": 0, "formula": "sin_datos"})
+                        "ventas_3m": 0, "formula": "sin_datos", "breakdown": []})
 
-    saldo_total = sum(float(s.get('saldo', 0) or 0) for s in saldos_lista)
-
-    # Sumar cheques si existen
+    saldo_base = sum(float(s.get('saldo', 0) or 0) for s in saldos_lista)
+    total_cheques = 0.0
     c_path = os.path.join(DATA_DIR, 'dso_cheques_actual.json')
     if os.path.exists(c_path):
         try:
             with open(c_path, 'r', encoding='utf-8') as _fc:
-                c_data = json.load(_fc)
-            saldo_total += sum(abs(float(ch.get('total', 0) or 0)) for ch in c_data.get('cheques', []))
+                total_cheques = sum(abs(float(ch.get('total', 0) or 0))
+                                    for ch in json.load(_fc).get('cheques', []))
         except Exception as _ce:
-            print(f"[dso-global] error leyendo cheques: {_ce}", flush=True)
+            print(f"[dso-global] error cheques: {_ce}", flush=True)
+    ar_total = saldo_base + total_cheques
 
-    # ── Fecha de corte = max(fecha_factura) de los saldos subidos ─────────────
-    fechas_obj = []
-    for s in saldos_lista:
-        fs = (s.get('fecha_factura') or '')[:10]
-        if not fs:
-            continue
-        try:
-            fechas_obj.append(datetime.fromisoformat(fs) if '-' in fs
-                              else datetime(int(fs[6:]), int(fs[3:5]), int(fs[:2])))
-        except Exception:
-            pass
-    fecha_corte = max(fechas_obj) if fechas_obj else datetime.now()
-    cutoff_4m   = fecha_corte - timedelta(days=120)
+    # ── 2. Fecha de corte — último día del período de los saldos ─────────────
+    fechas = [_parsear_fecha_dso(s.get('fecha_factura')) for s in saldos_lista]
+    fechas = [f for f in fechas if f]
+    fecha_corte = max(fechas) if fechas else datetime.now()
 
-    # ── Ventas 4 meses ─────────────────────────────────────────────────────────
-    ventas_4m    = 0.0
-    formula_usada = 'sin_ventas'
+    # ── 3. Ventas agrupadas por mes (dso_ventas_historico.json) ──────────────
+    ventas_por_mes = {}  # {(year, month): total}
+    n_filas_ventas = 0
     try:
         v_path = os.path.join(DATA_DIR, 'dso_ventas_historico.json')
         if os.path.exists(v_path):
             with open(v_path, 'r', encoding='utf-8') as _fv:
-                ventas_hist_data = json.load(_fv)
-            ventas_lista = (ventas_hist_data.get('ventas', [])
-                            if isinstance(ventas_hist_data, dict) else ventas_hist_data)
-            for v in ventas_lista:
-                fecha_str = (v.get('fecha') or '')[:10]
-                if not fecha_str:
+                vh = json.load(_fv)
+            lista = vh.get('ventas', []) if isinstance(vh, dict) else vh
+            n_filas_ventas = len(lista)
+            for v in lista:
+                fv = _parsear_fecha_dso(v.get('fecha'))
+                if fv is None:
                     continue
-                try:
-                    fv_dt = (datetime.fromisoformat(fecha_str) if '-' in fecha_str
-                             else datetime(int(fecha_str[6:]), int(fecha_str[3:5]), int(fecha_str[:2])))
-                except Exception:
-                    continue
-                if cutoff_4m <= fv_dt <= fecha_corte:
-                    ventas_4m += float(v.get('total', 0) or 0)
-        print(f"[dso-global] ventas_4m={ventas_4m:.0f} "
-              f"(periodo {cutoff_4m.strftime('%d/%m/%Y')} → {fecha_corte.strftime('%d/%m/%Y')})", flush=True)
+                key = (fv.year, fv.month)
+                ventas_por_mes[key] = ventas_por_mes.get(key, 0) + float(v.get('total', 0) or 0)
     except Exception as _ve:
-        print(f"[dso-global] ventas error: {_ve}", flush=True)
+        print(f"[dso-global] error ventas: {_ve}", flush=True)
 
-    # ── DSO = (AR / Ventas_4m) × 120 ─────────────────────────────────────────
-    if ventas_4m > 0:
-        dso = round((saldo_total / ventas_4m) * 120)
-        formula_usada = 'estandar'
-    else:
-        dso = None
+    # ── 4. 3 meses hacia atrás desde fecha_corte (mes más reciente primero) ──
+    meses = []
+    y, m = fecha_corte.year, fecha_corte.month
+    for _ in range(3):
+        dias = calendar.monthrange(y, m)[1]
+        ventas = ventas_por_mes.get((y, m), 0.0)
+        meses.append({"mes": f"{m:02d}/{y}", "dias": dias, "ventas": ventas})
+        m -= 1
+        if m == 0:
+            m, y = 12, y - 1
+
+    ventas_3m = sum(x['ventas'] for x in meses)
+
+    # ── 5. Método de agotamiento ──────────────────────────────────────────────
+    ar_restante = ar_total
+    dso_acum    = 0.0
+    breakdown   = []
+    for mes_info in meses:
+        if ar_restante <= 0:
+            break
+        v = mes_info['ventas']
+        d = mes_info['dias']
+        if v <= 0:
+            breakdown.append({**mes_info, "dias_dso": 0, "ar_restante": round(ar_restante), "nota": "sin ventas"})
+            continue
+        if ar_restante >= v:
+            dso_acum   += d
+            ar_restante -= v
+            breakdown.append({**mes_info, "dias_dso": d, "ar_restante": round(ar_restante)})
+        else:
+            dias_parcial = (ar_restante / v) * d
+            dso_acum    += dias_parcial
+            breakdown.append({**mes_info, "dias_dso": round(dias_parcial, 1), "ar_restante": 0})
+            ar_restante  = 0
+
+    dso = round(dso_acum) if ar_total > 0 else None
 
     clientes_unicos = len({s.get('cliente', '') for s in saldos_lista if s.get('cliente')})
-    print(f"[dso-global] corte={fecha_corte.strftime('%d/%m/%Y')} "
-          f"AR={saldo_total:.0f} ventas_4m={ventas_4m:.0f} dso={dso}", flush=True)
+    print(
+        f"[dso-global] corte={fecha_corte.strftime('%d/%m/%Y')} "
+        f"AR={ar_total:.0f} (saldos={saldo_base:.0f} cheques={total_cheques:.0f}) "
+        f"filas_ventas={n_filas_ventas} ventas_3m={ventas_3m:.0f} DSO={dso}d",
+        flush=True
+    )
+    for b in breakdown:
+        print(f"  → {b['mes']}: ventas={b['ventas']:.0f} dias_dso={b['dias_dso']} "
+              f"ar_restante={b.get('ar_restante',0):.0f}", flush=True)
+
     return jsonify({
-        "dso": dso,
-        "saldo_total": saldo_total,
+        "dso":        dso,
+        "saldo_total": ar_total,
+        "saldo_base":  saldo_base,
+        "total_cheques": total_cheques,
         "clientes_count": clientes_unicos,
-        "ventas_4m": ventas_4m,
+        "ventas_3m":  ventas_3m,
         "fecha_corte": fecha_corte.strftime('%d/%m/%Y'),
-        "formula": formula_usada,
+        "formula":    "agotamiento_3m",
+        "breakdown":  breakdown,
         "ultima_actualizacion": time.strftime('%d/%m/%Y')
     })
 
