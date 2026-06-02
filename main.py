@@ -3032,6 +3032,143 @@ def comercial():
     resp.headers['Pragma'] = 'no-cache'
     return resp
 
+@app.route("/director")
+@require_login
+def director():
+    resp = send_from_directory('static', 'director.html')
+    resp.headers['Cache-Control'] = 'no-store, must-revalidate'
+    resp.headers['Pragma'] = 'no-cache'
+    return resp
+
+@app.route("/api/director-data")
+@require_login
+def api_director_data():
+    """Panel Dirección Comercial: saldos, aging, score y DSO por cliente."""
+    _parse_f = lambda s: (
+        datetime(int(s.split('/')[2]), int(s.split('/')[1]), int(s.split('/')[0]))
+        if s and '/' in str(s) else None
+    )
+
+    # Fecha de corte = max(fechaFactura) del archivo de saldos
+    fechas_obj = [_parse_f(f.get('fechaFactura', '')) for f in _saldos_facturas]
+    fechas_obj = [d for d in fechas_obj if d]
+    fecha_corte = max(fechas_obj) if fechas_obj else datetime.now()
+
+    def _bucket(dias):
+        if dias <= 0:   return 'corriente'
+        if dias <= 30:  return 'd30'
+        if dias <= 60:  return 'd60'
+        if dias <= 90:  return 'd90'
+        if dias <= 120: return 'd120'
+        return 'd120plus'
+
+    # Agrupar facturas por cliente (clave = nombre normalizado)
+    _nc = lambda x: str(x).replace('-','').replace(' ','').strip()
+    clientes_map: dict = {}
+    for f in _saldos_facturas:
+        saldo = float(f.get('saldo') or 0)
+        if saldo <= 0:
+            continue
+        nombre  = str(f.get('cliente') or '').strip()
+        cuit    = _nc(str(f.get('cuit') or ''))
+        vendedor = str(f.get('vendedor') or '').strip()
+        key = cuit if cuit else nombre.upper()
+        if key not in clientes_map:
+            clientes_map[key] = {
+                'nombre': nombre, 'cuit': cuit, 'vendedor': vendedor,
+                'facturas': [], 'saldo_total': 0.0,
+                'buckets': {'corriente': 0.0, 'd30': 0.0, 'd60': 0.0,
+                            'd90': 0.0, 'd120': 0.0, 'd120plus': 0.0},
+            }
+        fp = _parse_f(f.get('fechaPago', ''))
+        dias_venc = max(0, (fecha_corte - fp).days) if fp else 0
+        # días desde la fecha de corte: si fechaPago >= corte → corriente (0 días vencido)
+        dias_vencido = max(0, (fecha_corte - fp).days) if fp and fp < fecha_corte else 0
+        bucket = _bucket(dias_vencido)
+        clientes_map[key]['saldo_total']     += saldo
+        clientes_map[key]['buckets'][bucket] += saldo
+        clientes_map[key]['facturas'].append({
+            'nro':           str(f.get('nroFactura') or ''),
+            'fecha_factura': f.get('fechaFactura', ''),
+            'fecha_pago':    f.get('fechaPago', ''),
+            'total':         float(f.get('totalFactura') or 0),
+            'saldo':         saldo,
+            'dias_vencido':  dias_vencido,
+            'bucket':        bucket,
+        })
+
+    # Cargar scores desde alertas_cartera.json
+    scores_map: dict = {}
+    try:
+        if os.path.exists(ALERTAS_FILE):
+            with open(ALERTAS_FILE, 'r', encoding='utf-8') as _fa:
+                _ad = json.load(_fa)
+            for _ce in (_ad.get('cartera') or []):
+                _cuit_e = _nc(str(_ce.get('cuit') or ''))
+                if _cuit_e:
+                    scores_map[_cuit_e] = {
+                        'score':  _ce.get('scoreCompleto'),
+                        'rango':  _ce.get('scoreRango'),
+                        'color':  _ce.get('scoreColor') or '#6b7280',
+                        'bloquear': _ce.get('bloquear_oportunidad', False),
+                        'alerta_temprana': _ce.get('alerta_temprana', False),
+                    }
+    except Exception: pass
+
+    # Construir lista de clientes con DSO individual
+    clientes_list = []
+    for key, c in clientes_map.items():
+        sc = scores_map.get(c['cuit']) if c['cuit'] else {}
+        saldo_total = c['saldo_total']
+        # DSO individual ponderado: Σ(saldo × días_vencido) / saldo_total
+        suma_pond = sum(f['saldo'] * f['dias_vencido'] for f in c['facturas'])
+        dso = round(suma_pond / saldo_total) if saldo_total > 0 else 0
+        clientes_list.append({
+            'nombre':    c['nombre'],
+            'cuit':      c['cuit'],
+            'vendedor':  c['vendedor'],
+            'saldo_total': round(saldo_total),
+            'dso':       dso,
+            'score':     (sc or {}).get('score'),
+            'rango':     (sc or {}).get('rango', '—'),
+            'score_color': (sc or {}).get('color', '#6b7280'),
+            'bloquear':  (sc or {}).get('bloquear', False),
+            'buckets':   {k: round(v) for k, v in c['buckets'].items()},
+            'facturas':  sorted(c['facturas'], key=lambda x: x['dias_vencido'], reverse=True),
+        })
+
+    clientes_list.sort(key=lambda x: x['saldo_total'], reverse=True)
+
+    # Totales globales
+    total_saldo = sum(c['saldo_total'] for c in clientes_list)
+    total_b: dict = {'corriente': 0, 'd30': 0, 'd60': 0, 'd90': 0, 'd120': 0, 'd120plus': 0}
+    for c in clientes_list:
+        for bk in total_b:
+            total_b[bk] += c['buckets'].get(bk, 0)
+    total_b = {k: round(v) for k, v in total_b.items()}
+
+    suma_pond_g = sum(f['saldo'] * f['dias_vencido'] for c in clientes_list for f in c['facturas'])
+    dso_global  = round(suma_pond_g / total_saldo) if total_saldo > 0 else 0
+
+    n_riesgo  = sum(1 for c in clientes_list if (c.get('score') or 1000) < 400)
+    n_vencido = sum(1 for c in clientes_list
+                    if c['buckets']['d30'] + c['buckets']['d60'] +
+                       c['buckets']['d90'] + c['buckets']['d120'] +
+                       c['buckets']['d120plus'] > 0)
+    n_critico = sum(1 for c in clientes_list if c['buckets']['d90'] + c['buckets']['d120plus'] > 0)
+
+    return jsonify({
+        'fecha_corte':   fecha_corte.strftime('%d/%m/%Y'),
+        'total_saldo':   round(total_saldo),
+        'total_buckets': total_b,
+        'dso_global':    dso_global,
+        'n_clientes':    len(clientes_list),
+        'n_riesgo':      n_riesgo,
+        'n_vencido':     n_vencido,
+        'n_critico':     n_critico,
+        'clientes':      clientes_list,
+    })
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
