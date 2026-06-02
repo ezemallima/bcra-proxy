@@ -1691,10 +1691,16 @@ async function procesarDSO() {
         var ventasParaGuardar = [];
         rowsVentas.forEach(function(row) {
           var cliente = (row[cV2]||'').toString().trim();
-          var monto = parseFloat((row[mV2]||'0').toString().replace(/[^0-9.-]/g,'')) || 0;
-          var fecha = (row[fV2]||'').toString().trim();
+          var monto   = parseMonto(row[mV2]);  // maneja formato argentino 1.500.000,00
+          var fechaObj = parseFecha(row[fV2]);  // normaliza cualquier formato a Date
+          // Guardar en ISO YYYY-MM-DD para que el backend lo pueda parsear siempre
+          var fecha = fechaObj ? (
+            fechaObj.getFullYear() + '-' +
+            String(fechaObj.getMonth() + 1).padStart(2, '0') + '-' +
+            String(fechaObj.getDate()).padStart(2, '0')
+          ) : '';
           var nro = nV2 ? (row[nV2]||'').toString().trim() : '';
-          if (cliente && fecha) {
+          if (cliente && fecha && monto > 0) {
             ventasParaGuardar.push({ cliente: cliente, fecha: fecha, total: monto, nro_factura: nro });
           }
         });
@@ -1722,10 +1728,15 @@ async function procesarDSO() {
         var saldosParaGuardar = [];
         rowsSaldos.forEach(function(row) {
           var cliente = (row[cS2]||'').toString().trim();
-          var saldo = parseFloat((row[mS2]||'0').toString().replace(/[^0-9.-]/g,'')) || 0;
-          var fecha_factura = (row[fS2]||'').toString().trim();
-          var fecha_pago = fpS2 ? (row[fpS2]||'').toString().trim() : '';
-          if (cliente && fecha_factura) {
+          var saldo   = parseMonto(row[mS2]);
+          var ffObj   = parseFecha(row[fS2]);
+          var fpObj   = fpS2 ? parseFecha(row[fpS2]) : null;
+          function toISO(d) {
+            return d ? (d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0')) : '';
+          }
+          var fecha_factura = toISO(ffObj);
+          var fecha_pago    = toISO(fpObj);
+          if (cliente && fecha_factura && saldo > 0) {
             saldosParaGuardar.push({ cliente: cliente, fecha_factura: fecha_factura, fecha_pago: fecha_pago, saldo: saldo });
           }
         });
@@ -1750,10 +1761,11 @@ async function procesarDSO() {
         var fC2 = mapearColumna(hC2, DSO_ALIASES.cheques.fecha || ['Fecha de Pago', 'fecha_pago', 'fecha pago']);
         var chequesParaGuardar = [];
         rowsCheques.forEach(function(row) {
-          var cliente = (row[cC2]||'').toString().trim();
-          var total = parseFloat((row[mC2]||'0').toString().replace(/[^0-9.-]/g,'')) || 0;
-          var fecha_pago = (row[fC2]||'').toString().trim();
-          if (cliente && fecha_pago) {
+          var cliente  = (row[cC2]||'').toString().trim();
+          var total    = parseMonto(row[mC2]);
+          var fpObj    = parseFecha(row[fC2]);
+          var fecha_pago = fpObj ? (fpObj.getFullYear() + '-' + String(fpObj.getMonth()+1).padStart(2,'0') + '-' + String(fpObj.getDate()).padStart(2,'0')) : '';
+          if (cliente && fecha_pago && total !== 0) {
             chequesParaGuardar.push({ cliente: cliente, fecha_pago: fecha_pago, total: total });
           }
         });
