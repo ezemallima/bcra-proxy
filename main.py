@@ -5299,25 +5299,29 @@ def save_dso_ventas():
                 if fd >= hace_4_meses:
                     filtrado.append(v)
             except: pass
-        # Smart merge usando nro_factura+cliente como clave primaria
+        # Upsert por nro_factura+cliente: re-upload siempre actualiza fecha y monto
         def _vkey(v):
             nro = (v.get('nro_factura') or '').strip()
             cli = (v.get('cliente') or '').strip()
             fecha = (v.get('fecha') or '')[:10]
             return (nro + '||' + cli) if nro else (cli + '||' + fecha)
-        existentes = {_vkey(v) for v in filtrado}
-        agregadas = 0
+        # Índice posicional para actualizar en lugar de saltar
+        idx_map = {_vkey(v): i for i, v in enumerate(filtrado)}
+        agregadas = actualizadas = 0
         for v in nuevas_ventas:
             k = _vkey(v)
-            if k not in existentes:
+            if k in idx_map:
+                filtrado[idx_map[k]] = v   # sobreescribe con datos frescos
+                actualizadas += 1
+            else:
+                idx_map[k] = len(filtrado)
                 filtrado.append(v)
-                existentes.add(k)
                 agregadas += 1
         resultado = {"ventas": filtrado, "ultima_actualizacion": hoy.strftime('%d/%m/%Y %H:%M'), "total_registros": len(filtrado)}
         with open(dso_file, 'w', encoding='utf-8') as f:
             json.dump(resultado, f, ensure_ascii=False, indent=2)
-        print(f"[dso-ventas] Smart merge: +{agregadas} nuevas, total: {len(filtrado)}", flush=True)
-        return jsonify({"ok": True, "agregadas": agregadas, "total": len(filtrado)})
+        print(f"[dso-ventas] Upsert: +{agregadas} nuevas, {actualizadas} actualizadas, total: {len(filtrado)}", flush=True)
+        return jsonify({"ok": True, "agregadas": agregadas, "actualizadas": actualizadas, "total": len(filtrado)})
     except Exception as e:
         import traceback
         print(f"[dso-ventas] Error: {traceback.format_exc()}", flush=True)

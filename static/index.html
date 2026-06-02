@@ -1975,10 +1975,13 @@ async function cargarDSOActual() {
     document.getElementById('dso-actual-label').innerHTML =
       'días · <span style="padding:2px 10px;border-radius:12px;font-size:11px;font-weight:700;background:' + color + '22;color:' + color + ';">' + label + '</span>';
     // Línea de datos + breakdown mensual
-    var ar = '$' + Math.round(d.saldo_total || 0).toLocaleString('es-AR');
+    var saldoBase = Math.round(d.saldo_base || d.saldo_total || 0);
+    var cheques   = Math.round(d.total_cheques || 0);
+    var arStr = '$' + saldoBase.toLocaleString('es-AR');
+    if (cheques > 0) arStr += ' + $' + cheques.toLocaleString('es-AR') + ' cheques = $' + Math.round(d.saldo_total||0).toLocaleString('es-AR');
     var detalleHtml =
       'Corte: <strong>' + (d.fecha_corte || '—') + '</strong> &nbsp;·&nbsp; '
-      + 'AR total: <strong>' + ar + '</strong>';
+      + 'Saldo + Cheques: <strong>' + arStr + '</strong>';
     if (d.breakdown && d.breakdown.length) {
       detalleHtml += '<div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;">';
       d.breakdown.forEach(function(b) {
