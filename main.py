@@ -1606,19 +1606,48 @@ def _layer_conducta_interna(
 def _evaluar_comunidad(cuit_limpio: str, wsp_index: dict) -> tuple:
     """
     Capa C: Comunidad Chat Bodegas — 20% del score (0-200 pts).
-    NLP sobre menciones en WhatsApp indexadas por CUIT.
+    NLP sobre menciones en WhatsApp indexadas por CUIT — últimos 6 meses.
+    Soporta formato array [{fecha, mensajes:[{texto}]}] y formato legacy dict.
     Returns: (pts, es_negativo, menciones_neg, menciones_pos)
     """
     if not isinstance(wsp_index, dict):
         return (100, False, 0, 0)
-    entry = wsp_index.get(cuit_limpio) or {}
-    if not isinstance(entry, dict):
-        return (100, False, 0, 0)
-    if not entry:
+    raw = wsp_index.get(cuit_limpio)
+    if not raw:
         return (100, False, 0, 0)
 
-    texto = str(entry.get('texto') or entry.get('mensajes') or '').lower()
-    if not texto:
+    hace_6m = datetime.now() - timedelta(days=180)
+
+    def _parse_fecha_wsp(s):
+        if not s: return None
+        try:
+            partes = str(s).strip().split('/')
+            if len(partes) == 3:
+                return datetime(int(partes[2]), int(partes[1]), int(partes[0]))
+        except: pass
+        return None
+
+    if isinstance(raw, list):
+        # Formato actual: [{fecha, cuit_mencionado, mensajes:[{autor, texto}]}]
+        # Aplicar filtro 6 meses sobre la fecha del thread
+        partes_texto = []
+        for t in raw:
+            if not isinstance(t, dict): continue
+            fecha_t = _parse_fecha_wsp(t.get('fecha') or
+                       (t.get('mensajes') or [{}])[0].get('fecha'))
+            if fecha_t and fecha_t < hace_6m:
+                continue  # thread fuera de ventana
+            for msg in (t.get('mensajes') or []):
+                if isinstance(msg, dict):
+                    partes_texto.append(str(msg.get('texto', '')))
+        texto = ' '.join(partes_texto).lower()
+    elif isinstance(raw, dict):
+        # Formato legacy: {texto: "...", mensajes: [...]}
+        texto = str(raw.get('texto') or raw.get('mensajes') or '').lower()
+    else:
+        return (100, False, 0, 0)
+
+    if not texto.strip():
         return (100, False, 0, 0)
 
     neg = sum(1 for kw in _KW_NEG if kw in texto)
@@ -1632,6 +1661,7 @@ def _evaluar_comunidad(cuit_limpio: str, wsp_index: dict) -> tuple:
         balance = pos - neg
         pts = max(0, min(200, 100 + balance * 20))
 
+    print(f"[wsp] {cuit_limpio} neg={neg} pos={pos} pts={pts}", flush=True)
     return (pts, es_negativo, neg, pos)
 
 

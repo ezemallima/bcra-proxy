@@ -3046,14 +3046,25 @@ async function cargarMoras() {
 function buscarEnWSP(cuit) { return wspIndex ? wspIndex[cuit.replace(/-/g,'')] || null : null; }
 
 function filtrarWSPReciente(threads) {
-  // Solo mantener mensajes de los últimos 6 meses
+  // Solo mantener mensajes de los últimos 6 meses.
+  // new Date("DD/M/YYYY") es Invalid Date en JS → parsear manualmente.
   if (!threads || !threads.length) return [];
   var hace6m = new Date();
   hace6m.setMonth(hace6m.getMonth() - 6);
+  function parseFechaWSP(s) {
+    if (!s) return null;
+    var parts = String(s).split('/');
+    if (parts.length === 3) {
+      var d = parseInt(parts[0], 10), m = parseInt(parts[1], 10) - 1, y = parseInt(parts[2], 10);
+      if (!isNaN(d) && !isNaN(m) && !isNaN(y)) return new Date(y, m, d);
+    }
+    var iso = new Date(s);
+    return isNaN(iso) ? null : iso;
+  }
   return threads.filter(function(t) {
-    var fecha = t.fecha || (t.mensajes && t.mensajes[0] && t.mensajes[0].fecha);
-    if (!fecha) return false;
-    return new Date(fecha) > hace6m;
+    var raw = t.fecha || (t.mensajes && t.mensajes[0] && t.mensajes[0].fecha);
+    var parsed = parseFechaWSP(raw);
+    return parsed && parsed > hace6m;
   });
 }
 function buscarEnMoras(cuit) { return morasIndex ? morasIndex[cuit.replace(/-/g,'')] || null : null; }
