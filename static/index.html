@@ -931,12 +931,18 @@
         <button onclick="descargarPlantillas()" style="font-size:12px;padding:7px 14px;background:var(--azul-suave);color:var(--azul-claro);border:1px solid var(--azul-borde);border-radius:8px;cursor:pointer;white-space:nowrap;">⬇ Descargar plantillas</button>
       </div>
 
+      <!-- Panel de meses acumulados -->
+      <div id="dso-meses-panel" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;margin-bottom:12px;display:none;">
+        <div style="font-size:11px;font-weight:600;color:var(--azul-claro);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Ventas acumuladas en servidor (últimos 3 meses necesarios)</div>
+        <div id="dso-meses-lista" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+      </div>
+
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
         <div>
-          <div style="font-size:11px;font-weight:600;color:var(--azul-claro);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Ventas</div>
-          <div style="font-size:10px;color:#94a3b8;margin-bottom:6px;">Columnas: Contacto · Fecha de factura · Total</div>
+          <div style="font-size:11px;font-weight:600;color:var(--azul-claro);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Ventas del mes</div>
+          <div style="font-size:10px;color:#94a3b8;margin-bottom:6px;">Reporte mensual (1 al 31) · Columnas: Contacto · Fecha de factura · Total</div>
           <div class="upload-area" id="dso-upload-ventas" onclick="document.getElementById('dso-file-ventas').click()" style="padding:12px;margin-bottom:0;cursor:pointer;">
-            <div style="font-size:12px;color:#64748b;">Subir reporte de ventas</div>
+            <div style="font-size:12px;color:#64748b;">Subir reporte mensual de ventas</div>
           </div>
           <input type="file" id="dso-file-ventas" accept=".xlsx,.xls,.csv" style="display:none;" onchange="cargarArchivoDSO(this,'ventas')" />
         </div>
@@ -1824,8 +1830,8 @@ async function procesarDSO() {
 
     renderTablaDSO(dsoDatos);
 
-    // Refrescar card DSO Vigente con los nuevos datos (espera 2s a que los POSTs terminen)
-    setTimeout(function() { cargarDSOActual(); }, 2000);
+    // Refrescar card y panel de meses tras el cálculo (espera 2s a que los POSTs terminen)
+    setTimeout(function() { cargarDSOActual(); cargarMesesDSO(); }, 2000);
 
     // DSO verificado por servidor — usa historial 4m acumulado de ventas
     document.getElementById('dso-servidor-wrap').style.display = 'none';
@@ -1955,6 +1961,51 @@ async function sincronizarServidor() {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(datos)
     });
+  } catch(e) {}
+}
+
+async function cargarMesesDSO() {
+  try {
+    var r = await fetch('/dso-ventas');
+    var d = await r.json();
+    var lista = d.ventas || [];
+    if (!lista.length) return;
+
+    // Agrupar por año-mes
+    var porMes = {};
+    lista.forEach(function(v) {
+      var f = (v.fecha || '').slice(0, 7); // YYYY-MM
+      if (!f) return;
+      porMes[f] = (porMes[f] || 0) + (parseFloat(v.total) || 0);
+    });
+    var meses = Object.keys(porMes).sort().reverse(); // más recientes primero
+    if (!meses.length) return;
+
+    var panel = document.getElementById('dso-meses-panel');
+    var listaEl = document.getElementById('dso-meses-lista');
+    if (!panel || !listaEl) return;
+
+    // Determinar qué 3 meses necesita el DSO (desde el mes del último saldo)
+    var hoy = new Date();
+    var necesarios = [];
+    for (var i = 0; i < 3; i++) {
+      var d2 = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
+      necesarios.push(d2.getFullYear() + '-' + String(d2.getMonth() + 1).padStart(2, '0'));
+    }
+
+    listaEl.innerHTML = necesarios.map(function(ym) {
+      var parts = ym.split('-');
+      var label = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, 1)
+        .toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
+      var tiene = porMes[ym] != null;
+      var monto = tiene ? '$' + Math.round(porMes[ym]).toLocaleString('es-AR') : '';
+      var color = tiene ? '#16a34a' : '#dc2626';
+      var bg    = tiene ? '#dcfce7' : '#fee2e2';
+      return '<div style="font-size:11px;padding:4px 10px;border-radius:8px;background:' + bg + ';color:' + color + ';font-weight:600;">'
+        + (tiene ? '✓ ' : '✗ ') + label + (monto ? ' · ' + monto : ' — falta subir') + '</div>';
+    }).join('');
+
+    panel.style.display = 'block';
   } catch(e) {}
 }
 
@@ -2968,7 +3019,8 @@ async function init() {
   await cargarDesdServidor();
 
   await cargarHistorialVentas();
-  cargarDSOActual(); // no-await: indicador DSO siempre visible
+  cargarDSOActual();  // indicador DSO siempre visible
+  cargarMesesDSO();   // panel de meses acumulados
   poblarVendedoresNuevo(); // no-await: carga en background
   await Promise.all([cargarWSP(), cargarMoras(), cargarCarteraServidor()]);
   actualizarMetricas();
