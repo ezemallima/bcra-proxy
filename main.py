@@ -4917,8 +4917,15 @@ def get_historial(cuit):
             if r.status_code == 404:
                 return 'NOT_FOUND', via
             if r.status_code == 200 and len(r.text.strip()) > 10:
-                d = _norm_bcra_resp(r.json())
-                if d.get('results') is not None:
+                raw = r.json()
+                # CDI v1.0 devuelve 'detalle' (no 'periodos') → necesita _map_detalle_bcra
+                _res = raw.get('results') if isinstance(raw, dict) else None
+                if isinstance(_res, dict) and 'detalle' in _res:
+                    d = _map_detalle_bcra(raw)
+                else:
+                    d = _norm_bcra_resp(raw)
+                if d.get('results') is not None and not d.get('error'):
+                    d['sin_deudas'] = len((d.get('results') or {}).get('periodos') or []) == 0
                     return d, via
         except Exception as e:
             print(f"[historial] {via} error para {cuit_limpio}: {e}", flush=True)
@@ -4931,13 +4938,14 @@ def get_historial(cuit):
             (f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/{cuit_limpio}",    10, "bcra_legacy"),
         ]
     )
+    got_404_hist = False
     with ThreadPoolExecutor(max_workers=len(endpoints_hist)) as ex:
         futs = {ex.submit(_fetch_hist, url, tmt, via): via for url, tmt, via in endpoints_hist}
         try:
             for fut in as_completed(futs, timeout=12):
                 result, via = fut.result()
                 if result == 'NOT_FOUND':
-                    return jsonify({"results": {"periodos": []}, "sin_deudas": True, "error_bcra": None}), 200
+                    got_404_hist = True   # no retornar aún — otro endpoint puede tener datos
                 elif result:
                     try:
                         with open(hist_path, 'w', encoding='utf-8') as f:
@@ -4947,6 +4955,8 @@ def get_historial(cuit):
                     return jsonify(result), 200
         except Exception:
             pass
+    if got_404_hist:
+        return jsonify({"results": {"periodos": []}, "sin_deudas": True, "error_bcra": None}), 200
     return jsonify({"results": None, "sin_deudas": None, "error_bcra": "sin_respuesta"}), 200
 
 @app.route("/analizar", methods=["POST"])
