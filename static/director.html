@@ -554,6 +554,7 @@ var _sortKey = 'saldo_total';
 var _sortDir = -1;
 var _filterVend = '';
 var _search = '';
+var _filterBucket = ''; // '' | 'd30' | 'd60' | 'd90' | 'd120plus'
 
 function fmt(n) {
   if (!n && n !== 0) return '—';
@@ -635,22 +636,30 @@ function renderKPIsAndAging(stats) {
   var d60_90 = (tb.d90||0);
   var critico = (tb.d120||0)+(tb.d120plus||0);
 
-  // KPI cards
+  // KPI cards — con data-bucket para filtrado interactivo
+  // bucket vacío ('') = sin filtro (muestra todos)
   var kpis = [
-    { label:'Saldo Total',    value: fmt(stats.total_saldo), sub: fmtFull(stats.total_saldo), color:'#3b82f6', icon:'💰' },
-    { label:'0–30 días',      value: fmt(tb.d30||0),  sub: pct(tb.d30,total)+'% del total',        color:'#10b981', icon:'📋' },
-    { label:'31–60 días',     value: fmt(d30_60),      sub: pct(d30_60,total)+'% del total',        color:'#f59e0b', icon:'📅' },
-    { label:'61–90 días',     value: fmt(d60_90),      sub: pct(d60_90,total)+'% del total',        color:'#f97316', icon:'⚠️' },
-    { label:'Crítico +90 d',  value: fmt(critico),     sub: pct(critico,total)+'% del total',       color:'#ef4444', icon:'🚨' },
-    { label:'DSO Promedio',   value: stats.dso_global+'d', sub:'días ponderado por saldo',          color: colorDSO(stats.dso_global), icon:'📊' },
-    { label:'Clientes',       value: stats.n_clientes, sub: stats.n_vencido+' con vencimiento >30d', color:'#8b5cf6', icon:'👥' },
-    { label:'Críticos +90d',  value: stats.n_critico,  sub: stats.n_riesgo+' con score < 400',      color:'#f97316', icon:'⚡' },
+    { label:'Saldo Total',   value: fmt(stats.total_saldo), sub: fmtFull(stats.total_saldo),         color:'#3b82f6', icon:'💰', bucket:'' },
+    { label:'0–30 días',     value: fmt(tb.d30||0),  sub: pct(tb.d30,total)+'% del total',           color:'#10b981', icon:'✅', bucket:'d30' },
+    { label:'31–60 días',    value: fmt(d30_60),      sub: pct(d30_60,total)+'% del total',           color:'#f59e0b', icon:'📅', bucket:'d60' },
+    { label:'61–90 días',    value: fmt(d60_90),      sub: pct(d60_90,total)+'% del total',           color:'#f97316', icon:'⚠️', bucket:'d90' },
+    { label:'Crítico +90 d', value: fmt(critico),     sub: pct(critico,total)+'% del total',          color:'#ef4444', icon:'🚨', bucket:'d120plus' },
+    { label:'DSO Promedio',  value: stats.dso_global+'d', sub:'días ponderado por saldo',            color: colorDSO(stats.dso_global), icon:'📊', bucket:'' },
+    { label:'Clientes',      value: stats.n_clientes, sub: stats.n_vencido+' con vencimiento >30d',  color:'#8b5cf6', icon:'👥', bucket:'' },
+    { label:'Críticos +90d', value: stats.n_critico,  sub: stats.n_riesgo+' con score < 400',        color:'#f97316', icon:'⚡', bucket:'d120plus' },
   ];
 
   var kpiHtml = '<div class="kpi-grid" id="kpi-grid">';
   kpis.forEach(function(k) {
-    kpiHtml += '<div class="kpi-card" style="--kpi-color:'+k.color+'">'
-      +'<div class="kpi-label">'+esc(k.label)+'</div>'
+    var isActive   = k.bucket && k.bucket === _filterBucket;
+    var isClickable = true; // todos son clickeables (los sin bucket resetean)
+    var activeStyle = isActive
+      ? 'outline:2px solid '+k.color+';outline-offset:2px;background:rgba('+hexToRgb(k.color)+',0.08);'
+      : '';
+    var cursorStyle = 'cursor:pointer;';
+    kpiHtml += '<div class="kpi-card" style="--kpi-color:'+k.color+';'+activeStyle+cursorStyle+'"'
+      +' onclick="setFilterBucket(\''+k.bucket+'\')" title="'+(k.bucket ? 'Filtrar por '+k.label : 'Ver todos')+'">'
+      +'<div class="kpi-label">'+esc(k.label)+(isActive ? ' <span style="font-size:9px;color:'+k.color+'">● activo</span>' : '')+'</div>'
       +'<div class="kpi-value" style="color:'+k.color+'">'+k.value+'</div>'
       +'<div class="kpi-sub">'+k.sub+'</div>'
       +'<div class="kpi-icon">'+k.icon+'</div>'
@@ -734,6 +743,16 @@ function renderTabla() {
       return (c.nombre||'').toLowerCase().includes(q) ||
              (c.cuit||'').includes(q) ||
              (c.vendedor||'').toLowerCase().includes(q);
+    });
+  }
+  // Filtro por bucket de aging (click en KPI)
+  if (_filterBucket) {
+    lista = lista.filter(function(c) {
+      if (_filterBucket === 'd120plus') {
+        // "Crítico +90d" incluye d90, d120 y d120plus
+        return (c.buckets.d90||0) + (c.buckets.d120||0) + (c.buckets.d120plus||0) > 0;
+      }
+      return (c.buckets[_filterBucket]||0) > 0;
     });
   }
 
@@ -870,21 +889,23 @@ function toggleRow(idx) {
   if (row) row.classList.toggle('expanded');
 }
 
-function onSearch(v) {
-  _search = v;
-  renderTabla();
-}
-function onFilterVend(v) {
-  _filterVend = v;
-  renderTabla();
-}
+function onSearch(v) { _search = v; renderTabla(); }
+function onFilterVend(v) { _filterVend = v; renderTabla(); }
 function setSort(key) {
-  if (_sortKey === key) { _sortDir *= -1; }
-  else { _sortKey = key; _sortDir = -1; }
+  if (_sortKey === key) { _sortDir *= -1; } else { _sortKey = key; _sortDir = -1; }
   renderTabla();
-  // Update active state on sort buttons
-  document.querySelectorAll('.sort-btn').forEach(function(b) { b.classList.remove('active'); });
-  event.target.classList.add('active');
+  document.querySelectorAll('.sort-btn').forEach(function(b){ b.classList.remove('active'); });
+  if (event && event.target) event.target.classList.add('active');
+}
+function setFilterBucket(bucket) {
+  // Toggle: click en el activo lo desactiva; click en otro lo activa
+  _filterBucket = (_filterBucket === bucket) ? '' : bucket;
+  renderTabla(); // renderTabla actualiza KPIs y tabla
+}
+function hexToRgb(hex) {
+  // '#10b981' → '16,185,129' para usar en rgba()
+  var r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return r+','+g+','+b;
 }
 function pct(v, total) {
   if (!total || !v) return '0';

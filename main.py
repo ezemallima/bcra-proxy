@@ -3140,9 +3140,13 @@ def api_director_data():
                     }
     except Exception: pass
 
+    # Usar saldos_gestion (se actualiza cada 5 días) para el panel del director.
+    # _saldos_facturas queda exclusivo para el cálculo de DSO con historial 4 meses.
+    _fuente_director = _saldos_gestion if _saldos_gestion else _saldos_facturas
+
     # Agrupar facturas por cliente
     clientes_map: dict = {}
-    for f in _saldos_facturas:
+    for f in _fuente_director:
         saldo = float(f.get('saldo') or 0)
         if saldo <= 0:
             continue
