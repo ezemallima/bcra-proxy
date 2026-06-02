@@ -3092,12 +3092,20 @@ def api_director_data():
         return 'd120plus'
 
     # Índice nombre→cuit desde _cartera_comercial para cruzar cuando saldos no trae CUIT
+    import re as _re
+    def _norm_nombre(s):
+        """Normaliza nombre: mayúsculas, sin puntuación, sin espacios extra.
+        'LOYDIS S.A.' → 'LOYDIS SA' | 'Abdenur C.' → 'ABDENUR C'"""
+        return _re.sub(r'\s+', ' ', _re.sub(r'[^A-Z0-9 ]', '', str(s).upper())).strip()
+
+    # Índice nombre_normalizado → CUIT (doble clave: con y sin puntuación)
     nombre_a_cuit: dict = {}
     for _cc in _cartera_comercial:
-        _cn = str(_cc.get('nombre') or '').strip().upper()
+        _nombre_raw = str(_cc.get('nombre') or '').strip()
         _ck = _nc(str(_cc.get('cuit') or ''))
-        if _cn and _ck:
-            nombre_a_cuit[_cn] = _ck
+        if _nombre_raw and _ck:
+            nombre_a_cuit[_nombre_raw.upper()] = _ck       # exacto
+            nombre_a_cuit[_norm_nombre(_nombre_raw)] = _ck  # normalizado sin puntuación
 
     # Cargar scores desde alertas_cartera.json (CUIT como clave)
     scores_map: dict = {}
@@ -3140,9 +3148,10 @@ def api_director_data():
             continue
         nombre   = str(f.get('cliente') or '').strip()
         cuit_raw = _nc(str(f.get('cuit') or ''))
-        # Si no viene CUIT en los saldos, buscarlo en cartera comercial por nombre
+        # Si no viene CUIT, buscar por nombre exacto primero, luego normalizado
         if not cuit_raw:
-            cuit_raw = nombre_a_cuit.get(nombre.upper(), '')
+            cuit_raw = (nombre_a_cuit.get(nombre.upper())
+                        or nombre_a_cuit.get(_norm_nombre(nombre), ''))
         vendedor = str(f.get('vendedor') or '').strip()
         key = cuit_raw if cuit_raw else nombre.upper()
         if key not in clientes_map:

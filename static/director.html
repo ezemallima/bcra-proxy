@@ -542,11 +542,11 @@ const BUCKET_LABELS = {
   d120plus: '+120 d',
 };
 const BUCKET_COLORS = {
-  d30:      '#3b82f6',
-  d60:      '#f59e0b',
-  d90:      '#f97316',
-  d120:     '#ef4444',
-  d120plus: '#7f1d1d',
+  d30:      '#10b981',  // verde   — 0-30 días (reciente)
+  d60:      '#f59e0b',  // amarillo — 31-60 días
+  d90:      '#f97316',  // naranja  — 61-90 días
+  d120:     '#ef4444',  // rojo     — 91-120 días
+  d120plus: '#7f1d1d',  // rojo oscuro — +120 días (crítico)
 };
 
 var _data = null;
@@ -638,7 +638,7 @@ function renderKPIsAndAging(stats) {
   // KPI cards
   var kpis = [
     { label:'Saldo Total',    value: fmt(stats.total_saldo), sub: fmtFull(stats.total_saldo), color:'#3b82f6', icon:'💰' },
-    { label:'0–30 días',      value: fmt(tb.d30||0),  sub: pct(tb.d30,total)+'% del total',        color:'#60a5fa', icon:'📋' },
+    { label:'0–30 días',      value: fmt(tb.d30||0),  sub: pct(tb.d30,total)+'% del total',        color:'#10b981', icon:'📋' },
     { label:'31–60 días',     value: fmt(d30_60),      sub: pct(d30_60,total)+'% del total',        color:'#f59e0b', icon:'📅' },
     { label:'61–90 días',     value: fmt(d60_90),      sub: pct(d60_90,total)+'% del total',        color:'#f97316', icon:'⚠️' },
     { label:'Crítico +90 d',  value: fmt(critico),     sub: pct(critico,total)+'% del total',       color:'#ef4444', icon:'🚨' },
