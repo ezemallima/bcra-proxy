@@ -1005,6 +1005,9 @@
       <!-- Benchmark -->
       <div id="dso-benchmark" class="card" style="margin-bottom:1rem;"></div>
 
+      <!-- DSO verificado servidor (fórmula estándar 4m) -->
+      <div id="dso-servidor-wrap" class="card" style="display:none;margin-bottom:1rem;border-left:4px solid var(--azul-claro);background:linear-gradient(135deg,#eff6ff,#fff);"></div>
+
       <!-- Tabla de clientes -->
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
@@ -1779,6 +1782,36 @@ async function procesarDSO() {
     document.getElementById('dso-benchmark').innerHTML = bHtml;
 
     renderTablaDSO(dsoDatos);
+
+    // DSO verificado por servidor — usa historial 4m acumulado de ventas
+    document.getElementById('dso-servidor-wrap').style.display = 'none';
+    fetch('/dso-global-saldos')
+      .then(function(r) { return r.json(); })
+      .then(function(srv) {
+        if (!srv || srv.dso === null || srv.dso === undefined) return;
+        var colSrv = colorDSO(srv.dso);
+        var formula = srv.formula === 'estandar'
+          ? '(Saldo / Ventas 4m) × 120'
+          : 'Promedio ponderado de días';
+        var ventasStr = srv.ventas_4m > 0
+          ? '$' + Math.round(srv.ventas_4m).toLocaleString('es-AR')
+          : 'sin datos';
+        var html = '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px;">';
+        html += '<div style="font-size:11px;color:var(--azul-claro);font-weight:600;text-transform:uppercase;letter-spacing:0.8px;">DSO Oficial — Servidor</div>';
+        html += '<span style="font-family:Syne,sans-serif;font-size:36px;font-weight:800;color:' + colSrv.color + ';line-height:1;">' + srv.dso + '</span>';
+        html += '<span style="font-size:14px;color:' + colSrv.color + ';font-weight:700;">días</span>';
+        html += '<span style="font-size:11px;padding:3px 10px;background:' + colSrv.bg + ';color:' + colSrv.color + ';border-radius:20px;font-weight:600;">' + colSrv.label + '</span>';
+        html += '</div>';
+        html += '<div style="font-size:12px;color:#64748b;display:flex;gap:20px;flex-wrap:wrap;">';
+        html += '<span>Corte: <strong style="color:var(--azul-oscuro);">' + (srv.fecha_corte || '—') + '</strong></span>';
+        html += '<span>Ventas 4m: <strong style="color:var(--azul-oscuro);">' + ventasStr + '</strong></span>';
+        html += '<span>Saldo pendiente: <strong style="color:var(--azul-oscuro);">$' + Math.round(srv.saldo_total || 0).toLocaleString('es-AR') + '</strong></span>';
+        html += '<span>Fórmula: <strong style="color:var(--azul-oscuro);">' + formula + '</strong></span>';
+        html += '</div>';
+        document.getElementById('dso-servidor-wrap').innerHTML = html;
+        document.getElementById('dso-servidor-wrap').style.display = 'block';
+      })
+      .catch(function() {});
 
   } catch(err) {
     document.getElementById('dso-loading').style.display = 'none';
