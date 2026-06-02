@@ -5708,13 +5708,24 @@ def get_dso_global_saldos():
         v_path = os.path.join(DATA_DIR, 'dso_ventas_historico.json')
         if os.path.exists(v_path):
             with open(v_path, 'r', encoding='utf-8') as _fv:
-                ventas_hist = json.load(_fv)
-            for v in ventas_hist:
-                fms = v.get('fechaMs', 0)
-                if fms:
-                    fv_dt = datetime.fromtimestamp(fms / 1000)
-                    if cutoff_4m <= fv_dt <= fecha_corte:
-                        ventas_4m += float(v.get('total', 0))
+                ventas_hist_data = json.load(_fv)
+            # dso_ventas_historico.json es un dict {"ventas": [...], "ultima_actualizacion": "..."}
+            ventas_lista = ventas_hist_data.get('ventas', []) if isinstance(ventas_hist_data, dict) else ventas_hist_data
+            for v in ventas_lista:
+                fecha_str = (v.get('fecha') or '')[:10]
+                if not fecha_str:
+                    continue
+                try:
+                    if '-' in fecha_str:
+                        fv_dt = datetime.fromisoformat(fecha_str)
+                    else:
+                        d2, m2, y2 = fecha_str.split('/')
+                        fv_dt = datetime(int(y2), int(m2), int(d2))
+                except Exception:
+                    continue
+                if cutoff_4m <= fv_dt <= fecha_corte:
+                    ventas_4m += float(v.get('total', 0) or 0)
+        print(f"[dso-global] ventas_4m={ventas_4m:.0f} (corte {cutoff_4m.strftime('%d/%m/%Y')} a {fecha_corte.strftime('%d/%m/%Y')})", flush=True)
     except Exception as _ve:
         print(f"[dso-global] ventas error: {_ve}", flush=True)
 
