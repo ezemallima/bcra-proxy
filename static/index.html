@@ -914,33 +914,6 @@
         </div>
       </div>
     </div>
-    <!-- Modal agregar cliente desde consulta (alta completa con vendedor + limite + plazo) -->
-    <div id="modal-agregar-cliente" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;align-items:center;justify-content:center;">
-      <div style="background:#fff;border-radius:14px;padding:24px;width:92%;max-width:480px;box-shadow:0 20px 60px rgba(0,0,0,0.3);max-height:90vh;overflow-y:auto;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-          <h3 style="margin:0;font-size:16px;font-weight:700;color:#0f2d52;">Agregar a seguimiento</h3>
-          <button onclick="cerrarModalAgregar()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#64748b;line-height:1;">&#215;</button>
-        </div>
-        <div style="font-size:12px;color:#64748b;margin-bottom:18px;" id="modal-agregar-subtitulo"></div>
-        <div style="display:flex;flex-direction:column;gap:12px;">
-          <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Vendedor asignado *</label>
-            <select id="agregar-vendedor" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;background:#fff;color:#1e293b;"></select></div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-            <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">L&iacute;mite de cr&eacute;dito ($) *</label>
-              <input id="agregar-limite" type="number" min="0" placeholder="ej. 600000" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" /></div>
-            <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Plazo de pago (d&iacute;as) *</label>
-              <input id="agregar-plazo" type="number" min="0" placeholder="ej. 30" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" /></div>
-          </div>
-          <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Ciudad</label>
-            <input id="agregar-ciudad" type="text" placeholder="Ciudad / Localidad" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" /></div>
-        </div>
-        <div id="agregar-error" style="display:none;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 12px;font-size:13px;color:#991b1b;margin-top:12px;"></div>
-        <div style="display:flex;gap:10px;margin-top:20px;">
-          <button onclick="confirmarAgregarCliente()" class="primary" style="flex:1;padding:11px;" id="btn-confirmar-agregar">Confirmar alta</button>
-          <button onclick="cerrarModalAgregar()" style="flex:1;padding:11px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;cursor:pointer;font-size:14px;font-weight:600;">Cancelar</button>
-        </div>
-      </div>
-    </div>
     <div class="buscador-wrap">
       <svg class="buscador-ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       <input type="text" id="buscar-cartera-admin" class="buscador-input" placeholder="Buscar cliente por nombre o CUIT..." oninput="filtrarListaCartera(this.value)" translate="no" autocomplete="off" spellcheck="false" />
@@ -3294,6 +3267,7 @@ async function consultarCliente() {
     estadoAfip = afipData.estado_afip || '';
     estadoAfipGlobal = estadoAfip;
     domicilioAfip = afipData.domicilio || '';
+    window._domicilioAfipActual = domicilioAfip; // accesible desde agregarDesdConsulta
     var afipNombre = afipData.nombre || '';
     // fuente === 'fallback' significa que no hay registro real en AFIP/BCRA/cartera
     afipTieneNombre = !!afipNombre && afipData.fuente !== 'fallback';
@@ -3529,8 +3503,21 @@ async function _loadCtaCteCard(cuit, targetId) {
 }
 
 function agregarDesdConsulta(cuit, nombre) {
-  // Abre modal de alta completa — reemplaza add directo que no persistia en servidor
-  abrirModalAgregarCliente(cuit, nombre);
+  // Pre-rellenar con datos disponibles de la consulta actual
+  var prefill = {};
+  // Ciudad desde AFIP (guardada como window._domicilioAfipActual en consultarCliente)
+  var _dom = window._domicilioAfipActual || '';
+  if (_dom.trim()) {
+    prefill.ciudad = _dom.split(',')[0].trim(); // tomar solo la localidad
+  }
+  // Límite dinámico sugerido desde el score del servidor
+  var _sc = window._ultimoScoreVende;
+  if (_sc && _sc.limite_dinamico_sugerido && _sc.limite_dinamico_sugerido > 0) {
+    prefill.limite = Math.round(_sc.limite_dinamico_sugerido);
+  }
+  // Plazo de pago: valor por defecto del sector (30 días)
+  prefill.plazo = 30;
+  abrirModalAgregarCliente(cuit, nombre, prefill);
 }
 
 function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nombreExterno) {
@@ -5193,7 +5180,7 @@ async function poblarVendedoresNuevo() {
 var _modalAgregarCuit = '';
 var _modalAgregarNombre = '';
 
-async function abrirModalAgregarCliente(cuit, nombre) {
+async function abrirModalAgregarCliente(cuit, nombre, prefill) {
   if (cartera.some(function(c){ return c.cuit === cuit; })) { return; }
   _modalAgregarCuit = cuit;
   _modalAgregarNombre = nombre;
@@ -5201,9 +5188,11 @@ async function abrirModalAgregarCliente(cuit, nombre) {
   var sel = document.getElementById('agregar-vendedor');
   sel.innerHTML = '<option value="">-- Seleccioná un vendedor --</option>' +
     vendedores.map(function(vn){ return '<option value="' + vn + '">' + vn + '</option>'; }).join('');
-  document.getElementById('agregar-limite').value = '';
-  document.getElementById('agregar-plazo').value = '';
-  document.getElementById('agregar-ciudad').value = '';
+  // Pre-rellenar con datos de la consulta si están disponibles
+  var pf = prefill || {};
+  document.getElementById('agregar-limite').value = pf.limite || '';
+  document.getElementById('agregar-plazo').value  = pf.plazo  || '';
+  document.getElementById('agregar-ciudad').value = pf.ciudad || '';
   document.getElementById('agregar-error').style.display = 'none';
   var sub = document.getElementById('modal-agregar-subtitulo');
   if (sub) sub.textContent = nombre + ' · CUIT ' + (cuit.length === 11 ? cuit.slice(0,2)+'-'+cuit.slice(2,10)+'-'+cuit.slice(10) : cuit);
@@ -6234,5 +6223,32 @@ init()
     if (splash) splash.classList.add('hidden');
   });
 </script>
+<!-- Modal agregar cliente — fuera de cualquier sección para que funcione desde cualquier pestaña -->
+<div id="modal-agregar-cliente" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:14px;padding:24px;width:92%;max-width:480px;box-shadow:0 20px 60px rgba(0,0,0,0.3);max-height:90vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <h3 style="margin:0;font-size:16px;font-weight:700;color:#0f2d52;">Agregar a seguimiento</h3>
+      <button onclick="cerrarModalAgregar()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#64748b;line-height:1;">&#215;</button>
+    </div>
+    <div style="font-size:12px;color:#64748b;margin-bottom:18px;" id="modal-agregar-subtitulo"></div>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Vendedor asignado *</label>
+        <select id="agregar-vendedor" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;background:#fff;color:#1e293b;"></select></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">L&iacute;mite de cr&eacute;dito ($) *</label>
+          <input id="agregar-limite" type="number" min="0" placeholder="ej. 600000" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" /></div>
+        <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Plazo de pago (d&iacute;as) *</label>
+          <input id="agregar-plazo" type="number" min="0" placeholder="ej. 30" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" /></div>
+      </div>
+      <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Ciudad</label>
+        <input id="agregar-ciudad" type="text" placeholder="Ciudad / Localidad" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" /></div>
+    </div>
+    <div id="agregar-error" style="display:none;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 12px;font-size:13px;color:#991b1b;margin-top:12px;"></div>
+    <div style="display:flex;gap:10px;margin-top:20px;">
+      <button onclick="confirmarAgregarCliente()" class="primary" style="flex:1;padding:11px;" id="btn-confirmar-agregar">Confirmar alta</button>
+      <button onclick="cerrarModalAgregar()" style="flex:1;padding:11px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;cursor:pointer;font-size:14px;font-weight:600;">Cancelar</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
