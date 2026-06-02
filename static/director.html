@@ -511,6 +511,11 @@
     <div class="header-badge">Panel Dirección Comercial</div>
   </div>
   <div class="header-right">
+    <div id="header-dso-dir" style="text-align:right;opacity:0;transition:opacity 0.4s;margin-right:8px;" title="">
+      <div style="font-size:9px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;">DSO Oficial</div>
+      <div id="header-dso-dir-num" style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;line-height:1.1;">—</div>
+      <div id="header-dso-dir-sub" style="font-size:9px;color:#94a3b8;">días</div>
+    </div>
     <span class="header-date" id="header-fecha">—</span>
     <button class="btn-refresh" onclick="cargarDatos()">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
@@ -590,6 +595,39 @@ function colorDias(d) {
   return {bg:'rgba(239,68,68,0.15)', color:'#ef4444'};
 }
 
+async function cargarDSODir() {
+  try {
+    const r = await fetch('/dso-global-saldos');
+    const d = await r.json();
+    if (!d || d.dso == null) return;
+    const color = colorDSO(d.dso);
+    const numEl = document.getElementById('header-dso-dir-num');
+    const subEl = document.getElementById('header-dso-dir-sub');
+    const wrap  = document.getElementById('header-dso-dir');
+    if (!numEl || !wrap) return;
+    numEl.textContent = d.dso + 'd';
+    numEl.style.color = color;
+    subEl.textContent = 'al ' + (d.fecha_corte || '—');
+    wrap.style.opacity = '1';
+    const formula = d.formula === 'estandar' ? '(Saldo/Ventas 4m)×120' : 'Promedio ponderado';
+    wrap.title = formula + ' · Ventas 4m: $' + Math.round(d.ventas_4m||0).toLocaleString('es-AR');
+    // Actualizar también el kpi-card "DSO Promedio" si está visible
+    var kpiGrid = document.getElementById('kpi-grid');
+    if (kpiGrid) {
+      var cards = kpiGrid.querySelectorAll('.kpi-card');
+      cards.forEach(function(card) {
+        if (card.querySelector('.kpi-label') && card.querySelector('.kpi-label').textContent.includes('DSO')) {
+          card.querySelector('.kpi-value').textContent = d.dso + 'd';
+          card.querySelector('.kpi-value').style.color = color;
+          card.style.setProperty('--kpi-color', color);
+          var sub = card.querySelector('.kpi-sub');
+          if (sub) sub.textContent = 'fórmula estándar 4m';
+        }
+      });
+    }
+  } catch(e) {}
+}
+
 async function cargarDatos() {
   document.getElementById('main-content').innerHTML =
     '<div class="loading-wrap"><div class="spinner"></div><div>Cargando datos...</div></div>';
@@ -599,6 +637,7 @@ async function cargarDatos() {
     _data = await r.json();
     document.getElementById('header-fecha').textContent = 'Al día: ' + _data.fecha_hoy;
     renderApp();
+    cargarDSODir();
   } catch(e) {
     document.getElementById('main-content').innerHTML =
       '<div class="loading-wrap"><div style="color:#ef4444;font-weight:600;">Error al cargar datos: ' + e.message + '</div></div>';

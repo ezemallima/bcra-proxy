@@ -721,6 +721,10 @@
         <div class="header-sub" id="header-cartera">— clientes</div>
       </div>
     </div>
+    <div id="header-dso" style="text-align:center;opacity:0;transition:opacity 0.4s;cursor:default;" title="">
+      <div id="header-dso-num" style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;line-height:1;">—</div>
+      <div style="font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;color:var(--accent2);margin-top:2px;">DSO</div>
+    </div>
     <button class="btn-logout" onclick="doLogout()">Salir</button>
   </div>
 
@@ -977,8 +981,10 @@ async function iniciarApp(perfil) {
   renderCartera('todos');
   renderOportunidades();
   cargarSaldosCartera();
+  cargarDSOHeader();
   // Polling cada 5 minutos: detecta nuevo DSO subido por admin
   setInterval(() => cargarSaldosCartera(), 5 * 60 * 1000);
+  setInterval(() => cargarDSOHeader(), 5 * 60 * 1000);
   // Sync cross-tab: detecta cuando la App Principal sube nuevos saldos
   window.addEventListener('storage', e => {
     if (e.key === 'piat_saldos_ts' || e.key === 'piat_dso_global') {
@@ -1014,6 +1020,23 @@ function normNombre(s) {
   return String(s||'').trim().toUpperCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
     .replace(/[^A-Z0-9]/g,' ').replace(/\s+/g,' ').trim();
+}
+
+async function cargarDSOHeader() {
+  try {
+    const r = await fetch(API + '/dso-global-saldos');
+    const d = await r.json();
+    if (!d || d.dso == null) return;
+    const color = d.dso <= 45 ? '#10b981' : d.dso <= 65 ? '#f59e0b' : '#ef4444';
+    const numEl = document.getElementById('header-dso-num');
+    const wrap  = document.getElementById('header-dso');
+    if (!numEl || !wrap) return;
+    numEl.textContent = d.dso + 'd';
+    numEl.style.color = color;
+    wrap.style.opacity = '1';
+    const formula = d.formula === 'estandar' ? '(Saldo/Ventas 4m)×120' : 'Promedio ponderado';
+    wrap.title = 'DSO al ' + (d.fecha_corte || '—') + ' · ' + formula;
+  } catch(e) {}
 }
 
 async function cargarSaldosCartera(forzar = false) {
