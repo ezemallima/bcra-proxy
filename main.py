@@ -40,6 +40,49 @@ ADMIN_PASS = 'Artel2026'
 DIRECTOR_USER = 'DIRECTORCOMERCIAL'
 DIRECTOR_PASS = 'ARTEL2026'
 
+# ── Fuentes BCRA externas ────────────────────────────────────────────────────
+BCRA_WRAPPER_BASE = 'https://bcra-wrapper.vercel.app'   # proxy Vercel, sin rate-limit
+
+# ── Caché macro ArgentinaDatos (24 h, una consulta diaria, no por CUIT) ─────
+_macro_cache: dict = {'data': None, 'ts': 0.0}
+_MACRO_TTL = 86400  # 24 horas
+
+def _fetch_macro_data() -> dict:
+    """Inflación interanual, riesgo país y dólar blue. Cachea 24h. Falla silenciosa."""
+    global _macro_cache
+    if _macro_cache['data'] and time.time() - _macro_cache['ts'] < _MACRO_TTL:
+        return _macro_cache['data']
+    result: dict = {}
+    base = 'https://api.argentinadatos.com/v1'
+    for url, key in [
+        (base + '/finanzas/indices/inflacionInteranual',    'inflacion'),
+        (base + '/finanzas/indices/riesgo-pais/ultimo',     'riesgo_pais'),
+        (base + '/cotizaciones/dolares/blue',               'dolar_blue'),
+    ]:
+        try:
+            r = requests.get(url, timeout=5, verify=False)
+            if r.status_code == 200:
+                d = r.json()
+                if key == 'inflacion' and isinstance(d, list) and d:
+                    result['inflacion'] = d[-1].get('valor')
+                elif key == 'riesgo_pais' and isinstance(d, dict):
+                    result['riesgo_pais'] = d.get('valor')
+                elif key == 'dolar_blue':
+                    if isinstance(d, list) and d:
+                        u = d[-1]
+                        result['dolar_blue_compra'] = u.get('compra')
+                        result['dolar_blue_venta']  = u.get('venta')
+                    elif isinstance(d, dict):
+                        result['dolar_blue_compra'] = d.get('compra')
+                        result['dolar_blue_venta']  = d.get('venta')
+        except Exception:
+            pass
+    if result:
+        _macro_cache['data'] = result
+        _macro_cache['ts'] = time.time()
+        print(f"[macro] inflacion={result.get('inflacion')} riesgo={result.get('riesgo_pais')} blue={result.get('dolar_blue_venta')}", flush=True)
+    return result or (_macro_cache.get('data') or {})
+
 # ── Startup: genera static/logo.png usando solo stdlib (sin PIL) ─────────────
 def _generar_logo_png():
     import struct as _s, zlib as _z, math as _m
@@ -735,13 +778,14 @@ def consultar_bcra(cuit, reintentos=3):
 
     def _fetch(url, tmt, via):
         try:
-            # BCRA oficial: usar _bcra_get (ScraperAPI si hay key → IPs argentinas, evita bloqueos)
+            # BCRA oficial: ScraperAPI (IPs argentinas). Wrapper y workers: directo.
             r = _bcra_get(url, timeout=tmt) if 'bcra.gob.ar' in url else requests.get(url, timeout=tmt, verify=False)
             if r.status_code == 404:
                 return 'NOT_FOUND', via
             if r.status_code == 200 and len(r.text.strip()) > 10:
                 raw = r.json()
-                if 'bcra.gob.ar' in url:
+                # Wrapper y BCRA oficial: _parse_bcra maneja CDI v1.0 y legacy
+                if 'bcra.gob.ar' in url or 'bcra-wrapper' in url:
                     d = _parse_bcra(raw)
                 else:
                     d = _norm_bcra_resp(raw)
@@ -756,7 +800,9 @@ def consultar_bcra(cuit, reintentos=3):
         return None, via
 
     endpoints = (
-        [(w + "/deudas/" + cuit, 2.5, f"Worker{i+1}") for i, w in enumerate(BCRA_WORKERS[:3])]
+        # Wrapper Vercel primero (rápido, sin rate-limit) + workers (2.5s) + BCRA oficial (10s)
+        [(BCRA_WRAPPER_BASE + '/central-deudores/' + cuit, 3.5, 'bcra_wrapper')]
+        + [(w + "/deudas/" + cuit, 2.5, f"Worker{i+1}") for i, w in enumerate(BCRA_WORKERS[:3])]
         + [
             (f"https://api.bcra.gob.ar/CentralDeInformacion/v1.0/Deudas/{cuit}", 10, 'bcra_cdi'),
             (f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/{cuit}",    10, 'bcra_legacy'),
@@ -3036,6 +3082,17 @@ def index():
 def ping():
     return jsonify({"ok": True, "ts": time.time()})
 
+@app.route("/api/macro-context")
+@require_login
+def api_macro_context():
+    """Datos macro en caché (inflación, riesgo país, dólar blue). Actualiza si venció TTL."""
+    data = _fetch_macro_data()
+    return jsonify({
+        "ok": bool(data),
+        "data": data,
+        "cache_age_min": round((time.time() - _macro_cache['ts']) / 60, 1) if _macro_cache['ts'] else None,
+    })
+
 @app.route("/comercial")
 def comercial():
     resp = send_from_directory('static', 'comercial.html')
@@ -4811,7 +4868,8 @@ def get_cheques(cuit):
         return None, via
 
     endpoints_chq = (
-        [(w + "/deudas/" + cuit_limpio + "/cheques", 2.5, f"Worker{i+1}") for i, w in enumerate(BCRA_WORKERS[:2])]
+        [(BCRA_WRAPPER_BASE + '/cheques-rechazados/' + cuit_limpio, 3.5, 'bcra_wrapper')]
+        + [(w + "/deudas/" + cuit_limpio + "/cheques", 2.5, f"Worker{i+1}") for i, w in enumerate(BCRA_WORKERS[:2])]
         + [
             (f"https://api.bcra.gob.ar/CentralDeInformacion/v1.0/ChequesRechazados/{cuit_limpio}", 10, "bcra_cdi"),
             (f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/{cuit_limpio}", 10, "bcra_legacy"),
@@ -4922,6 +4980,24 @@ def analizar():
 
         # El frontend ya incluyó el rango en el prompt; el backend lo refuerza
         # como bloque autorizado para que el system prompt lo tome como referencia.
+        # Contexto macro — solo para análisis cualitativo, NUNCA modifica límite
+        macro = _fetch_macro_data()
+        if macro:
+            partes_macro = []
+            if macro.get('inflacion') is not None:
+                partes_macro.append(f"Inflación interanual: {macro['inflacion']:.1f}%")
+            if macro.get('riesgo_pais') is not None:
+                partes_macro.append(f"Riesgo país: {int(macro['riesgo_pais'])} bps")
+            if macro.get('dolar_blue_venta') is not None:
+                partes_macro.append(f"Dólar blue: ${macro.get('dolar_blue_compra','—')} compra / ${macro['dolar_blue_venta']} venta")
+            if partes_macro:
+                bloque_macro = (
+                    "\n\n--- CONTEXTO MACROECONÓMICO (solo para análisis cualitativo — "
+                    "NO modifica el límite de crédito ni el score) ---\n"
+                    + "\n".join(f"• {p}" for p in partes_macro)
+                )
+                prompt = prompt + bloque_macro
+
         payload = {
             "systemInstruction": {"parts": [{"text": CREDIT_ANALYSIS_SYSTEM_PROMPT}]},
             "contents": [{"parts": [{"text": prompt}]}],
