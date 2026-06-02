@@ -1966,30 +1966,39 @@ async function sincronizarServidor() {
 
 async function cargarMesesDSO() {
   try {
-    var r = await fetch('/dso-ventas');
-    var d = await r.json();
-    var lista = d.ventas || [];
-    if (!lista.length) return;
+    // Obtener fecha_corte del último saldo subido y ventas acumuladas en paralelo
+    var [rDso, rVentas] = await Promise.all([
+      fetch('/dso-global-saldos'),
+      fetch('/dso-ventas')
+    ]);
+    var dso    = await rDso.json();
+    var vData  = await rVentas.json();
+    var lista  = vData.ventas || [];
 
-    // Agrupar por año-mes
+    // Agrupar ventas por año-mes
     var porMes = {};
     lista.forEach(function(v) {
       var f = (v.fecha || '').slice(0, 7); // YYYY-MM
-      if (!f) return;
-      porMes[f] = (porMes[f] || 0) + (parseFloat(v.total) || 0);
+      if (f) porMes[f] = (porMes[f] || 0) + (parseFloat(v.total) || 0);
     });
-    var meses = Object.keys(porMes).sort().reverse(); // más recientes primero
-    if (!meses.length) return;
 
-    var panel = document.getElementById('dso-meses-panel');
+    var panel   = document.getElementById('dso-meses-panel');
     var listaEl = document.getElementById('dso-meses-lista');
     if (!panel || !listaEl) return;
 
-    // Determinar qué 3 meses necesita el DSO (desde el mes del último saldo)
-    var hoy = new Date();
+    // Los 3 meses se calculan desde la fecha_corte del saldo (no desde hoy)
+    // fecha_corte viene como "DD/MM/YYYY"
+    var fechaCorte = new Date();  // fallback = hoy
+    if (dso && dso.fecha_corte) {
+      var partes = dso.fecha_corte.split('/');
+      if (partes.length === 3) {
+        fechaCorte = new Date(parseInt(partes[2]), parseInt(partes[1]) - 1, parseInt(partes[0]));
+      }
+    }
+
     var necesarios = [];
     for (var i = 0; i < 3; i++) {
-      var d2 = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
+      var d2 = new Date(fechaCorte.getFullYear(), fechaCorte.getMonth() - i, 1);
       necesarios.push(d2.getFullYear() + '-' + String(d2.getMonth() + 1).padStart(2, '0'));
     }
 
@@ -1997,7 +2006,7 @@ async function cargarMesesDSO() {
       var parts = ym.split('-');
       var label = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, 1)
         .toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
-      var tiene = porMes[ym] != null;
+      var tiene = porMes[ym] != null && porMes[ym] > 0;
       var monto = tiene ? '$' + Math.round(porMes[ym]).toLocaleString('es-AR') : '';
       var color = tiene ? '#16a34a' : '#dc2626';
       var bg    = tiene ? '#dcfce7' : '#fee2e2';
@@ -2028,11 +2037,10 @@ async function cargarDSOActual() {
     // Línea de datos + breakdown mensual
     var saldoBase = Math.round(d.saldo_base || d.saldo_total || 0);
     var cheques   = Math.round(d.total_cheques || 0);
-    var arStr = '$' + saldoBase.toLocaleString('es-AR');
-    if (cheques > 0) arStr += ' + $' + cheques.toLocaleString('es-AR') + ' cheques = $' + Math.round(d.saldo_total||0).toLocaleString('es-AR');
     var detalleHtml =
       'Corte: <strong>' + (d.fecha_corte || '—') + '</strong> &nbsp;·&nbsp; '
-      + 'Saldo + Cheques: <strong>' + arStr + '</strong>';
+      + 'AR (saldos): <strong>$' + saldoBase.toLocaleString('es-AR') + '</strong>'
+      + (cheques > 0 ? ' &nbsp;·&nbsp; Cheques: $' + cheques.toLocaleString('es-AR') : '');
     if (d.breakdown && d.breakdown.length) {
       detalleHtml += '<div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;">';
       d.breakdown.forEach(function(b) {

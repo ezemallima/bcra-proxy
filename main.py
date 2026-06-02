@@ -5718,7 +5718,9 @@ def get_dso_global_saldos():
                                     for ch in json.load(_fc).get('cheques', []))
         except Exception as _ce:
             print(f"[dso-global] error cheques: {_ce}", flush=True)
-    ar_total = saldo_base + total_cheques
+    # El agotamiento usa SOLO saldos (cuentas por cobrar puras).
+    # Los cheques se informan por separado para transparencia.
+    ar_total = saldo_base
 
     # ── 2. Fecha de corte — último día del período de los saldos ─────────────
     fechas = [_parsear_fecha_dso(s.get('fecha_factura')) for s in saldos_lista]
@@ -5793,15 +5795,16 @@ def get_dso_global_saldos():
               f"ar_restante={b.get('ar_restante',0):.0f}", flush=True)
 
     return jsonify({
-        "dso":        dso,
-        "saldo_total": ar_total,
-        "saldo_base":  saldo_base,
+        "dso":           dso,
+        "saldo_total":   saldo_base,        # AR para el cálculo = solo saldos
+        "saldo_base":    saldo_base,
         "total_cheques": total_cheques,
+        "ar_con_cheques": saldo_base + total_cheques,
         "clientes_count": clientes_unicos,
-        "ventas_3m":  ventas_3m,
-        "fecha_corte": fecha_corte.strftime('%d/%m/%Y'),
-        "formula":    "agotamiento_3m",
-        "breakdown":  breakdown,
+        "ventas_3m":     ventas_3m,
+        "fecha_corte":   fecha_corte.strftime('%d/%m/%Y'),
+        "formula":       "agotamiento_3m_solo_saldos",
+        "breakdown":     breakdown,
         "ultima_actualizacion": time.strftime('%d/%m/%Y')
     })
 
