@@ -1347,6 +1347,34 @@ function parseMonto(v) {
   return isNaN(n) ? 0 : n;
 }
 
+// Convierte cualquier formato de fecha de Excel/Odoo a ISO YYYY-MM-DD
+// Soporta: DD/MM/YYYY (argentino Odoo), YYYY-MM-DD (ISO), serial Excel
+function fechaExcelAISO(v) {
+  if (v == null || v === '') return '';
+  var s = String(v).trim();
+  // Serial numérico de Excel (p.ej. 46010)
+  if (/^\d{5,6}$/.test(s)) {
+    var ts = (parseFloat(s) - 25569) * 86400 * 1000;
+    var dE = new Date(ts);
+    if (!isNaN(dE.getTime())) {
+      return dE.getUTCFullYear() + '-' + String(dE.getUTCMonth()+1).padStart(2,'0') + '-' + String(dE.getUTCDate()).padStart(2,'0');
+    }
+  }
+  // DD/MM/YYYY o D/M/YYYY — formato Odoo Argentina (PRIMERO, antes del genérico)
+  var m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) {
+    return m[3] + '-' + m[2].padStart(2,'0') + '-' + m[1].padStart(2,'0');
+  }
+  // Ya es ISO YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  // Último recurso: Date genérico (para strings como "Apr 1, 2026")
+  var dG = new Date(s);
+  if (!isNaN(dG.getTime())) {
+    return dG.getFullYear() + '-' + String(dG.getMonth()+1).padStart(2,'0') + '-' + String(dG.getDate()).padStart(2,'0');
+  }
+  return '';
+}
+
 function parseFecha(v) {
   if (!v) return null;
   var d = new Date(v);
@@ -1691,15 +1719,9 @@ async function procesarDSO() {
         var ventasParaGuardar = [];
         rowsVentas.forEach(function(row) {
           var cliente = (row[cV2]||'').toString().trim();
-          var monto   = parseMonto(row[mV2]);  // maneja formato argentino 1.500.000,00
-          var fechaObj = parseFecha(row[fV2]);  // normaliza cualquier formato a Date
-          // Guardar en ISO YYYY-MM-DD para que el backend lo pueda parsear siempre
-          var fecha = fechaObj ? (
-            fechaObj.getFullYear() + '-' +
-            String(fechaObj.getMonth() + 1).padStart(2, '0') + '-' +
-            String(fechaObj.getDate()).padStart(2, '0')
-          ) : '';
-          var nro = nV2 ? (row[nV2]||'').toString().trim() : '';
+          var monto   = parseMonto(row[mV2]);
+          var fecha   = fechaExcelAISO(row[fV2]);
+          var nro     = nV2 ? (row[nV2]||'').toString().trim() : '';
           if (cliente && fecha && monto > 0) {
             ventasParaGuardar.push({ cliente: cliente, fecha: fecha, total: monto, nro_factura: nro });
           }
@@ -1727,16 +1749,12 @@ async function procesarDSO() {
         var fpS2 = mapearColumna(hS2, ['Fecha de pago', 'fecha_pago', 'fecha pago']);
         var saldosParaGuardar = [];
         rowsSaldos.forEach(function(row) {
-          var cliente = (row[cS2]||'').toString().trim();
-          var saldo   = parseMonto(row[mS2]);
-          var ffObj   = parseFecha(row[fS2]);
-          var fpObj   = fpS2 ? parseFecha(row[fpS2]) : null;
-          function toISO(d) {
-            return d ? (d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0')) : '';
-          }
-          var fecha_factura = toISO(ffObj);
-          var fecha_pago    = toISO(fpObj);
-          if (cliente && fecha_factura && saldo > 0) {
+          var cliente       = (row[cS2]||'').toString().trim();
+          var saldo         = parseMonto(row[mS2]);
+          var fecha_factura = fS2  ? fechaExcelAISO(row[fS2])  : '';
+          var fecha_pago    = fpS2 ? fechaExcelAISO(row[fpS2]) : '';
+          // fecha_factura es opcional — el servidor usa max() para la fecha de corte
+          if (cliente && saldo > 0) {
             saldosParaGuardar.push({ cliente: cliente, fecha_factura: fecha_factura, fecha_pago: fecha_pago, saldo: saldo });
           }
         });
@@ -1761,11 +1779,10 @@ async function procesarDSO() {
         var fC2 = mapearColumna(hC2, DSO_ALIASES.cheques.fecha || ['Fecha de Pago', 'fecha_pago', 'fecha pago']);
         var chequesParaGuardar = [];
         rowsCheques.forEach(function(row) {
-          var cliente  = (row[cC2]||'').toString().trim();
-          var total    = parseMonto(row[mC2]);
-          var fpObj    = parseFecha(row[fC2]);
-          var fecha_pago = fpObj ? (fpObj.getFullYear() + '-' + String(fpObj.getMonth()+1).padStart(2,'0') + '-' + String(fpObj.getDate()).padStart(2,'0')) : '';
-          if (cliente && fecha_pago && total !== 0) {
+          var cliente    = (row[cC2]||'').toString().trim();
+          var total      = parseMonto(row[mC2]);
+          var fecha_pago = fC2 ? fechaExcelAISO(row[fC2]) : '';
+          if (cliente && total !== 0) {
             chequesParaGuardar.push({ cliente: cliente, fecha_pago: fecha_pago, total: total });
           }
         });
@@ -1806,6 +1823,9 @@ async function procesarDSO() {
     document.getElementById('dso-benchmark').innerHTML = bHtml;
 
     renderTablaDSO(dsoDatos);
+
+    // Refrescar card DSO Vigente con los nuevos datos (espera 2s a que los POSTs terminen)
+    setTimeout(function() { cargarDSOActual(); }, 2000);
 
     // DSO verificado por servidor — usa historial 4m acumulado de ventas
     document.getElementById('dso-servidor-wrap').style.display = 'none';
