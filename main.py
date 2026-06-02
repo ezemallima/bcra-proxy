@@ -37,6 +37,9 @@ SCRAPERAPI_KEY  = os.environ.get('SCRAPERAPI_KEY', '')
 ADMIN_CUIT = '30710295022'
 ADMIN_PASS = 'Artel2026'
 
+DIRECTOR_USER = 'DIRECTORCOMERCIAL'
+DIRECTOR_PASS = 'ARTEL2026'
+
 # ── Startup: genera static/logo.png usando solo stdlib (sin PIL) ─────────────
 def _generar_logo_png():
     import struct as _s, zlib as _z, math as _m
@@ -3011,6 +3014,14 @@ def require_login(f):
         return f(*args, **kwargs)
     return _wrapped
 
+def require_director(f):
+    @wraps(f)
+    def _wrapped(*args, **kwargs):
+        if not session.get('director_logged_in'):
+            return redirect(url_for('director_login_page'))
+        return f(*args, **kwargs)
+    return _wrapped
+
 # ─── ENDPOINTS ───────────────────────────────────────────
 
 @app.route("/")
@@ -3032,8 +3043,27 @@ def comercial():
     resp.headers['Pragma'] = 'no-cache'
     return resp
 
+@app.route("/director-login", methods=["GET", "POST"])
+def director_login_page():
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        usuario = str(data.get('usuario', '')).strip().upper()
+        clave   = str(data.get('clave', '')).strip()
+        if usuario == DIRECTOR_USER and clave == DIRECTOR_PASS:
+            session['director_logged_in'] = True
+            session.permanent = True
+            return jsonify({"ok": True})
+        return jsonify({"ok": False, "error": "Usuario o clave incorrectos"}), 401
+    # GET → mostrar pantalla de login
+    return send_from_directory('static', 'director_login.html')
+
+@app.route("/director-logout")
+def director_logout():
+    session.pop('director_logged_in', None)
+    return redirect(url_for('director_login_page'))
+
 @app.route("/director")
-@require_login
+@require_director
 def director():
     resp = send_from_directory('static', 'director.html')
     resp.headers['Cache-Control'] = 'no-store, must-revalidate'
@@ -3041,7 +3071,7 @@ def director():
     return resp
 
 @app.route("/api/director-data")
-@require_login
+@require_director
 def api_director_data():
     """Panel Dirección Comercial: saldos, aging, score y DSO por cliente."""
     _parse_f = lambda s: (
