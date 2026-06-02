@@ -1739,7 +1739,8 @@ async function procesarDSO() {
             body: JSON.stringify({ ventas: ventasParaGuardar })
           }).then(function(r) { return r.json(); })
             .then(function(d) {
-              console.log('[DSO] Ventas guardadas:', d.agregadas, 'nuevas, total:', d.total);
+              var mesesLog = d.meses ? Object.entries(d.meses).map(function(e){ return e[0]+': $'+Math.round(e[1]).toLocaleString('es-AR'); }).join(' | ') : '';
+              console.log('[DSO] Ventas guardadas por mes:', mesesLog);
             }).catch(function(e) { console.warn('[DSO] Error guardando ventas:', e); });
         }
       } catch(e) { console.warn('[DSO] Error preparando ventas:', e); }
@@ -1975,12 +1976,8 @@ async function cargarMesesDSO() {
     var vData  = await rVentas.json();
     var lista  = vData.ventas || [];
 
-    // Agrupar ventas por año-mes
-    var porMes = {};
-    lista.forEach(function(v) {
-      var f = (v.fecha || '').slice(0, 7); // YYYY-MM
-      if (f) porMes[f] = (porMes[f] || 0) + (parseFloat(v.total) || 0);
-    });
+    // Leer totales mensuales (nuevo formato {meses: {"YYYY-MM": total}})
+    var porMes = vData.meses || {};
 
     var panel   = document.getElementById('dso-meses-panel');
     var listaEl = document.getElementById('dso-meses-lista');

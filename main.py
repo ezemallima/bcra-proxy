@@ -5270,58 +5270,58 @@ def get_dso_ventas():
         if os.path.exists(dso_file):
             with open(dso_file, 'r', encoding='utf-8') as f:
                 return jsonify(json.load(f))
-        return jsonify({"ventas": [], "ultima_actualizacion": ""})
+        return jsonify({"meses": {}, "ultima_actualizacion": ""})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @app.route("/dso-ventas", methods=["POST"])
 def save_dso_ventas():
-    """Smart merge: acumula 120 días usando nro_factura+cliente como clave única."""
+    """Agrega el total de ventas del mes al historial mensual.
+    Cada upload sobreescribe SOLO los meses que trae — los demás se conservan.
+    Formato almacenado: {meses: {"YYYY-MM": total}, ultima_actualizacion: "..."}"""
     try:
         body = request.get_json(force=True)
-        nuevas_ventas = body.get('ventas', [])
-        if not nuevas_ventas:
+        nuevas = body.get('ventas', [])
+        if not nuevas:
             return jsonify({"error": "Sin ventas"}), 400
-        from datetime import datetime, timedelta
-        hoy = datetime.now()
-        hace_4_meses = hoy - timedelta(days=120)
+        from datetime import datetime
+
+        # Sumar totales por mes YYYY-MM (sin deduplicación — cada fila suma)
+        meses_nuevos: dict = {}
+        sin_fecha = 0
+        for v in nuevas:
+            fv = _parsear_fecha_dso(v.get('fecha'))
+            if fv is None:
+                sin_fecha += 1
+                continue
+            ym = f"{fv.year}-{fv.month:02d}"
+            meses_nuevos[ym] = meses_nuevos.get(ym, 0.0) + float(v.get('total', 0) or 0)
+
+        if not meses_nuevos:
+            return jsonify({"error": f"Sin ventas con fecha válida ({sin_fecha} filas sin fecha)"}), 400
+
+        # Cargar historico y sobreescribir solo los meses del upload actual
         dso_file = os.path.join(DATA_DIR, 'dso_ventas_historico.json')
-        historico = []
+        historico: dict = {}
         if os.path.exists(dso_file):
-            with open(dso_file, 'r', encoding='utf-8') as f:
-                historico = json.load(f).get('ventas', [])
-        # Filtrar historico: solo últimos 120 días
-        filtrado = []
-        for v in historico:
             try:
-                fs = (v.get('fecha') or '')[:10]
-                fd = datetime.fromisoformat(fs) if '-' in fs else datetime(int(fs[6:]), int(fs[3:5]), int(fs[:2]))
-                if fd >= hace_4_meses:
-                    filtrado.append(v)
-            except: pass
-        # Upsert por nro_factura+cliente: re-upload siempre actualiza fecha y monto
-        def _vkey(v):
-            nro = (v.get('nro_factura') or '').strip()
-            cli = (v.get('cliente') or '').strip()
-            fecha = (v.get('fecha') or '')[:10]
-            return (nro + '||' + cli) if nro else (cli + '||' + fecha)
-        # Índice posicional para actualizar en lugar de saltar
-        idx_map = {_vkey(v): i for i, v in enumerate(filtrado)}
-        agregadas = actualizadas = 0
-        for v in nuevas_ventas:
-            k = _vkey(v)
-            if k in idx_map:
-                filtrado[idx_map[k]] = v   # sobreescribe con datos frescos
-                actualizadas += 1
-            else:
-                idx_map[k] = len(filtrado)
-                filtrado.append(v)
-                agregadas += 1
-        resultado = {"ventas": filtrado, "ultima_actualizacion": hoy.strftime('%d/%m/%Y %H:%M'), "total_registros": len(filtrado)}
+                with open(dso_file, 'r', encoding='utf-8') as f:
+                    historico = json.load(f).get('meses', {})
+            except Exception:
+                pass
+        historico.update(meses_nuevos)
+
+        # Conservar solo últimos 6 meses para no crecer indefinidamente
+        meses_validos = sorted(historico.keys(), reverse=True)[:6]
+        historico = {k: historico[k] for k in meses_validos}
+
+        resultado = {"meses": historico, "ultima_actualizacion": datetime.now().strftime('%d/%m/%Y %H:%M')}
         with open(dso_file, 'w', encoding='utf-8') as f:
             json.dump(resultado, f, ensure_ascii=False, indent=2)
-        print(f"[dso-ventas] Upsert: +{agregadas} nuevas, {actualizadas} actualizadas, total: {len(filtrado)}", flush=True)
-        return jsonify({"ok": True, "agregadas": agregadas, "actualizadas": actualizadas, "total": len(filtrado)})
+
+        log = ' | '.join(f"{k}=${v:,.0f}" for k, v in sorted(meses_nuevos.items()))
+        print(f"[dso-ventas] {log} — historico: {len(historico)} meses | {sin_fecha} filas sin fecha", flush=True)
+        return jsonify({"ok": True, "meses": meses_nuevos, "total_meses": len(historico)})
     except Exception as e:
         import traceback
         print(f"[dso-ventas] Error: {traceback.format_exc()}", flush=True)
@@ -5727,7 +5727,7 @@ def get_dso_global_saldos():
     fechas = [f for f in fechas if f]
     fecha_corte = max(fechas) if fechas else datetime.now()
 
-    # ── 3. Ventas agrupadas por mes (dso_ventas_historico.json) ──────────────
+    # ── 3. Ventas por mes desde historico mensual ─────────────────────────────
     ventas_por_mes = {}  # {(year, month): total}
     n_filas_ventas = 0
     try:
@@ -5735,14 +5735,14 @@ def get_dso_global_saldos():
         if os.path.exists(v_path):
             with open(v_path, 'r', encoding='utf-8') as _fv:
                 vh = json.load(_fv)
-            lista = vh.get('ventas', []) if isinstance(vh, dict) else vh
-            n_filas_ventas = len(lista)
-            for v in lista:
-                fv = _parsear_fecha_dso(v.get('fecha'))
-                if fv is None:
-                    continue
-                key = (fv.year, fv.month)
-                ventas_por_mes[key] = ventas_por_mes.get(key, 0) + float(v.get('total', 0) or 0)
+            meses_data = vh.get('meses', {})
+            n_filas_ventas = len(meses_data)
+            for ym, total in meses_data.items():
+                try:
+                    y2, m2 = int(ym[:4]), int(ym[5:7])
+                    ventas_por_mes[(y2, m2)] = float(total)
+                except Exception:
+                    pass
     except Exception as _ve:
         print(f"[dso-global] error ventas: {_ve}", flush=True)
 
