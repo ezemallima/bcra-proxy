@@ -5672,91 +5672,94 @@ def get_saldos_timestamp():
 
 @app.route("/dso-global-saldos")
 def get_dso_global_saldos():
-    """DSO global desde saldos_facturas.json.
-    Fórmula estándar: (Saldos / Ventas_4m) × 120.
-    Fecha de corte = última fechaFactura del upload, no la fecha del sistema."""
+    """DSO global usando dso_saldos_actual.json + dso_cheques_actual.json (lo que el usuario sube
+    por el DSO tool) y dso_ventas_historico.json (4 meses acumulados).
+    Fórmula: (AR / Ventas_4m) × 120."""
     from datetime import datetime
-    if not _saldos_facturas:
-        return jsonify({"dso": None, "saldo_total": 0, "clientes_count": 0, "facturas_count": 0})
 
-    # Fecha de corte = max(fechaFactura) del archivo subido
-    fechas_obj = []
-    for f in _saldos_facturas:
+    # ── AR: saldos del upload DSO actual ──────────────────────────────────────
+    saldos_lista = []
+    s_path = os.path.join(DATA_DIR, 'dso_saldos_actual.json')
+    if os.path.exists(s_path):
         try:
-            d, m, y = f['fechaFactura'].split('/')
-            fechas_obj.append(datetime(int(y), int(m), int(d)))
-        except:
+            with open(s_path, 'r', encoding='utf-8') as _fs:
+                s_data = json.load(_fs)
+            saldos_lista = s_data.get('saldos', [])
+        except Exception as _se:
+            print(f"[dso-global] error leyendo saldos: {_se}", flush=True)
+
+    if not saldos_lista:
+        return jsonify({"dso": None, "saldo_total": 0, "clientes_count": 0,
+                        "ventas_4m": 0, "formula": "sin_datos"})
+
+    saldo_total = sum(float(s.get('saldo', 0) or 0) for s in saldos_lista)
+
+    # Sumar cheques si existen
+    c_path = os.path.join(DATA_DIR, 'dso_cheques_actual.json')
+    if os.path.exists(c_path):
+        try:
+            with open(c_path, 'r', encoding='utf-8') as _fc:
+                c_data = json.load(_fc)
+            saldo_total += sum(abs(float(ch.get('total', 0) or 0)) for ch in c_data.get('cheques', []))
+        except Exception as _ce:
+            print(f"[dso-global] error leyendo cheques: {_ce}", flush=True)
+
+    # ── Fecha de corte = max(fecha_factura) de los saldos subidos ─────────────
+    fechas_obj = []
+    for s in saldos_lista:
+        fs = (s.get('fecha_factura') or '')[:10]
+        if not fs:
+            continue
+        try:
+            fechas_obj.append(datetime.fromisoformat(fs) if '-' in fs
+                              else datetime(int(fs[6:]), int(fs[3:5]), int(fs[:2])))
+        except Exception:
             pass
     fecha_corte = max(fechas_obj) if fechas_obj else datetime.now()
+    cutoff_4m   = fecha_corte - timedelta(days=120)
 
-    facturas_pendientes = [f for f in _saldos_facturas if (f.get('saldo') or 0) > 0]
-    saldo_total = sum(f.get('saldo', 0) for f in facturas_pendientes)
-    vencidas = 0
-    for f in facturas_pendientes:
-        try:
-            dp, mp, yp = f['fechaPago'].split('/')
-            if datetime(int(yp), int(mp), int(dp)) < fecha_corte:
-                vencidas += 1
-        except:
-            pass
-
-    # Ventas 4 meses anteriores a la fecha de corte (dso_ventas_historico.json)
-    ventas_4m = 0.0
-    cutoff_4m = fecha_corte - timedelta(days=120)
-    formula_usada = 'dias_pendientes'
+    # ── Ventas 4 meses ─────────────────────────────────────────────────────────
+    ventas_4m    = 0.0
+    formula_usada = 'sin_ventas'
     try:
         v_path = os.path.join(DATA_DIR, 'dso_ventas_historico.json')
         if os.path.exists(v_path):
             with open(v_path, 'r', encoding='utf-8') as _fv:
                 ventas_hist_data = json.load(_fv)
-            # dso_ventas_historico.json es un dict {"ventas": [...], "ultima_actualizacion": "..."}
-            ventas_lista = ventas_hist_data.get('ventas', []) if isinstance(ventas_hist_data, dict) else ventas_hist_data
+            ventas_lista = (ventas_hist_data.get('ventas', [])
+                            if isinstance(ventas_hist_data, dict) else ventas_hist_data)
             for v in ventas_lista:
                 fecha_str = (v.get('fecha') or '')[:10]
                 if not fecha_str:
                     continue
                 try:
-                    if '-' in fecha_str:
-                        fv_dt = datetime.fromisoformat(fecha_str)
-                    else:
-                        d2, m2, y2 = fecha_str.split('/')
-                        fv_dt = datetime(int(y2), int(m2), int(d2))
+                    fv_dt = (datetime.fromisoformat(fecha_str) if '-' in fecha_str
+                             else datetime(int(fecha_str[6:]), int(fecha_str[3:5]), int(fecha_str[:2])))
                 except Exception:
                     continue
                 if cutoff_4m <= fv_dt <= fecha_corte:
                     ventas_4m += float(v.get('total', 0) or 0)
-        print(f"[dso-global] ventas_4m={ventas_4m:.0f} (corte {cutoff_4m.strftime('%d/%m/%Y')} a {fecha_corte.strftime('%d/%m/%Y')})", flush=True)
+        print(f"[dso-global] ventas_4m={ventas_4m:.0f} "
+              f"(periodo {cutoff_4m.strftime('%d/%m/%Y')} → {fecha_corte.strftime('%d/%m/%Y')})", flush=True)
     except Exception as _ve:
         print(f"[dso-global] ventas error: {_ve}", flush=True)
 
-    # Fórmula estándar: (Saldos / Ventas_4m) × 120 días
+    # ── DSO = (AR / Ventas_4m) × 120 ─────────────────────────────────────────
     if ventas_4m > 0:
         dso = round((saldo_total / ventas_4m) * 120)
         formula_usada = 'estandar'
     else:
-        # Fallback: promedio ponderado de días pendientes (sin ventas disponibles)
-        suma_pond = sum(
-            f['saldo'] * max(0, (fecha_corte - datetime(*[int(x) for x in f['fechaFactura'].split('/')][::-1])).days)
-            for f in facturas_pendientes
-            if f.get('fechaFactura') and '/' in f['fechaFactura']
-        )
-        dso = round(suma_pond / saldo_total) if saldo_total > 0 else None
+        dso = None
 
-    print(
-        f"[dso-global] corte={fecha_corte.strftime('%d/%m/%Y')} "
-        f"pendientes={len(facturas_pendientes)} saldo={saldo_total:.0f} "
-        f"ventas_4m={ventas_4m:.0f} dso={dso} formula={formula_usada}",
-        flush=True
-    )
-    clientes_unicos = len({f.get('cliente', '') for f in _saldos_facturas if f.get('cliente')})
+    clientes_unicos = len({s.get('cliente', '') for s in saldos_lista if s.get('cliente')})
+    print(f"[dso-global] corte={fecha_corte.strftime('%d/%m/%Y')} "
+          f"AR={saldo_total:.0f} ventas_4m={ventas_4m:.0f} dso={dso}", flush=True)
     return jsonify({
         "dso": dso,
         "saldo_total": saldo_total,
         "clientes_count": clientes_unicos,
-        "facturas_count": len(_saldos_facturas),
-        "facturas_vencidas": vencidas,
-        "fecha_corte": fecha_corte.strftime('%d/%m/%Y'),
         "ventas_4m": ventas_4m,
+        "fecha_corte": fecha_corte.strftime('%d/%m/%Y'),
         "formula": formula_usada,
         "ultima_actualizacion": time.strftime('%d/%m/%Y')
     })

@@ -749,6 +749,9 @@
       <div class="section-title">Mi Cartera</div>
       <div class="section-sub" id="cartera-subtitle">Clientes activos</div>
 
+      <!-- Banner DSO global de cartera -->
+      <div id="cartera-dso-banner" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:10px;"></div>
+
       <!-- Buscador sticky con blur -->
       <div class="sticky-search">
         <input type="text" class="buscar-input" id="buscar-cartera"
@@ -982,7 +985,7 @@ async function iniciarApp(perfil) {
   renderOportunidades();
   cargarSaldosCartera();
   cargarDSOHeader();
-  // Polling cada 5 minutos: detecta nuevo DSO subido por admin
+  // Polling cada 5 minutos
   setInterval(() => cargarSaldosCartera(), 5 * 60 * 1000);
   setInterval(() => cargarDSOHeader(), 5 * 60 * 1000);
   // Sync cross-tab: detecta cuando la App Principal sube nuevos saldos
@@ -1024,7 +1027,7 @@ function normNombre(s) {
 
 async function cargarDSOHeader() {
   try {
-    const r = await fetch(API + '/dso-global-saldos');
+    const r = await fetch('/dso-global-saldos');
     const d = await r.json();
     if (!d || d.dso == null) return;
     const color = d.dso <= 45 ? '#10b981' : d.dso <= 65 ? '#f59e0b' : '#ef4444';
@@ -1034,9 +1037,26 @@ async function cargarDSOHeader() {
     numEl.textContent = d.dso + 'd';
     numEl.style.color = color;
     wrap.style.opacity = '1';
-    const formula = d.formula === 'estandar' ? '(Saldo/Ventas 4m)×120' : 'Promedio ponderado';
-    wrap.title = 'DSO al ' + (d.fecha_corte || '—') + ' · ' + formula;
+    wrap.title = 'DSO al ' + (d.fecha_corte || '—') + ' · (Saldo/Ventas 4m)×120';
+    // También actualiza el banner de cartera si existe
+    const bannerEl = document.getElementById('cartera-dso-banner');
+    if (bannerEl) actualizarBannerDSO(d);
   } catch(e) {}
+}
+
+function actualizarBannerDSO(d) {
+  const el = document.getElementById('cartera-dso-banner');
+  if (!el || !d || d.dso == null) return;
+  const color = d.dso <= 45 ? '#10b981' : d.dso <= 65 ? '#f59e0b' : '#ef4444';
+  const label = d.dso <= 45 ? 'Normal' : d.dso <= 65 ? 'Atención' : 'Crítico';
+  el.innerHTML =
+    '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
+    + '<span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">DSO Cartera</span>'
+    + '<span style="font-family:\'Syne\',sans-serif;font-size:22px;font-weight:800;color:' + color + ';line-height:1;">' + d.dso + 'd</span>'
+    + '<span style="font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700;background:' + color + '22;color:' + color + ';">' + label + '</span>'
+    + '<span style="font-size:10px;color:var(--text3);">al ' + (d.fecha_corte || '—') + '</span>'
+    + '</div>';
+  el.style.display = 'block';
 }
 
 async function cargarSaldosCartera(forzar = false) {
@@ -1082,6 +1102,44 @@ async function cargarSaldosCartera(forzar = false) {
   ) : 'todos';
   renderCartera(filtro);
   renderOportunidades();
+  // Cargar saldos del DSO tool como fallback para badges de clientes
+  cargarSaldosDSOFallback();
+}
+
+// Carga dso_saldos_actual.json y puebla SALDOS_MAP para clientes sin datos de facturas
+async function cargarSaldosDSOFallback() {
+  try {
+    const r = await fetch('/dso-saldos');
+    const d = await r.json();
+    const rows = d.saldos || [];
+    if (!rows.length) return;
+    // Agrupar por cliente
+    const porCliente = {};
+    rows.forEach(function(s) {
+      const k = normNombre(s.cliente || '');
+      if (!k) return;
+      if (!porCliente[k]) porCliente[k] = [];
+      if ((parseFloat(s.saldo) || 0) > 0) {
+        porCliente[k].push({
+          fechaPago: s.fecha_pago || s.fecha_factura || '',
+          saldo:     parseFloat(s.saldo) || 0
+        });
+      }
+    });
+    let agregados = 0;
+    Object.keys(porCliente).forEach(function(k) {
+      if (SALDOS_MAP[k] && (SALDOS_MAP[k].facturas || []).length > 0) return; // ya tiene datos reales
+      const facturas = porCliente[k];
+      const total = facturas.reduce((s, f) => s + f.saldo, 0);
+      if (total > 0) {
+        SALDOS_MAP[k] = { facturas: facturas, total_saldo: total };
+        agregados++;
+      }
+    });
+    if (agregados > 0) {
+      renderCartera(document.querySelector('.filter-chip.active')?.dataset?.filtro || 'todos');
+    }
+  } catch(e) {}
 }
 
 function normUltra(s) {

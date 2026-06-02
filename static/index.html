@@ -960,6 +960,18 @@
       <button class="primary" id="dso-btn-calcular" onclick="procesarDSO()" style="width:100%;display:none;">Calcular DSO →</button>
     </div>
 
+    <!-- ── INDICADOR DSO ACTUAL (siempre visible, carga del servidor) ── -->
+    <div id="dso-actual-card" class="card" style="display:none;margin-bottom:1rem;border-left:4px solid var(--azul-claro);background:linear-gradient(135deg,#eff6ff,#fff);">
+      <div style="font-size:11px;color:var(--azul-claro);font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">DSO Vigente — Último Cálculo</div>
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+        <span id="dso-actual-num" style="font-family:'Syne',sans-serif;font-size:48px;font-weight:800;line-height:1;">—</span>
+        <div>
+          <div id="dso-actual-label" style="font-size:13px;font-weight:700;margin-bottom:4px;">días</div>
+          <div id="dso-actual-detalle" style="font-size:11px;color:#64748b;line-height:1.6;"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- ⚡ CARRIL RÁPIDO — Saldos de Gestión Semanal -->
     <div class="card" style="border:2px solid #10b981;background:linear-gradient(135deg,#f0fdf4 0%,#fff 100%);margin-bottom:1rem;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px;">
@@ -1911,6 +1923,28 @@ async function sincronizarServidor() {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(datos)
     });
+  } catch(e) {}
+}
+
+async function cargarDSOActual() {
+  try {
+    var r = await fetch('/dso-global-saldos');
+    var d = await r.json();
+    var card = document.getElementById('dso-actual-card');
+    if (!card) return;
+    if (!d || d.dso == null) { card.style.display = 'none'; return; }
+    var color = d.dso <= 45 ? '#16a34a' : d.dso <= 65 ? '#d97706' : '#dc2626';
+    var label = d.dso <= 45 ? 'Normal' : d.dso <= 65 ? 'Atención' : 'Crítico';
+    document.getElementById('dso-actual-num').textContent = d.dso;
+    document.getElementById('dso-actual-num').style.color = color;
+    document.getElementById('dso-actual-label').innerHTML =
+      'días · <span style="padding:2px 10px;border-radius:12px;font-size:11px;font-weight:700;background:' + color + '22;color:' + color + ';">' + label + '</span>';
+    var ventas = d.ventas_4m > 0 ? '$' + Math.round(d.ventas_4m).toLocaleString('es-AR') : 'sin datos de ventas';
+    document.getElementById('dso-actual-detalle').innerHTML =
+      'Corte: <strong>' + (d.fecha_corte || '—') + '</strong> &nbsp;·&nbsp; '
+      + 'Saldo AR: <strong>$' + Math.round(d.saldo_total || 0).toLocaleString('es-AR') + '</strong> &nbsp;·&nbsp; '
+      + 'Ventas 4m: <strong>' + ventas + '</strong>';
+    card.style.display = 'block';
   } catch(e) {}
 }
 
@@ -2886,6 +2920,7 @@ async function init() {
   await cargarDesdServidor();
 
   await cargarHistorialVentas();
+  cargarDSOActual(); // no-await: indicador DSO siempre visible
   poblarVendedoresNuevo(); // no-await: carga en background
   await Promise.all([cargarWSP(), cargarMoras(), cargarCarteraServidor()]);
   actualizarMetricas();
