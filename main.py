@@ -5721,9 +5721,8 @@ def get_dso_global_saldos():
                                     if float(ch.get('total', 0) or 0) > 0)
         except Exception as _ce:
             print(f"[dso-global] error cheques: {_ce}", flush=True)
-    # El agotamiento usa SOLO saldos (cuentas por cobrar puras).
-    # Los cheques se informan por separado para transparencia.
-    ar_total = saldo_base
+    # AR = Saldos + Cheques (según fórmula del usuario: Deuda Total a Agotar)
+    ar_total = saldo_base + total_cheques
 
     # ── 2. Fecha de corte — último día del período de los saldos ─────────────
     fechas = [_parsear_fecha_dso(s.get('fecha_factura')) for s in saldos_lista]
