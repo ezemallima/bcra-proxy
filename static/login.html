@@ -437,13 +437,16 @@ const VENDEDORES = {
   'Ezequiel Mallima':         '20393831821',
   'Marcelo Fernandez':        '20251483680',
   'Pablo Perticone':          '20224421371',
+  'Raul Maza':                '20254118959',
   'Roberto Pascual':          '20206068834',
   'Sergio Piatanesi':         '20217157332',
   'Valeria Gutierrez Castex': '27224289966',
 };
 
 function rutaSegunRol(rol) {
-  return (rol === 'admin' || rol === 'administracion') ? '/' : '/comercial';
+  if (rol === 'director') return '/director';
+  if (rol === 'admin' || rol === 'administracion') return '/';
+  return '/comercial';
 }
 
 function esCuit(val) {
@@ -501,6 +504,25 @@ async function handleLogin(e) {
     window.location.replace('/comercial');
 
   } else {
+    // ── Camino D: Usuario Director (no es CUIT ni email) ─────────────────────
+    const idUp = identifier.toUpperCase();
+    if (idUp === 'DIRECTORCOMERCIAL' || idUp === 'DIRECTOR') {
+      try {
+        const res  = await fetch('/director-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ usuario: idUp, clave: password }),
+        });
+        const json = await res.json();
+        if (json.ok) { window.location.replace('/director'); return; }
+        btn.disabled = false; btn.classList.remove('loading');
+        mostrarError('Usuario o contraseña incorrectos.'); return;
+      } catch (_) {
+        btn.disabled = false; btn.classList.remove('loading');
+        mostrarError('Error de conexión. Intentá de nuevo.'); return;
+      }
+    }
+
     // ── Camino B: Email + contraseña (Supabase) ───────────────────────────────
     try {
       await loginConEmail(identifier, password);
