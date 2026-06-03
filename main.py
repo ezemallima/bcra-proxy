@@ -5255,8 +5255,9 @@ def save_dso_cheques():
         f_actual = os.path.join(DATA_DIR, 'dso_cheques_actual.json')
         with open(f_actual, 'w', encoding='utf-8') as f:
             json.dump({"cheques": nuevos, "ultima_actualizacion": hoy.strftime('%d/%m/%Y %H:%M')}, f, ensure_ascii=False)
-        total = sum(abs(c.get('total', 0)) for c in nuevos)
-        print(f"[dso-cheques] Wipe & write: {len(nuevos)} cheques ${total:,.0f}", flush=True)
+        total_pos = sum(c.get('total', 0) for c in nuevos if c.get('total', 0) > 0)
+        total_neg = sum(c.get('total', 0) for c in nuevos if c.get('total', 0) < 0)
+        print(f"[dso-cheques] {len(nuevos)} cheques: positivos=${total_pos:,.0f} negativos=${total_neg:,.0f}", flush=True)
         return jsonify({"ok": True, "agregados": len(nuevos), "total": len(nuevos)})
     except Exception as e:
         import traceback
@@ -5714,8 +5715,10 @@ def get_dso_global_saldos():
     if os.path.exists(c_path):
         try:
             with open(c_path, 'r', encoding='utf-8') as _fc:
-                total_cheques = sum(abs(float(ch.get('total', 0) or 0))
-                                    for ch in json.load(_fc).get('cheques', []))
+                # Solo cheques positivos (pendientes de cobro)
+                total_cheques = sum(float(ch.get('total', 0) or 0)
+                                    for ch in json.load(_fc).get('cheques', [])
+                                    if float(ch.get('total', 0) or 0) > 0)
         except Exception as _ce:
             print(f"[dso-global] error cheques: {_ce}", flush=True)
     # El agotamiento usa SOLO saldos (cuentas por cobrar puras).

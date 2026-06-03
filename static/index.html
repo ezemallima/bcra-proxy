@@ -1728,7 +1728,8 @@ async function procesarDSO() {
           var monto   = parseMonto(row[mV2]);
           var fecha   = fechaExcelAISO(row[fV2]);
           var nro     = nV2 ? (row[nV2]||'').toString().trim() : '';
-          if (cliente && fecha && monto > 0) {
+          // Incluye negativos (notas de crédito): restan del total mensual
+          if (cliente && fecha && monto !== 0) {
             ventasParaGuardar.push({ cliente: cliente, fecha: fecha, total: monto, nro_factura: nro });
           }
         });
@@ -1789,7 +1790,8 @@ async function procesarDSO() {
           var cliente    = (row[cC2]||'').toString().trim();
           var total      = parseMonto(row[mC2]);
           var fecha_pago = fC2 ? fechaExcelAISO(row[fC2]) : '';
-          if (cliente && total !== 0) {
+          // Solo cheques positivos (pendientes de cobro); los negativos son cancelaciones
+          if (cliente && total > 0) {
             chequesParaGuardar.push({ cliente: cliente, fecha_pago: fecha_pago, total: total });
           }
         });
