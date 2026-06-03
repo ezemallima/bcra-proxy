@@ -847,8 +847,15 @@ function normNombreDir(s) {
 function renderClientRow(c, idx) {
   var sc = c.score;
   var scColor = colorScore(sc);
-  // DSO individual: usar valor por agotamiento si está disponible
-  var dsoExh = _dsoPorCliente[normNombreDir(c.nombre)];
+  // DSO individual: buscar en cache por agotamiento con múltiples variantes de nombre
+  var _nNorm = normNombreDir(c.nombre);
+  var dsoExh = _dsoPorCliente[_nNorm];
+  // Fallback: buscar coincidencia parcial (primeras 2 palabras) por si el nombre difiere levemente
+  if (dsoExh == null && _nNorm) {
+    var _prim = _nNorm.split(' ').slice(0, 2).join(' ');
+    var _found = Object.keys(_dsoPorCliente).find(function(k) { return k.startsWith(_prim); });
+    if (_found) dsoExh = _dsoPorCliente[_found];
+  }
   var dsoVal = (dsoExh != null) ? dsoExh : (c.dso || 0);
   var dsoColor = colorDSO(dsoVal);
   var total = c.saldo_total || 1;

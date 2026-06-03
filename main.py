@@ -5820,9 +5820,9 @@ def get_dso_todos():
     fechas = [f for f in fechas if f]
     fecha_corte = max(fechas) if fechas else datetime.now()
 
-    # ── DSO por cliente ───────────────────────────────────────────────────────
-    saldo_por_cli: dict     = {}
-    vendedor_por_cli: dict  = {}
+    # ── Saldo y vendedor por cliente ──────────────────────────────────────────
+    saldo_por_cli: dict    = {}
+    vendedor_por_cli: dict = {}
     for s in saldos_lista:
         cli = _norm_nombre(s.get('cliente') or '')
         if not cli:
@@ -5832,25 +5832,50 @@ def get_dso_todos():
         if vend:
             vendedor_por_cli[cli] = vend
 
-    dso_por_cliente: dict  = {}
+    # Enriquecer vendedor_por_cli desde saldos_gestion/facturas (siempre tienen vendedor)
+    # Cubre casos donde dso_saldos_actual no tiene el campo vendedor (upload anterior al fix)
+    fuente_vend = _saldos_gestion if _saldos_gestion else _saldos_facturas
+    for f in fuente_vend:
+        cli  = _norm_nombre(f.get('cliente') or '')
+        vend = (f.get('vendedor') or '').strip()
+        if cli and vend and cli not in vendedor_por_cli:
+            vendedor_por_cli[cli] = vend
+
+    # Total saldo para asignación proporcional de ventas a clientes sin datos propios
+    total_saldo_global = sum(v for v in saldo_por_cli.values() if v > 0)
+
+    def _ventas_proporcional(cli_saldo: float) -> dict:
+        """Asigna ventas proporcionales al saldo del cliente cuando no hay datos per-cliente."""
+        if total_saldo_global <= 0 or cli_saldo <= 0:
+            return {}
+        ratio = cli_saldo / total_saldo_global
+        return {ym: tot * ratio for ym, tot in ventas_globales.items()}
+
+    # ── DSO por cliente ───────────────────────────────────────────────────────
+    dso_por_cliente: dict = {}
     for cli, saldo in saldo_por_cli.items():
         cheques = cheques_por_cliente.get(cli, 0.0)
         ar      = saldo + cheques
-        ventas  = ventas_por_cli.get(cli, ventas_globales)   # fallback a global si no hay por cliente
-        res     = _dso_exhaustion(ar, ventas, fecha_corte)
+        if ar <= 0:
+            dso_por_cliente[cli] = 0
+            continue
+        # Usar ventas propias si existen, si no asignar proporcionalmente
+        ventas_cli = ventas_por_cli.get(cli) or _ventas_proporcional(saldo)
+        res = _dso_exhaustion(ar, ventas_cli, fecha_corte)
         dso_por_cliente[cli] = res["dso"]
 
-    # ── DSO por vendedor (agrega clientes del vendedor) ───────────────────────
-    vend_saldo:  dict = {}
+    # ── DSO por vendedor ──────────────────────────────────────────────────────
+    vend_saldo:   dict = {}
     vend_cheques: dict = {}
-    vend_ventas: dict = {}   # vend → {(y,m) → total}
+    vend_ventas:  dict = {}
     for cli, saldo in saldo_por_cli.items():
         vend = vendedor_por_cli.get(cli, '')
         if not vend:
             continue
         vend_saldo[vend]   = vend_saldo.get(vend, 0.0) + saldo
         vend_cheques[vend] = vend_cheques.get(vend, 0.0) + cheques_por_cliente.get(cli, 0.0)
-        v_cli = ventas_por_cli.get(cli, {})
+        # Sumar ventas propias del cliente al vendedor
+        v_cli = ventas_por_cli.get(cli) or _ventas_proporcional(saldo)
         if vend not in vend_ventas:
             vend_ventas[vend] = {}
         for ym_key, tot in v_cli.items():
@@ -5859,20 +5884,22 @@ def get_dso_todos():
     dso_por_vendedor: dict = {}
     for vend in vend_saldo:
         ar     = vend_saldo[vend] + vend_cheques.get(vend, 0.0)
-        ventas = vend_ventas.get(vend, ventas_globales)
+        ventas = vend_ventas.get(vend, {})
         res    = _dso_exhaustion(ar, ventas, fecha_corte)
         dso_por_vendedor[vend] = {
             "dso":      res["dso"],
-            "ar":       round(vend_saldo[vend] + vend_cheques.get(vend, 0.0)),
+            "ar":       round(ar),
             "saldo":    round(vend_saldo[vend]),
             "cheques":  round(vend_cheques.get(vend, 0.0)),
             "breakdown": res["breakdown"],
         }
 
+    print(f"[dso-todos] {len(dso_por_cliente)} clientes | {len(dso_por_vendedor)} vendedores | "
+          f"fecha_corte={fecha_corte.strftime('%d/%m/%Y')}", flush=True)
     return jsonify({
-        "fecha_corte":     fecha_corte.strftime('%d/%m/%Y'),
-        "por_vendedor":    dso_por_vendedor,
-        "por_cliente":     dso_por_cliente,
+        "fecha_corte":  fecha_corte.strftime('%d/%m/%Y'),
+        "por_vendedor": dso_por_vendedor,
+        "por_cliente":  dso_por_cliente,
     })
 
 
