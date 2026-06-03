@@ -563,8 +563,6 @@ var _filterBucket = ''; // '' | 'd30' | 'd60' | 'd90' | 'd120plus'
 // DSO exhaustion por cliente (clave = nombre normalizado, valor = días).
 // Calculado por /api/dso-todos con ventas reales por cliente (no proporcional).
 var _dsoPorCliente = {};
-// DSO global ponderado precalculado por el servidor (mismo valor que la app comercial).
-var _dsoGlobalPonderado = null;
 
 function fmt(n) {
   if (!n && n !== 0) return '—';
@@ -613,59 +611,60 @@ async function cargarDatos() {
     if (!rDir.ok) throw new Error('HTTP ' + rDir.status);
     _data = await rDir.json();
 
-    // DSO global ponderado viene directo en _data (caché server-side de /api/dso-todos)
-    _dsoGlobalPonderado = _data.dso_global_ponderado || null;
-
     // DSO por cliente (agotamiento con ventas reales, no proporcional)
     if (rTodos && rTodos.ok) {
       var todos = await rTodos.json();
       _dsoPorCliente = todos.por_cliente || {};
-      // Actualizar ponderado global si llega más fresco del segundo endpoint
-      if (todos.dso_global_ponderado) _dsoGlobalPonderado = todos.dso_global_ponderado;
     }
 
     document.getElementById('header-fecha').textContent = 'Al día: ' + _data.fecha_hoy;
     renderApp();
+    actualizarKPIDSOGlobal();
   } catch(e) {
     document.getElementById('main-content').innerHTML =
       '<div class="loading-wrap"><div style="color:#ef4444;font-weight:600;">Error al cargar datos: ' + e.message + '</div></div>';
   }
 }
 
-// Calcular totales a partir de la lista filtrada.
-// DSO global: usa agotamiento por cliente (si disponible) como promedio ponderado.
-// Fallback a aging cuando no hay datos de ventas (caso: primer uso sin historial).
 function calcTotales(lista) {
   var ts = 0, tb = {d30:0,d60:0,d90:0,d120:0,d120plus:0};
-  var n_vencido = 0, n_critico = 0, n_riesgo = 0;
-  var suma_pond_aging = 0;
-  var suma_pond_exh = 0, suma_saldo_exh = 0;
+  var n_vencido = 0, n_critico = 0, n_riesgo = 0, suma_pond = 0;
   lista.forEach(function(c) {
     ts += c.saldo_total;
     BUCKETS.forEach(function(bk){ tb[bk] += (c.buckets[bk]||0); });
     if ((c.buckets.d60||0)+(c.buckets.d90||0)+(c.buckets.d120||0)+(c.buckets.d120plus||0) > 0) n_vencido++;
     if ((c.buckets.d90||0)+(c.buckets.d120||0)+(c.buckets.d120plus||0) > 0) n_critico++;
     if (c.score && c.score < 400) n_riesgo++;
-    c.facturas.forEach(function(f){ suma_pond_aging += f.saldo * (f.dias||0); });
-    // Acumular DSO exhaustion ponderado por saldo
-    var dsoExh = _dsoPorCliente[normNombreDir(c.nombre || '')];
-    if (typeof dsoExh === 'number' && dsoExh > 0) {
-      suma_pond_exh  += dsoExh * c.saldo_total;
-      suma_saldo_exh += c.saldo_total;
-    }
+    c.facturas.forEach(function(f){ suma_pond += f.saldo * (f.dias||0); });
   });
-  // DSO global: servidor ponderado (= app comercial) cuando no hay filtros activos.
-  // Con filtros aplicados, calcular localmente desde los datos filtrados.
-  var sinFiltros = (!_filterVend && !_search && !_filterBucket);
-  var dso_exh    = suma_saldo_exh > ts * 0.5 ? Math.round(suma_pond_exh / suma_saldo_exh) : null;
-  var dso_aging  = ts > 0 ? Math.round(suma_pond_aging / ts) : 0;
-  var dso_local  = dso_exh !== null ? dso_exh : dso_aging;
   return {
     total_saldo: ts, total_buckets: tb,
-    dso_global: (sinFiltros && _dsoGlobalPonderado) ? _dsoGlobalPonderado : dso_local,
+    dso_global: ts > 0 ? Math.round(suma_pond / ts) : 0,
     n_clientes: lista.length, n_vencido: n_vencido,
     n_critico: n_critico, n_riesgo: n_riesgo
   };
+}
+
+// Actualiza SOLO el KPI "DSO Promedio" con el mismo valor que muestra la app comercial.
+async function actualizarKPIDSOGlobal() {
+  try {
+    const r = await fetch('/dso-global-saldos');
+    if (!r.ok) return;
+    const d = await r.json();
+    if (!d || d.dso == null) return;
+    var grid = document.getElementById('kpi-grid');
+    if (!grid) return;
+    grid.querySelectorAll('.kpi-card').forEach(function(card) {
+      var lbl = card.querySelector('.kpi-label');
+      if (lbl && lbl.textContent.trim() === 'DSO Promedio') {
+        var color = colorDSO(d.dso);
+        card.querySelector('.kpi-value').textContent = d.dso + 'd';
+        card.querySelector('.kpi-value').style.color = color;
+        card.style.setProperty('--kpi-color', color);
+        card.querySelector('.kpi-sub').textContent = 'días · método cobro';
+      }
+    });
+  } catch(e) {}
 }
 
 function renderKPIsAndAging(stats) {
