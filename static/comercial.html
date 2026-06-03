@@ -1028,8 +1028,20 @@ function normNombre(s) {
 
 async function cargarDSOHeader() {
   try {
-    const r = await fetch('/dso-global-saldos');
-    const d = await r.json();
+    const r = await fetch('/api/dso-todos');
+    const todos = await r.json();
+    if (!todos) return;
+
+    // DSO del vendedor logueado
+    const nombre  = SESSION && SESSION.nombre ? SESSION.nombre : '';
+    const vData   = (todos.por_vendedor || {})[nombre];
+    // Si no hay dato por vendedor, usar global como fallback
+    const rGlobal = await fetch('/dso-global-saldos');
+    const global  = await rGlobal.json();
+    const d = vData
+      ? { dso: vData.dso, fecha_corte: todos.fecha_corte, saldo_total: vData.saldo }
+      : global;
+
     if (!d || d.dso == null) return;
     const color = d.dso <= 45 ? '#10b981' : d.dso <= 65 ? '#f59e0b' : '#ef4444';
     const numEl = document.getElementById('header-dso-num');
@@ -1038,25 +1050,26 @@ async function cargarDSOHeader() {
     numEl.textContent = d.dso + 'd';
     numEl.style.color = color;
     wrap.style.opacity = '1';
-    wrap.title = 'DSO al ' + (d.fecha_corte || '—') + ' · Método de agotamiento 3 meses';
-    // También actualiza el banner de cartera si existe
-    const bannerEl = document.getElementById('cartera-dso-banner');
-    if (bannerEl) actualizarBannerDSO(d);
+    wrap.title = 'DSO de tu cartera al ' + (d.fecha_corte || todos.fecha_corte || '—');
+    if (document.getElementById('cartera-dso-banner')) actualizarBannerDSO(d, vData);
   } catch(e) {}
 }
 
-function actualizarBannerDSO(d) {
+function actualizarBannerDSO(d, vData) {
   const el = document.getElementById('cartera-dso-banner');
   if (!el || !d || d.dso == null) return;
   const color = d.dso <= 45 ? '#10b981' : d.dso <= 65 ? '#f59e0b' : '#ef4444';
   const label = d.dso <= 45 ? 'Normal' : d.dso <= 65 ? 'Atención' : 'Crítico';
-  el.innerHTML =
-    '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
-    + '<span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">DSO Cartera</span>'
+  let html = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
+    + '<span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">DSO Mi Cartera</span>'
     + '<span style="font-family:\'Syne\',sans-serif;font-size:22px;font-weight:800;color:' + color + ';line-height:1;">' + d.dso + 'd</span>'
     + '<span style="font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700;background:' + color + '22;color:' + color + ';">' + label + '</span>'
-    + '<span style="font-size:10px;color:var(--text3);">al ' + (d.fecha_corte || '—') + '</span>'
-    + '</div>';
+    + '<span style="font-size:10px;color:var(--text3);">al ' + (d.fecha_corte || '—') + '</span>';
+  if (vData) {
+    html += '<span style="font-size:10px;color:var(--text3);">· AR: $' + Math.round(vData.ar || 0).toLocaleString('es-AR') + '</span>';
+  }
+  html += '</div>';
+  el.innerHTML = html;
   el.style.display = 'block';
 }
 

@@ -5277,9 +5277,9 @@ def get_dso_ventas():
 
 @app.route("/dso-ventas", methods=["POST"])
 def save_dso_ventas():
-    """Agrega el total de ventas del mes al historial mensual.
-    Cada upload sobreescribe SOLO los meses que trae — los demás se conservan.
-    Formato almacenado: {meses: {"YYYY-MM": total}, ultima_actualizacion: "..."}"""
+    """Agrega ventas al historial mensual, tanto totales como por cliente.
+    Sobreescribe SOLO los meses incluidos en el upload.
+    Formato: {meses: {"YYYY-MM": total}, por_cliente: {"CLIENTE": {"YYYY-MM": total}}}"""
     try:
         body = request.get_json(force=True)
         nuevas = body.get('ventas', [])
@@ -5287,42 +5287,67 @@ def save_dso_ventas():
             return jsonify({"error": "Sin ventas"}), 400
         from datetime import datetime
 
-        # Sumar totales por mes YYYY-MM (sin deduplicación — cada fila suma)
-        meses_nuevos: dict = {}
+        # Acumular totales: global por mes Y por cliente×mes
+        meses_nuevos: dict = {}       # ym → total
+        clientes_nuevos: dict = {}    # cli_norm → {ym → total}
         sin_fecha = 0
         for v in nuevas:
             fv = _parsear_fecha_dso(v.get('fecha'))
             if fv is None:
                 sin_fecha += 1
                 continue
-            ym = f"{fv.year}-{fv.month:02d}"
-            meses_nuevos[ym] = meses_nuevos.get(ym, 0.0) + float(v.get('total', 0) or 0)
+            ym  = f"{fv.year}-{fv.month:02d}"
+            tot = float(v.get('total', 0) or 0)
+            meses_nuevos[ym] = meses_nuevos.get(ym, 0.0) + tot
+            # Normalizar nombre de cliente igual que el resto del sistema
+            cli = _norm_nombre(v.get('cliente') or '')
+            if cli:
+                clientes_nuevos.setdefault(cli, {})
+                clientes_nuevos[cli][ym] = clientes_nuevos[cli].get(ym, 0.0) + tot
 
         if not meses_nuevos:
             return jsonify({"error": f"Sin ventas con fecha válida ({sin_fecha} filas sin fecha)"}), 400
 
-        # Cargar historico y sobreescribir solo los meses del upload actual
+        # Cargar historico existente
         dso_file = os.path.join(DATA_DIR, 'dso_ventas_historico.json')
-        historico: dict = {}
+        historico_meses: dict = {}
+        historico_clientes: dict = {}
         if os.path.exists(dso_file):
             try:
-                with open(dso_file, 'r', encoding='utf-8') as f:
-                    historico = json.load(f).get('meses', {})
+                prev = json.load(open(dso_file, 'r', encoding='utf-8'))
+                historico_meses    = prev.get('meses', {})
+                historico_clientes = prev.get('por_cliente', {})
             except Exception:
                 pass
-        historico.update(meses_nuevos)
 
-        # Conservar solo últimos 6 meses para no crecer indefinidamente
-        meses_validos = sorted(historico.keys(), reverse=True)[:6]
-        historico = {k: historico[k] for k in meses_validos}
+        # Sobreescribir meses del upload (wipe+replace por mes)
+        historico_meses.update(meses_nuevos)
+        meses_validos = sorted(historico_meses.keys(), reverse=True)[:6]
+        historico_meses = {k: historico_meses[k] for k in meses_validos}
 
-        resultado = {"meses": historico, "ultima_actualizacion": datetime.now().strftime('%d/%m/%Y %H:%M')}
+        # Sobreescribir ventas por cliente en los meses del upload
+        for cli, meses_cli in clientes_nuevos.items():
+            if cli not in historico_clientes:
+                historico_clientes[cli] = {}
+            historico_clientes[cli].update(meses_cli)
+        # Purgar meses obsoletos por cliente también
+        for cli in list(historico_clientes.keys()):
+            historico_clientes[cli] = {ym: v for ym, v in historico_clientes[cli].items()
+                                       if ym in historico_meses}
+            if not historico_clientes[cli]:
+                del historico_clientes[cli]
+
+        resultado = {
+            "meses": historico_meses,
+            "por_cliente": historico_clientes,
+            "ultima_actualizacion": datetime.now().strftime('%d/%m/%Y %H:%M')
+        }
         with open(dso_file, 'w', encoding='utf-8') as f:
             json.dump(resultado, f, ensure_ascii=False, indent=2)
 
         log = ' | '.join(f"{k}=${v:,.0f}" for k, v in sorted(meses_nuevos.items()))
-        print(f"[dso-ventas] {log} — historico: {len(historico)} meses | {sin_fecha} filas sin fecha", flush=True)
-        return jsonify({"ok": True, "meses": meses_nuevos, "total_meses": len(historico)})
+        print(f"[dso-ventas] {log} | {len(clientes_nuevos)} clientes | {sin_fecha} sin fecha", flush=True)
+        return jsonify({"ok": True, "meses": meses_nuevos, "total_meses": len(historico_meses)})
     except Exception as e:
         import traceback
         print(f"[dso-ventas] Error: {traceback.format_exc()}", flush=True)
@@ -5674,6 +5699,159 @@ def get_saldos_timestamp():
         return resp
     except:
         return jsonify({"ts": 0, "fecha": None})
+
+def _dso_exhaustion(ar: float, ventas_por_mes: dict, fecha_corte_dt) -> dict:
+    """Aplica el método de agotamiento sobre 3 meses hacia atrás desde fecha_corte_dt.
+    ventas_por_mes: {(year, month): total}
+    Devuelve {dso, breakdown} o {dso: None} si no hay ventas."""
+    import calendar
+    if ar <= 0:
+        return {"dso": 0, "breakdown": []}
+    meses = []
+    y, m = fecha_corte_dt.year, fecha_corte_dt.month
+    for _ in range(3):
+        dias  = calendar.monthrange(y, m)[1]
+        ventas = ventas_por_mes.get((y, m), 0.0)
+        meses.append({"mes": f"{m:02d}/{y}", "dias": dias, "ventas": ventas})
+        m -= 1
+        if m == 0:
+            m, y = 12, y - 1
+    ar_rest = ar
+    dso_acum = 0.0
+    breakdown = []
+    for mi in meses:
+        if ar_rest <= 0:
+            break
+        v = mi["ventas"]
+        d = mi["dias"]
+        if v <= 0:
+            breakdown.append({**mi, "dias_dso": 0, "nota": "sin ventas"})
+            continue
+        if ar_rest >= v:
+            dso_acum += d
+            ar_rest  -= v
+            breakdown.append({**mi, "dias_dso": d, "ar_restante": round(ar_rest)})
+        else:
+            dp = (ar_rest / v) * d
+            dso_acum += dp
+            breakdown.append({**mi, "dias_dso": round(dp, 1), "ar_restante": 0})
+            ar_rest = 0
+    return {"dso": round(dso_acum) if ar > 0 else None, "breakdown": breakdown}
+
+
+@app.route("/api/dso-todos")
+def get_dso_todos():
+    """DSO por vendedor y por cliente usando el método de agotamiento.
+    Fuentes: dso_saldos_actual, dso_cheques_actual, dso_ventas_historico."""
+    import calendar
+    from datetime import datetime
+
+    # ── Leer saldos ──────────────────────────────────────────────────────────
+    saldos_lista = []
+    s_path = os.path.join(DATA_DIR, 'dso_saldos_actual.json')
+    if os.path.exists(s_path):
+        try:
+            saldos_lista = json.load(open(s_path, 'r', encoding='utf-8')).get('saldos', [])
+        except Exception:
+            pass
+
+    # ── Leer cheques ─────────────────────────────────────────────────────────
+    cheques_por_cliente: dict = {}
+    c_path = os.path.join(DATA_DIR, 'dso_cheques_actual.json')
+    if os.path.exists(c_path):
+        try:
+            for ch in json.load(open(c_path, 'r', encoding='utf-8')).get('cheques', []):
+                tot = float(ch.get('total', 0) or 0)
+                if tot <= 0:
+                    continue
+                cli = _norm_nombre(ch.get('cliente') or '')
+                if cli:
+                    cheques_por_cliente[cli] = cheques_por_cliente.get(cli, 0.0) + tot
+        except Exception:
+            pass
+
+    # ── Leer ventas por cliente ───────────────────────────────────────────────
+    ventas_globales: dict = {}   # (year, month) → total
+    ventas_por_cli: dict  = {}   # cli_norm → {(year, month) → total}
+    v_path = os.path.join(DATA_DIR, 'dso_ventas_historico.json')
+    if os.path.exists(v_path):
+        try:
+            vh = json.load(open(v_path, 'r', encoding='utf-8'))
+            for ym, tot in vh.get('meses', {}).items():
+                try:
+                    ventas_globales[(int(ym[:4]), int(ym[5:7]))] = float(tot)
+                except Exception:
+                    pass
+            for cli, meses_cli in vh.get('por_cliente', {}).items():
+                ventas_por_cli[cli] = {}
+                for ym, tot in meses_cli.items():
+                    try:
+                        ventas_por_cli[cli][(int(ym[:4]), int(ym[5:7]))] = float(tot)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+    # ── Fecha de corte ────────────────────────────────────────────────────────
+    fechas = [_parsear_fecha_dso(s.get('fecha_factura')) for s in saldos_lista]
+    fechas = [f for f in fechas if f]
+    fecha_corte = max(fechas) if fechas else datetime.now()
+
+    # ── DSO por cliente ───────────────────────────────────────────────────────
+    saldo_por_cli: dict     = {}
+    vendedor_por_cli: dict  = {}
+    for s in saldos_lista:
+        cli = _norm_nombre(s.get('cliente') or '')
+        if not cli:
+            continue
+        saldo_por_cli[cli] = saldo_por_cli.get(cli, 0.0) + float(s.get('saldo', 0) or 0)
+        vend = (s.get('vendedor') or '').strip()
+        if vend:
+            vendedor_por_cli[cli] = vend
+
+    dso_por_cliente: dict  = {}
+    for cli, saldo in saldo_por_cli.items():
+        cheques = cheques_por_cliente.get(cli, 0.0)
+        ar      = saldo + cheques
+        ventas  = ventas_por_cli.get(cli, ventas_globales)   # fallback a global si no hay por cliente
+        res     = _dso_exhaustion(ar, ventas, fecha_corte)
+        dso_por_cliente[cli] = res["dso"]
+
+    # ── DSO por vendedor (agrega clientes del vendedor) ───────────────────────
+    vend_saldo:  dict = {}
+    vend_cheques: dict = {}
+    vend_ventas: dict = {}   # vend → {(y,m) → total}
+    for cli, saldo in saldo_por_cli.items():
+        vend = vendedor_por_cli.get(cli, '')
+        if not vend:
+            continue
+        vend_saldo[vend]   = vend_saldo.get(vend, 0.0) + saldo
+        vend_cheques[vend] = vend_cheques.get(vend, 0.0) + cheques_por_cliente.get(cli, 0.0)
+        v_cli = ventas_por_cli.get(cli, {})
+        if vend not in vend_ventas:
+            vend_ventas[vend] = {}
+        for ym_key, tot in v_cli.items():
+            vend_ventas[vend][ym_key] = vend_ventas[vend].get(ym_key, 0.0) + tot
+
+    dso_por_vendedor: dict = {}
+    for vend in vend_saldo:
+        ar     = vend_saldo[vend] + vend_cheques.get(vend, 0.0)
+        ventas = vend_ventas.get(vend, ventas_globales)
+        res    = _dso_exhaustion(ar, ventas, fecha_corte)
+        dso_por_vendedor[vend] = {
+            "dso":      res["dso"],
+            "ar":       round(vend_saldo[vend] + vend_cheques.get(vend, 0.0)),
+            "saldo":    round(vend_saldo[vend]),
+            "cheques":  round(vend_cheques.get(vend, 0.0)),
+            "breakdown": res["breakdown"],
+        }
+
+    return jsonify({
+        "fecha_corte":     fecha_corte.strftime('%d/%m/%Y'),
+        "por_vendedor":    dso_por_vendedor,
+        "por_cliente":     dso_por_cliente,
+    })
+
 
 def _parsear_fecha_dso(s):
     """Parsea fecha en formato ISO (YYYY-MM-DD) o argentino (DD/MM/YYYY)."""

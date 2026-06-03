@@ -595,10 +595,21 @@ function colorDias(d) {
   return {bg:'rgba(239,68,68,0.15)', color:'#ef4444'};
 }
 
+var _dsoPorCliente = {};   // cache para el render de filas
+
 async function cargarDSODir() {
   try {
-    const r = await fetch('/dso-global-saldos');
-    const d = await r.json();
+    // Cargar global + por vendedor + por cliente en paralelo
+    const [rGlobal, rTodos] = await Promise.all([
+      fetch('/dso-global-saldos'),
+      fetch('/api/dso-todos')
+    ]);
+    const d     = await rGlobal.json();
+    const todos = await rTodos.json();
+
+    // Guardar DSO por cliente para usarlo en las filas de la tabla
+    _dsoPorCliente = todos.por_cliente || {};
+
     if (!d || d.dso == null) return;
     const color = colorDSO(d.dso);
     const numEl = document.getElementById('header-dso-dir-num');
@@ -609,9 +620,8 @@ async function cargarDSODir() {
     numEl.style.color = color;
     subEl.textContent = 'al ' + (d.fecha_corte || '—');
     wrap.style.opacity = '1';
-    const formula = d.formula === 'estandar' ? '(Saldo/Ventas 4m)×120' : 'Promedio ponderado';
-    wrap.title = 'Método de agotamiento 3m · Ventas: $' + Math.round(d.ventas_3m||d.ventas_4m||0).toLocaleString('es-AR');
-    // Actualizar también el kpi-card "DSO Promedio" si está visible
+    wrap.title = 'Método de agotamiento 3m';
+    // Actualizar el kpi-card "DSO Promedio" con el valor global
     var kpiGrid = document.getElementById('kpi-grid');
     if (kpiGrid) {
       var cards = kpiGrid.querySelectorAll('.kpi-card');
@@ -828,10 +838,19 @@ function renderTabla() {
   }).join('');
 }
 
+function normNombreDir(s) {
+  return String(s || '').trim().toUpperCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^A-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 function renderClientRow(c, idx) {
   var sc = c.score;
   var scColor = colorScore(sc);
-  var dsoColor = colorDSO(c.dso || 0);
+  // DSO individual: usar valor por agotamiento si está disponible
+  var dsoExh = _dsoPorCliente[normNombreDir(c.nombre)];
+  var dsoVal = (dsoExh != null) ? dsoExh : (c.dso || 0);
+  var dsoColor = colorDSO(dsoVal);
   var total = c.saldo_total || 1;
   var tb = c.buckets || {};
 
@@ -844,7 +863,7 @@ function renderClientRow(c, idx) {
     : '<div style="font-size:11px;color:#64748b;">Sin score</div>';
 
   // DSO cell
-  var dsoBadge = '<div class="dso-val" style="color:' + dsoColor + '">' + (c.dso||0) + '</div>'
+  var dsoBadge = '<div class="dso-val" style="color:' + dsoColor + '">' + dsoVal + '</div>'
     + '<div class="dso-label">días</div>';
 
   // Mini aging bar
