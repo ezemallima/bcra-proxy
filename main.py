@@ -3539,6 +3539,29 @@ def get_cartera_por_vendedor(vendedor):
     else:
         base = [c for c in _cartera_comercial if (c.get('vendedor') or '').strip().lower() == v]
 
+    # Fallback: si no hay clientes en cartera_comercial, construir desde saldos
+    # (cubre vendedores nuevos que todavía no están en el JSON de cartera)
+    if not base and v not in ('todos', 'all', ''):
+        fuente_fb = _saldos_gestion if _saldos_gestion else _saldos_facturas
+        clientes_visto = set()
+        for f in fuente_fb:
+            vend_fb = (f.get('vendedor') or '').strip().lower()
+            if vend_fb != v:
+                continue
+            cli = (f.get('cliente') or '').strip()
+            if not cli or cli in clientes_visto:
+                continue
+            clientes_visto.add(cli)
+            base.append({
+                'nombre':   cli,
+                'cuit':     '',   # CUIT desconocido hasta que se consulte BCRA
+                'vendedor': (f.get('vendedor') or '').strip(),
+                'ciudad':   '',
+                'total_saldo': float(f.get('saldo') or 0),
+            })
+        if base:
+            print(f"[cartera] {v}: {len(base)} clientes desde saldos (no estaba en cartera_comercial)", flush=True)
+
     # Mapa de saldos desde gestión (o auditoría como fallback)
     fuente_s = _saldos_gestion if _saldos_gestion else _saldos_facturas
     saldo_map = {}
