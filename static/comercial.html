@@ -1057,11 +1057,11 @@ async function cargarDSOHeader() {
     const vData      = (todos.por_vendedor || {})[nombre];
     const dsoVendPond = calcDSOPonderado(todos, vendNorm);
     const dsoGlobalPond = calcDSOPonderado(todos, '');
-    // Preferir promedio ponderado por cliente; fallback a exhaustion por vendedor
-    const dsoVend = dsoVendPond || (vData ? vData.dso : null);
-    const d = dsoVend != null
-      ? { dso: dsoVend,       fecha_corte: todos.fecha_corte, saldo_total: vData ? vData.saldo : null }
-      : { dso: dsoGlobalPond, fecha_corte: todos.fecha_corte, saldo_total: null };
+    // Prioridad: ponderado vendedor → ponderado global → exhaustion vendedor (fallback viejo)
+    const dsoDisplay = dsoVendPond || dsoGlobalPond || (vData ? vData.dso : null);
+    const d = dsoDisplay != null
+      ? { dso: dsoDisplay, fecha_corte: todos.fecha_corte, saldo_total: vData ? vData.saldo : null }
+      : null;
 
     if (!d || d.dso == null) return;
     const color = d.dso <= 45 ? '#10b981' : d.dso <= 65 ? '#f59e0b' : '#ef4444';

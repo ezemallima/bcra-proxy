@@ -3206,8 +3206,25 @@ def api_director_data():
                     }
     except Exception: pass
 
+    # Índice de enriquecimiento desde _saldos_gestion: (cliente_norm, YYYYMMDD) → datos faltantes.
+    # dso_saldos_actual.json no trae nroFactura, totalFactura ni fechaPago; se recuperan aquí.
+    _gs_enrich: dict = {}
+    _vend_enrich: dict = {}
+    for _fv in (_saldos_gestion if _saldos_gestion else _saldos_facturas):
+        _cn  = _norm_nombre(str(_fv.get('cliente') or ''))
+        _cv  = str(_fv.get('vendedor') or '').strip()
+        _gff = _parse_f(str(_fv.get('fechaFactura') or ''))
+        if _cn and _cv:
+            _vend_enrich[_cn] = _cv
+        if _cn and _gff:
+            _gs_enrich[(_cn, _gff.strftime('%Y%m%d'))] = {
+                'nroFactura':   str(_fv.get('nroFactura') or ''),
+                'totalFactura': float(_fv.get('totalFactura') or 0),
+                'fechaPago':    str(_fv.get('fechaPago') or ''),
+            }
+
     # Priorizar dso_saldos_actual.json (archivo subido vía DSO tool, siempre más reciente).
-    # Normaliza los nombres de campo (fecha_factura→fechaFactura, etc.) al formato estándar.
+    # Normaliza los nombres de campo y enriquece campos faltantes desde _saldos_gestion.
     # Fallback a _saldos_gestion si el archivo DSO todavía no fue subido en esta sesión.
     _fuente_director = []
     _dso_path = os.path.join(DATA_DIR, 'dso_saldos_actual.json')
@@ -3215,31 +3232,28 @@ def api_director_data():
         try:
             with open(_dso_path, 'r', encoding='utf-8') as _fdso:
                 _raw_dso = json.load(_fdso).get('saldos', [])
-            _fuente_director = [
-                {
-                    'cliente':      s.get('cliente', ''),
-                    'cuit':         s.get('cuit', ''),
-                    'vendedor':     s.get('vendedor', ''),
-                    'fechaFactura': s.get('fecha_factura', s.get('fechaFactura', '')),
-                    'fechaPago':    s.get('fecha_pago',    s.get('fechaPago', '')),
-                    'saldo':        s.get('saldo', 0),
-                    'nroFactura':   s.get('nroFactura', s.get('nro_factura', '')),
-                    'totalFactura': s.get('totalFactura', s.get('total_factura', 0)),
-                }
-                for s in _raw_dso
-            ]
+            for _s in _raw_dso:
+                _cli_n = _norm_nombre(_s.get('cliente', ''))
+                _ff    = _parse_f(_s.get('fecha_factura', _s.get('fechaFactura', '')))
+                _enr   = _gs_enrich.get((_cli_n, _ff.strftime('%Y%m%d') if _ff else ''), {})
+                _fuente_director.append({
+                    'cliente':      _s.get('cliente', ''),
+                    'cuit':         _s.get('cuit', ''),
+                    'vendedor':     _s.get('vendedor', ''),
+                    'fechaFactura': _s.get('fecha_factura', _s.get('fechaFactura', '')),
+                    'fechaPago':    (_s.get('fecha_pago') or _s.get('fechaPago')
+                                     or _enr.get('fechaPago', '')),
+                    'saldo':        _s.get('saldo', 0),
+                    'nroFactura':   (_s.get('nroFactura') or _s.get('nro_factura')
+                                     or _enr.get('nroFactura', '')),
+                    'totalFactura': (_s.get('totalFactura') or _s.get('total_factura')
+                                     or _enr.get('totalFactura', 0)),
+                })
         except Exception:
             pass
     if not _fuente_director:
         _fuente_director = _saldos_gestion if _saldos_gestion else _saldos_facturas
-    # Enriquecer vendedor desde _saldos_gestion cuando dso_saldos_actual no trae ese campo
-    # (ocurre en uploads anteriores al fix del campo vendedor en el DSO tool)
-    _vend_enrich: dict = {}
-    for _fv in (_saldos_gestion if _saldos_gestion else _saldos_facturas):
-        _cn = _norm_nombre(str(_fv.get('cliente') or ''))
-        _cv = str(_fv.get('vendedor') or '').strip()
-        if _cn and _cv:
-            _vend_enrich[_cn] = _cv
+    # Enriquecer vendedor en los registros que no lo traigan
     for _fd in _fuente_director:
         if not str(_fd.get('vendedor') or '').strip():
             _fd['vendedor'] = _vend_enrich.get(_norm_nombre(str(_fd.get('cliente') or '')), '')
