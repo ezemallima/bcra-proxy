@@ -560,6 +560,9 @@ var _sortDir = -1;
 var _filterVend = '';
 var _search = '';
 var _filterBucket = ''; // '' | 'd30' | 'd60' | 'd90' | 'd120plus'
+// DSO exhaustion por cliente (clave = nombre normalizado, valor = días).
+// Calculado por /api/dso-todos con ventas reales por cliente (no proporcional).
+var _dsoPorCliente = {};
 
 function fmt(n) {
   if (!n && n !== 0) return '—';
@@ -600,9 +603,20 @@ async function cargarDatos() {
   document.getElementById('main-content').innerHTML =
     '<div class="loading-wrap"><div class="spinner"></div><div>Cargando datos...</div></div>';
   try {
-    const r = await fetch('/api/director-data');
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    _data = await r.json();
+    // Cargar saldos/aging y DSO exhaustion en paralelo
+    const [rDir, rTodos] = await Promise.all([
+      fetch('/api/director-data'),
+      fetch('/api/dso-todos').catch(function() { return { ok: false }; })
+    ]);
+    if (!rDir.ok) throw new Error('HTTP ' + rDir.status);
+    _data = await rDir.json();
+
+    // Poblar DSO por cliente (agotamiento con ventas reales, no proporcional)
+    if (rTodos && rTodos.ok) {
+      var todos = await rTodos.json();
+      _dsoPorCliente = todos.por_cliente || {};
+    }
+
     document.getElementById('header-fecha').textContent = 'Al día: ' + _data.fecha_hoy;
     renderApp();
   } catch(e) {
@@ -611,22 +625,34 @@ async function cargarDatos() {
   }
 }
 
-// Calcular totales a partir de la lista filtrada
+// Calcular totales a partir de la lista filtrada.
+// DSO global: usa agotamiento por cliente (si disponible) como promedio ponderado.
+// Fallback a aging cuando no hay datos de ventas (caso: primer uso sin historial).
 function calcTotales(lista) {
   var ts = 0, tb = {d30:0,d60:0,d90:0,d120:0,d120plus:0};
   var n_vencido = 0, n_critico = 0, n_riesgo = 0;
-  var suma_pond = 0;
+  var suma_pond_aging = 0;
+  var suma_pond_exh = 0, suma_saldo_exh = 0;
   lista.forEach(function(c) {
     ts += c.saldo_total;
     BUCKETS.forEach(function(bk){ tb[bk] += (c.buckets[bk]||0); });
     if ((c.buckets.d60||0)+(c.buckets.d90||0)+(c.buckets.d120||0)+(c.buckets.d120plus||0) > 0) n_vencido++;
     if ((c.buckets.d90||0)+(c.buckets.d120||0)+(c.buckets.d120plus||0) > 0) n_critico++;
     if (c.score && c.score < 400) n_riesgo++;
-    c.facturas.forEach(function(f){ suma_pond += f.saldo * (f.dias||0); });
+    c.facturas.forEach(function(f){ suma_pond_aging += f.saldo * (f.dias||0); });
+    // Acumular DSO exhaustion ponderado por saldo
+    var dsoExh = _dsoPorCliente[normNombreDir(c.nombre || '')];
+    if (typeof dsoExh === 'number' && dsoExh > 0) {
+      suma_pond_exh  += dsoExh * c.saldo_total;
+      suma_saldo_exh += c.saldo_total;
+    }
   });
+  // Usar exhaustion si cubre >50% del saldo total, sino aging
+  var dso_exh   = suma_saldo_exh > ts * 0.5 ? Math.round(suma_pond_exh / suma_saldo_exh) : null;
+  var dso_aging = ts > 0 ? Math.round(suma_pond_aging / ts) : 0;
   return {
     total_saldo: ts, total_buckets: tb,
-    dso_global: ts > 0 ? Math.round(suma_pond/ts) : 0,
+    dso_global: dso_exh !== null ? dso_exh : dso_aging,
     n_clientes: lista.length, n_vencido: n_vencido,
     n_critico: n_critico, n_riesgo: n_riesgo
   };
@@ -804,9 +830,11 @@ function normNombreDir(s) {
 function renderClientRow(c, idx) {
   var sc = c.score;
   var scColor = colorScore(sc);
-  // DSO individual: aging ponderado de facturas (días desde emisión × saldo)
-  // Calculado directamente por el servidor — NO usar exhaustion aquí
-  var dsoVal = c.dso || 0;
+  // DSO individual: agotamiento con ventas reales por cliente.
+  // Fallback a aging ponderado si no hay historial de ventas para este cliente.
+  var _dsoNorm = normNombreDir(c.nombre || '');
+  var _dsoExh  = _dsoPorCliente[_dsoNorm];
+  var dsoVal   = (typeof _dsoExh === 'number' && _dsoExh > 0) ? _dsoExh : (c.dso || 0);
   var dsoColor = colorDSO(dsoVal);
   var total = c.saldo_total || 1;
   var tb = c.buckets || {};
