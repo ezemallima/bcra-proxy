@@ -1026,21 +1026,42 @@ function normNombre(s) {
     .replace(/[^A-Z0-9]/g,' ').replace(/\s+/g,' ').trim();
 }
 
+// Promedio ponderado de DSO por cliente (mismo cálculo que usa el director).
+// Si vendedorNorm != '' filtra solo los clientes de ese vendedor.
+function calcDSOPonderado(todos, vendedorNorm) {
+  var porCli  = todos.por_cliente         || {};
+  var saldoCli = todos.saldo_por_cliente  || {};
+  var vendCli  = todos.vendedor_por_cliente || {};
+  var sumPond = 0, sumSaldo = 0;
+  Object.keys(porCli).forEach(function(cli) {
+    if (vendedorNorm && normNombre(vendCli[cli] || '') !== vendedorNorm) return;
+    var dso   = porCli[cli];
+    var saldo = saldoCli[cli] || 0;
+    if (dso > 0 && saldo > 0) {
+      sumPond  += dso * saldo;
+      sumSaldo += saldo;
+    }
+  });
+  return sumSaldo > 0 ? Math.round(sumPond / sumSaldo) : null;
+}
+
 async function cargarDSOHeader() {
   try {
     const r = await fetch('/api/dso-todos');
     const todos = await r.json();
     if (!todos) return;
 
-    // DSO del vendedor logueado
-    const nombre  = SESSION && SESSION.nombre ? SESSION.nombre : '';
-    const vData   = (todos.por_vendedor || {})[nombre];
-    // Si no hay dato por vendedor, usar global como fallback
-    const rGlobal = await fetch('/dso-global-saldos');
-    const global  = await rGlobal.json();
-    const d = vData
-      ? { dso: vData.dso, fecha_corte: todos.fecha_corte, saldo_total: vData.saldo }
-      : global;
+    // DSO del vendedor logueado — promedio ponderado de sus clientes
+    const nombre     = SESSION && SESSION.nombre ? SESSION.nombre : '';
+    const vendNorm   = normNombre(nombre);
+    const vData      = (todos.por_vendedor || {})[nombre];
+    const dsoVendPond = calcDSOPonderado(todos, vendNorm);
+    const dsoGlobalPond = calcDSOPonderado(todos, '');
+    // Preferir promedio ponderado por cliente; fallback a exhaustion por vendedor
+    const dsoVend = dsoVendPond || (vData ? vData.dso : null);
+    const d = dsoVend != null
+      ? { dso: dsoVend,       fecha_corte: todos.fecha_corte, saldo_total: vData ? vData.saldo : null }
+      : { dso: dsoGlobalPond, fecha_corte: todos.fecha_corte, saldo_total: null };
 
     if (!d || d.dso == null) return;
     const color = d.dso <= 45 ? '#10b981' : d.dso <= 65 ? '#f59e0b' : '#ef4444';

@@ -5941,9 +5941,13 @@ def get_dso_todos():
     print(f"[dso-todos] {len(dso_por_cliente)} clientes | {len(dso_por_vendedor)} vendedores | "
           f"fecha_corte={fecha_corte.strftime('%d/%m/%Y')}", flush=True)
     return jsonify({
-        "fecha_corte":  fecha_corte.strftime('%d/%m/%Y'),
-        "por_vendedor": dso_por_vendedor,
-        "por_cliente":  dso_por_cliente,
+        "fecha_corte":       fecha_corte.strftime('%d/%m/%Y'),
+        "por_vendedor":      dso_por_vendedor,
+        "por_cliente":       dso_por_cliente,
+        # Saldo por cliente (normalizado) — permite calcular promedio ponderado en frontend
+        "saldo_por_cliente": {cli: round(saldo) for cli, saldo in saldo_por_cli.items()},
+        # Vendedor asignado a cada cliente — permite filtrar cartera por vendedor en frontend
+        "vendedor_por_cliente": {cli: vendedor_por_cli.get(cli, '') for cli in saldo_por_cli},
     })
 
 
