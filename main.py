@@ -3335,19 +3335,55 @@ def api_director_data():
                       if c['buckets'].get('d90', 0) + c['buckets'].get('d120', 0)
                          + c['buckets'].get('d120plus', 0) > 0)
 
+    # ── DSO global ponderado: agotamiento real por cliente (= app comercial) ────
+    # Se calcula aquí mismo para no depender de caché ni de una llamada paralela.
+    _dso_g_pond = None
+    try:
+        _vp = os.path.join(DATA_DIR, 'dso_ventas_historico.json')
+        _vgl: dict = {}   # (year,month) → total empresa
+        _vpc: dict = {}   # cliente_norm → {(year,month) → total}
+        if os.path.exists(_vp):
+            with open(_vp, 'r', encoding='utf-8') as _fv:
+                _vh = json.load(_fv)
+            for _ym, _t in _vh.get('meses', {}).items():
+                try: _vgl[(int(_ym[:4]), int(_ym[5:7]))] = float(_t)
+                except: pass
+            for _cli_v, _mc in _vh.get('por_cliente', {}).items():
+                _cn = _norm_nombre(_cli_v)
+                _vpc[_cn] = {}
+                for _ym, _t in _mc.items():
+                    try: _vpc[_cn][(int(_ym[:4]), int(_ym[5:7]))] = float(_t)
+                    except: pass
+        _ts = total_saldo if total_saldo > 0 else 1
+        _sp = 0.0; _ss = 0.0
+        for _c in clientes_list:
+            _s = float(_c['saldo_total'])
+            if _s <= 0:
+                continue
+            _cn = _norm_nombre(_c['nombre'])
+            # Ventas propias del cliente; si no hay, distribución proporcional al saldo
+            _vc = _vpc.get(_cn) or {_k: _v * _s / _ts for _k, _v in _vgl.items()}
+            _r = _dso_exhaustion(_s, _vc, hoy)
+            if _r.get('dso'):
+                _sp += _r['dso'] * _s
+                _ss += _s
+        if _ss > 0:
+            _dso_g_pond = round(_sp / _ss)
+    except Exception as _ex:
+        print(f"[director-data] DSO ponderado error: {_ex}", flush=True)
+
     return jsonify({
-        'fecha_hoy':              hoy.strftime('%d/%m/%Y'),
-        'total_saldo':            round(total_saldo),
-        'total_buckets':          total_b,
-        'dso_global':             dso_global,
-        # DSO global ponderado (mismo cálculo que app comercial) desde caché de /api/dso-todos
-        'dso_global_ponderado':   _dso_global_ponderado_cache,
-        'n_clientes':             len(clientes_list),
-        'n_con_score':            n_con_score,
-        'n_riesgo':               n_riesgo,
-        'n_vencido':              n_vencido,
-        'n_critico':              n_critico,
-        'clientes':               clientes_list,
+        'fecha_hoy':            hoy.strftime('%d/%m/%Y'),
+        'total_saldo':          round(total_saldo),
+        'total_buckets':        total_b,
+        'dso_global':           dso_global,
+        'dso_global_ponderado': _dso_g_pond,
+        'n_clientes':           len(clientes_list),
+        'n_con_score':          n_con_score,
+        'n_riesgo':             n_riesgo,
+        'n_vencido':            n_vencido,
+        'n_critico':            n_critico,
+        'clientes':             clientes_list,
     })
 
 @app.route("/login", methods=["GET", "POST"])
