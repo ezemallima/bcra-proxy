@@ -563,6 +563,8 @@ var _filterBucket = ''; // '' | 'd30' | 'd60' | 'd90' | 'd120plus'
 // DSO exhaustion por cliente (clave = nombre normalizado, valor = días).
 // Calculado por /api/dso-todos con ventas reales por cliente (no proporcional).
 var _dsoPorCliente = {};
+// DSO global ponderado precalculado por el servidor (mismo valor que la app comercial).
+var _dsoGlobalPonderado = null;
 
 function fmt(n) {
   if (!n && n !== 0) return '—';
@@ -611,10 +613,11 @@ async function cargarDatos() {
     if (!rDir.ok) throw new Error('HTTP ' + rDir.status);
     _data = await rDir.json();
 
-    // Poblar DSO por cliente (agotamiento con ventas reales, no proporcional)
+    // Poblar DSO por cliente y DSO global ponderado (agotamiento con ventas reales)
     if (rTodos && rTodos.ok) {
       var todos = await rTodos.json();
-      _dsoPorCliente = todos.por_cliente || {};
+      _dsoPorCliente      = todos.por_cliente || {};
+      _dsoGlobalPonderado = todos.dso_global_ponderado || null;
     }
 
     document.getElementById('header-fecha').textContent = 'Al día: ' + _data.fecha_hoy;
@@ -647,12 +650,15 @@ function calcTotales(lista) {
       suma_saldo_exh += c.saldo_total;
     }
   });
-  // Usar exhaustion si cubre >50% del saldo total, sino aging
-  var dso_exh   = suma_saldo_exh > ts * 0.5 ? Math.round(suma_pond_exh / suma_saldo_exh) : null;
-  var dso_aging = ts > 0 ? Math.round(suma_pond_aging / ts) : 0;
+  // DSO global: servidor ponderado (= app comercial) cuando no hay filtros activos.
+  // Con filtros aplicados, calcular localmente desde los datos filtrados.
+  var sinFiltros = (!_filterVend && !_search && !_filterBucket);
+  var dso_exh    = suma_saldo_exh > ts * 0.5 ? Math.round(suma_pond_exh / suma_saldo_exh) : null;
+  var dso_aging  = ts > 0 ? Math.round(suma_pond_aging / ts) : 0;
+  var dso_local  = dso_exh !== null ? dso_exh : dso_aging;
   return {
     total_saldo: ts, total_buckets: tb,
-    dso_global: dso_exh !== null ? dso_exh : dso_aging,
+    dso_global: (sinFiltros && _dsoGlobalPonderado) ? _dsoGlobalPonderado : dso_local,
     n_clientes: lista.length, n_vencido: n_vencido,
     n_critico: n_critico, n_riesgo: n_riesgo
   };
