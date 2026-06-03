@@ -1051,14 +1051,14 @@ async function cargarDSOHeader() {
     const todos = await r.json();
     if (!todos) return;
 
-    // DSO del vendedor logueado — promedio ponderado de sus clientes
-    const nombre     = SESSION && SESSION.nombre ? SESSION.nombre : '';
-    const vendNorm   = normNombre(nombre);
-    const vData      = (todos.por_vendedor || {})[nombre];
-    const dsoVendPond = calcDSOPonderado(todos, vendNorm);
-    const dsoGlobalPond = calcDSOPonderado(todos, '');
-    // Prioridad: ponderado vendedor → ponderado global → exhaustion vendedor (fallback viejo)
-    const dsoDisplay = dsoVendPond || dsoGlobalPond || (vData ? vData.dso : null);
+    const nombre = SESSION && SESSION.nombre ? SESSION.nombre : '';
+    const vData  = (todos.por_vendedor || {})[nombre];
+
+    // Usar DSO ponderado precalculado por el servidor (Σ dso_i×saldo_i / Σ saldo_i).
+    // Prioridad: ponderado del vendedor → ponderado global → exhaustion vendedor (fallback)
+    const dsoVendPond   = (todos.dso_vendedor_ponderado || {})[nombre] || null;
+    const dsoGlobalPond = todos.dso_global_ponderado || null;
+    const dsoDisplay    = dsoVendPond || dsoGlobalPond || (vData ? vData.dso : null);
     const d = dsoDisplay != null
       ? { dso: dsoDisplay, fecha_corte: todos.fecha_corte, saldo_total: vData ? vData.saldo : null }
       : null;

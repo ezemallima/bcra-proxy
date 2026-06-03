@@ -5952,16 +5952,43 @@ def get_dso_todos():
             "breakdown": res["breakdown"],
         }
 
+    # ── DSO ponderado global y por vendedor (promedio ponderado de DSO por cliente) ──
+    # Mismo método que usa el panel Director: Σ(dso_i × saldo_i) / Σ(saldo_i)
+    # Más preciso que el agotamiento agregado porque usa datos reales de cada cliente.
+    _sp_g: float = 0.0
+    _ss_g: float = 0.0
+    _vend_pond: dict = {}   # vendedor → {sum_pond, sum_saldo}
+    for cli, saldo in saldo_por_cli.items():
+        dso_cli = dso_por_cliente.get(cli)
+        if not dso_cli or saldo <= 0:
+            continue
+        _sp_g += dso_cli * saldo
+        _ss_g += saldo
+        vend = vendedor_por_cli.get(cli, '')
+        if vend:
+            if vend not in _vend_pond:
+                _vend_pond[vend] = {'sp': 0.0, 'ss': 0.0}
+            _vend_pond[vend]['sp'] += dso_cli * saldo
+            _vend_pond[vend]['ss'] += saldo
+
+    dso_global_ponderado = round(_sp_g / _ss_g) if _ss_g > 0 else None
+    dso_vendedor_ponderado = {
+        v: round(d['sp'] / d['ss'])
+        for v, d in _vend_pond.items() if d['ss'] > 0
+    }
+
     print(f"[dso-todos] {len(dso_por_cliente)} clientes | {len(dso_por_vendedor)} vendedores | "
+          f"DSO global ponderado={dso_global_ponderado}d | "
           f"fecha_corte={fecha_corte.strftime('%d/%m/%Y')}", flush=True)
     return jsonify({
-        "fecha_corte":       fecha_corte.strftime('%d/%m/%Y'),
-        "por_vendedor":      dso_por_vendedor,
-        "por_cliente":       dso_por_cliente,
-        # Saldo por cliente (normalizado) — permite calcular promedio ponderado en frontend
-        "saldo_por_cliente": {cli: round(saldo) for cli, saldo in saldo_por_cli.items()},
-        # Vendedor asignado a cada cliente — permite filtrar cartera por vendedor en frontend
-        "vendedor_por_cliente": {cli: vendedor_por_cli.get(cli, '') for cli in saldo_por_cli},
+        "fecha_corte":            fecha_corte.strftime('%d/%m/%Y'),
+        "por_vendedor":           dso_por_vendedor,
+        "por_cliente":            dso_por_cliente,
+        "saldo_por_cliente":      {cli: round(saldo) for cli, saldo in saldo_por_cli.items()},
+        "vendedor_por_cliente":   {cli: vendedor_por_cli.get(cli, '') for cli in saldo_por_cli},
+        # Valores precalculados server-side (evitan re-calcular en cada cliente frontend)
+        "dso_global_ponderado":   dso_global_ponderado,
+        "dso_vendedor_ponderado": dso_vendedor_ponderado,
     })
 
 
