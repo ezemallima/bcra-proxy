@@ -1341,16 +1341,33 @@ function descargarPlantillas() {
 function norm(s) { return String(s || '').toLowerCase().trim(); }
 
 function parseMonto(v) {
-  var s = String(v || '0').trim();
-  s = s.replace(/[$\s]/g, '');
-  // Formato argentino: punto = miles, coma = decimal
+  if (v == null || v === '') return 0;
+  var s = String(v).trim();
+
+  // ── Detectar signo negativo en cualquier formato ──────────────────────────
+  var neg = false;
+  // Notación contable: (1.234,56) o (1234.56)
+  if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1, -1).trim(); }
+  // Guión o guión unicode al inicio: -1234 o −1234
+  if (/^[-−–]/.test(s)) { neg = true; s = s.replace(/^[-−–]/, '').trim(); }
+  // Guión al final (formato contable trailing): 1234-
+  if (/[-]$/.test(s)) { neg = true; s = s.slice(0, -1).trim(); }
+
+  // ── Limpiar símbolos monetarios y espacios ────────────────────────────────
+  s = s.replace(/[$\s%]/g, '');
+
+  // ── Separadores de miles/decimales ────────────────────────────────────────
+  // Formato argentino: 1.234.567,89 (punto = miles, coma = decimal)
   if (s.indexOf(',') > s.indexOf('.') && s.indexOf(',') >= 0) {
     s = s.replace(/\./g, '').replace(',', '.');
   } else {
+    // Formato universal: 1,234,567.89 o 1234567.89
     s = s.replace(/,/g, '');
   }
+
   var n = parseFloat(s);
-  return isNaN(n) ? 0 : n;
+  if (isNaN(n)) return 0;
+  return neg ? -n : n;
 }
 
 // Convierte cualquier formato de fecha de Excel/Odoo a ISO YYYY-MM-DD
