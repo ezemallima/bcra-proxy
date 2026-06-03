@@ -3336,16 +3336,18 @@ def api_director_data():
                          + c['buckets'].get('d120plus', 0) > 0)
 
     return jsonify({
-        'fecha_hoy':     hoy.strftime('%d/%m/%Y'),
-        'total_saldo':   round(total_saldo),
-        'total_buckets': total_b,
-        'dso_global':    dso_global,
-        'n_clientes':    len(clientes_list),
-        'n_con_score':   n_con_score,
-        'n_riesgo':      n_riesgo,
-        'n_vencido':     n_vencido,
-        'n_critico':     n_critico,
-        'clientes':      clientes_list,
+        'fecha_hoy':              hoy.strftime('%d/%m/%Y'),
+        'total_saldo':            round(total_saldo),
+        'total_buckets':          total_b,
+        'dso_global':             dso_global,
+        # DSO global ponderado (mismo cálculo que app comercial) desde caché de /api/dso-todos
+        'dso_global_ponderado':   _dso_global_ponderado_cache,
+        'n_clientes':             len(clientes_list),
+        'n_con_score':            n_con_score,
+        'n_riesgo':               n_riesgo,
+        'n_vencido':              n_vencido,
+        'n_critico':              n_critico,
+        'clientes':               clientes_list,
     })
 
 @app.route("/login", methods=["GET", "POST"])
@@ -5481,6 +5483,10 @@ _saldos_gestion = _saldos_gestion_loaded if _saldos_gestion_loaded else list(_sa
 if not _saldos_gestion_loaded:
     print("[gestion] Usando saldos_facturas como fallback inicial para gestión", flush=True)
 
+# Caché del DSO global ponderado (Σ dso_i×saldo_i / Σ saldo_i) calculado en /api/dso-todos.
+# Lo lee /api/director-data para incluirlo en su respuesta sin necesidad de un segundo fetch.
+_dso_global_ponderado_cache: int | None = None
+
 # ── Índices en memoria (O(1) lookup por CUIT y nombre) ──────────────────────
 _saldos_idx_cuit:   dict = {}   # cuit_limpio   → [facturas]
 _saldos_idx_nombre: dict = {}   # norm_nombre   → [facturas]
@@ -5972,6 +5978,9 @@ def get_dso_todos():
             _vend_pond[vend]['ss'] += saldo
 
     dso_global_ponderado = round(_sp_g / _ss_g) if _ss_g > 0 else None
+    global _dso_global_ponderado_cache
+    if dso_global_ponderado is not None:
+        _dso_global_ponderado_cache = dso_global_ponderado
     dso_vendedor_ponderado = {
         v: round(d['sp'] / d['ss'])
         for v, d in _vend_pond.items() if d['ss'] > 0

@@ -613,11 +613,15 @@ async function cargarDatos() {
     if (!rDir.ok) throw new Error('HTTP ' + rDir.status);
     _data = await rDir.json();
 
-    // Poblar DSO por cliente y DSO global ponderado (agotamiento con ventas reales)
+    // DSO global ponderado viene directo en _data (caché server-side de /api/dso-todos)
+    _dsoGlobalPonderado = _data.dso_global_ponderado || null;
+
+    // DSO por cliente (agotamiento con ventas reales, no proporcional)
     if (rTodos && rTodos.ok) {
       var todos = await rTodos.json();
-      _dsoPorCliente      = todos.por_cliente || {};
-      _dsoGlobalPonderado = todos.dso_global_ponderado || null;
+      _dsoPorCliente = todos.por_cliente || {};
+      // Actualizar ponderado global si llega más fresco del segundo endpoint
+      if (todos.dso_global_ponderado) _dsoGlobalPonderado = todos.dso_global_ponderado;
     }
 
     document.getElementById('header-fecha').textContent = 'Al día: ' + _data.fecha_hoy;
