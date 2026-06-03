@@ -3132,10 +3132,19 @@ def director():
 def api_director_data():
     """Panel Dirección Comercial: saldos, aging, score y DSO por cliente.
     Aging: días desde fecha de emisión hasta HOY (no desde fechaPago)."""
-    _parse_f = lambda s: (
-        datetime(int(s.split('/')[2]), int(s.split('/')[1]), int(s.split('/')[0]))
-        if s and '/' in str(s) else None
-    )
+    def _parse_f(s):
+        if not s:
+            return None
+        s = str(s).strip()
+        if '/' in s:                          # DD/MM/YYYY
+            p = s.split('/')
+            try: return datetime(int(p[2]), int(p[1]), int(p[0]))
+            except Exception: return None
+        if '-' in s and len(s) >= 10:         # YYYY-MM-DD (ISO)
+            p = s.split('-')
+            try: return datetime(int(p[0]), int(p[1]), int(p[2]))
+            except Exception: return None
+        return None
 
     _nc = lambda x: str(x).replace('-','').replace(' ','').strip()
     hoy = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
