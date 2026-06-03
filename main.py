@@ -3197,9 +3197,43 @@ def api_director_data():
                     }
     except Exception: pass
 
-    # Usar saldos_gestion (se actualiza cada 5 días) para el panel del director.
-    # _saldos_facturas queda exclusivo para el cálculo de DSO con historial 4 meses.
-    _fuente_director = _saldos_gestion if _saldos_gestion else _saldos_facturas
+    # Priorizar dso_saldos_actual.json (archivo subido vía DSO tool, siempre más reciente).
+    # Normaliza los nombres de campo (fecha_factura→fechaFactura, etc.) al formato estándar.
+    # Fallback a _saldos_gestion si el archivo DSO todavía no fue subido en esta sesión.
+    _fuente_director = []
+    _dso_path = os.path.join(DATA_DIR, 'dso_saldos_actual.json')
+    if os.path.exists(_dso_path):
+        try:
+            with open(_dso_path, 'r', encoding='utf-8') as _fdso:
+                _raw_dso = json.load(_fdso).get('saldos', [])
+            _fuente_director = [
+                {
+                    'cliente':      s.get('cliente', ''),
+                    'cuit':         s.get('cuit', ''),
+                    'vendedor':     s.get('vendedor', ''),
+                    'fechaFactura': s.get('fecha_factura', s.get('fechaFactura', '')),
+                    'fechaPago':    s.get('fecha_pago',    s.get('fechaPago', '')),
+                    'saldo':        s.get('saldo', 0),
+                    'nroFactura':   s.get('nroFactura', s.get('nro_factura', '')),
+                    'totalFactura': s.get('totalFactura', s.get('total_factura', 0)),
+                }
+                for s in _raw_dso
+            ]
+        except Exception:
+            pass
+    if not _fuente_director:
+        _fuente_director = _saldos_gestion if _saldos_gestion else _saldos_facturas
+    # Enriquecer vendedor desde _saldos_gestion cuando dso_saldos_actual no trae ese campo
+    # (ocurre en uploads anteriores al fix del campo vendedor en el DSO tool)
+    _vend_enrich: dict = {}
+    for _fv in (_saldos_gestion if _saldos_gestion else _saldos_facturas):
+        _cn = _norm_nombre(str(_fv.get('cliente') or ''))
+        _cv = str(_fv.get('vendedor') or '').strip()
+        if _cn and _cv:
+            _vend_enrich[_cn] = _cv
+    for _fd in _fuente_director:
+        if not str(_fd.get('vendedor') or '').strip():
+            _fd['vendedor'] = _vend_enrich.get(_norm_nombre(str(_fd.get('cliente') or '')), '')
 
     # Agrupar facturas por cliente
     clientes_map: dict = {}
@@ -5806,10 +5840,11 @@ def get_dso_todos():
                 except Exception:
                     pass
             for cli, meses_cli in vh.get('por_cliente', {}).items():
-                ventas_por_cli[cli] = {}
+                cli_norm = _norm_nombre(cli)  # normalizar igual que saldo_por_cli
+                ventas_por_cli[cli_norm] = {}
                 for ym, tot in meses_cli.items():
                     try:
-                        ventas_por_cli[cli][(int(ym[:4]), int(ym[5:7]))] = float(tot)
+                        ventas_por_cli[cli_norm][(int(ym[:4]), int(ym[5:7]))] = float(tot)
                     except Exception:
                         pass
         except Exception:

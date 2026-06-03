@@ -595,48 +595,6 @@ function colorDias(d) {
   return {bg:'rgba(239,68,68,0.15)', color:'#ef4444'};
 }
 
-var _dsoPorCliente = {};   // cache para el render de filas
-
-async function cargarDSODir() {
-  try {
-    // Cargar global + por vendedor + por cliente en paralelo
-    const [rGlobal, rTodos] = await Promise.all([
-      fetch('/dso-global-saldos'),
-      fetch('/api/dso-todos')
-    ]);
-    const d     = await rGlobal.json();
-    const todos = await rTodos.json();
-
-    // Guardar DSO por cliente para usarlo en las filas de la tabla
-    _dsoPorCliente = todos.por_cliente || {};
-
-    if (!d || d.dso == null) return;
-    const color = colorDSO(d.dso);
-    const numEl = document.getElementById('header-dso-dir-num');
-    const subEl = document.getElementById('header-dso-dir-sub');
-    const wrap  = document.getElementById('header-dso-dir');
-    if (!numEl || !wrap) return;
-    numEl.textContent = d.dso + 'd';
-    numEl.style.color = color;
-    subEl.textContent = 'al ' + (d.fecha_corte || '—');
-    wrap.style.opacity = '1';
-    wrap.title = 'Método de agotamiento 3m';
-    // Actualizar el kpi-card "DSO Promedio" con el valor global
-    var kpiGrid = document.getElementById('kpi-grid');
-    if (kpiGrid) {
-      var cards = kpiGrid.querySelectorAll('.kpi-card');
-      cards.forEach(function(card) {
-        if (card.querySelector('.kpi-label') && card.querySelector('.kpi-label').textContent.includes('DSO')) {
-          card.querySelector('.kpi-value').textContent = d.dso + 'd';
-          card.querySelector('.kpi-value').style.color = color;
-          card.style.setProperty('--kpi-color', color);
-          var sub = card.querySelector('.kpi-sub');
-          if (sub) sub.textContent = 'fórmula estándar 4m';
-        }
-      });
-    }
-  } catch(e) {}
-}
 
 async function cargarDatos() {
   document.getElementById('main-content').innerHTML =
@@ -647,7 +605,6 @@ async function cargarDatos() {
     _data = await r.json();
     document.getElementById('header-fecha').textContent = 'Al día: ' + _data.fecha_hoy;
     renderApp();
-    cargarDSODir();
   } catch(e) {
     document.getElementById('main-content').innerHTML =
       '<div class="loading-wrap"><div style="color:#ef4444;font-weight:600;">Error al cargar datos: ' + e.message + '</div></div>';
@@ -847,16 +804,9 @@ function normNombreDir(s) {
 function renderClientRow(c, idx) {
   var sc = c.score;
   var scColor = colorScore(sc);
-  // DSO individual: buscar en cache por agotamiento con múltiples variantes de nombre
-  var _nNorm = normNombreDir(c.nombre);
-  var dsoExh = _dsoPorCliente[_nNorm];
-  // Fallback: buscar coincidencia parcial (primeras 2 palabras) por si el nombre difiere levemente
-  if (dsoExh == null && _nNorm) {
-    var _prim = _nNorm.split(' ').slice(0, 2).join(' ');
-    var _found = Object.keys(_dsoPorCliente).find(function(k) { return k.startsWith(_prim); });
-    if (_found) dsoExh = _dsoPorCliente[_found];
-  }
-  var dsoVal = (dsoExh != null) ? dsoExh : (c.dso || 0);
+  // DSO individual: aging ponderado de facturas (días desde emisión × saldo)
+  // Calculado directamente por el servidor — NO usar exhaustion aquí
+  var dsoVal = c.dso || 0;
   var dsoColor = colorDSO(dsoVal);
   var total = c.saldo_total || 1;
   var tb = c.buckets || {};
