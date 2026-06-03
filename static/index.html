@@ -1344,14 +1344,18 @@ function parseMonto(v) {
   if (v == null || v === '') return 0;
   var s = String(v).trim();
 
-  // ── Detectar signo negativo en cualquier formato ──────────────────────────
+  // ── Detectar signo negativo ───────────────────────────────────────────────
   var neg = false;
-  // Notación contable: (1.234,56) o (1234.56)
-  if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1, -1).trim(); }
-  // Guión o guión unicode al inicio: -1234 o −1234
-  if (/^[-−–]/.test(s)) { neg = true; s = s.replace(/^[-−–]/, '').trim(); }
-  // Guión al final (formato contable trailing): 1234-
-  if (/[-]$/.test(s)) { neg = true; s = s.slice(0, -1).trim(); }
+  // Notación contable con paréntesis: (1.234,56)
+  if (s.charAt(0) === '(' && s.charAt(s.length - 1) === ')') {
+    neg = true;
+    s = s.slice(1, -1).trim();
+  }
+  // Guión o unicode minus/endash al INICIO solamente
+  if (s.charAt(0) === '-' || s.charAt(0) === '−' || s.charAt(0) === '–') {
+    neg = true;
+    s = s.slice(1).trim();
+  }
 
   // ── Limpiar símbolos monetarios y espacios ────────────────────────────────
   s = s.replace(/[$\s%]/g, '');
@@ -1361,7 +1365,7 @@ function parseMonto(v) {
   if (s.indexOf(',') > s.indexOf('.') && s.indexOf(',') >= 0) {
     s = s.replace(/\./g, '').replace(',', '.');
   } else {
-    // Formato universal: 1,234,567.89 o 1234567.89
+    // Formato universal o sin separadores: 1,234,567.89 o 1234567.89
     s = s.replace(/,/g, '');
   }
 
@@ -1778,8 +1782,8 @@ async function procesarDSO() {
           var saldo         = parseMonto(row[mS2]);
           var fecha_factura = fS2  ? fechaExcelAISO(row[fS2])  : '';
           var fecha_pago    = fpS2 ? fechaExcelAISO(row[fpS2]) : '';
-          // fecha_factura es opcional — el servidor usa max() para la fecha de corte
-          if (cliente && saldo > 0) {
+          // Enviar positivos Y negativos: el servidor suma el neto (AR real)
+          if (cliente && saldo !== 0) {
             saldosParaGuardar.push({ cliente: cliente, fecha_factura: fecha_factura, fecha_pago: fecha_pago, saldo: saldo });
           }
         });
@@ -1851,7 +1855,22 @@ async function procesarDSO() {
     renderTablaDSO(dsoDatos);
 
     // Refrescar card y panel de meses tras el cálculo (espera 2s a que los POSTs terminen)
-    setTimeout(function() { cargarDSOActual(); cargarMesesDSO(); }, 2000);
+    // Cuando llega el DSO del servidor, actualiza también el KPI local para evitar dos números distintos
+    setTimeout(function() {
+      cargarMesesDSO();
+      fetch('/dso-global-saldos').then(function(r){ return r.json(); }).then(function(srv) {
+        if (!srv || srv.dso == null) return;
+        cargarDSOActual();  // refresca el card principal
+        // Sincroniza el KPI local con el valor oficial del servidor
+        var numEl = document.getElementById('dso-numero');
+        if (numEl) {
+          numEl.textContent = srv.dso;
+          numEl.style.color = colorDSO(srv.dso).color;
+        }
+        var saldoEl = document.getElementById('dso-saldo-total');
+        if (saldoEl) saldoEl.textContent = '$' + Math.round(srv.saldo_total || 0).toLocaleString('es-AR');
+      }).catch(function(){});
+    }, 2000);
 
     // DSO verificado por servidor — usa historial 4m acumulado de ventas
     document.getElementById('dso-servidor-wrap').style.display = 'none';
