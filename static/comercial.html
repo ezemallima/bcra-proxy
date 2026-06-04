@@ -644,6 +644,76 @@
     .tab-content { padding-bottom: 16px; overflow-x: hidden; }
     .tab-pane { padding: 20px 24px; box-sizing: border-box; }
   }
+
+  /* ── ALERTAS VENCIMIENTO ── */
+  .alertas-venc-wrap { margin-bottom: 12px; }
+  .alertas-venc-scroll {
+    display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+  .alertas-venc-scroll::-webkit-scrollbar { display: none; }
+  .alerta-venc-card {
+    flex-shrink: 0; background: rgba(239,68,68,.07);
+    border: 1.5px solid rgba(239,68,68,.25); border-radius: 12px;
+    padding: 10px 14px; cursor: pointer; min-width: 140px;
+  }
+  .alerta-venc-card .avc-cnt { font-size: 22px; font-weight: 800; color: #dc2626; font-family: 'Syne', sans-serif; }
+  .alerta-venc-card .avc-label { font-size: 10px; color: var(--text2); margin-top: 2px; text-transform: uppercase; letter-spacing: .5px; }
+  .alerta-venc-card .avc-nombre { font-size: 12px; font-weight: 600; color: var(--text); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
+  .alertas-venc-header { font-size: 11px; font-weight: 700; color: #dc2626; text-transform: uppercase; letter-spacing: .6px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+
+  /* ── FILTROS AVANZADOS ── */
+  #filtros-anchor { position: relative; }
+  #filtros-panel {
+    display: none; position: absolute; top: calc(100% + 6px); right: 0; z-index: 200;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 16px 18px; min-width: 230px;
+    box-shadow: 0 8px 32px rgba(0,0,0,.18);
+  }
+  #filtros-panel.open { display: block; }
+  .filtros-titulo { font-size: 11px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 12px; }
+  .filtro-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .filtro-row:last-child { border-bottom: none; padding-bottom: 0; }
+  .filtro-row span { font-size: 13px; color: var(--text); }
+  /* Toggle switch */
+  .toggle-sw { position: relative; width: 38px; height: 22px; flex-shrink: 0; }
+  .toggle-sw input { opacity: 0; width: 0; height: 0; }
+  .toggle-sw .slider {
+    position: absolute; inset: 0; background: #cbd5e1; border-radius: 999px;
+    cursor: pointer; transition: background .2s;
+  }
+  .toggle-sw .slider::before {
+    content: ''; position: absolute; width: 16px; height: 16px; border-radius: 50%;
+    background: #fff; left: 3px; top: 3px; transition: transform .2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,.2);
+  }
+  .toggle-sw input:checked + .slider { background: var(--azul); }
+  .toggle-sw input:checked + .slider::before { transform: translateX(16px); }
+  #btn-filtros { display:flex;align-items:center;gap:5px;background:none;border:1px solid var(--border);border-radius:8px;padding:7px 11px;font-size:12px;color:var(--text2);cursor:pointer;font-family:'Inter',sans-serif; }
+  #btn-filtros.filtros-activos { border-color:var(--azul);color:var(--azul);background:rgba(59,130,246,.06); }
+  #filtros-badge { display:none;background:var(--azul);color:#fff;border-radius:999px;font-size:10px;font-weight:700;width:16px;height:16px;align-items:center;justify-content:center; }
+  #filtros-badge.visible { display:flex; }
+
+  /* ── FACTURA COBRADA ("modo oscuro") ── */
+  .fac-cobrada { opacity: .38; pointer-events: none; }
+  .fac-cobrada .chk-cobrado { pointer-events: none; }
+
+  /* Checkbox cobrado */
+  .chk-cobrado {
+    width: 18px; height: 18px; cursor: pointer; accent-color: #16a34a;
+    flex-shrink: 0; border-radius: 4px;
+  }
+  .chk-cobrado:disabled { cursor: not-allowed; }
+
+  /* Botón WhatsApp por factura */
+  .btn-wsp-fac {
+    background: none; border: 1.5px solid #25d366; color: #25d366;
+    border-radius: 8px; padding: 4px 7px; cursor: pointer; display:flex;
+    align-items:center; flex-shrink:0; transition: background .15s, color .15s;
+  }
+  .btn-wsp-fac:active { background: rgba(37,211,102,.1); }
+  .btn-wsp-fac.wsp-enviado { background: #25d366; color: #fff; border-color: #25d366; }
+  .btn-wsp-fac.wsp-enviado svg { opacity: 1; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -753,6 +823,15 @@
       <!-- Banner DSO global de cartera -->
       <div id="cartera-dso-banner" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:10px;"></div>
 
+      <!-- Panel de alertas de vencimiento próximo -->
+      <div class="alertas-venc-wrap" id="alertas-venc-wrap" style="display:none">
+        <div class="alertas-venc-header">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Vencen en 10 días
+        </div>
+        <div class="alertas-venc-scroll" id="alertas-venc-scroll"></div>
+      </div>
+
       <!-- Buscador sticky con blur -->
       <div class="sticky-search">
         <input type="text" class="buscar-input" id="buscar-cartera"
@@ -761,16 +840,39 @@
       </div>
 
       <!-- Filtros + recalc -->
-      <div class="filter-row">
+      <div class="filter-row" style="position:relative">
         <button class="filter-chip active" onclick="filtrarCartera('todos',this)">Todos</button>
         <button class="filter-chip" onclick="filtrarCartera('alertas',this)">Alertas</button>
         <button class="filter-chip" onclick="filtrarCartera('saldo',this)">Con saldo</button>
-        <button id="btn-recalc" onclick="actualizarScores(this)"
-                style="margin-left:auto;background:none;border:1px solid var(--border);
-                       border-radius:8px;padding:7px 11px;font-size:12px;
-                       color:var(--text2);cursor:pointer;font-family:'Inter',sans-serif;">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg> Scores
-        </button>
+        <div id="filtros-anchor" style="margin-left:auto;display:flex;align-items:center;gap:6px">
+          <button id="btn-filtros" onclick="toggleFiltrosPanel(event)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+            Filtros
+            <span id="filtros-badge"></span>
+          </button>
+          <!-- Panel flotante de filtros avanzados -->
+          <div id="filtros-panel">
+            <div class="filtros-titulo">Filtros avanzados</div>
+            <div class="filtro-row">
+              <span>Vence en 10 días</span>
+              <label class="toggle-sw"><input type="checkbox" id="ftoggle-vence10" onchange="aplicarFiltrosAvanzados()"><span class="slider"></span></label>
+            </div>
+            <div class="filtro-row">
+              <span>Enviado por WhatsApp</span>
+              <label class="toggle-sw"><input type="checkbox" id="ftoggle-wa" onchange="aplicarFiltrosAvanzados()"><span class="slider"></span></label>
+            </div>
+            <div class="filtro-row">
+              <span>Pendiente de cobro</span>
+              <label class="toggle-sw"><input type="checkbox" id="ftoggle-pendiente" onchange="aplicarFiltrosAvanzados()"><span class="slider"></span></label>
+            </div>
+          </div>
+          <button id="btn-recalc" onclick="actualizarScores(this)"
+                  style="background:none;border:1px solid var(--border);
+                         border-radius:8px;padding:7px 11px;font-size:12px;
+                         color:var(--text2);cursor:pointer;font-family:'Inter',sans-serif;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg> Scores
+          </button>
+        </div>
       </div>
 
       <!-- Filtro por vendedor — visible solo para supervisores (JS lo muestra/construye) -->
@@ -1010,6 +1112,8 @@ async function iniciarApp(perfil) {
   }
   cargarSaldosCartera();
   cargarDSOHeader();
+  cargarAlertasVencimiento();
+  cargarEstadoFacturas();
   // Polling cada 5 minutos para saldos y DSO
   setInterval(() => cargarSaldosCartera(), 5 * 60 * 1000);
   setInterval(() => cargarDSOHeader(),     5 * 60 * 1000);
@@ -1440,6 +1544,8 @@ function renderCartera(filtro) {
   // Filtro secundario por vendedor (solo activo en modo supervisor)
   if (_filtroVendedor) lista = lista.filter(c => (c.vendedor||'').toLowerCase() === _filtroVendedor);
   if (_carteraFiltrada) lista = lista.filter(c => matchBusqueda(c.nombre, _carteraFiltrada, c.cuit));
+  // Filtros avanzados (vence10 / wa / pendiente)
+  lista = _aplicarFiltrosAvanzadosLista(lista);
 
   const el = document.getElementById('cartera-lista');
   if (!lista.length) {
@@ -1826,23 +1932,29 @@ function switchModalTab(tab, btn) {
   document.getElementById('mtab-bcra').style.display = tab==='bcra' ? 'block' : 'none';
 }
 
+// SVG icono WhatsApp mini (reutilizado en filas de factura)
+const _SVG_WA_MINI = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M20.52 3.48A11.93 11.93 0 0 0 12 0C5.37 0 0 5.37 0 12c0 2.11.55 4.17 1.6 5.98L0 24l6.18-1.62A11.96 11.96 0 0 0 12 24c6.63 0 12-5.37 12-12 0-3.21-1.25-6.22-3.48-8.52zm-8.52 18.43c-1.8 0-3.56-.48-5.1-1.39l-.37-.22-3.8.99 1.02-3.68-.24-.38A9.93 9.93 0 0 1 2.07 12c0-5.48 4.45-9.93 9.93-9.93 2.65 0 5.14 1.03 7.01 2.9a9.88 9.88 0 0 1 2.92 7.03c0 5.48-4.45 9.93-9.93 9.93zm5.44-7.44c-.3-.15-1.77-.87-2.04-.97-.28-.1-.48-.15-.68.15-.2.3-.77.97-.94 1.17-.17.2-.35.22-.65.07a8.14 8.14 0 0 1-2.4-1.48 9.1 9.1 0 0 1-1.66-2.07c-.17-.3-.02-.46.13-.61.13-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.07-.15-.68-1.63-.93-2.23-.24-.58-.49-.5-.68-.51-.17-.01-.37-.01-.57-.01-.2 0-.52.07-.79.37-.27.3-1.04 1.02-1.04 2.48s1.07 2.88 1.21 3.08c.15.2 2.1 3.2 5.08 4.49.71.31 1.26.49 1.69.63.71.23 1.36.2 1.87.12.57-.08 1.77-.72 2.02-1.42.25-.7.25-1.3.17-1.42-.08-.12-.28-.2-.57-.35z"/></svg>`;
+
 function renderFacturas(data, nombre) {
   const facturas = data.facturas || [];
   if (!facturas.length) return '<div class="empty"><div class="empty-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="20 6 9 17 4 12"/></svg></div><div class="empty-text">Sin facturas pendientes</div></div>';
 
-  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const cuit = window._modalCuit || '';
+  const hoy  = new Date(); hoy.setHours(0,0,0,0);
   const sorted = [...facturas].sort((a,b) => parseFecha(a.fechaPago)-parseFecha(b.fechaPago));
 
-  // DSO máximo para el header del modal
+  // Total efectivo: excluye las ya marcadas como cobradas
+  const totalEfectivo = sorted.reduce((s,f) => s + (f._cobrada ? 0 : (parseFloat(f.saldo)||0)), 0);
+
   const dsoMax = calcDSO(data);
   const dsoModalCls   = dsoMax > 30 ? 'dso-critical' : dsoMax > 15 ? 'dso-warning' : 'dso-ok';
   const dsoModalLabel = dsoMax > 0 ? dsoMax + ' días vencida' : 'Al día';
-  const vencidasCnt   = sorted.filter(f => parseFecha(f.fechaPago) < hoy && f.saldo > 0).length;
+  const vencidasCnt   = sorted.filter(f => !f._cobrada && parseFecha(f.fechaPago) < hoy && f.saldo > 0).length;
 
   let html = `<div class="total-box">
     <div>
       <div class="total-label">Total a cobrar</div>
-      <div class="total-monto">$${fmtFull(data.total_saldo)}</div>
+      <div class="total-monto" id="modal-total-cobrar" data-saldo="${totalEfectivo}">$${fmtFull(totalEfectivo)}</div>
       ${vencidasCnt > 0 ? `<div style="font-size:11px;color:var(--text2);margin-top:4px">${vencidasCnt} factura${vencidasCnt!==1?'s':''} vencida${vencidasCnt!==1?'s':''}</div>` : ''}
     </div>
     ${dsoMax > 0 ? `<span class="card-dso-badge ${dsoModalCls}" style="font-size:11px;padding:5px 10px;">${dsoModalLabel}</span>` : ''}
@@ -1855,20 +1967,36 @@ function renderFacturas(data, nombre) {
     if (dias < 0) { clase = 'vencida'; tag = `<span class="tag-vencida">Vencida hace ${Math.abs(dias)}d</span>`; }
     else if (dias <= 7) { clase = 'proxima'; tag = `<span class="tag-proxima">Vence en ${dias}d</span>`; }
 
+    const cobrada    = !!f._cobrada;
+    const waEnviado  = !!f._enviado_whatsapp;
+    const nroEsc     = esc(f.nroFactura || '');
+    const nroData    = (f.nroFactura || '').replace(/'/g, "\\'");
     const diferencia = f.totalFactura !== f.saldo;
-    const chkId = `fac-chk-${idx}`;
-    html += `<div class="factura-item ${clase}">
+    const chkId      = `fac-chk-${idx}`;
+    const cobId      = `fac-cob-${idx}`;
+
+    html += `<div class="factura-item ${clase}${cobrada?' fac-cobrada':''}">
       <div class="factura-row1">
-        <div style="display:flex;align-items:center;gap:8px">
-          <input type="checkbox" id="${chkId}" class="fac-chk" data-saldo="${f.saldo}" checked
+        <div style="display:flex;align-items:center;gap:8px;min-width:0">
+          <!-- Checkbox cobrado (marcado cuando el cliente pagó) -->
+          <input type="checkbox" id="${cobId}" class="chk-cobrado" data-saldo="${f.saldo}" data-nro="${nroEsc}"
+            ${cobrada ? 'checked disabled' : ''}
+            onchange="marcarCobrada(this,'${nroData}',${parseFloat(f.saldo)||0})">
+          <!-- Checkbox selección WA (sin cambios) -->
+          <input type="checkbox" id="${chkId}" class="fac-chk" data-saldo="${f.saldo}" ${cobrada?'':'checked'}
             style="width:16px;height:16px;cursor:pointer;accent-color:#25d366;flex-shrink:0"
             onchange="actualizarTotalSeleccionado()">
-          <div>
-            <div class="factura-nro">${esc(f.nroFactura)}</div>
+          <div style="min-width:0">
+            <div class="factura-nro">${nroEsc}</div>
             ${tag}
           </div>
         </div>
-        <div class="factura-saldo">$${fmtFull(f.saldo)}</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+          <div class="factura-saldo">$${fmtFull(f.saldo)}</div>
+          <!-- Botón WA por fila -->
+          <button class="btn-wsp-fac${waEnviado?' wsp-enviado':''}" title="${waEnviado?'WA enviado':'Marcar como enviado por WA'}"
+            onclick="marcarWAFac(this,'${nroData}')">${_SVG_WA_MINI}</button>
+        </div>
       </div>
       <div class="factura-fechas">
         <span class="factura-fecha"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Emitida: ${f.fechaFactura}</span>
@@ -1886,6 +2014,161 @@ function renderFacturas(data, nombre) {
   </button>`;
 
   return html;
+}
+
+// ── ACCIONES RÁPIDAS DE FACTURAS ──────────────────────────────────────────────
+
+async function marcarCobrada(chk, nroFac, saldo) {
+  const cuit = window._modalCuit;
+  if (!cuit || !nroFac) { chk.checked = false; return; }
+  chk.disabled = true;  // prevenir doble click mientras llega la respuesta
+  try {
+    const r = await fetch(API + '/api/facturas/' + encodeURIComponent(cuit) + '/marcar-cobrada', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({nroFactura: nroFac}),
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+
+    // Aplicar estilo visual a la fila
+    const row = chk.closest('.factura-item');
+    if (row) row.classList.add('fac-cobrada');
+
+    // Descontar del total visible sin recargar
+    const totalEl = document.getElementById('modal-total-cobrar');
+    if (totalEl) {
+      const nuevo = Math.max(0, (parseFloat(totalEl.dataset.saldo) || 0) - saldo);
+      totalEl.dataset.saldo = nuevo;
+      totalEl.textContent = '$' + fmtFull(nuevo);
+    }
+
+    // Registrar CUIT en estado local (para filtros de cartera)
+    window._cuitsConCobradas = window._cuitsConCobradas || new Set();
+    window._cuitsConCobradas.add(String(cuit).replace(/\D/g,''));
+
+    console.log('[cobrada] ' + cuit + ' · ' + nroFac + ' → pendiente_validacion');
+  } catch(e) {
+    console.error('[marcarCobrada]', e);
+    chk.disabled = false;
+    chk.checked  = false;
+  }
+}
+
+async function marcarWAFac(btn, nroFac) {
+  const cuit = window._modalCuit;
+  if (!cuit || !nroFac) return;
+  if (btn.classList.contains('wsp-enviado')) return;  // ya marcado
+  btn.style.opacity = '.5';
+  try {
+    const r = await fetch(API + '/api/facturas/' + encodeURIComponent(cuit) + '/marcar-whatsapp', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({nroFactura: nroFac}),
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+
+    btn.classList.add('wsp-enviado');
+    btn.title = 'WA enviado';
+
+    window._cuitsConWA = window._cuitsConWA || new Set();
+    window._cuitsConWA.add(String(cuit).replace(/\D/g,''));
+
+    console.log('[wa_fac] ' + cuit + ' · ' + nroFac + ' → enviado_whatsapp');
+  } catch(e) {
+    console.error('[marcarWAFac]', e);
+  }
+  btn.style.opacity = '';
+}
+
+// ── FILTROS AVANZADOS DE CARTERA ──────────────────────────────────────────────
+
+var _filtrosAvanzados = { vence10: false, wa: false, pendiente: false };
+window._cuitsConCobradas = new Set();
+window._cuitsConWA       = new Set();
+
+function toggleFiltrosPanel(e) {
+  e.stopPropagation();
+  document.getElementById('filtros-panel').classList.toggle('open');
+}
+// Cerrar panel al tocar fuera
+document.addEventListener('click', function(e) {
+  const panel = document.getElementById('filtros-panel');
+  const anchor = document.getElementById('filtros-anchor');
+  if (panel && anchor && !anchor.contains(e.target)) panel.classList.remove('open');
+});
+
+function aplicarFiltrosAvanzados() {
+  _filtrosAvanzados.vence10    = document.getElementById('ftoggle-vence10')?.checked || false;
+  _filtrosAvanzados.wa         = document.getElementById('ftoggle-wa')?.checked       || false;
+  _filtrosAvanzados.pendiente  = document.getElementById('ftoggle-pendiente')?.checked|| false;
+
+  const activos = [_filtrosAvanzados.vence10, _filtrosAvanzados.wa, _filtrosAvanzados.pendiente].filter(Boolean).length;
+  const badge = document.getElementById('filtros-badge');
+  const btn   = document.getElementById('btn-filtros');
+  if (badge) { badge.textContent = activos; badge.classList.toggle('visible', activos > 0); }
+  if (btn)   { btn.classList.toggle('filtros-activos', activos > 0); }
+
+  // Re-renderizar con el filtro de tipo activo
+  const chipActivo = document.querySelector('.filter-row .filter-chip.active');
+  const tipoFiltro = chipActivo?.getAttribute('onclick')?.match(/'([^']+)'/)?.[1] || 'todos';
+  renderCartera(tipoFiltro);
+}
+
+// ── ALERTAS DE VENCIMIENTO ────────────────────────────────────────────────────
+
+async function cargarAlertasVencimiento() {
+  try {
+    const r = await safeFetch(API + '/api/alertas-vencimiento', {retries: 0, timeoutMs: 6000});
+    if (!r || r._gateway_error || !r.total) return;
+
+    const wrap   = document.getElementById('alertas-venc-wrap');
+    const scroll = document.getElementById('alertas-venc-scroll');
+    if (!wrap || !scroll) return;
+
+    // Card resumen total
+    scroll.innerHTML = `<div class="alerta-venc-card" onclick="filtrarCartera('alertas',document.querySelector('.filter-chip'))">
+      <div class="avc-cnt">${r.total}</div>
+      <div class="avc-label">clientes vencen pronto</div>
+    </div>` + (r.clientes || []).map(c => `
+      <div class="alerta-venc-card" onclick="abrirModalCliente('${esc(c.cuit||'')}','${esc(c.nombre||'')}')">
+        <div class="avc-cnt">${c.count}</div>
+        <div class="avc-label">fac · $${fmtM(c.monto)}</div>
+        <div class="avc-nombre">${esc(c.nombre)}</div>
+      </div>`).join('');
+
+    wrap.style.display = 'block';
+  } catch(e) { console.warn('[alertas-venc]', e); }
+}
+
+async function cargarEstadoFacturas() {
+  try {
+    const r = await safeFetch(API + '/api/facturas-estado-resumen', {retries: 0, timeoutMs: 4000});
+    if (!r || r._gateway_error) return;
+    window._cuitsConCobradas = new Set((r.cobradas || []).map(c => String(c).replace(/\D/g,'')));
+    window._cuitsConWA       = new Set((r.wa_enviadas || []).map(c => String(c).replace(/\D/g,'')));
+  } catch(e) { console.warn('[estado-facturas]', e); }
+}
+
+function _facVence10(c) {
+  // Retorna true si el cliente tiene alguna factura que vence en ≤10 días
+  const saldos = getSaldos(c.nombre, c.cuit);
+  if (!saldos?.facturas?.length) return false;
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const lim = new Date(hoy); lim.setDate(lim.getDate() + 10);
+  return saldos.facturas.some(f => {
+    if (!((parseFloat(f.saldo)||0) > 0)) return false;
+    const v = parseFecha(f.fechaPago);
+    return v && v >= hoy && v <= lim;
+  });
+}
+
+function _cuitNorm(c) { return String(c.cuit||'').replace(/\D/g,'').trim(); }
+
+function _aplicarFiltrosAvanzadosLista(lista) {
+  if (_filtrosAvanzados.vence10)   lista = lista.filter(_facVence10);
+  if (_filtrosAvanzados.wa)        lista = lista.filter(c => window._cuitsConWA.has(_cuitNorm(c)));
+  if (_filtrosAvanzados.pendiente) lista = lista.filter(c => window._cuitsConCobradas.has(_cuitNorm(c)));
+  return lista;
 }
 
 function _chqIsLevantado(item) {

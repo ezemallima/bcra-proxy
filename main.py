@@ -266,6 +266,39 @@ print(
 )
 WSP_FILE = os.path.join(os.getcwd(), 'whatsapp_index.json')
 
+# ── Estado local de facturas: pendiente_validacion + enviado_whatsapp ─────────
+_FACTURAS_ESTADO_FILE = os.path.join(DATA_DIR, 'facturas_estado.json')
+_facturas_estado_lock = threading.Lock()
+
+def _fac_key(cuit_limpio: str, nro: str) -> str:
+    return f"{cuit_limpio}__{nro}"
+
+def _fac_estado_load() -> dict:
+    try:
+        if os.path.exists(_FACTURAS_ESTADO_FILE):
+            with open(_FACTURAS_ESTADO_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"[fac_estado] Error cargando: {e}", flush=True)
+    return {}
+
+def _fac_estado_save(estado: dict):
+    try:
+        with open(_FACTURAS_ESTADO_FILE, 'w', encoding='utf-8') as f:
+            json.dump(estado, f, ensure_ascii=False)
+    except Exception as e:
+        print(f"[fac_estado] Error guardando: {e}", flush=True)
+
+def _fac_anotar_estado(enriched: list, cuit_limpio: str) -> list:
+    """Agrega _cobrada y _enviado_whatsapp a cada factura desde el estado persistido."""
+    estado = _fac_estado_load()
+    for f in enriched:
+        key = _fac_key(cuit_limpio, str(f.get('nroFactura', '')))
+        e = estado.get(key, {})
+        f['_cobrada'] = e.get('estado') == 'pendiente_validacion'
+        f['_enviado_whatsapp'] = bool(e.get('enviado_whatsapp', False))
+    return enriched
+
 bcra_cache = {}
 CACHE_TTL = 60 * 60 * 24   # 24 horas — reduce consultas al BCRA y mejora latencia
 CACHE_TTL_ERROR = 300
@@ -6069,6 +6102,7 @@ def api_facturas_por_cuit(cuit):
     if result:
         total = sum(f.get('saldo', 0) for f in result)
         enriched, monto_v30, alerta30 = _enrich_con_mora(result)
+        enriched = _fac_anotar_estado(enriched, cuit_limpio)
         print(f"[facturas] CUIT {cuit_limpio}: {len(enriched)} facturas ${total:,.0f} (método: cuit)", flush=True)
         return jsonify({"facturas": enriched, "total_saldo": total, "cantidad": len(enriched),
                         "monto_pendiente_vencido": monto_v30, "alerta_mora_30": alerta30, "metodo": "cuit"})
@@ -6087,6 +6121,7 @@ def api_facturas_por_cuit(cuit):
         if result:
             total = sum(f.get('saldo', 0) for f in result)
             enriched, monto_v30, alerta30 = _enrich_con_mora(result)
+            enriched = _fac_anotar_estado(enriched, cuit_limpio)
             metodo = "nombre_cartera" if nombre_cartera else "nombre_hint"
             print(f"[facturas] '{nombre}': {len(enriched)} facturas ${total:,.0f} (método: {metodo})", flush=True)
             return jsonify({"facturas": enriched, "total_saldo": total, "cantidad": len(enriched),
@@ -6096,6 +6131,96 @@ def api_facturas_por_cuit(cuit):
           f"(idx_cuit={len(_saldos_idx_cuit)} entradas, idx_nombre={len(_saldos_idx_nombre)} entradas)", flush=True)
     return jsonify({"facturas": [], "total_saldo": 0, "cantidad": 0,
                     "monto_pendiente_vencido": 0, "alerta_mora_30": False, "metodo": "nulo"})
+
+
+@app.route("/api/facturas/<cuit>/marcar-cobrada", methods=['POST'])
+def marcar_factura_cobrada(cuit):
+    """Vendedor marca una factura como 'pendiente_validacion' (no reversible por el vendedor)."""
+    data = request.get_json(force=True, silent=True) or {}
+    nro = str(data.get('nroFactura', '')).strip()
+    if not nro:
+        return jsonify({'ok': False, 'error': 'nroFactura requerido'}), 400
+    cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
+    key = _fac_key(cuit_limpio, nro)
+    with _facturas_estado_lock:
+        estado = _fac_estado_load()
+        prev = estado.get(key, {})
+        estado[key] = {
+            'estado': 'pendiente_validacion',
+            'ts': time.time(),
+            'cuit': cuit_limpio,
+            'nroFactura': nro,
+            'enviado_whatsapp': prev.get('enviado_whatsapp', False),
+        }
+        _fac_estado_save(estado)
+    print(f"[fac_cobrada] {cuit_limpio} · {nro} → pendiente_validacion", flush=True)
+    return jsonify({'ok': True})
+
+
+@app.route("/api/facturas/<cuit>/marcar-whatsapp", methods=['POST'])
+def marcar_factura_whatsapp(cuit):
+    """Vendedor marca una factura como enviada por WhatsApp."""
+    data = request.get_json(force=True, silent=True) or {}
+    nro = str(data.get('nroFactura', '')).strip()
+    if not nro:
+        return jsonify({'ok': False, 'error': 'nroFactura requerido'}), 400
+    cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
+    key = _fac_key(cuit_limpio, nro)
+    with _facturas_estado_lock:
+        estado = _fac_estado_load()
+        if key not in estado:
+            estado[key] = {'cuit': cuit_limpio, 'nroFactura': nro}
+        estado[key]['enviado_whatsapp'] = True
+        estado[key]['ts_whatsapp'] = time.time()
+        _fac_estado_save(estado)
+    print(f"[fac_wa] {cuit_limpio} · {nro} → enviado_whatsapp", flush=True)
+    return jsonify({'ok': True})
+
+
+@app.route("/api/facturas-estado-resumen")
+def facturas_estado_resumen():
+    """Resumen: qué CUITs tienen facturas con estado activo (para filtros de cartera)."""
+    estado = _fac_estado_load()
+    cuits_cobradas, cuits_wa = set(), set()
+    for e in estado.values():
+        c = e.get('cuit', '')
+        if not c:
+            continue
+        if e.get('estado') == 'pendiente_validacion':
+            cuits_cobradas.add(c)
+        if e.get('enviado_whatsapp'):
+            cuits_wa.add(c)
+    return jsonify({'cobradas': list(cuits_cobradas), 'wa_enviadas': list(cuits_wa)})
+
+
+@app.route("/api/alertas-vencimiento")
+def alertas_vencimiento_endpoint():
+    """Clientes con facturas a vencer en los próximos 10 días (para panel de alertas)."""
+    from datetime import date, timedelta
+    hoy = date.today()
+    limite = hoy + timedelta(days=10)
+    fuente = _saldos_gestion if _saldos_gestion else _saldos_facturas
+    clientes_dict: dict = {}
+    for f in fuente:
+        saldo = float(f.get('saldo') or 0)
+        if saldo <= 0:
+            continue
+        venc = _parse_fecha_venc(f.get('fechaPago', ''))
+        if venc is None:
+            continue
+        if not (hoy <= venc <= limite):
+            continue
+        nombre = str(f.get('cliente', '')).strip()
+        cuit_f = str(f.get('cuit', '')).replace('-', '').replace(' ', '').strip()
+        k = cuit_f or nombre
+        if not k:
+            continue
+        if k not in clientes_dict:
+            clientes_dict[k] = {'nombre': nombre, 'cuit': cuit_f, 'count': 0, 'monto': 0.0}
+        clientes_dict[k]['count'] += 1
+        clientes_dict[k]['monto'] = round(clientes_dict[k]['monto'] + saldo, 2)
+    clientes = sorted(clientes_dict.values(), key=lambda x: x['monto'], reverse=True)
+    return jsonify({'total': len(clientes), 'clientes': clientes[:30]})
 
 
 @app.route("/upload-saldos-gestion", methods=["POST"])
