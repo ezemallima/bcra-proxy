@@ -3877,10 +3877,11 @@ def api_supervisor_cartera(cuit_supervisor):
     base = [c for c in _cartera_comercial
             if (c.get('vendedor') or '').strip().lower() in nombres_lower]
 
-    # ── Aging y saldos desde _saldos_gestion (o fallback _saldos_facturas) ─────
-    fuente_s   = _saldos_gestion if _saldos_gestion else _saldos_facturas
-    aging_map  = {}   # norm_nombre → max días de factura pendiente
-    saldo_map  = {}   # norm_nombre → saldo total acumulado
+    # ── Aging, saldos y última factura desde _saldos_gestion ─────────────────
+    fuente_s       = _saldos_gestion if _saldos_gestion else _saldos_facturas
+    aging_map      = {}   # norm_nombre → max días de factura pendiente con saldo
+    saldo_map      = {}   # norm_nombre → saldo total acumulado
+    ultima_fac_map = {}   # norm_nombre → datetime de la factura más reciente
 
     for fac in fuente_s:
         if not isinstance(fac, dict):
@@ -3899,6 +3900,39 @@ def api_supervisor_cartera(cuit_supervisor):
             if fecha_d:
                 dias = (hoy - fecha_d).days
                 aging_map[cli_norm] = max(aging_map.get(cli_norm, 0), dias)
+        # Última factura emitida (con o sin saldo) para mostrar en el panel de detalle
+        fecha_any = _parse_f(fac.get('fechaFactura'))
+        if fecha_any:
+            prev = ultima_fac_map.get(cli_norm)
+            if not prev or fecha_any > prev:
+                ultima_fac_map[cli_norm] = fecha_any
+
+    # ── Fallback: vendedores sin clientes en cartera_comercial → leer de saldos ─
+    # Cubre el caso de vendedores nuevos (ej. Raúl Maza) que aún no tienen clientes
+    # asignados en cartera_comercial.json pero sí aparecen en saldos.
+    nombres_con_clientes = {(c.get('vendedor') or '').strip().lower() for c in base}
+    for _nombre_v in nombres_equipo:
+        if _nombre_v.lower() in nombres_con_clientes:
+            continue
+        _vistos: set = set()
+        for fac in fuente_s:
+            if not isinstance(fac, dict):
+                continue
+            if (fac.get('vendedor') or '').strip().lower() != _nombre_v.lower():
+                continue
+            cli = (fac.get('cliente') or '').strip()
+            if not cli or cli in _vistos:
+                continue
+            _vistos.add(cli)
+            base.append({
+                'nombre':        cli,
+                'cuit':          '',
+                'vendedor':      _nombre_v,
+                'ciudad':        '',
+                'limiteCredito': 0,
+            })
+        if _vistos:
+            print(f"[sup-cartera] fallback saldos: {_nombre_v} → {len(_vistos)} clientes", flush=True)
 
     # ── Scores desde archivos de alertas ──────────────────────────────────────
     scores:           dict = {}
@@ -3974,6 +4008,14 @@ def api_supervisor_cartera(cuit_supervisor):
                     max_dias = mv
                     break
 
+        ultima_fac = ultima_fac_map.get(nom_norm)
+        if not ultima_fac:
+            prim2 = ' '.join(nom_norm.split()[:2])
+            for k, v in ultima_fac_map.items():
+                if ' '.join(k.split()[:2]) == prim2:
+                    ultima_fac = v
+                    break
+
         limite_credito  = float(cc.get('limiteCredito') or 0)
         cupo_disponible = max(0.0, limite_credito - total_saldo) if limite_credito > 0 else None
         score_val       = sc.get('scoreCompleto') or None
@@ -3995,6 +4037,7 @@ def api_supervisor_cartera(cuit_supervisor):
             'alerta':             cuit_nc in alertas_cuits or alerta_temprana,
             'alerta_temprana':    alerta_temprana,
             'max_dias_pendiente': max_dias,
+            'ultima_factura':     ultima_fac.strftime('%d/%m/%Y') if ultima_fac else None,
         })
 
     result.sort(key=lambda x: (0 if x['total_saldo'] > 0 else 1, -(x['total_saldo'] or 0), x['nombre']))

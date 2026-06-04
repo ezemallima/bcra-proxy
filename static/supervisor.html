@@ -357,12 +357,48 @@ tbody td {
   color: #15803d;
 }
 .btn-wsp:hover { background: rgba(34,197,94,0.15); }
-.btn-detail {
-  background: rgba(37,99,235,0.07);
-  border-color: rgba(37,99,235,0.2);
-  color: var(--accent2);
+/* ── DETAIL ROW (panel expandible inline) ───────────────────────────────── */
+tbody tr.data-row { cursor: pointer; }
+tbody tr.data-row.row-expanded { background: rgba(37,99,235,0.04) !important; }
+.detail-row td { padding: 0 !important; border-bottom: 2px solid rgba(37,99,235,0.18) !important; }
+.detail-panel {
+  background: var(--surface2);
+  border-top: 1px solid var(--border);
+  padding: 14px 16px 16px;
+  animation: slideDown 0.15s ease-out;
 }
-.btn-detail:hover { background: rgba(37,99,235,0.14); }
+@keyframes slideDown { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; } }
+.detail-grid {
+  display: flex; flex-wrap: wrap; gap: 18px;
+  margin-bottom: 12px;
+}
+.detail-item { display: flex; flex-direction: column; gap: 3px; min-width: 100px; }
+.detail-label {
+  font-size: 10px; font-weight: 700; color: var(--text3);
+  text-transform: uppercase; letter-spacing: 0.6px;
+}
+.detail-val { font-size: 13px; font-weight: 600; color: var(--text); }
+.detail-footer {
+  padding-top: 10px; border-top: 1px solid var(--border);
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.btn-consulta-completa {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--accent); color: #fff;
+  font-size: 12px; font-weight: 600;
+  padding: 7px 14px; border-radius: 8px; border: none;
+  cursor: pointer; font-family: 'Inter', sans-serif;
+  text-decoration: none; transition: background 0.15s;
+}
+.btn-consulta-completa:hover { background: var(--accent2); }
+.sit-badge {
+  display: inline-block; font-size: 11px; font-weight: 700;
+  padding: 2px 8px; border-radius: 6px;
+}
+.sit1 { background: var(--green-bg);  color: var(--green); }
+.sit2 { background: var(--yellow-bg); color: var(--yellow); }
+.sit3, .sit4 { background: var(--orange-bg); color: var(--orange); }
+.sit5, .sit6 { background: var(--red-bg);    color: var(--red); }
 
 /* Empty state */
 .empty-state {
@@ -676,8 +712,11 @@ function sortedClientes(list) {
   });
 }
 
-// ── Render tabla ───────────────────────────────────────────────────────────────
+// ── Render tabla (con panel de detalle expandible inline) ─────────────────────
+let openDetailIdx = -1;   // índice visible actual con el panel abierto
+
 function renderTabla() {
+  openDetailIdx = -1;     // resetear al re-renderizar
   const q = (document.getElementById('search-input').value || '').trim();
   const visible = sortedClientes(CLIENTES.filter(c =>
     pasaFiltroAging(c) &&
@@ -699,12 +738,11 @@ function renderTabla() {
     return;
   }
 
-  tbody.innerHTML = visible.map(c => {
+  tbody.innerHTML = visible.map((c, i) => {
     const hasSaldo   = (c.total_saldo || 0) > 0;
     const saldoCls   = hasSaldo ? 'has-saldo' : 'no-saldo';
     const saldoTxt   = hasSaldo ? fmtFull(c.total_saldo) : '—';
     const scoreCls   = scoreClass(c.score);
-    const scoreTxt   = scoreLabel(c.score);
     const agingDias  = c.max_dias_pendiente || 0;
     const agingCls   = agingClass(agingDias);
     const agingTxt   = agingDias > 0 ? agingDias + 'd' : (hasSaldo ? '0d' : '—');
@@ -713,33 +751,98 @@ function renderTabla() {
     const ciudadTxt  = c.ciudad ? esc(c.ciudad) : '';
     const vend       = esc(c.vendedor || '');
     const nombre     = esc(c.nombre || '');
+    const sit        = c.ultimaSit || 1;
 
     const wspMsg = encodeURIComponent(
       `*Estado de cuenta: ${c.nombre}*\nCUIT: ${c.cuit || 'S/D'}\nSaldo pendiente: ${hasSaldo ? fmtFull(c.total_saldo) : '$0'}\nFactura más antigua: ${agingDias > 0 ? agingDias + ' días' : 'al día'}\n\n_Enviado desde Vende Seguro_`
     );
     const wspUrl = `https://wa.me/?text=${wspMsg}`;
 
-    return `<tr>
+    // ── Panel de detalle (visible al hacer clic en la fila) ─────────────────
+    const limTxt  = c.limite_credito > 0 ? fmtFull(c.limite_credito) : '—';
+    const cupTxt  = c.cupo_disponible != null ? fmtFull(c.cupo_disponible) : '—';
+    const ultFac  = c.ultima_factura || '—';
+    const scoreDetalle = c.score ? `${c.scoreRango || ''} (${c.score})` : '—';
+
+    const detailPanel = `
+      <div class="detail-panel">
+        <div class="detail-grid">
+          <div class="detail-item">
+            <div class="detail-label">Score</div>
+            <div class="detail-val"><span class="score-badge ${scoreCls}">${scoreDetalle}</span></div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Límite crédito</div>
+            <div class="detail-val">${limTxt}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Cupo disponible</div>
+            <div class="detail-val">${cupTxt}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Factura más antigua</div>
+            <div class="detail-val"><span class="aging-badge ${agingCls}">${agingDias > 0 ? agingDias + ' días' : 'Sin deuda'}</span></div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Última factura</div>
+            <div class="detail-val">${ultFac}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Situación BCRA</div>
+            <div class="detail-val"><span class="sit-badge sit${sit}">Sit. ${sit}</span></div>
+          </div>
+        </div>
+        <div class="detail-footer">
+          ${c.cuit
+            ? `<button class="btn-consulta-completa" onclick="event.stopPropagation(); verConsulta('${nc(c.cuit)}')">Ver consulta BCRA completa →</button>`
+            : `<span style="font-size:12px;color:var(--text3)">Sin CUIT — datos desde saldos</span>`}
+        </div>
+      </div>`;
+
+    return `<tr class="data-row" id="row-${i}" onclick="toggleDetalle(${i})">
       <td class="td-nombre">
         ${alertaHtml}${nombre}
-        <small>${ciudadTxt}${ciudadTxt && cuitTxt ? ' · ' : ''}${cuitTxt ? cuitTxt : ''}</small>
+        <small>${ciudadTxt}${ciudadTxt && cuitTxt ? ' · ' : ''}${cuitTxt}</small>
       </td>
       <td class="td-vendedor hide-mobile">${vend}</td>
       <td class="td-saldo ${saldoCls}">${saldoTxt}</td>
-      <td class="hide-mobile"><span class="score-badge ${scoreCls}">${scoreTxt}</span></td>
+      <td class="hide-mobile"><span class="score-badge ${scoreCls}">${c.score || '—'}</span></td>
       <td><span class="aging-badge ${agingCls}">${agingTxt}</span></td>
-      <td class="td-actions">
+      <td class="td-actions" onclick="event.stopPropagation()">
         <a class="btn-action btn-wsp" href="${wspUrl}" target="_blank" rel="noopener" title="Compartir estado de cuenta por WhatsApp">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
           Ctacte
         </a>
-        ${c.cuit ? `<button class="btn-action btn-detail" onclick="verDetalle('${nc(c.cuit)}','${nombre.replace(/'/g,"\\'")}')">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-          Detalle
-        </button>` : ''}
       </td>
+    </tr>
+    <tr class="detail-row" id="detail-${i}" style="display:none">
+      <td colspan="6">${detailPanel}</td>
     </tr>`;
   }).join('');
+}
+
+// ── Toggle del panel de detalle inline ─────────────────────────────────────────
+function toggleDetalle(idx) {
+  // Cerrar el que estaba abierto (si es otro)
+  if (openDetailIdx >= 0 && openDetailIdx !== idx) {
+    const prev = document.getElementById('detail-' + openDetailIdx);
+    const prevRow = document.getElementById('row-' + openDetailIdx);
+    if (prev) prev.style.display = 'none';
+    if (prevRow) prevRow.classList.remove('row-expanded');
+  }
+  const row    = document.getElementById('row-' + idx);
+  const detail = document.getElementById('detail-' + idx);
+  if (!detail) return;
+  const isOpen = detail.style.display === 'table-row';
+  detail.style.display = isOpen ? 'none' : 'table-row';
+  if (row) row.classList.toggle('row-expanded', !isOpen);
+  openDetailIdx = isOpen ? -1 : idx;
+}
+
+// ── Consulta BCRA completa (abre /comercial con auto-query) ────────────────────
+function verConsulta(cuit) {
+  localStorage.setItem('vendeSeguro_auto_cuit', cuit);
+  window.location.href = '/comercial';
 }
 
 // ── KPIs ───────────────────────────────────────────────────────────────────────
@@ -758,25 +861,22 @@ function actualizarKPIs() {
 }
 
 // ── Chips de vendedores ────────────────────────────────────────────────────────
+// Usa EQUIPO (todos los miembros del equipo del servidor) para que aparezcan
+// incluso los vendedores que aún no tienen clientes asignados (ej. Raúl Maza).
 function renderChipsVendedor() {
   const row = document.getElementById('row-vendedor');
-  const vendedores = [...new Set(CLIENTES.map(c => c.vendedor).filter(Boolean))].sort();
-  const extras = vendedores.map(v =>
-    `<button class="chip" data-vendedor="${esc(v)}" onclick="setFiltroVendedor('${v.replace(/'/g,"\\'")}',this)">${esc(v.split(' ')[0])}</button>`
-  ).join('');
+  // EQUIPO incluye al propio supervisor + supervisados; ordenar alfabéticamente
+  const vendedores = [...EQUIPO].sort();
+  const extras = vendedores.map(v => {
+    const label = v.split(' ').slice(0, 2).join(' ');  // primeras dos palabras para legibilidad
+    return `<button class="chip" data-vendedor="${esc(v)}" onclick="setFiltroVendedor('${v.replace(/'/g,"\\'")}',this)">${esc(label)}</button>`;
+  }).join('');
   row.innerHTML = `<span class="filter-label">Vendedor</span>
     <button class="chip active" data-vendedor="todos" onclick="setFiltroVendedor('todos',this)">Todos</button>
     ${extras}`;
 }
 
-// ── "Ver detalle" → redirige a /comercial con auto-query ─────────────────────
-function verDetalle(cuit, nombre) {
-  localStorage.setItem('vendeSeguro_auto_cuit', cuit);
-  // Asegurar que la sesión sea válida para /comercial (usa los mismos campos)
-  window.location.href = '/comercial';
-}
-
-// ── "Ir a comercial" sin parámetros ──────────────────────────────────────────
+// ── Ir a app comercial (header / nav inferior) ───────────────────────────────
 function irAComercial() {
   window.location.href = '/comercial';
 }
