@@ -3831,14 +3831,6 @@ _SUPERVISOR_MAP = {
     },
 }
 
-# Índice inverso: norm_nombre_vendedor → clave-de-equipo (CUIT del supervisor)
-# Usado por _sync_cartera_vendedores para garantizar que solo se hacen cambios intra-equipo.
-_VENDEDOR_A_EQUIPO: dict = {
-    _norm_nombre(nombre_v): sup_cuit
-    for sup_cuit, sup_data in _SUPERVISOR_MAP.items()
-    for nombre_v in ([sup_data['nombre']] + sup_data['supervisa'])
-}
-
 _cartera_lock = threading.Lock()   # protege lecturas/escrituras de _cartera_comercial
 
 
@@ -3856,6 +3848,15 @@ def _sync_cartera_vendedores(saldos: list) -> list:
 
     if not saldos or not _cartera_comercial:
         return []
+
+    # Índice inverso: norm_nombre_vendedor → CUIT del supervisor de su equipo.
+    # _norm_nombre no está disponible a nivel de módulo en la línea donde se define
+    # _SUPERVISOR_MAP, por eso se construye aquí (dentro de la función) donde ya existe.
+    _vend_a_equipo: dict = {
+        _norm_nombre(nv): sc
+        for sc, sd in _SUPERVISOR_MAP.items()
+        for nv in ([sd['nombre']] + sd['supervisa'])
+    }
 
     # Construir mapa: norm_nombre_cliente → vendedor_canónico_del_reporte
     saldos_vend: dict = {}
@@ -3879,8 +3880,8 @@ def _sync_cartera_vendedores(saldos: list) -> list:
             continue
 
         # Permitir el cambio solo si ambos vendedores pertenecen al mismo equipo
-        equipo_actual = _VENDEDOR_A_EQUIPO.get(_norm_nombre(vend_actual))
-        equipo_saldos = _VENDEDOR_A_EQUIPO.get(_norm_nombre(vend_saldos))
+        equipo_actual = _vend_a_equipo.get(_norm_nombre(vend_actual))
+        equipo_saldos = _vend_a_equipo.get(_norm_nombre(vend_saldos))
 
         if equipo_actual and equipo_saldos and equipo_actual == equipo_saldos:
             nueva_cartera[i] = {**c, 'vendedor': vend_saldos}
