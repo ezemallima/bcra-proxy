@@ -2652,60 +2652,51 @@ function enviarEstadoCuenta() {
   const saludo = hora < 13 ? 'Buenos días' : hora < 20 ? 'Buenas tardes' : 'Buenas noches';
   const hoy    = new Date(); hoy.setHours(0, 0, 0, 0);
 
-  // String.fromCodePoint con hex — solo ASCII en el fuente, sin literales emoji
-  var E_FAC  = String.fromCodePoint(0x1F4C4);                                  // documento
-  var E_WARN = String.fromCodePoint(0x26A0) + String.fromCodePoint(0xFE0F);    // advertencia
-  var E_BANK = String.fromCodePoint(0x1F3E6);                                  // banco
-  var E_PIN  = String.fromCodePoint(0x1F4CC);                                  // pushpin
-  var E_KEY  = String.fromCodePoint(0x1F511);                                  // llave
-  const SEP  = '-------------------------';
+  const SEP = '------------------------------';
 
+  // Una entrada por factura: negrita sin espacios antes del *
   const detalle = seleccionadas.map(f => {
     const fechaEm  = f.fechaFactura || '-';
     const fechaVto = f.fechaPago    || '-';
-
     const diasAtraso = f.fechaPago
       ? Math.floor((hoy - parseFecha(f.fechaPago)) / 86400000)
       : null;
     const esVencida = diasAtraso !== null && diasAtraso > 0;
 
-    const lines = [
-      E_FAC + ' *' + (f.nroFactura || 'Sin número') + '*',
-      '   Emitida:     ' + fechaEm,
-      '   ' + (esVencida ? 'Venció el:   ' : 'Vencimiento: ') + fechaVto,
-      '   Saldo:       *$' + fmtFull(f.saldo) + '*',
+    const lineas = [
+      '*Nro: ' + (f.nroFactura || 'Sin numero') + '*',
+      'Emitida:     ' + fechaEm,
+      (esVencida ? 'Vencio el:   ' : 'Vencimiento: ') + fechaVto,
+      'Saldo:       *$' + fmtFull(f.saldo) + '*',
     ];
-
     if (esVencida) {
-      lines.push('   ' + E_WARN + ' *Vencida hace ' + diasAtraso + ' día' + (diasAtraso !== 1 ? 's' : '') + '*');
+      lineas.push('!! VENCIDA hace ' + diasAtraso + ' dia' + (diasAtraso !== 1 ? 's' : ''));
     }
-
-    return lines.join('\n');
+    return lineas.join('\n');
   }).join('\n\n');
 
   const totalSel    = seleccionadas.reduce((acc, f) => acc + (parseFloat(f.saldo) || 0), 0);
   const cntVencidas = seleccionadas.filter(f =>
     f.fechaPago && Math.floor((hoy - parseFecha(f.fechaPago)) / 86400000) > 0
   ).length;
-
   const notaVenc = cntVencidas > 0
-    ? '\n_' + E_WARN + ' ' + cntVencidas + ' factura' + (cntVencidas !== 1 ? 's' : '') + ' vencida' + (cntVencidas !== 1 ? 's' : '') + '_'
+    ? '\n' + cntVencidas + ' factura' + (cntVencidas !== 1 ? 's' : '') + ' vencida' + (cntVencidas !== 1 ? 's' : '')
     : '';
 
   const msg =
     'Estimado/a ' + nombre + ', ' + saludo + '.\n\n' +
     'Te acerco el detalle de tu cuenta corriente en *Bodega Piattelli*:\n\n' +
-    '*-- Facturas pendientes --*\n\n' +
+    '*FACTURAS PENDIENTES*\n\n' +
     detalle + '\n\n' +
     SEP + '\n' +
     '*TOTAL PENDIENTE: $' + fmtFull(totalSel) + '*' + notaVenc + '\n' +
     SEP + '\n\n' +
     '*Datos de Pago:*\n' +
-    E_BANK + ' Banco Galicia - CC $: 10653-1 081-8\n' +
-    E_PIN  + ' CBU: 0070081820000010653188\n' +
-    E_KEY  + ' ALIAS: ARTELINCGALICIA\n' +
-    E_FAC  + ' CUIT: 30710295022\n\n' +
-    'Quedo a tu disposición para coordinar el pago. ¡Muchas gracias!';
+    'Banco Galicia - CC $: 10653-1 081-8\n' +
+    'CBU: 0070081820000010653188\n' +
+    'ALIAS: ARTELINCGALICIA\n' +
+    'CUIT: 30710295022\n\n' +
+    'Quedo a tu disposicion para coordinar el pago. Muchas gracias!';
 
   window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
 }
