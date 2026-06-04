@@ -987,18 +987,23 @@ async function iniciarApp(perfil) {
   hideLoading();
   const n = CARTERA_LOCAL.length;
   document.getElementById('header-cartera').textContent = n + ' cliente' + (n!==1?'s':'');
-  document.getElementById('cartera-subtitle').textContent = n + ' clientes activos';
+  document.getElementById('cartera-subtitle').textContent =
+    SESSION.rol === 'supervisor'
+      ? n + ' clientes del equipo'
+      : n + ' clientes activos';
   // Populate sidebar (desktop)
   const _sbName = document.getElementById('sb-name');
   const _sbUser = document.getElementById('sb-user-name');
   const _sbCnt  = document.getElementById('sb-cartera-count');
   if (_sbName) _sbName.textContent = SESSION.nombre;
-  if (_sbUser) _sbUser.textContent = SESSION.nombre;
+  if (_sbUser) _sbUser.textContent = SESSION.nombre + (SESSION.rol === 'supervisor' ? ' — Jefe de Ventas' : '');
   if (_sbCnt)  _sbCnt.textContent  = n + ' cliente' + (n!==1?'s':'');
   renderCartera('todos');
   renderOportunidades();
-  // Supervisor: actualizar título de sección y mostrar filtros de vendedor
+  // Jefe de Ventas: actualizar header, título de sección y filtros por vendedor
   if (SESSION.rol === 'supervisor') {
+    const _hc = document.getElementById('header-cartera');
+    if (_hc) _hc.textContent = 'Jefe de Ventas · ' + n + ' clientes del equipo';
     const _ct = document.getElementById('cartera-title');
     if (_ct) _ct.textContent = 'Cartera del Equipo';
     _initFiltrosSuper();

@@ -3852,7 +3852,9 @@ def api_supervisor_cartera(cuit_supervisor):
 
     nombre_propio   = sup_info['nombre']
     nombres_equipo  = [nombre_propio] + sup_info['supervisa']
-    nombres_lower   = {n.lower() for n in nombres_equipo}
+    # Usar _norm_nombre para comparaciones → tolerante a tildes, espacios y mayúsculas.
+    # "Raúl Maza" == "Raul Maza" == "RAUL MAZA" luego de normalizar.
+    nombres_norm    = {_norm_nombre(n) for n in nombres_equipo}
 
     hoy = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
@@ -3875,7 +3877,7 @@ def api_supervisor_cartera(cuit_supervisor):
 
     # ── Base: todos los clientes del equipo desde cartera_comercial ────────────
     base = [c for c in _cartera_comercial
-            if (c.get('vendedor') or '').strip().lower() in nombres_lower]
+            if _norm_nombre(c.get('vendedor') or '') in nombres_norm]
 
     # ── Aging, saldos y última factura desde _saldos_gestion ─────────────────
     fuente_s       = _saldos_gestion if _saldos_gestion else _saldos_facturas
@@ -3886,8 +3888,8 @@ def api_supervisor_cartera(cuit_supervisor):
     for fac in fuente_s:
         if not isinstance(fac, dict):
             continue
-        vend_f = (fac.get('vendedor') or '').strip().lower()
-        if vend_f not in nombres_lower:
+        vend_f = _norm_nombre(fac.get('vendedor') or '')
+        if vend_f not in nombres_norm:
             continue
         cli_raw  = (fac.get('cliente') or '').strip()
         cli_norm = _norm_nombre(cli_raw)
@@ -3908,17 +3910,18 @@ def api_supervisor_cartera(cuit_supervisor):
                 ultima_fac_map[cli_norm] = fecha_any
 
     # ── Fallback: vendedores sin clientes en cartera_comercial → leer de saldos ─
-    # Cubre el caso de vendedores nuevos (ej. Raúl Maza) que aún no tienen clientes
-    # asignados en cartera_comercial.json pero sí aparecen en saldos.
-    nombres_con_clientes = {(c.get('vendedor') or '').strip().lower() for c in base}
+    # Cubre el caso de vendedores (ej. Raúl Maza) que aún no tienen clientes
+    # asignados en cartera_comercial.json pero sí aparecen en el reporte de saldos.
+    # La comparación usa _norm_nombre para tolerar tildes ("Raúl" == "Raul").
+    nombres_con_clientes = {_norm_nombre(c.get('vendedor') or '') for c in base}
     for _nombre_v in nombres_equipo:
-        if _nombre_v.lower() in nombres_con_clientes:
+        if _norm_nombre(_nombre_v) in nombres_con_clientes:
             continue
         _vistos: set = set()
         for fac in fuente_s:
             if not isinstance(fac, dict):
                 continue
-            if (fac.get('vendedor') or '').strip().lower() != _nombre_v.lower():
+            if _norm_nombre(fac.get('vendedor') or '') != _norm_nombre(_nombre_v):
                 continue
             cli = (fac.get('cliente') or '').strip()
             if not cli or cli in _vistos:
