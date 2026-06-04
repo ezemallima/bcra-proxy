@@ -2642,24 +2642,59 @@ function enviarEstadoCuenta() {
   const nombre = window._modalNombre || '';
   if (!data?.facturas?.length) { alert('No hay facturas pendientes para enviar.'); return; }
 
-  // Leer solo las facturas con checkbox marcado
-  const chks = [...document.querySelectorAll('#mtab-facturas .fac-chk')];
-  const sorted = [...data.facturas].sort((a,b) => parseFecha(a.fechaPago)-parseFecha(b.fechaPago));
+  const chks       = [...document.querySelectorAll('#mtab-facturas .fac-chk')];
+  const sorted     = [...data.facturas].sort((a,b) => parseFecha(a.fechaPago)-parseFecha(b.fechaPago));
   const seleccionadas = sorted.filter((_, i) => chks[i]?.checked);
 
   if (!seleccionadas.length) { alert('Seleccioná al menos una factura para enviar.'); return; }
 
-  const h = new Date().getHours();
-  const saludo = h < 13 ? 'Buenos días' : h < 20 ? 'Buenas tardes' : 'Buenas noches';
+  const hora   = new Date().getHours();
+  const saludo = hora < 13 ? 'Buenos días' : hora < 20 ? 'Buenas tardes' : 'Buenas noches';
+  const hoy    = new Date(); hoy.setHours(0, 0, 0, 0);
+  const SEP    = '─────────────────────────';
 
-  const detalle = seleccionadas.map(f => `  • ${f.nroFactura}: $${fmtFull(f.saldo)}`).join('\n');
-  const totalSel = seleccionadas.reduce((acc, f) => acc + (parseFloat(f.saldo) || 0), 0);
+  // ── Detalle por factura con fechas y estado de vencimiento ──────────────────
+  const detalle = seleccionadas.map(f => {
+    const fechaEm  = f.fechaFactura || '—';
+    const fechaVto = f.fechaPago    || '—';
+
+    // Días de atraso (positivo = vencida, negativo = días hasta el vencimiento)
+    const diasAtraso = f.fechaPago
+      ? Math.floor((hoy - parseFecha(f.fechaPago)) / 86400000)
+      : null;
+    const esVencida = diasAtraso !== null && diasAtraso > 0;
+
+    const lines = [
+      `📄 *${f.nroFactura || 'Sin número'}*`,
+      `   Emitida:     ${fechaEm}`,
+      `   Vencimiento: ${fechaVto}`,
+      `   Saldo:       *$${fmtFull(f.saldo)}*`,
+    ];
+
+    if (esVencida) {
+      lines.push(`   ⚠️ *Vencida hace ${diasAtraso} día${diasAtraso !== 1 ? 's' : ''}*`);
+    }
+
+    return lines.join('\n');
+  }).join('\n\n');
+
+  const totalSel    = seleccionadas.reduce((acc, f) => acc + (parseFloat(f.saldo) || 0), 0);
+  const cntVencidas = seleccionadas.filter(f =>
+    f.fechaPago && Math.floor((hoy - parseFecha(f.fechaPago)) / 86400000) > 0
+  ).length;
+
+  const notaVenc = cntVencidas > 0
+    ? `\n_⚠️ ${cntVencidas} factura${cntVencidas !== 1 ? 's' : ''} vencida${cntVencidas !== 1 ? 's' : ''}_`
+    : '';
 
   const msg =
     `Estimado/a ${nombre}, ${saludo}.\n\n` +
     `Te acerco el detalle de tu cuenta corriente en *Bodega Piattelli*:\n\n` +
-    `*Facturas pendientes:*\n${detalle}\n\n` +
-    `*Total pendiente: $${fmtFull(totalSel)}*\n\n` +
+    `*── Facturas pendientes ──*\n\n` +
+    `${detalle}\n\n` +
+    `${SEP}\n` +
+    `*TOTAL PENDIENTE: $${fmtFull(totalSel)}*${notaVenc}\n` +
+    `${SEP}\n\n` +
     `*Datos de Pago:*\n` +
     `🏦 Banco Galicia - CC $: 10653-1 081-8\n` +
     `📌 CBU: 0070081820000010653188\n` +
