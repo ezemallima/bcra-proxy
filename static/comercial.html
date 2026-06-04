@@ -2667,7 +2667,7 @@ function enviarEstadoCuenta() {
     const lines = [
       `📄 *${f.nroFactura || 'Sin número'}*`,
       `   Emitida:     ${fechaEm}`,
-      `   Vencimiento: ${fechaVto}`,
+      `   ${esVencida ? 'Venció el:   ' : 'Vencimiento: '}${fechaVto}`,
       `   Saldo:       *$${fmtFull(f.saldo)}*`,
     ];
 
