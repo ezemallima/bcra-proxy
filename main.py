@@ -2612,6 +2612,10 @@ def _actualizar_score_en_cartera(cuit_limpio: str, score_data: dict, solvency: d
             'scoreRango':           score_data.get('rango'),
             'scoreColor':           score_data.get('color'),
             'scoreEmoji':           score_data.get('emoji'),
+            # max_sit: situación BCRA real (sin ajustes de mora técnica/administrativa).
+            # sit_efectivo puede quedar en 1 por lógica de scoring, pero lo que el banco
+            # reporta es max_sit — ese es el dato que debe ver el vendedor.
+            'ultimaSit':            score_data.get('max_sit', 1),
             'alerta_temprana':      score_data.get('alerta_temprana', False),
             'bloquear_oportunidad': score_data.get('bloquear_oportunidad', False),
             'alerta_logistica':     score_data.get('alerta_logistica', ''),
@@ -2982,30 +2986,45 @@ def ejecutar_verificacion(cartera_data):
             except Exception as e_sc:
                 print(f"{tag} ERROR score: {type(e_sc).__name__}: {e_sc}", flush=True)
 
-            # Situación BCRA
-            if bcra_data and bcra_data.get('results') is not None:
+            # Situación BCRA — fuente de verdad en orden de prioridad:
+            # 1. score_data['max_sit']: calculado por calcular_rating_predictivo con los mismos
+            #    datos BCRA, incluyendo toda la lógica de normalización. Más confiable.
+            # 2. Lectura directa de periodos[0] del raw bcra_data (fallback).
+            # 3. Sin datos: conservar sit_anterior (marcar como fallida si no hubo fetch).
+            max_sit = sit_anterior  # default conservador
+            if score_data and score_data.get('max_sit') is not None:
+                # Fuente primaria: max_sit del motor de scoring (procesado correctamente)
+                max_sit = score_data['max_sit']
+                cliente_actualizado['ultimaSit']   = max_sit
+                cliente_actualizado['ultimaVerif'] = time.strftime('%d/%m/%Y')
+                print(f"{tag} ultimaSit={max_sit} (desde score_data)", flush=True)
+            elif bcra_data and bcra_data.get('results') is not None:
+                # Fuente secundaria: leer periodos directamente del bcra_data
                 periodos  = (bcra_data.get('results') or {}).get('periodos') or []
                 entidades = periodos[0].get('entidades', []) if periodos else []
                 max_sit   = max((e.get('situacion', 1) or 1) for e in entidades) if entidades else 1
                 cliente_actualizado['ultimaSit']   = max_sit
                 cliente_actualizado['ultimaVerif'] = time.strftime('%d/%m/%Y')
-                if max_sit > sit_anterior or max_sit >= 3:
-                    alerta = {
-                        "nombre": nombre, "cuit": cuit,
-                        "sitAnterior": sit_anterior, "sitActual": max_sit,
-                        "fecha": time.strftime('%d/%m/%Y'), "tipo": "bcra"
-                    }
-                    if score_data:
-                        alerta.update({
-                            "scoreCompleto": score_data["score"], "scoreRango": score_data["rango"],
-                            "scoreColor": score_data["color"], "scoreEmoji": score_data["emoji"]
-                        })
-                    nuevas_alertas.append(alerta)
+                print(f"{tag} ultimaSit={max_sit} (desde periodos raw)", flush=True)
             else:
                 cliente_actualizado['ultimaVerif'] = time.strftime('%d/%m/%Y')
                 if not bcra_ok:
                     cliente_actualizado['verificacion_fallida'] = True
-                    print(f"{tag} Sin datos BCRA — conserva estado anterior (sit={sit_anterior})", flush=True)
+                    print(f"{tag} Sin datos BCRA — conserva sit_anterior={sit_anterior}", flush=True)
+
+            # Generar alerta si la situación empeoró o es grave
+            if max_sit > sit_anterior or max_sit >= 3:
+                alerta = {
+                    "nombre": nombre, "cuit": cuit,
+                    "sitAnterior": sit_anterior, "sitActual": max_sit,
+                    "fecha": time.strftime('%d/%m/%Y'), "tipo": "bcra"
+                }
+                if score_data:
+                    alerta.update({
+                        "scoreCompleto": score_data["score"], "scoreRango": score_data["rango"],
+                        "scoreColor": score_data["color"], "scoreEmoji": score_data["emoji"]
+                    })
+                nuevas_alertas.append(alerta)
 
             # Bodegas: resultado pre-fetched en Fase 2 (sin llamada IA individual por cliente)
             _es_neg, _motivo = bodegas_prefetch.get(cuit, (False, ""))
