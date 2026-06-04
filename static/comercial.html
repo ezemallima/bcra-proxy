@@ -2646,33 +2646,38 @@ function enviarEstadoCuenta() {
   const sorted     = [...data.facturas].sort((a,b) => parseFecha(a.fechaPago)-parseFecha(b.fechaPago));
   const seleccionadas = sorted.filter((_, i) => chks[i]?.checked);
 
-  if (!seleccionadas.length) { alert('Seleccioná al menos una factura para enviar.'); return; }
+  if (!seleccionadas.length) { alert('Seleccioná al menos una factura para enviar.'); return; }
 
   const hora   = new Date().getHours();
   const saludo = hora < 13 ? 'Buenos días' : hora < 20 ? 'Buenas tardes' : 'Buenas noches';
   const hoy    = new Date(); hoy.setHours(0, 0, 0, 0);
-  const SEP    = '─────────────────────────';
 
-  // ── Detalle por factura con fechas y estado de vencimiento ──────────────────
+  // String.fromCodePoint con hex — solo ASCII en el fuente, sin literales emoji
+  var E_FAC  = String.fromCodePoint(0x1F4C4);                                  // documento
+  var E_WARN = String.fromCodePoint(0x26A0) + String.fromCodePoint(0xFE0F);    // advertencia
+  var E_BANK = String.fromCodePoint(0x1F3E6);                                  // banco
+  var E_PIN  = String.fromCodePoint(0x1F4CC);                                  // pushpin
+  var E_KEY  = String.fromCodePoint(0x1F511);                                  // llave
+  const SEP  = '-------------------------';
+
   const detalle = seleccionadas.map(f => {
-    const fechaEm  = f.fechaFactura || '—';
-    const fechaVto = f.fechaPago    || '—';
+    const fechaEm  = f.fechaFactura || '-';
+    const fechaVto = f.fechaPago    || '-';
 
-    // Días de atraso (positivo = vencida, negativo = días hasta el vencimiento)
     const diasAtraso = f.fechaPago
       ? Math.floor((hoy - parseFecha(f.fechaPago)) / 86400000)
       : null;
     const esVencida = diasAtraso !== null && diasAtraso > 0;
 
     const lines = [
-      `📄 *${f.nroFactura || 'Sin número'}*`,
-      `   Emitida:     ${fechaEm}`,
-      `   ${esVencida ? 'Venció el:   ' : 'Vencimiento: '}${fechaVto}`,
-      `   Saldo:       *$${fmtFull(f.saldo)}*`,
+      E_FAC + ' *' + (f.nroFactura || 'Sin número') + '*',
+      '   Emitida:     ' + fechaEm,
+      '   ' + (esVencida ? 'Venció el:   ' : 'Vencimiento: ') + fechaVto,
+      '   Saldo:       *$' + fmtFull(f.saldo) + '*',
     ];
 
     if (esVencida) {
-      lines.push(`   ⚠️ *Vencida hace ${diasAtraso} día${diasAtraso !== 1 ? 's' : ''}*`);
+      lines.push('   ' + E_WARN + ' *Vencida hace ' + diasAtraso + ' día' + (diasAtraso !== 1 ? 's' : '') + '*');
     }
 
     return lines.join('\n');
@@ -2684,23 +2689,23 @@ function enviarEstadoCuenta() {
   ).length;
 
   const notaVenc = cntVencidas > 0
-    ? `\n_⚠️ ${cntVencidas} factura${cntVencidas !== 1 ? 's' : ''} vencida${cntVencidas !== 1 ? 's' : ''}_`
+    ? '\n_' + E_WARN + ' ' + cntVencidas + ' factura' + (cntVencidas !== 1 ? 's' : '') + ' vencida' + (cntVencidas !== 1 ? 's' : '') + '_'
     : '';
 
   const msg =
-    `Estimado/a ${nombre}, ${saludo}.\n\n` +
-    `Te acerco el detalle de tu cuenta corriente en *Bodega Piattelli*:\n\n` +
-    `*── Facturas pendientes ──*\n\n` +
-    `${detalle}\n\n` +
-    `${SEP}\n` +
-    `*TOTAL PENDIENTE: $${fmtFull(totalSel)}*${notaVenc}\n` +
-    `${SEP}\n\n` +
-    `*Datos de Pago:*\n` +
-    `🏦 Banco Galicia - CC $: 10653-1 081-8\n` +
-    `📌 CBU: 0070081820000010653188\n` +
-    `🔑 ALIAS: ARTELINCGALICIA\n` +
-    `📄 CUIT: 30710295022\n\n` +
-    `Quedo a tu disposición para coordinar el pago. ¡Muchas gracias!`;
+    'Estimado/a ' + nombre + ', ' + saludo + '.\n\n' +
+    'Te acerco el detalle de tu cuenta corriente en *Bodega Piattelli*:\n\n' +
+    '*-- Facturas pendientes --*\n\n' +
+    detalle + '\n\n' +
+    SEP + '\n' +
+    '*TOTAL PENDIENTE: $' + fmtFull(totalSel) + '*' + notaVenc + '\n' +
+    SEP + '\n\n' +
+    '*Datos de Pago:*\n' +
+    E_BANK + ' Banco Galicia - CC $: 10653-1 081-8\n' +
+    E_PIN  + ' CBU: 0070081820000010653188\n' +
+    E_KEY  + ' ALIAS: ARTELINCGALICIA\n' +
+    E_FAC  + ' CUIT: 30710295022\n\n' +
+    'Quedo a tu disposición para coordinar el pago. ¡Muchas gracias!';
 
   window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
 }
