@@ -3831,6 +3831,84 @@ _SUPERVISOR_MAP = {
     },
 }
 
+# Índice inverso: norm_nombre_vendedor → clave-de-equipo (CUIT del supervisor)
+# Usado por _sync_cartera_vendedores para garantizar que solo se hacen cambios intra-equipo.
+_VENDEDOR_A_EQUIPO: dict = {
+    _norm_nombre(nombre_v): sup_cuit
+    for sup_cuit, sup_data in _SUPERVISOR_MAP.items()
+    for nombre_v in ([sup_data['nombre']] + sup_data['supervisa'])
+}
+
+_cartera_lock = threading.Lock()   # protege lecturas/escrituras de _cartera_comercial
+
+
+def _sync_cartera_vendedores(saldos: list) -> list:
+    """Corrige asignaciones de vendedor en cartera_comercial.json usando saldos como fuente.
+
+    Regla: si un cliente existe en cartera_comercial bajo vendedor A, pero en el reporte
+    de saldos aparece bajo vendedor B, y AMBOS están en el mismo equipo de supervisor,
+    el cliente se reasigna a vendedor B (el reporte es la fuente más reciente y confiable).
+    Solo se hacen cambios intra-equipo para evitar contaminación entre grupos.
+
+    Devuelve lista de strings con los cambios realizados (para logging).
+    """
+    global _cartera_comercial
+
+    if not saldos or not _cartera_comercial:
+        return []
+
+    # Construir mapa: norm_nombre_cliente → vendedor_canónico_del_reporte
+    saldos_vend: dict = {}
+    for fac in saldos:
+        if not isinstance(fac, dict):
+            continue
+        vend = (fac.get('vendedor') or '').strip()
+        cli_norm = _norm_nombre(fac.get('cliente') or '')
+        if cli_norm and vend and cli_norm not in saldos_vend:
+            saldos_vend[cli_norm] = vend
+
+    cambios: list = []
+    nueva_cartera = list(_cartera_comercial)
+
+    for i, c in enumerate(nueva_cartera):
+        cli_norm    = _norm_nombre(c.get('nombre') or '')
+        vend_actual = (c.get('vendedor') or '').strip()
+        vend_saldos = saldos_vend.get(cli_norm)
+
+        if not vend_saldos or vend_saldos == vend_actual:
+            continue
+
+        # Permitir el cambio solo si ambos vendedores pertenecen al mismo equipo
+        equipo_actual = _VENDEDOR_A_EQUIPO.get(_norm_nombre(vend_actual))
+        equipo_saldos = _VENDEDOR_A_EQUIPO.get(_norm_nombre(vend_saldos))
+
+        if equipo_actual and equipo_saldos and equipo_actual == equipo_saldos:
+            nueva_cartera[i] = {**c, 'vendedor': vend_saldos}
+            cambios.append(f"{c.get('nombre')}: {vend_actual} → {vend_saldos}")
+
+    if not cambios:
+        return []
+
+    # Persistir: escritura atómica (tmp → fsync → rename)
+    cc_path = _CC_FILE if os.path.exists(DATA_DIR) else os.path.join(os.getcwd(), 'cartera_comercial.json')
+    tmp_path = cc_path + '.sync_tmp'
+    try:
+        with _cartera_lock:
+            with open(tmp_path, 'w', encoding='utf-8') as _f:
+                json.dump(nueva_cartera, _f, ensure_ascii=False, indent=2)
+                _f.flush()
+                os.fsync(_f.fileno())
+            os.replace(tmp_path, cc_path)
+            _cartera_comercial = nueva_cartera
+        print(f"[sync-cartera] {len(cambios)} reasignaciones: {cambios}", flush=True)
+    except Exception as _e:
+        print(f"[sync-cartera] Error al guardar: {_e}", flush=True)
+        if os.path.exists(tmp_path):
+            try: os.remove(tmp_path)
+            except: pass
+
+    return cambios
+
 
 @app.route("/supervisor")
 def supervisor_page():
@@ -5755,6 +5833,11 @@ _saldos_gestion_loaded = _load_json_with_fallback('saldos_gestion_vendedores.jso
 _saldos_gestion = _saldos_gestion_loaded if _saldos_gestion_loaded else list(_saldos_facturas)
 if not _saldos_gestion_loaded:
     print("[gestion] Usando saldos_facturas como fallback inicial para gestión", flush=True)
+else:
+    # Al arrancar con datos persistidos, sincronizar asignaciones de vendedor en cartera_comercial
+    _startup_cambios = _sync_cartera_vendedores(_saldos_gestion)
+    if _startup_cambios:
+        print(f"[startup] sync-cartera: {len(_startup_cambios)} correcciones aplicadas al arrancar", flush=True)
 
 # Caché del DSO global ponderado (Σ dso_i×saldo_i / Σ saldo_i) calculado en /api/dso-todos.
 # Lo lee /api/director-data para incluirlo en su respuesta sin necesidad de un segundo fetch.
@@ -6039,8 +6122,10 @@ def upload_saldos_gestion():
         _saldos_gestion  = saldos
         _saldos_facturas = list(saldos)   # sincronizar SSoT para que el índice siempre sea fresco
         _rebuild_saldos_index()
-        print(f"[gestion] {len(saldos)} facturas de gestión importadas — facturas sincronizado", flush=True)
-        return jsonify({"ok": True, "total": len(saldos)})
+        # Auto-sync: corregir asignaciones de vendedor en cartera_comercial según el reporte
+        _cambios = _sync_cartera_vendedores(saldos)
+        print(f"[gestion] {len(saldos)} facturas importadas | sync-cartera: {len(_cambios)} cambios", flush=True)
+        return jsonify({"ok": True, "total": len(saldos), "reasignaciones": len(_cambios), "cambios": _cambios})
     except Exception as e:
         import traceback
         print(f"[gestion] Error: {traceback.format_exc()}", flush=True)
