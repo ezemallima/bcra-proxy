@@ -6220,7 +6220,7 @@ def alertas_vencimiento_endpoint():
         clientes_dict[k]['count'] += 1
         clientes_dict[k]['monto'] = round(clientes_dict[k]['monto'] + saldo, 2)
     clientes = sorted(clientes_dict.values(), key=lambda x: x['monto'], reverse=True)
-    return jsonify({'total': len(clientes), 'clientes': clientes[:30]})
+    return jsonify({'total': len(clientes), 'clientes': clientes})
 
 
 @app.route("/upload-saldos-gestion", methods=["POST"])

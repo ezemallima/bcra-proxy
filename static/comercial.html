@@ -658,12 +658,14 @@
   .avc-arrow { font-size: 12px; color: var(--azul); font-weight: 700; flex-shrink: 0; white-space: nowrap; }
 
   /* ── FILTROS AVANZADOS ── */
-  #filtros-anchor { position: relative; }
+  #filtros-anchor { position: static; }
   #filtros-panel {
-    display: none; position: absolute; top: calc(100% + 6px); right: 0; z-index: 300;
+    /* position:fixed escapa de cualquier overflow:hidden del árbol padre */
+    display: none; position: fixed; z-index: 9999;
     background: var(--surface); border: 1px solid var(--border);
     border-radius: 14px; padding: 16px 18px; width: 240px;
-    box-shadow: 0 8px 32px rgba(0,0,0,.22);
+    box-shadow: 0 8px 32px rgba(0,0,0,.28);
+    /* top / right se calculan por JS al abrir */
   }
   #filtros-panel.open { display: block; }
   .filtros-titulo {
@@ -900,6 +902,14 @@
 
       <!-- Filtro por vendedor — visible solo para supervisores (JS lo muestra/construye) -->
       <div id="sup-vend-row" style="display:none;flex-wrap:wrap;align-items:center;gap:6px;margin-top:6px;margin-bottom:2px;"></div>
+
+      <!-- Barra de filtro activo: aparece cuando hay algún filtro aplicado -->
+      <div id="filtro-activo-bar" style="display:none;align-items:center;justify-content:space-between;gap:10px;background:rgba(59,130,246,.07);border:1.5px solid rgba(59,130,246,.22);border-radius:10px;padding:8px 12px;margin-bottom:10px">
+        <span id="filtro-activo-label" style="font-size:12px;color:var(--azul);font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+        <button onclick="resetFiltroCartera()" style="flex-shrink:0;background:none;border:1px solid rgba(59,130,246,.4);border-radius:8px;padding:5px 10px;font-size:12px;font-weight:600;color:var(--azul);cursor:pointer;font-family:'Inter',sans-serif;white-space:nowrap">
+          ← Volver completo
+        </button>
+      </div>
 
       <!-- Grid responsive de tarjetas (renderCartera() inyecta .cliente-card aquí) -->
       <div id="cartera-lista"></div>
@@ -2127,50 +2137,105 @@ async function confirmarRendicion() {
 // ── FILTROS AVANZADOS DE CARTERA ──────────────────────────────────────────────
 
 var _filtrosAvanzados = { vence10: false, wa: false, pendiente: false };
-window._cuitsConCobradas = new Set();
-window._cuitsConWA       = new Set();
+window._cuitsConCobradas  = new Set();
+window._cuitsConWA        = new Set();
+// Almacena los CUITs/nombres del backend para filtro vence10 (fuente de verdad)
+window._vence10CUITs      = new Set();
+window._vence10Nombres    = new Set();
 
 function toggleFiltrosPanel(e) {
   e.stopPropagation();
-  document.getElementById('filtros-panel').classList.toggle('open');
+  const panel = document.getElementById('filtros-panel');
+  const btn   = document.getElementById('btn-filtros');
+  if (!panel || !btn) return;
+
+  if (panel.classList.contains('open')) {
+    panel.classList.remove('open');
+    return;
+  }
+  // Posicionar el panel (position:fixed) relativo al viewport del botón
+  const rect   = btn.getBoundingClientRect();
+  const panelW = 240;
+  const margen = 8;
+  let left = rect.right - panelW;
+  if (left < margen) left = margen;
+  panel.style.top  = (rect.bottom + 6) + 'px';
+  panel.style.left = left + 'px';
+  panel.style.right = 'auto';
+  panel.classList.add('open');
 }
 document.addEventListener('click', function(e) {
   const panel  = document.getElementById('filtros-panel');
   const anchor = document.getElementById('filtros-anchor');
-  if (panel && anchor && !anchor.contains(e.target)) panel.classList.remove('open');
+  if (panel && anchor && !anchor.contains(e.target) && !panel.contains(e.target)) {
+    panel.classList.remove('open');
+  }
 });
+
+function _actualizarBarraFiltroActivo(tipoFiltro) {
+  const bar   = document.getElementById('filtro-activo-bar');
+  const label = document.getElementById('filtro-activo-label');
+  if (!bar) return;
+
+  const activos = [];
+  if (tipoFiltro === 'alertas') activos.push('Alertas +45 días');
+  if (tipoFiltro === 'saldo')   activos.push('Con saldo');
+  if (_filtrosAvanzados.vence10)   activos.push('Vence en 10 días');
+  if (_filtrosAvanzados.wa)        activos.push('Enviado por WA');
+  if (_filtrosAvanzados.pendiente) activos.push('Pendiente cobro');
+
+  if (activos.length === 0) {
+    bar.style.display = 'none';
+  } else {
+    bar.style.display  = 'flex';
+    if (label) label.textContent = activos.join(' · ');
+  }
+}
 
 function aplicarFiltrosAvanzados() {
   _filtrosAvanzados.vence10   = document.getElementById('ftoggle-vence10')?.checked  || false;
   _filtrosAvanzados.wa        = document.getElementById('ftoggle-wa')?.checked        || false;
   _filtrosAvanzados.pendiente = document.getElementById('ftoggle-pendiente')?.checked || false;
 
-  // Leer el radio de tipo de vista
   const radioSelec = document.querySelector('input[name="ftipo"]:checked');
   const tipoFiltro = radioSelec?.value || 'todos';
 
-  // Badge y estado del botón
   const extras  = [_filtrosAvanzados.vence10, _filtrosAvanzados.wa, _filtrosAvanzados.pendiente].filter(Boolean).length;
   const tipoAct = tipoFiltro !== 'todos' ? 1 : 0;
   const total   = extras + tipoAct;
   const badge   = document.getElementById('filtros-badge');
-  const btn     = document.getElementById('btn-filtros');
+  const btnF    = document.getElementById('btn-filtros');
   if (badge) { badge.textContent = total > 0 ? total : ''; badge.classList.toggle('visible', total > 0); }
-  if (btn)   btn.classList.toggle('filtros-activos', total > 0);
+  if (btnF)  btnF.classList.toggle('filtros-activos', total > 0);
 
+  _actualizarBarraFiltroActivo(tipoFiltro);
   renderCartera(tipoFiltro);
+}
+
+function resetFiltroCartera() {
+  // Limpiar radio
+  const radioTodos = document.querySelector('input[name="ftipo"][value="todos"]');
+  if (radioTodos) radioTodos.checked = true;
+  // Limpiar toggles
+  ['ftoggle-vence10','ftoggle-wa','ftoggle-pendiente'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.checked = false;
+  });
+  _filtrosAvanzados = { vence10: false, wa: false, pendiente: false };
+  // Ocultar badge y barra
+  const badge = document.getElementById('filtros-badge');
+  const btnF  = document.getElementById('btn-filtros');
+  const bar   = document.getElementById('filtro-activo-bar');
+  if (badge) { badge.textContent = ''; badge.classList.remove('visible'); }
+  if (btnF)  btnF.classList.remove('filtros-activos');
+  if (bar)   bar.style.display = 'none';
+  renderCartera('todos');
 }
 
 function activarFiltroVence10() {
   const tog = document.getElementById('ftoggle-vence10');
   if (tog) { tog.checked = true; }
   aplicarFiltrosAvanzados();
-  // Abrir panel brevemente para feedback visual
-  const panel = document.getElementById('filtros-panel');
-  if (panel) {
-    panel.classList.add('open');
-    setTimeout(() => panel.classList.remove('open'), 2000);
-  }
 }
 
 // ── ALERTAS DE VENCIMIENTO ────────────────────────────────────────────────────
@@ -2180,7 +2245,17 @@ async function cargarAlertasVencimiento() {
     const r = await safeFetch(API + '/api/alertas-vencimiento', {retries: 0, timeoutMs: 6000});
     if (!r || r._gateway_error || !r.total) return;
 
-    const wrap  = document.getElementById('alertas-venc-wrap');
+    // Guardar CUITs y nombres del backend para que _facVence10Backend funcione sin SALDOS_MAP
+    window._vence10CUITs   = new Set();
+    window._vence10Nombres = new Set();
+    (r.clientes || []).forEach(c => {
+      const cn = String(c.cuit  || '').replace(/\D/g, '').trim();
+      if (cn) window._vence10CUITs.add(cn);
+      const nn = normNombre(c.nombre || '');
+      if (nn) window._vence10Nombres.add(nn);
+    });
+
+    const wrap   = document.getElementById('alertas-venc-wrap');
     const titulo = document.getElementById('avc-titulo');
     const sub    = document.getElementById('avc-sub');
     if (!wrap || !titulo) return;
@@ -2201,7 +2276,18 @@ async function cargarEstadoFacturas() {
   } catch(e) { console.warn('[estado-facturas]', e); }
 }
 
-function _facVence10(c) {
+function _cuitNorm(c) { return String(c.cuit||'').replace(/\D/g,'').trim(); }
+
+// Filtra por vencimiento usando los datos del backend (fuente de verdad)
+// — no depende de SALDOS_MAP (que solo tiene datos de clientes ya abiertos)
+function _facVence10Backend(c) {
+  const cn = _cuitNorm(c);
+  if (cn && window._vence10CUITs.has(cn)) return true;
+  return window._vence10Nombres.has(normNombre(c.nombre || ''));
+}
+
+// Fallback local para cuando aún no llegó la respuesta del backend
+function _facVence10Local(c) {
   const saldos = getSaldos(c.nombre, c.cuit);
   if (!saldos?.facturas?.length) return false;
   const hoy = new Date(); hoy.setHours(0,0,0,0);
@@ -2213,7 +2299,12 @@ function _facVence10(c) {
   });
 }
 
-function _cuitNorm(c) { return String(c.cuit||'').replace(/\D/g,'').trim(); }
+function _facVence10(c) {
+  // Priorizar datos del backend (completos); fallback al local si aún no cargó
+  return window._vence10CUITs.size > 0
+    ? _facVence10Backend(c)
+    : _facVence10Local(c);
+}
 
 function _aplicarFiltrosAvanzadosLista(lista) {
   if (_filtrosAvanzados.vence10)   lista = lista.filter(_facVence10);
