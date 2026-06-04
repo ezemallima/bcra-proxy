@@ -500,11 +500,11 @@ async function handleLogin(e) {
       btn.disabled = false; btn.classList.remove('loading');
       mostrarError('CUIT no registrado en el sistema.'); return;
     }
-    // Supervisores comerciales tienen su propio dashboard
+    // Supervisores y vendedores usan la misma app comercial; el rol controla la vista
     const SUPERVISORES_CUITS = new Set(['27224289966', '20207619923']);
     const rol = SUPERVISORES_CUITS.has(cuit) ? 'supervisor' : 'vendedor';
     localStorage.setItem('vendeSeguro_session', JSON.stringify({ nombre, cuit, rol }));
-    window.location.replace(rol === 'supervisor' ? '/supervisor' : '/comercial');
+    window.location.replace('/comercial');
 
   } else {
     // ── Camino D: Usuario Director (no es CUIT ni email) ─────────────────────

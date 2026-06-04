@@ -379,6 +379,7 @@
   .sit-badge { font-size: 10px; font-weight: 700; border-radius: 5px; padding: 2px 6px; }
   .alerta-badge      { font-size: 10px; font-weight: 700; background: rgba(239,68,68,0.13);   color: var(--red);    border-radius: 5px; padding: 2px 6px; }
   .alerta-temprana-badge { font-size: 10px; font-weight: 700; background: rgba(245,158,11,0.13); color: var(--yellow); border-radius: 5px; padding: 2px 6px; }
+  .cliente-vendedor-tag { font-size: 10px; font-weight: 600; background: rgba(37,99,235,0.08); border: 1px solid rgba(37,99,235,0.18); color: var(--azul); border-radius: 20px; padding: 2px 7px; letter-spacing: 0.3px; }
   .excedido-badge    { font-size: 10px; font-weight: 700; background: rgba(249,115,22,0.13);  color: var(--orange); border-radius: 5px; padding: 2px 6px; }
   .saldo-badge       { font-size: 10px; font-weight: 700; background: rgba(245,158,11,0.13);  color: var(--yellow); border-radius: 5px; padding: 2px 6px; }
 
@@ -746,7 +747,7 @@
 
     <!-- ── TAB: CARTERA ───────────────────────────────────────────── -->
     <div class="tab-pane" id="tab-cartera">
-      <div class="section-title">Mi Cartera</div>
+      <div class="section-title" id="cartera-title">Mi Cartera</div>
       <div class="section-sub" id="cartera-subtitle">Clientes activos</div>
 
       <!-- Banner DSO global de cartera -->
@@ -771,6 +772,9 @@
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg> Scores
         </button>
       </div>
+
+      <!-- Filtro por vendedor — visible solo para supervisores (JS lo muestra/construye) -->
+      <div id="sup-vend-row" style="display:none;flex-wrap:wrap;align-items:center;gap:6px;margin-top:6px;margin-bottom:2px;"></div>
 
       <!-- Grid responsive de tarjetas (renderCartera() inyecta .cliente-card aquí) -->
       <div id="cartera-lista"></div>
@@ -848,6 +852,7 @@ let CARTERA_LOCAL = [];
 let ALERTAS = [];
 let SALDOS_MAP = {};
 let SALDOS_TIMESTAMP = 0;
+let _filtroVendedor = null;   // null = todos; string = nombre.toLowerCase() del vendedor filtrado
 
 // ── LOGIN (reemplazado por login.html + Supabase) ──
 // ── LOGIN (reemplazado por login.html + Supabase) ──
@@ -881,9 +886,17 @@ async function iniciarApp(perfil) {
 
   // BLOQUE 1: Cartera (crítico — si falla, no hay app)
   try {
-    const cr = await fetch(API + '/cartera-por-vendedor/' + encodeURIComponent(SESSION.nombre) + '?v=' + Date.now()).catch(() => null);
+    // Supervisores tienen un endpoint especial que combina cartera propia + equipo
+    const _isSuper = SESSION.rol === 'supervisor';
+    const _cartUrl = _isSuper
+      ? (API + '/api/supervisor-cartera/' + SESSION.cuit + '?v=' + Date.now())
+      : (API + '/cartera-por-vendedor/' + encodeURIComponent(SESSION.nombre) + '?v=' + Date.now());
+    const cr = await fetch(_cartUrl).catch(() => null);
     if (cr && cr.ok) {
-      CARTERA_LOCAL = await cr.json();
+      const _crData = await cr.json();
+      // /api/supervisor-cartera devuelve {ok, equipo, clientes}; /cartera-por-vendedor devuelve array directo
+      CARTERA_LOCAL = Array.isArray(_crData) ? _crData : (_crData.clientes || []);
+      if (!Array.isArray(_crData) && _crData.equipo) window._supEquipo = _crData.equipo;
       CARTERA_LOCAL.forEach(c => {
         if ((c.total_saldo || 0) > 0) {
           const k  = normNombre(c.nombre);
@@ -984,6 +997,12 @@ async function iniciarApp(perfil) {
   if (_sbCnt)  _sbCnt.textContent  = n + ' cliente' + (n!==1?'s':'');
   renderCartera('todos');
   renderOportunidades();
+  // Supervisor: actualizar título de sección y mostrar filtros de vendedor
+  if (SESSION.rol === 'supervisor') {
+    const _ct = document.getElementById('cartera-title');
+    if (_ct) _ct.textContent = 'Cartera del Equipo';
+    _initFiltrosSuper();
+  }
   cargarSaldosCartera();
   cargarDSOHeader();
   // Polling cada 5 minutos
@@ -1348,6 +1367,8 @@ function renderCartera(filtro) {
   else if (filtro === 'riesgo') lista = lista.filter(c => (c.ultimaSit||1) >= 3);
   else if (filtro === 'buenos') lista = lista.filter(c => (c.score||0) >= 700);
   else if (filtro === 'saldo') lista = lista.filter(c => getSaldos(c.nombre, c.cuit));
+  // Filtro secundario por vendedor (solo activo en modo supervisor)
+  if (_filtroVendedor) lista = lista.filter(c => (c.vendedor||'').toLowerCase() === _filtroVendedor);
   if (_carteraFiltrada) lista = lista.filter(c => matchBusqueda(c.nombre, _carteraFiltrada, c.cuit));
 
   const el = document.getElementById('cartera-lista');
@@ -1440,6 +1461,7 @@ function renderCartera(filtro) {
         ${tieneAT      ? '<span class="alerta-temprana-badge"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Temprana</span>' : ''}
         ${esExcedido   ? '<span class="excedido-badge"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg> Límite excedido</span>' : ''}
         ${c.alerta_logistica ? `<span class="alerta-temprana-badge">${esc(c.alerta_logistica)}</span>` : ''}
+        ${SESSION?.rol === 'supervisor' && c.vendedor ? `<span class="cliente-vendedor-tag">${esc(c.vendedor.split(' ')[0])}</span>` : ''}
       </div>
 
       <!-- Barra de crédito (si tiene límite configurado) -->
@@ -2965,12 +2987,12 @@ document.getElementById('cuit-input').addEventListener('keypress',e=>{if(e.key==
     const perfil = await verificarSesion();
     if (perfil) { await iniciarApp(perfil); return; }
 
-    // Camino 2: sesión legacy (vendedores con CUIT+PIN)
+    // Camino 2: sesión legacy (vendedores / supervisores con CUIT+PIN)
     const saved = localStorage.getItem('vendeSeguro_session');
     if (saved) {
       const sess = JSON.parse(saved);
       if (sess?.nombre && sess?.cuit) {
-        SESSION = { nombre: sess.nombre, cuit: sess.cuit };
+        SESSION = { nombre: sess.nombre, cuit: sess.cuit, rol: sess.rol || 'vendedor' };
         await iniciarApp(null);
         return;
       }
@@ -2990,6 +3012,34 @@ document.getElementById('cuit-input').addEventListener('keypress',e=>{if(e.key==
       '</div>';
   }
 })();
+
+// ── SUPERVISOR: filtros por vendedor ────────────────────────────────────────
+// Construye chips de vendedor desde window._supEquipo (cargado en iniciarApp).
+// Aparece solo cuando SESSION.rol === 'supervisor'.
+function _initFiltrosSuper() {
+  const row = document.getElementById('sup-vend-row');
+  if (!row || !window._supEquipo) return;
+  const equipo = [...window._supEquipo].sort();
+  row.style.display = 'flex';
+  row.innerHTML = [
+    `<span style="font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.8px;align-self:center;flex-shrink:0;">Vendedor</span>`,
+    `<button class="filter-chip active" style="font-size:11px;" onclick="setFiltroVend(null,this)">Todos</button>`,
+    ...equipo.map(v => {
+      const label = v.split(' ').slice(0, 2).join(' ');
+      return `<button class="filter-chip" style="font-size:11px;" onclick="setFiltroVend('${v.replace(/'/g,"\\'").toLowerCase()}',this)">${esc(label)}</button>`;
+    })
+  ].join('');
+}
+
+function setFiltroVend(v, btn) {
+  _filtroVendedor = v;
+  document.querySelectorAll('#sup-vend-row .filter-chip').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  // Re-aplicar el filtro de tipo (todos/alertas/saldo) que esté activo
+  const chipActivo = document.querySelector('.filter-row .filter-chip.active');
+  const tipoFiltro = chipActivo?.getAttribute('onclick')?.match(/'([^']+)'/)?.[1] || 'todos';
+  renderCartera(tipoFiltro);
+}
 
 // ── BUSCADORES ──
 var _carteraFiltrada = null;
