@@ -6195,31 +6195,46 @@ def facturas_estado_resumen():
 
 @app.route("/api/alertas-vencimiento")
 def alertas_vencimiento_endpoint():
-    """Clientes con facturas a vencer en los próximos 10 días (para panel de alertas)."""
+    """Clientes de la cartera con facturas a vencer en los próximos 10 días.
+
+    Itera _cartera_comercial (fuente de CUITs reales) y usa _buscar_por_nombre_en_idx
+    — la misma lógica fuzzy que /api/facturas/<cuit> — para obtener las facturas.
+    Devuelve el CUIT real de la cartera, no el CUIT vacío de los registros de saldos.
+    """
     from datetime import date, timedelta
-    hoy = date.today()
+    hoy    = date.today()
     limite = hoy + timedelta(days=10)
-    fuente = _saldos_gestion if _saldos_gestion else _saldos_facturas
-    clientes_dict: dict = {}
-    for f in fuente:
-        saldo = float(f.get('saldo') or 0)
-        if saldo <= 0:
+
+    clientes = []
+    for cc in _cartera_comercial:
+        nombre   = str(cc.get('nombre', '')).strip()
+        cuit_car = str(cc.get('cuit',   '')).replace('-', '').replace(' ', '').strip()
+        if not nombre:
             continue
-        venc = _parse_fecha_venc(f.get('fechaPago', ''))
-        if venc is None:
+
+        # Misma búsqueda fuzzy que usa api_facturas_por_cuit
+        facturas = _buscar_por_nombre_en_idx(nombre)
+        if not facturas:
             continue
-        if not (hoy <= venc <= limite):
-            continue
-        nombre = str(f.get('cliente', '')).strip()
-        cuit_f = str(f.get('cuit', '')).replace('-', '').replace(' ', '').strip()
-        k = cuit_f or nombre
-        if not k:
-            continue
-        if k not in clientes_dict:
-            clientes_dict[k] = {'nombre': nombre, 'cuit': cuit_f, 'count': 0, 'monto': 0.0}
-        clientes_dict[k]['count'] += 1
-        clientes_dict[k]['monto'] = round(clientes_dict[k]['monto'] + saldo, 2)
-    clientes = sorted(clientes_dict.values(), key=lambda x: x['monto'], reverse=True)
+
+        vencen = []
+        for f in facturas:
+            saldo = float(f.get('saldo') or 0)
+            if saldo <= 0:
+                continue
+            venc = _parse_fecha_venc(f.get('fechaPago', ''))
+            if venc and hoy <= venc <= limite:
+                vencen.append(saldo)
+
+        if vencen:
+            clientes.append({
+                'nombre': nombre,
+                'cuit':   cuit_car,   # CUIT real de cartera_comercial
+                'count':  len(vencen),
+                'monto':  round(sum(vencen), 2),
+            })
+
+    clientes.sort(key=lambda x: x['monto'], reverse=True)
     return jsonify({'total': len(clientes), 'clientes': clientes})
 
 
