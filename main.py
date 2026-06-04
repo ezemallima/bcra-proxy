@@ -784,15 +784,8 @@ def consultar_bcra(cuit, reintentos=3):
                 return 'NOT_FOUND', via
             if r.status_code == 200 and len(r.text.strip()) > 10:
                 raw = r.json()
-                # Wrapper y BCRA oficial: _parse_bcra maneja CDI v1.0 y legacy
-                if 'bcra.gob.ar' in url or 'bcra-wrapper' in url:
-                    d = _parse_bcra(raw)
-                else:
-                    d = _norm_bcra_resp(raw)
-                    if d.get('error') or d.get('results') is None:
-                        d = None
-                    else:
-                        d['sin_deudas'] = len((d.get('results') or {}).get('periodos') or []) == 0
+                # _parse_bcra detecta CDI v1.0 (detalle) y legacy (periodos) para todas las fuentes
+                d = _parse_bcra(raw)
                 if d:
                     return d, via
         except Exception as e:
@@ -800,9 +793,9 @@ def consultar_bcra(cuit, reintentos=3):
         return None, via
 
     endpoints = (
-        # Wrapper Vercel primero (rápido, sin rate-limit) + workers (2.5s) + BCRA oficial (10s)
+        # Wrapper Vercel primero (rápido, sin rate-limit) + todos los workers (4s) + BCRA oficial (10s)
         [(BCRA_WRAPPER_BASE + '/central-deudores/' + cuit, 3.5, 'bcra_wrapper')]
-        + [(w + "/deudas/" + cuit, 2.5, f"Worker{i+1}") for i, w in enumerate(BCRA_WORKERS[:3])]
+        + [(w + "/deudas/" + cuit, 4, f"Worker{i+1}") for i, w in enumerate(BCRA_WORKERS)]
         + [
             (f"https://api.bcra.gob.ar/CentralDeInformacion/v1.0/Deudas/{cuit}", 10, 'bcra_cdi'),
             (f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/{cuit}",    10, 'bcra_legacy'),
@@ -5340,7 +5333,7 @@ def get_cheques(cuit):
 
     endpoints_chq = (
         [(BCRA_WRAPPER_BASE + '/cheques-rechazados/' + cuit_limpio, 3.5, 'bcra_wrapper')]
-        + [(w + "/deudas/" + cuit_limpio + "/cheques", 2.5, f"Worker{i+1}") for i, w in enumerate(BCRA_WORKERS[:2])]
+        + [(w + "/deudas/" + cuit_limpio + "/cheques", 4, f"Worker{i+1}") for i, w in enumerate(BCRA_WORKERS[:4])]
         + [
             (f"https://api.bcra.gob.ar/CentralDeInformacion/v1.0/ChequesRechazados/{cuit_limpio}", 10, "bcra_cdi"),
             (f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/{cuit_limpio}", 10, "bcra_legacy"),
@@ -5403,7 +5396,7 @@ def get_historial(cuit):
         return None, via
 
     endpoints_hist = (
-        [(w + "/deudas/" + cuit_limpio + "/historial", 2.5, f"Worker{i+1}") for i, w in enumerate(BCRA_WORKERS[:2])]
+        [(w + "/deudas/" + cuit_limpio + "/historial", 4, f"Worker{i+1}") for i, w in enumerate(BCRA_WORKERS[:4])]
         + [
             (f"https://api.bcra.gob.ar/CentralDeInformacion/v1.0/Deudas/Historicas/{cuit_limpio}", 10, "bcra_cdi"),
             (f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/{cuit_limpio}",    10, "bcra_legacy"),
