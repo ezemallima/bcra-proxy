@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="es" translate="no">
+<head>
+<meta charset="UTF-8">
+<meta name="google" content="notranslate">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Vende Seguro">
+<link rel="apple-touch-icon" href="/static/logo.png">
+<link rel="icon" type="image/png" href="/static/logo.png">
+<title>Vende Seguro — Supervisor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Syne:wght@700;800&family=Roboto+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* ── DESIGN TOKENS ───────────────────────────────────────────────────────── */
+:root {
+  --bg:        #f1f5f9;
+  --bg2:       #e8edf4;
+  --surface:   #ffffff;
+  --surface2:  #f8fafc;
+  --border:    #e2e8f0;
+  --border2:   #cbd5e1;
+  --text:      #0f172a;
+  --text2:     #64748b;
+  --text3:     #94a3b8;
+  --accent:    #2563eb;
+  --accent2:   #1d4ed8;
+  --green:     #166534;
+  --green-bg:  #dcfce7;
+  --yellow:    #92400e;
+  --yellow-bg: #fef3c7;
+  --orange:    #9a3412;
+  --orange-bg: #ffedd5;
+  --red:       #991b1b;
+  --red-bg:    #fee2e2;
+  --purple:    #7c3aed;
+  --purple-bg: #ede9fe;
+  --radius:    14px;
+  --tab-h:     62px;
+  --shadow:    0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -1px rgba(0,0,0,0.04);
+  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html { height: 100%; }
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100%;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+* { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+*::-webkit-scrollbar { width: 5px; height: 5px; }
+*::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 3px; }
+
+/* ── LOADING OVERLAY ────────────────────────────────────────────────────── */
+#loading-overlay {
+  position: fixed; inset: 0; z-index: 999;
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  flex-direction: column; gap: 16px;
+}
+.loading-spinner {
+  width: 36px; height: 36px;
+  border: 3px solid rgba(37,99,235,0.15);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+.loading-text { font-size: 13px; color: var(--text2); font-weight: 500; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── HEADER ─────────────────────────────────────────────────────────────── */
+.app-header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: max(13px, env(safe-area-inset-top, 13px)) 16px 13px;
+  display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 100;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+}
+.header-brand { display: flex; align-items: center; gap: 10px; }
+.header-logo {
+  width: 34px; height: 34px;
+  background: var(--accent);
+  border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.header-logo svg { width: 18px; height: 18px; }
+.header-info { display: flex; flex-direction: column; }
+.header-name {
+  font-family: 'Syne', sans-serif;
+  font-size: 14px; font-weight: 800; color: var(--text);
+  letter-spacing: -0.2px; line-height: 1.2;
+}
+.header-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: rgba(37,99,235,0.08);
+  color: var(--accent);
+  font-size: 10px; font-weight: 700;
+  padding: 2px 7px; border-radius: 20px;
+  text-transform: uppercase; letter-spacing: 0.5px;
+  border: 1px solid rgba(37,99,235,0.2);
+  margin-top: 2px;
+  width: fit-content;
+}
+.header-right { display: flex; align-items: center; gap: 8px; }
+.btn-ver-comercial {
+  background: rgba(37,99,235,0.08);
+  border: 1px solid rgba(37,99,235,0.2);
+  color: var(--accent);
+  font-size: 12px; font-weight: 600;
+  border-radius: 8px; padding: 7px 12px;
+  cursor: pointer; font-family: 'Inter', sans-serif;
+  transition: background 0.15s;
+  display: flex; align-items: center; gap: 5px;
+}
+.btn-ver-comercial:hover { background: rgba(37,99,235,0.14); }
+.btn-logout {
+  background: var(--surface2); border: 1px solid var(--border);
+  color: var(--text2); font-size: 12px; font-weight: 600;
+  border-radius: 8px; padding: 7px 13px; cursor: pointer;
+  font-family: 'Inter', sans-serif; transition: background 0.15s;
+}
+.btn-logout:hover { background: var(--bg2); }
+
+/* ── MAIN CONTENT ───────────────────────────────────────────────────────── */
+.main-content {
+  padding: 16px 16px calc(var(--tab-h) + 24px);
+  max-width: 1100px; margin: 0 auto;
+}
+
+/* ── SECTION TITLE ─────────────────────────────────────────────────────── */
+.section-title {
+  font-size: 11px; font-weight: 700; color: var(--text2);
+  text-transform: uppercase; letter-spacing: 1px;
+  margin-bottom: 10px; margin-top: 20px;
+}
+.section-title:first-child { margin-top: 0; }
+
+/* ── KPI CARDS ──────────────────────────────────────────────────────────── */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 4px;
+}
+@media (min-width: 540px) { .kpi-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 900px) { .kpi-grid { grid-template-columns: repeat(5, 1fr); } }
+
+.kpi-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 14px 12px;
+  display: flex; flex-direction: column; gap: 6px;
+  box-shadow: var(--shadow);
+  transition: box-shadow 0.15s;
+}
+.kpi-card:hover { box-shadow: var(--shadow-lg); }
+.kpi-label {
+  font-size: 10px; font-weight: 700; color: var(--text2);
+  text-transform: uppercase; letter-spacing: 0.8px;
+}
+.kpi-value {
+  font-family: 'Syne', sans-serif;
+  font-size: 22px; font-weight: 800; color: var(--text);
+  letter-spacing: -0.5px; line-height: 1;
+}
+.kpi-value.green { color: #16a34a; }
+.kpi-value.red   { color: #dc2626; }
+.kpi-value.amber { color: #d97706; }
+.kpi-value.blue  { color: var(--accent); }
+.kpi-sub {
+  font-size: 10px; color: var(--text3);
+  display: flex; align-items: center; gap: 4px;
+}
+.kpi-dot {
+  width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+}
+
+/* ── FILTROS ────────────────────────────────────────────────────────────── */
+.filters-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  box-shadow: var(--shadow);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.filter-row {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+}
+.filter-label {
+  font-size: 10px; font-weight: 700; color: var(--text2);
+  text-transform: uppercase; letter-spacing: 0.8px;
+  min-width: 48px;
+}
+.chip {
+  background: var(--bg2);
+  border: 1.5px solid var(--border2);
+  color: var(--text2);
+  font-size: 12px; font-weight: 600;
+  padding: 5px 11px; border-radius: 20px;
+  cursor: pointer; font-family: 'Inter', sans-serif;
+  transition: all 0.15s; white-space: nowrap;
+  line-height: 1;
+}
+.chip:hover { background: var(--surface); border-color: var(--accent); color: var(--accent); }
+.chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.chip.warn.active { background: #d97706; border-color: #d97706; }
+.chip.danger.active { background: #dc2626; border-color: #dc2626; }
+
+.search-wrap {
+  position: relative; flex: 1; min-width: 160px;
+}
+.search-wrap svg {
+  position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+  pointer-events: none; color: var(--text3);
+}
+.search-input {
+  width: 100%;
+  background: var(--bg2);
+  border: 1.5px solid var(--border);
+  border-radius: 9px;
+  padding: 8px 12px 8px 32px;
+  font-family: 'Inter', sans-serif; font-size: 13px; color: var(--text);
+  outline: none; transition: border-color 0.2s;
+}
+.search-input:focus { border-color: var(--accent); background: rgba(37,99,235,0.04); }
+.search-input::placeholder { color: var(--text3); }
+
+/* ── TABLE CARD ─────────────────────────────────────────────────────────── */
+.table-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+.table-header-bar {
+  padding: 12px 16px;
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+}
+.table-count {
+  font-size: 12px; font-weight: 600; color: var(--text2);
+}
+.table-count strong { color: var(--text); font-size: 14px; }
+
+.table-wrap { overflow-x: auto; }
+table {
+  width: 100%; border-collapse: collapse;
+  font-size: 13px;
+}
+thead th {
+  background: var(--surface2);
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 10px; font-weight: 700;
+  color: var(--text2); text-transform: uppercase; letter-spacing: 0.7px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  cursor: pointer; user-select: none;
+}
+thead th:hover { color: var(--accent); }
+thead th.sorted { color: var(--accent); }
+thead th .sort-icon { margin-left: 4px; opacity: 0.5; font-size: 9px; }
+thead th.sorted .sort-icon { opacity: 1; }
+
+tbody tr {
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+}
+tbody tr:last-child { border-bottom: none; }
+tbody tr:hover { background: var(--surface2); }
+tbody td {
+  padding: 11px 14px;
+  vertical-align: middle;
+  color: var(--text);
+}
+.td-nombre {
+  font-weight: 600; font-size: 13px;
+  max-width: 220px;
+}
+.td-nombre small {
+  display: block; font-size: 11px; color: var(--text3);
+  font-weight: 400; margin-top: 1px;
+}
+.td-vendedor {
+  font-size: 12px; color: var(--text2); white-space: nowrap;
+}
+.td-saldo {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 12px; font-weight: 600; text-align: right;
+  white-space: nowrap;
+}
+.td-saldo.has-saldo { color: var(--accent2); }
+.td-saldo.no-saldo  { color: var(--text3); }
+
+/* Score badge */
+.score-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 700;
+  padding: 3px 8px; border-radius: 20px; white-space: nowrap;
+}
+.score-badge.excellent { background: var(--green-bg);  color: var(--green); }
+.score-badge.good      { background: var(--yellow-bg); color: var(--yellow); }
+.score-badge.review    { background: var(--orange-bg); color: var(--orange); }
+.score-badge.risk      { background: var(--red-bg);    color: var(--red); }
+.score-badge.none      { background: var(--bg2);        color: var(--text3); }
+
+/* Aging badge */
+.aging-badge {
+  display: inline-flex; align-items: center;
+  font-size: 11px; font-weight: 700;
+  padding: 3px 8px; border-radius: 20px; white-space: nowrap;
+}
+.aging-badge.d0  { background: var(--green-bg);  color: var(--green); }
+.aging-badge.d30 { background: var(--yellow-bg); color: var(--yellow); }
+.aging-badge.d60 { background: var(--orange-bg); color: var(--orange); }
+.aging-badge.d90 { background: var(--red-bg);    color: var(--red); }
+.aging-badge.none{ background: var(--bg2);         color: var(--text3); }
+
+/* Alerta badge */
+.alerta-dot {
+  display: inline-block;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #dc2626;
+  box-shadow: 0 0 0 2px rgba(220,38,38,0.2);
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+
+/* Actions */
+.td-actions { white-space: nowrap; text-align: right; }
+.btn-action {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 600;
+  padding: 5px 9px; border-radius: 7px; border: 1px solid;
+  cursor: pointer; font-family: 'Inter', sans-serif;
+  transition: all 0.15s; text-decoration: none;
+  margin-left: 4px;
+}
+.btn-wsp {
+  background: rgba(34,197,94,0.08);
+  border-color: rgba(34,197,94,0.25);
+  color: #15803d;
+}
+.btn-wsp:hover { background: rgba(34,197,94,0.15); }
+.btn-detail {
+  background: rgba(37,99,235,0.07);
+  border-color: rgba(37,99,235,0.2);
+  color: var(--accent2);
+}
+.btn-detail:hover { background: rgba(37,99,235,0.14); }
+
+/* Empty state */
+.empty-state {
+  padding: 48px 24px; text-align: center; color: var(--text3);
+}
+.empty-state svg { margin-bottom: 12px; opacity: 0.4; }
+.empty-state p { font-size: 14px; font-weight: 500; }
+.empty-state small { font-size: 12px; }
+
+/* Bottom nav */
+.bottom-nav {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  height: var(--tab-h);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  display: flex; z-index: 100;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+  box-shadow: 0 -1px 6px rgba(0,0,0,0.06);
+}
+.nav-btn {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 4px;
+  background: none; border: none; cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  color: var(--text3); font-size: 10px; font-weight: 600;
+  transition: color 0.15s;
+  padding: 8px 0;
+}
+.nav-btn.active { color: var(--accent); }
+.nav-btn svg { transition: transform 0.15s; }
+.nav-btn:active svg { transform: scale(0.9); }
+
+/* Spinner inline */
+.spinner-sm {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid rgba(37,99,235,0.15);
+  border-top-color: var(--accent);
+  animation: spin 0.7s linear infinite;
+  display: inline-block; vertical-align: middle;
+}
+
+/* Responsive: tabla colapsa en mobile */
+@media (max-width: 639px) {
+  .hide-mobile { display: none; }
+}
+</style>
+</head>
+<body>
+
+<div id="loading-overlay">
+  <div class="loading-spinner"></div>
+  <div class="loading-text">Cargando datos del equipo…</div>
+</div>
+
+<div id="app" style="display:none; flex-direction:column; min-height:100dvh;">
+
+  <!-- HEADER -->
+  <header class="app-header">
+    <div class="header-brand">
+      <div class="header-logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+      </div>
+      <div class="header-info">
+        <div class="header-name" id="header-name">Supervisor</div>
+        <div class="header-badge">
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+          Supervisor Comercial
+        </div>
+      </div>
+    </div>
+    <div class="header-right">
+      <button class="btn-ver-comercial" onclick="irAComercial()" title="Ir a vista completa">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12h8M12 8v8"/></svg>
+        App
+      </button>
+      <button class="btn-logout" onclick="doLogout()">Salir</button>
+    </div>
+  </header>
+
+  <!-- MAIN -->
+  <main class="main-content" id="main-content">
+
+    <!-- KPI SECTION -->
+    <div class="section-title">Resumen del equipo</div>
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Clientes</div>
+        <div class="kpi-value blue" id="kpi-total">—</div>
+        <div class="kpi-sub"><div class="kpi-dot" style="background:var(--accent)"></div>en cartera</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Con saldo</div>
+        <div class="kpi-value" id="kpi-con-saldo">—</div>
+        <div class="kpi-sub"><div class="kpi-dot" style="background:#64748b"></div>deuda activa</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Alertas</div>
+        <div class="kpi-value red" id="kpi-alertas">—</div>
+        <div class="kpi-sub"><div class="kpi-dot" style="background:#dc2626"></div>requieren acción</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Cartera</div>
+        <div class="kpi-value green" id="kpi-cartera">—</div>
+        <div class="kpi-sub"><div class="kpi-dot" style="background:#16a34a"></div>saldo total</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Vencido +60d</div>
+        <div class="kpi-value amber" id="kpi-vencido">—</div>
+        <div class="kpi-sub"><div class="kpi-dot" style="background:#d97706"></div>facturas críticas</div>
+      </div>
+    </div>
+
+    <!-- FILTROS -->
+    <div class="section-title" style="margin-top:18px">Filtros</div>
+    <div class="filters-card">
+      <!-- Aging -->
+      <div class="filter-row">
+        <span class="filter-label">Aging</span>
+        <button class="chip active" data-aging="todos" onclick="setFiltroAging('todos',this)">Todos</button>
+        <button class="chip" data-aging="d30" onclick="setFiltroAging('d30',this)">0–30 días</button>
+        <button class="chip warn" data-aging="d60" onclick="setFiltroAging('d60',this)">31–60 días</button>
+        <button class="chip warn" data-aging="d90" onclick="setFiltroAging('d90',this)">61–90 días</button>
+        <button class="chip danger" data-aging="d90plus" onclick="setFiltroAging('d90plus',this)">+90 días</button>
+      </div>
+      <!-- Vendedor -->
+      <div class="filter-row" id="row-vendedor">
+        <span class="filter-label">Vendedor</span>
+        <!-- chips dinámicos -->
+      </div>
+      <!-- Búsqueda -->
+      <div class="filter-row">
+        <div class="search-wrap">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input class="search-input" id="search-input" type="text" placeholder="Buscar cliente o CUIT…" oninput="renderTabla()" autocomplete="off" autocorrect="off" spellcheck="false">
+        </div>
+      </div>
+    </div>
+
+    <!-- TABLA -->
+    <div class="section-title" style="margin-top:18px">Cartera del equipo</div>
+    <div class="table-card">
+      <div class="table-header-bar">
+        <div class="table-count"><strong id="count-visible">0</strong> clientes</div>
+        <div id="sort-info" style="font-size:11px;color:var(--text3)">Ord: saldo ↓</div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th onclick="toggleSort('nombre')">Cliente <span class="sort-icon" id="si-nombre"></span></th>
+              <th class="hide-mobile" onclick="toggleSort('vendedor')">Vendedor <span class="sort-icon" id="si-vendedor"></span></th>
+              <th onclick="toggleSort('saldo')" class="sorted">Saldo <span class="sort-icon" id="si-saldo">↓</span></th>
+              <th class="hide-mobile" onclick="toggleSort('score')">Score <span class="sort-icon" id="si-score"></span></th>
+              <th onclick="toggleSort('aging')">Aging <span class="sort-icon" id="si-aging"></span></th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="tabla-body">
+            <tr><td colspan="6"><div class="empty-state"><div class="loading-spinner" style="width:24px;height:24px;margin:0 auto 8px"></div><p>Cargando cartera…</p></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- BOTTOM NAV -->
+  <nav class="bottom-nav">
+    <button class="nav-btn active" onclick="irAComercial()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      Consultar
+    </button>
+    <button class="nav-btn active" style="color:var(--accent)">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Mi Equipo
+    </button>
+    <button class="nav-btn" onclick="doLogout()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      Salir
+    </button>
+  </nav>
+
+</div><!-- #app -->
+
+<script>
+// ── Estado global ──────────────────────────────────────────────────────────────
+let SESSION    = null;
+let CLIENTES   = [];        // datos originales del API
+let EQUIPO     = [];        // nombres del equipo
+let filtroAging   = 'todos';
+let filtroVendedor = 'todos';
+let sortCol    = 'saldo';
+let sortAsc    = false;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const nc = s => String(s || '').replace(/\D/g, '').trim();
+
+function fmtM(n) {
+  if (!n) return '$0';
+  n = Math.round(n);
+  if (n >= 1_000_000_000) return '$' + (n / 1_000_000_000).toFixed(1) + 'B';
+  if (n >= 1_000_000)     return '$' + (n / 1_000_000).toFixed(1) + 'M';
+  if (n >= 1_000)         return '$' + (n / 1_000).toFixed(0) + 'K';
+  return '$' + n.toLocaleString('es-AR');
+}
+
+function fmtFull(n) {
+  return n ? '$' + Math.round(n).toLocaleString('es-AR') : '$0';
+}
+
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function agingBucket(dias) {
+  if (!dias || dias <= 0) return 'none';
+  if (dias <= 30)  return 'd30';
+  if (dias <= 60)  return 'd60';
+  if (dias <= 90)  return 'd90';
+  return 'd90plus';
+}
+
+function agingLabel(dias) {
+  if (!dias || dias <= 0) return null;
+  return dias + 'd';
+}
+
+function agingClass(dias) {
+  if (!dias || dias <= 0) return 'none';
+  if (dias <= 30)  return 'd0';    // verde
+  if (dias <= 60)  return 'd30';   // amarillo
+  if (dias <= 90)  return 'd60';   // naranja
+  return 'd90';                     // rojo
+}
+
+function scoreClass(s) {
+  if (!s) return 'none';
+  if (s >= 700) return 'excellent';
+  if (s >= 400) return 'good';
+  if (s >= 200) return 'review';
+  return 'risk';
+}
+
+function scoreLabel(s) {
+  if (!s) return '—';
+  if (s >= 700) return '✓ ' + s;
+  if (s >= 400) return '~ ' + s;
+  return '✕ ' + s;
+}
+
+function matchBusqueda(c, q) {
+  if (!q) return true;
+  q = q.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  if (/^\d+$/.test(q)) return (c.cuit || '').replace(/\D/g,'').includes(q);
+  const n = (c.nombre || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  return q.split(' ').filter(p => p.length >= 2).every(p => n.includes(p));
+}
+
+// ── Filtro aging ───────────────────────────────────────────────────────────────
+function pasaFiltroAging(c) {
+  if (filtroAging === 'todos') return true;
+  const b = agingBucket(c.max_dias_pendiente);
+  if (filtroAging === 'd30')     return b === 'd30';
+  if (filtroAging === 'd60')     return b === 'd60';
+  if (filtroAging === 'd90')     return b === 'd90';
+  if (filtroAging === 'd90plus') return b === 'd90plus';
+  return true;
+}
+
+function setFiltroAging(valor, btn) {
+  filtroAging = valor;
+  document.querySelectorAll('[data-aging]').forEach(el => el.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderTabla();
+}
+
+function setFiltroVendedor(valor, btn) {
+  filtroVendedor = valor;
+  document.querySelectorAll('[data-vendedor]').forEach(el => el.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderTabla();
+}
+
+// ── Sort ───────────────────────────────────────────────────────────────────────
+function toggleSort(col) {
+  if (sortCol === col) { sortAsc = !sortAsc; }
+  else { sortCol = col; sortAsc = col === 'nombre' || col === 'vendedor'; }
+  document.querySelectorAll('[id^="si-"]').forEach(el => { el.textContent = ''; el.closest('th').classList.remove('sorted'); });
+  const si = document.getElementById('si-' + col);
+  if (si) { si.textContent = sortAsc ? '↑' : '↓'; si.closest('th').classList.add('sorted'); }
+  document.getElementById('sort-info').textContent = 'Ord: ' + col + (sortAsc ? ' ↑' : ' ↓');
+  renderTabla();
+}
+
+function sortedClientes(list) {
+  return [...list].sort((a, b) => {
+    let va, vb;
+    if (sortCol === 'nombre')   { va = (a.nombre  || '').toLowerCase(); vb = (b.nombre  || '').toLowerCase(); }
+    else if (sortCol === 'vendedor') { va = (a.vendedor || '').toLowerCase(); vb = (b.vendedor || '').toLowerCase(); }
+    else if (sortCol === 'saldo') { va = a.total_saldo || 0; vb = b.total_saldo || 0; }
+    else if (sortCol === 'score') { va = a.score || 0; vb = b.score || 0; }
+    else if (sortCol === 'aging') { va = a.max_dias_pendiente || 0; vb = b.max_dias_pendiente || 0; }
+    else { va = a.total_saldo || 0; vb = b.total_saldo || 0; }
+    if (typeof va === 'string') return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+    return sortAsc ? va - vb : vb - va;
+  });
+}
+
+// ── Render tabla ───────────────────────────────────────────────────────────────
+function renderTabla() {
+  const q = (document.getElementById('search-input').value || '').trim();
+  const visible = sortedClientes(CLIENTES.filter(c =>
+    pasaFiltroAging(c) &&
+    (filtroVendedor === 'todos' || (c.vendedor || '').toLowerCase() === filtroVendedor.toLowerCase()) &&
+    matchBusqueda(c, q)
+  ));
+
+  document.getElementById('count-visible').textContent = visible.length;
+  const tbody = document.getElementById('tabla-body');
+
+  if (!visible.length) {
+    tbody.innerHTML = `<tr><td colspan="6">
+      <div class="empty-state">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <p>Sin clientes con estos filtros</p>
+        <small>Probá cambiar el rango de aging o el vendedor</small>
+      </div>
+    </td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = visible.map(c => {
+    const hasSaldo   = (c.total_saldo || 0) > 0;
+    const saldoCls   = hasSaldo ? 'has-saldo' : 'no-saldo';
+    const saldoTxt   = hasSaldo ? fmtFull(c.total_saldo) : '—';
+    const scoreCls   = scoreClass(c.score);
+    const scoreTxt   = scoreLabel(c.score);
+    const agingDias  = c.max_dias_pendiente || 0;
+    const agingCls   = agingClass(agingDias);
+    const agingTxt   = agingDias > 0 ? agingDias + 'd' : (hasSaldo ? '0d' : '—');
+    const alertaHtml = c.alerta ? '<span class="alerta-dot" title="Alerta activa"></span>' : '';
+    const cuitTxt    = c.cuit ? c.cuit : '';
+    const ciudadTxt  = c.ciudad ? esc(c.ciudad) : '';
+    const vend       = esc(c.vendedor || '');
+    const nombre     = esc(c.nombre || '');
+
+    const wspMsg = encodeURIComponent(
+      `*Estado de cuenta: ${c.nombre}*\nCUIT: ${c.cuit || 'S/D'}\nSaldo pendiente: ${hasSaldo ? fmtFull(c.total_saldo) : '$0'}\nFactura más antigua: ${agingDias > 0 ? agingDias + ' días' : 'al día'}\n\n_Enviado desde Vende Seguro_`
+    );
+    const wspUrl = `https://wa.me/?text=${wspMsg}`;
+
+    return `<tr>
+      <td class="td-nombre">
+        ${alertaHtml}${nombre}
+        <small>${ciudadTxt}${ciudadTxt && cuitTxt ? ' · ' : ''}${cuitTxt ? cuitTxt : ''}</small>
+      </td>
+      <td class="td-vendedor hide-mobile">${vend}</td>
+      <td class="td-saldo ${saldoCls}">${saldoTxt}</td>
+      <td class="hide-mobile"><span class="score-badge ${scoreCls}">${scoreTxt}</span></td>
+      <td><span class="aging-badge ${agingCls}">${agingTxt}</span></td>
+      <td class="td-actions">
+        <a class="btn-action btn-wsp" href="${wspUrl}" target="_blank" rel="noopener" title="Compartir estado de cuenta por WhatsApp">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+          Ctacte
+        </a>
+        ${c.cuit ? `<button class="btn-action btn-detail" onclick="verDetalle('${nc(c.cuit)}','${nombre.replace(/'/g,"\\'")}')">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          Detalle
+        </button>` : ''}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ── KPIs ───────────────────────────────────────────────────────────────────────
+function actualizarKPIs() {
+  const total    = CLIENTES.length;
+  const conSaldo = CLIENTES.filter(c => (c.total_saldo || 0) > 0).length;
+  const alertas  = CLIENTES.filter(c => c.alerta).length;
+  const sumCart  = CLIENTES.reduce((s, c) => s + (c.total_saldo || 0), 0);
+  const vencidos = CLIENTES.filter(c => (c.max_dias_pendiente || 0) > 60).length;
+
+  document.getElementById('kpi-total').textContent    = total;
+  document.getElementById('kpi-con-saldo').textContent = conSaldo;
+  document.getElementById('kpi-alertas').textContent  = alertas;
+  document.getElementById('kpi-cartera').textContent  = fmtM(sumCart);
+  document.getElementById('kpi-vencido').textContent  = vencidos;
+}
+
+// ── Chips de vendedores ────────────────────────────────────────────────────────
+function renderChipsVendedor() {
+  const row = document.getElementById('row-vendedor');
+  const vendedores = [...new Set(CLIENTES.map(c => c.vendedor).filter(Boolean))].sort();
+  const extras = vendedores.map(v =>
+    `<button class="chip" data-vendedor="${esc(v)}" onclick="setFiltroVendedor('${v.replace(/'/g,"\\'")}',this)">${esc(v.split(' ')[0])}</button>`
+  ).join('');
+  row.innerHTML = `<span class="filter-label">Vendedor</span>
+    <button class="chip active" data-vendedor="todos" onclick="setFiltroVendedor('todos',this)">Todos</button>
+    ${extras}`;
+}
+
+// ── "Ver detalle" → redirige a /comercial con auto-query ─────────────────────
+function verDetalle(cuit, nombre) {
+  localStorage.setItem('vendeSeguro_auto_cuit', cuit);
+  // Asegurar que la sesión sea válida para /comercial (usa los mismos campos)
+  window.location.href = '/comercial';
+}
+
+// ── "Ir a comercial" sin parámetros ──────────────────────────────────────────
+function irAComercial() {
+  window.location.href = '/comercial';
+}
+
+// ── Logout ────────────────────────────────────────────────────────────────────
+function doLogout() {
+  localStorage.removeItem('vendeSeguro_session');
+  localStorage.removeItem('vendeSeguro_auto_cuit');
+  window.location.replace('/login');
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+(async function() {
+  // Verificar sesión localStorage
+  const saved = localStorage.getItem('vendeSeguro_session');
+  if (!saved) { window.location.replace('/login'); return; }
+
+  let sess;
+  try { sess = JSON.parse(saved); } catch(_) { window.location.replace('/login'); return; }
+
+  if (!sess?.nombre || !sess?.cuit || sess?.rol !== 'supervisor') {
+    window.location.replace('/login');
+    return;
+  }
+
+  SESSION = sess;
+  document.getElementById('header-name').textContent = SESSION.nombre;
+
+  // Cargar cartera del equipo
+  try {
+    const r = await fetch(`/api/supervisor-cartera/${SESSION.cuit}?v=${Date.now()}`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    if (!data.ok) throw new Error(data.error || 'Error del servidor');
+
+    CLIENTES = data.clientes || [];
+    EQUIPO   = data.equipo   || [];
+
+    renderChipsVendedor();
+    actualizarKPIs();
+    renderTabla();
+
+  } catch(e) {
+    console.error('[supervisor] Error cargando cartera:', e);
+    document.getElementById('tabla-body').innerHTML = `<tr><td colspan="6">
+      <div class="empty-state">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <p style="color:var(--red)">Error al cargar la cartera</p>
+        <small>${esc(e.message)}</small>
+      </div>
+    </td></tr>`;
+  } finally {
+    document.getElementById('loading-overlay').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+  }
+})();
+</script>
+</body>
+</html>

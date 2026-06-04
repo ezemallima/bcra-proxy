@@ -490,7 +490,7 @@ async function handleLogin(e) {
       }
     }
 
-    // ── Camino A: CUIT + PIN (vendedores legacy) ─────────────────────────────
+    // ── Camino A: CUIT + PIN (vendedores / supervisores legacy) ─────────────
     if (password !== PIN_COMERCIAL) {
       btn.disabled = false; btn.classList.remove('loading');
       mostrarError('PIN incorrecto.'); return;
@@ -500,8 +500,11 @@ async function handleLogin(e) {
       btn.disabled = false; btn.classList.remove('loading');
       mostrarError('CUIT no registrado en el sistema.'); return;
     }
-    localStorage.setItem('vendeSeguro_session', JSON.stringify({ nombre, cuit }));
-    window.location.replace('/comercial');
+    // Supervisores comerciales tienen su propio dashboard
+    const SUPERVISORES_CUITS = new Set(['27224289966', '20207619923']);
+    const rol = SUPERVISORES_CUITS.has(cuit) ? 'supervisor' : 'vendedor';
+    localStorage.setItem('vendeSeguro_session', JSON.stringify({ nombre, cuit, rol }));
+    window.location.replace(rol === 'supervisor' ? '/supervisor' : '/comercial');
 
   } else {
     // ── Camino D: Usuario Director (no es CUIT ni email) ─────────────────────

@@ -3817,6 +3817,197 @@ def get_cartera_comercial(vendedor):
     except: pass
     return jsonify(result)
 
+# ── Mapa de supervisión (jefes de equipo comercial) ───────────────────────────
+# Clave: CUIT normalizado del supervisor.
+# 'supervisa': nombres de vendedor exactamente como aparecen en cartera_comercial.json.
+_SUPERVISOR_MAP = {
+    '27224289966': {   # Valeria Gutierrez Castex
+        'nombre':    'Valeria Gutierrez Castex',
+        'supervisa': ['Raul Maza', 'Marcelo Fernandez', 'Ezequiel Mallima'],
+    },
+    '20207619923': {   # Alejandro Valan
+        'nombre':    'Alejandro Valan',
+        'supervisa': ['Anabel Borrageiros', 'Sergio Piatanesi', 'Pablo Perticone', 'Adrian Arango'],
+    },
+}
+
+
+@app.route("/supervisor")
+def supervisor_page():
+    resp = send_from_directory('static', 'supervisor.html')
+    resp.headers['Cache-Control'] = 'no-store, must-revalidate'
+    resp.headers['Pragma'] = 'no-cache'
+    return resp
+
+
+@app.route("/api/supervisor-cartera/<cuit_supervisor>")
+def api_supervisor_cartera(cuit_supervisor):
+    """Cartera ampliada para supervisor: sus propios clientes + los de su equipo.
+    Incluye aging (días desde fechaFactura de la factura más antigua con saldo > 0),
+    score crediticio, saldo total y columna vendedor por cliente."""
+    cuit_n = str(cuit_supervisor).replace('-', '').replace(' ', '').strip()
+    sup_info = _SUPERVISOR_MAP.get(cuit_n)
+    if not sup_info:
+        return jsonify({"ok": False, "error": "CUIT no autorizado como supervisor"}), 403
+
+    nombre_propio   = sup_info['nombre']
+    nombres_equipo  = [nombre_propio] + sup_info['supervisa']
+    nombres_lower   = {n.lower() for n in nombres_equipo}
+
+    hoy = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+    def _parse_f(s):
+        if not s:
+            return None
+        s = str(s).strip()
+        if '/' in s:
+            p = s.split('/')
+            try: return datetime(int(p[2]), int(p[1]), int(p[0]))
+            except Exception: return None
+        if '-' in s and len(s) >= 10:
+            p = s.split('-')
+            try: return datetime(int(p[0]), int(p[1]), int(p[2]))
+            except Exception: return None
+        return None
+
+    def _nc(x):
+        return str(x or '').replace('-', '').replace(' ', '').strip()
+
+    # ── Base: todos los clientes del equipo desde cartera_comercial ────────────
+    base = [c for c in _cartera_comercial
+            if (c.get('vendedor') or '').strip().lower() in nombres_lower]
+
+    # ── Aging y saldos desde _saldos_gestion (o fallback _saldos_facturas) ─────
+    fuente_s   = _saldos_gestion if _saldos_gestion else _saldos_facturas
+    aging_map  = {}   # norm_nombre → max días de factura pendiente
+    saldo_map  = {}   # norm_nombre → saldo total acumulado
+
+    for fac in fuente_s:
+        if not isinstance(fac, dict):
+            continue
+        vend_f = (fac.get('vendedor') or '').strip().lower()
+        if vend_f not in nombres_lower:
+            continue
+        cli_raw  = (fac.get('cliente') or '').strip()
+        cli_norm = _norm_nombre(cli_raw)
+        if not cli_norm:
+            continue
+        saldo_f = float(fac.get('saldo') or 0)
+        saldo_map[cli_norm] = saldo_map.get(cli_norm, 0) + saldo_f
+        if saldo_f > 0:
+            fecha_d = _parse_f(fac.get('fechaFactura'))
+            if fecha_d:
+                dias = (hoy - fecha_d).days
+                aging_map[cli_norm] = max(aging_map.get(cli_norm, 0), dias)
+
+    # ── Scores desde archivos de alertas ──────────────────────────────────────
+    scores:           dict = {}
+    scores_by_nombre: dict = {}
+    alertas_cuits:    set  = set()
+
+    def _load_score_file_sup(ruta):
+        if not os.path.exists(ruta):
+            return
+        try:
+            with open(ruta, 'r', encoding='utf-8') as _f:
+                _ad = json.load(_f)
+            for _c in _ad.get('cartera', []):
+                _nc_val = _nc(_c.get('cuit', ''))
+                if _nc_val:
+                    scores[_nc_val] = _c
+                _n = (_c.get('nombre') or '').strip()
+                if _n:
+                    scores_by_nombre[_norm_nombre(_n)] = _c
+            if not _ad.get('cartera') and not _ad.get('alertas'):
+                for _k, _v in _ad.items():
+                    if isinstance(_v, dict) and _v.get('scoreCompleto'):
+                        _nc_val = _nc(_k)
+                        if _nc_val:
+                            scores[_nc_val] = _v
+            for _a in _ad.get('alertas', []):
+                _nc_val = _nc(_a.get('cuit', ''))
+                if _nc_val:
+                    alertas_cuits.add(_nc_val)
+                _n = (_a.get('nombre') or '').strip()
+                if _n and _a.get('scoreCompleto'):
+                    scores_by_nombre.setdefault(_norm_nombre(_n), _a)
+        except Exception as _e:
+            print(f"[sup-cartera] Error cargando scores {ruta}: {_e}", flush=True)
+
+    for _ruta in list(dict.fromkeys([
+        os.path.join(os.getcwd(), 'alertas_bcra.json'),   ALERTAS_BCRA_FILE,
+        os.path.join(os.getcwd(), 'alertas_cartera.json'), ALERTAS_FILE,
+    ])):
+        _load_score_file_sup(_ruta)
+
+    # ── Construir resultado ────────────────────────────────────────────────────
+    result = []
+    for cc in base:
+        nombre   = (cc.get('nombre') or '').strip()
+        cuit     = (cc.get('cuit')   or '').strip()
+        cuit_nc  = _nc(cuit)
+        nom_norm = _norm_nombre(nombre)
+
+        sc = scores.get(cuit_nc, {})
+        if not sc.get('scoreCompleto'):
+            sc = scores_by_nombre.get(nom_norm, {})
+        if not sc.get('scoreCompleto'):
+            prim2 = ' '.join(nom_norm.split()[:2])
+            for _k, _sv in scores_by_nombre.items():
+                if ' '.join(_k.split()[:2]) == prim2:
+                    sc = _sv
+                    break
+
+        total_saldo = saldo_map.get(nom_norm, 0)
+        if total_saldo == 0:
+            prim2 = ' '.join(nom_norm.split()[:2])
+            for k, sv in saldo_map.items():
+                if ' '.join(k.split()[:2]) == prim2:
+                    total_saldo = sv
+                    break
+
+        max_dias = aging_map.get(nom_norm, 0)
+        if max_dias == 0:
+            prim2 = ' '.join(nom_norm.split()[:2])
+            for k, mv in aging_map.items():
+                if ' '.join(k.split()[:2]) == prim2:
+                    max_dias = mv
+                    break
+
+        limite_credito  = float(cc.get('limiteCredito') or 0)
+        cupo_disponible = max(0.0, limite_credito - total_saldo) if limite_credito > 0 else None
+        score_val       = sc.get('scoreCompleto') or None
+        alerta_temprana = sc.get('alerta_temprana', False)
+
+        result.append({
+            'nombre':             nombre,
+            'cuit':               cuit,
+            'ciudad':             cc.get('ciudad', ''),
+            'vendedor':           cc.get('vendedor', ''),
+            'email':              cc.get('email', ''),
+            'total_saldo':        total_saldo,
+            'limite_credito':     limite_credito,
+            'cupo_disponible':    cupo_disponible,
+            'score':              score_val,
+            'scoreRango':         sc.get('scoreRango') or None,
+            'scoreColor':         sc.get('scoreColor') or None,
+            'ultimaSit':          sc.get('ultimaSit') or 1,
+            'alerta':             cuit_nc in alertas_cuits or alerta_temprana,
+            'alerta_temprana':    alerta_temprana,
+            'max_dias_pendiente': max_dias,
+        })
+
+    result.sort(key=lambda x: (0 if x['total_saldo'] > 0 else 1, -(x['total_saldo'] or 0), x['nombre']))
+
+    resp = jsonify({
+        "ok":      True,
+        "equipo":  nombres_equipo,
+        "clientes": result,
+    })
+    resp.headers['Cache-Control'] = 'no-store'
+    return resp
+
+
 @app.route("/api-v17-scores", methods=["GET"])
 @app.route("/scores-cartera", methods=["GET"])   # alias legacy — no rompe clientes viejos
 def get_scores_cartera():

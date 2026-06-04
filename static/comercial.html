@@ -1012,6 +1012,16 @@ async function iniciarApp(perfil) {
       .find(c => c.getAttribute('onclick') && c.getAttribute('onclick').includes("'" + savedFiltro + "'"));
     if (chipBtn) filtrarCartera(savedFiltro, chipBtn);
   }
+  // Auto-consulta CUIT si viene redirigido desde supervisor (vendeSeguro_auto_cuit)
+  const autoCuit = localStorage.getItem('vendeSeguro_auto_cuit');
+  if (autoCuit) {
+    localStorage.removeItem('vendeSeguro_auto_cuit');
+    document.getElementById('cuit-input').value = autoCuit;
+    const tabBtnConsulta = [...document.querySelectorAll('.tab-btn')]
+      .find(b => b.getAttribute('onclick') && b.getAttribute('onclick').includes("'consulta'"));
+    switchTab('consulta', tabBtnConsulta || null);
+    setTimeout(() => consultarCuit(), 600);
+  }
   } catch (e) {
     hideLoading();
     console.error('[iniciarApp] Fallo en arranque:', e);
