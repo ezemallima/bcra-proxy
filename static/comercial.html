@@ -1086,15 +1086,30 @@ async function cargarDSOHeader() {
     if (!todos) return;
 
     const nombre = SESSION && SESSION.nombre ? SESSION.nombre : '';
-    const vData  = (todos.por_vendedor || {})[nombre];
+    let dsoDisplay, saldoTotal, vData;
 
-    // Usar DSO ponderado precalculado por el servidor (Σ dso_i×saldo_i / Σ saldo_i).
-    // Prioridad: ponderado del vendedor → ponderado global → exhaustion vendedor (fallback)
-    const dsoVendPond   = (todos.dso_vendedor_ponderado || {})[nombre] || null;
-    const dsoGlobalPond = todos.dso_global_ponderado || null;
-    const dsoDisplay    = dsoVendPond || dsoGlobalPond || (vData ? vData.dso : null);
+    if (SESSION?.rol === 'supervisor' && window._supEquipo?.length) {
+      // Jefe de Ventas: DSO ponderado del equipo completo (Σ dso_i×saldo_i / Σ saldo_i)
+      let sumSaldo = 0, sumDSOxSaldo = 0;
+      for (const vn of window._supEquipo) {
+        const dsoV = (todos.dso_vendedor_ponderado || {})[vn] || null;
+        const vd   = (todos.por_vendedor || {})[vn];
+        const sal  = vd ? (vd.saldo || 0) : 0;
+        if (dsoV && sal > 0) { sumSaldo += sal; sumDSOxSaldo += dsoV * sal; }
+      }
+      dsoDisplay = sumSaldo > 0 ? Math.round(sumDSOxSaldo / sumSaldo) : null;
+      saldoTotal = sumSaldo;
+      vData      = { saldo: sumSaldo };
+    } else {
+      // Vendedor individual
+      vData       = (todos.por_vendedor || {})[nombre];
+      const dsoVP = (todos.dso_vendedor_ponderado || {})[nombre] || null;
+      dsoDisplay  = dsoVP || todos.dso_global_ponderado || (vData ? vData.dso : null);
+      saldoTotal  = vData ? vData.saldo : null;
+    }
+
     const d = dsoDisplay != null
-      ? { dso: dsoDisplay, fecha_corte: todos.fecha_corte, saldo_total: vData ? vData.saldo : null }
+      ? { dso: dsoDisplay, fecha_corte: todos.fecha_corte, saldo_total: saldoTotal }
       : null;
 
     if (!d || d.dso == null) return;
@@ -1105,7 +1120,9 @@ async function cargarDSOHeader() {
     numEl.textContent = d.dso + 'd';
     numEl.style.color = color;
     wrap.style.opacity = '1';
-    wrap.title = 'DSO de tu cartera al ' + (d.fecha_corte || todos.fecha_corte || '—');
+    wrap.title = SESSION?.rol === 'supervisor'
+      ? 'DSO del equipo al ' + (todos.fecha_corte || '—')
+      : 'DSO de tu cartera al ' + (d.fecha_corte || todos.fecha_corte || '—');
     if (document.getElementById('cartera-dso-banner')) actualizarBannerDSO(d, vData);
   } catch(e) {}
 }
