@@ -5050,25 +5050,43 @@ def _calcular_score_handler(cuit: str):
             return jsonify(_cached)
     try:
         bcra_data, _ = consultar_bcra_cached(cuit_limpio)
-        # CUIT inexistente: BCRA 404 sin denominación Y solvencia/AFIP tampoco lo conoce
-        # Y además no está en ninguna fuente interna (cartera propia o saldos)
-        _bcra_denom = (bcra_data.get('results') or {}).get('denominacion', '').strip()
-        if bcra_data.get('sin_deudas') is True and not _bcra_denom:
-            _solv_chk = get_solvency_data(cuit_limpio)
+        _bcra_denom  = (bcra_data.get('results') or {}).get('denominacion', '').strip()
+        _bcra_error  = bool(bcra_data.get('error_bcra')) or bcra_data.get('bcra_disponible') is False
+
+        # ── Validación de CUIT: solo bloquear cuando BCRA devolvió un ERROR real ──
+        # Si BCRA respondió con sin_deudas=True, significa que el CUIT ES válido
+        # (la persona existe pero no tiene historial crediticio). NO es CUIT inexistente.
+        # Solo verificar via ARCA cuando la consulta BCRA falló completamente.
+        if _bcra_error and not _bcra_denom:
+            _solv_chk  = get_solvency_data(cuit_limpio)
             if not isinstance(_solv_chk, dict): _solv_chk = {}
             _razon_chk = (_solv_chk.get('razon_social') or _solv_chk.get('nombre') or '').strip()
             if not _razon_chk:
-                # Verificar en cartera y saldos internos antes de descartar
-                _nc = lambda x: str(x).replace('-', '').replace(' ', '').strip()
+                # Re-leer cartera del disco (captura clientes agregados después del último deploy)
+                _nc = lambda x: str(x or '').replace('-', '').replace(' ', '').strip()
+                _cc_live = _cartera_comercial
+                try:
+                    _cc_path_live = _CC_FILE if os.path.exists(_CC_FILE) \
+                                    else os.path.join(os.getcwd(), 'cartera_comercial.json')
+                    with open(_cc_path_live, encoding='utf-8') as _ccf:
+                        _cc_live = json.load(_ccf)
+                except Exception:
+                    pass
                 _en_interna = (
-                    any(_nc(c.get('cuit', '')) == cuit_limpio for c in _cartera_comercial)
+                    any(_nc(c.get('cuit', '')) == cuit_limpio for c in _cc_live)
                     or any(_nc(f.get('cuit', '')) == cuit_limpio
                            for f in (_saldos_gestion if _saldos_gestion else _saldos_facturas))
                 )
                 if not _en_interna:
-                    print(f"[fetch-score] {cuit_limpio} CUIT INEXISTENTE — sin datos BCRA/AFIP/solvencia", flush=True)
+                    print(f"[fetch-score] {cuit_limpio} CUIT INEXISTENTE — error BCRA + sin AFIP/solvencia", flush=True)
                     return jsonify({"error": "cuit_inexistente", "cuit": cuit_limpio, "score": None}), 200
-                print(f"[fetch-score] {cuit_limpio} sin BCRA/AFIP pero presente en cartera interna — calculando score", flush=True)
+                print(f"[fetch-score] {cuit_limpio} sin BCRA/AFIP pero en cartera interna — calculando score", flush=True)
+
+        # sin_deudas=True sin error BCRA = cliente válido sin historial crediticio.
+        # El motor usa el piso 650 para este caso (_cliente_sin_deuda).
+        if bcra_data.get('sin_deudas') and not _bcra_denom and not _bcra_error:
+            print(f"[fetch-score] {cuit_limpio} cliente nuevo sin historial BCRA — score base 650", flush=True)
+
         score_data   = calcular_score_servidor(cuit_limpio, bcra_data or {})
         solvency     = get_solvency_data(cuit_limpio)
         if not isinstance(solvency, dict): solvency = {}
