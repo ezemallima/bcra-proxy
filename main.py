@@ -5834,11 +5834,6 @@ _saldos_gestion_loaded = _load_json_with_fallback('saldos_gestion_vendedores.jso
 _saldos_gestion = _saldos_gestion_loaded if _saldos_gestion_loaded else list(_saldos_facturas)
 if not _saldos_gestion_loaded:
     print("[gestion] Usando saldos_facturas como fallback inicial para gestión", flush=True)
-else:
-    # Al arrancar con datos persistidos, sincronizar asignaciones de vendedor en cartera_comercial
-    _startup_cambios = _sync_cartera_vendedores(_saldos_gestion)
-    if _startup_cambios:
-        print(f"[startup] sync-cartera: {len(_startup_cambios)} correcciones aplicadas al arrancar", flush=True)
 
 # Caché del DSO global ponderado (Σ dso_i×saldo_i / Σ saldo_i) calculado en /api/dso-todos.
 # Lo lee /api/director-data para incluirlo en su respuesta sin necesidad de un segundo fetch.
@@ -6124,7 +6119,11 @@ def upload_saldos_gestion():
         _saldos_facturas = list(saldos)   # sincronizar SSoT para que el índice siempre sea fresco
         _rebuild_saldos_index()
         # Auto-sync: corregir asignaciones de vendedor en cartera_comercial según el reporte
-        _cambios = _sync_cartera_vendedores(saldos)
+        try:
+            _cambios = _sync_cartera_vendedores(saldos)
+        except Exception as _se:
+            print(f"[gestion] sync-cartera error (no crítico): {_se}", flush=True)
+            _cambios = []
         print(f"[gestion] {len(saldos)} facturas importadas | sync-cartera: {len(_cambios)} cambios", flush=True)
         return jsonify({"ok": True, "total": len(saldos), "reasignaciones": len(_cambios), "cambios": _cambios})
     except Exception as e:
