@@ -1010,9 +1010,15 @@ async function iniciarApp(perfil) {
   }
   cargarSaldosCartera();
   cargarDSOHeader();
-  // Polling cada 5 minutos
+  // Polling cada 5 minutos para saldos y DSO
   setInterval(() => cargarSaldosCartera(), 5 * 60 * 1000);
-  setInterval(() => cargarDSOHeader(), 5 * 60 * 1000);
+  setInterval(() => cargarDSOHeader(),     5 * 60 * 1000);
+  // Polling de scores cada 10 minutos — detecta degradaciones BCRA (Sit >= 2) en background
+  setInterval(() => refrescarScores(), 10 * 60 * 1000);
+  // Refresh de scores al volver al tab (usuario estaba en otra pestaña)
+  document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible') refrescarScores();
+  });
   // Sync cross-tab: detecta cuando la App Principal sube nuevos saldos
   window.addEventListener('storage', e => {
     if (e.key === 'piat_saldos_ts' || e.key === 'piat_dso_global') {
@@ -1331,23 +1337,65 @@ async function refrescarScores() {
       const nc = normCuit(c.cuit);
       if (nc && (c.scoreCompleto ?? 0) > 0) scoreMap[nc] = c;
     });
+
+    // Detectar degradaciones BCRA (Sit 1 → Sit >= 2) para alertar al vendedor
+    const degradados = [];
     let actualizados = 0;
     CARTERA_LOCAL.forEach((c, i) => {
       const nc = normCuit(c.cuit);
-      if (scoreMap[nc]) {
-        CARTERA_LOCAL[i].score      = scoreMap[nc].scoreCompleto;
-        CARTERA_LOCAL[i].scoreRango = scoreMap[nc].scoreRango;
-        CARTERA_LOCAL[i].scoreColor = scoreMap[nc].scoreColor;
-        CARTERA_LOCAL[i].scoreEmoji = scoreMap[nc].scoreEmoji;
-        CARTERA_LOCAL[i].ultimaSit  = scoreMap[nc].ultimaSit || c.ultimaSit || 1;
-        actualizados++;
-      }
+      if (!scoreMap[nc]) return;
+      const sitAnterior = c.ultimaSit || 1;
+      const sitNueva    = scoreMap[nc].ultimaSit || 1;
+      CARTERA_LOCAL[i].score                = scoreMap[nc].scoreCompleto;
+      CARTERA_LOCAL[i].scoreRango           = scoreMap[nc].scoreRango;
+      CARTERA_LOCAL[i].scoreColor           = scoreMap[nc].scoreColor;
+      CARTERA_LOCAL[i].scoreEmoji           = scoreMap[nc].scoreEmoji;
+      CARTERA_LOCAL[i].ultimaSit            = sitNueva;
+      CARTERA_LOCAL[i].alerta_temprana      = scoreMap[nc].alerta_temprana || false;
+      CARTERA_LOCAL[i].bloquear_oportunidad = scoreMap[nc].bloquear_oportunidad || false;
+      CARTERA_LOCAL[i].alerta_logistica     = scoreMap[nc].alerta_logistica || '';
+      actualizados++;
+      // Detectar: cliente que antes era Sit 1 y ahora es Sit >= 2
+      if (sitAnterior < 2 && sitNueva >= 2) degradados.push(c.nombre);
     });
-    renderCartera(document.querySelector('.filter-chip.active')?.textContent?.includes('Alertas')?'alertas':
-      document.querySelector('.filter-chip.active')?.textContent?.includes('saldo')?'saldo':'todos');
+
+    renderCartera(document.querySelector('.filter-chip.active')?.textContent?.includes('Alertas') ? 'alertas' :
+      document.querySelector('.filter-chip.active')?.textContent?.includes('saldo') ? 'saldo' : 'todos');
     if (document.getElementById('tab-oport').classList.contains('active')) renderOportunidades();
-    console.log('[refresh] Scores actualizados:', actualizados + '/' + CARTERA_LOCAL.length);
+    console.log('[refresh] Scores:', actualizados + '/' + CARTERA_LOCAL.length, '| Degradados BCRA:', degradados.length);
+
+    // Banner de alerta inmediata si algún cliente degradó su situación BCRA
+    if (degradados.length > 0) _mostrarAlertaDegradacion(degradados);
   } catch(e) {}
+}
+
+function _mostrarAlertaDegradacion(nombres) {
+  // Mostrar banner no-modal sobre la cartera — no bloquea la pantalla
+  const existente = document.getElementById('bcra-alerta-banner');
+  if (existente) existente.remove();
+  const lista = nombres.map(n => '<b>' + esc(n) + '</b>').join(', ');
+  const banner = document.createElement('div');
+  banner.id = 'bcra-alerta-banner';
+  banner.style.cssText = [
+    'position:fixed','top:70px','left:50%','transform:translateX(-50%)',
+    'z-index:9999','max-width:480px','width:90%',
+    'background:#7f1d1d','color:#fef2f2',
+    'border:2px solid #dc2626','border-radius:12px',
+    'padding:14px 18px','box-shadow:0 8px 32px rgba(0,0,0,0.4)',
+    'font-family:Inter,sans-serif','font-size:13px','line-height:1.5',
+    'cursor:pointer'
+  ].join(';');
+  banner.innerHTML =
+    '<div style="display:flex;align-items:flex-start;gap:10px">' +
+    '<span style="font-size:20px;flex-shrink:0">&#9888;</span>' +
+    '<div><div style="font-weight:700;font-size:14px;margin-bottom:4px">ALERTA BCRA — Situacion degradada</div>' +
+    '<div>' + lista + ' registra mora bancaria (Sit. 2 o superior).<br>' +
+    '<b>Suspender ventas a credito automaticamente.</b></div>' +
+    '<div style="margin-top:8px;font-size:11px;opacity:.7">Toca para cerrar</div></div></div>';
+  banner.addEventListener('click', function(){ banner.remove(); });
+  document.body.appendChild(banner);
+  // Auto-cerrar en 30 segundos
+  setTimeout(function(){ if (banner.parentNode) banner.remove(); }, 30000);
 }
 
 // ── CARTERA ──
