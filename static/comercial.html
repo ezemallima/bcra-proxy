@@ -1666,33 +1666,56 @@ function renderCartera(filtro) {
 // Calcula días desde última compra por cliente (del historial de ventas del servidor)
 async function cargarUltimasCompras() {
   if (window.ULTIMAS_COMPRAS) return; // ya cargado
-  window.ULTIMAS_COMPRAS = {};
+  window.ULTIMAS_COMPRAS     = {};  // clave: normNombre exacto → Date
+  window.ULTIMAS_COMPRAS_P2  = {};  // clave: primeras 2 palabras sig. → Date (fuzzy)
   try {
     const r = await fetch(API + '/dso-ventas');
     if (!r.ok) return;
-    const data = await r.json();
+    const data  = await r.json();
     const ventas = data.ventas || [];
-    // Para cada cliente, guardar la fecha más reciente
     ventas.forEach(function(v) {
       if (!v.cliente || !v.fecha) return;
-      const cn = normNombre(v.cliente);
       const fecha = new Date(v.fecha);
       if (isNaN(fecha)) return;
-      if (!window.ULTIMAS_COMPRAS[cn] || fecha > window.ULTIMAS_COMPRAS[cn]) {
+      const cn = normNombre(v.cliente);
+      // Índice exacto
+      if (!window.ULTIMAS_COMPRAS[cn] || fecha > window.ULTIMAS_COMPRAS[cn])
         window.ULTIMAS_COMPRAS[cn] = fecha;
+      // Índice por primeras 2 palabras de ≥3 chars (mismatch de sufijos SA/SRL/etc.)
+      const words2 = cn.split(' ').filter(w => w.length >= 3).slice(0, 2).join(' ');
+      if (words2) {
+        if (!window.ULTIMAS_COMPRAS_P2[words2] || fecha > window.ULTIMAS_COMPRAS_P2[words2])
+          window.ULTIMAS_COMPRAS_P2[words2] = fecha;
       }
     });
-    console.log('[oport] Últimas compras cargadas para', Object.keys(window.ULTIMAS_COMPRAS).length, 'clientes');
+    console.log('[oport] Últimas compras:', Object.keys(window.ULTIMAS_COMPRAS).length, 'clientes en historial de ventas');
   } catch(e) { console.warn('[oport] Error cargando ventas:', e); }
 }
 
-function diasDesdeUltimaCompra(nombre) {
+// Retorna la Date de la última compra con matching de 2 niveles, o null si no existe.
+function ultimaCompraFecha(nombre) {
   if (!window.ULTIMAS_COMPRAS) return null;
   const cn = normNombre(nombre);
-  const fecha = window.ULTIMAS_COMPRAS[cn];
-  if (!fecha) return null; // nunca compró (en el historial disponible)
-  const hoy = new Date();
-  hoy.setHours(0,0,0,0);
+  // Nivel 1: coincidencia exacta
+  if (window.ULTIMAS_COMPRAS[cn]) return window.ULTIMAS_COMPRAS[cn];
+  // Nivel 2: primeras 2 palabras significativas (maneja variaciones S.A./SRL/etc.)
+  const words2 = cn.split(' ').filter(w => w.length >= 3).slice(0, 2).join(' ');
+  if (words2 && window.ULTIMAS_COMPRAS_P2?.[words2]) return window.ULTIMAS_COMPRAS_P2[words2];
+  return null;
+}
+
+function _fmtFechaCompra(fecha) {
+  if (!fecha) return '';
+  const d = String(fecha.getDate()).padStart(2,'0');
+  const m = String(fecha.getMonth()+1).padStart(2,'0');
+  const y = fecha.getFullYear();
+  return `${d}/${m}/${y}`;
+}
+
+function diasDesdeUltimaCompra(nombre) {
+  const fecha = ultimaCompraFecha(nombre);
+  if (!fecha) return null;
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
   return Math.floor((hoy - fecha) / 86400000);
 }
 
@@ -1721,37 +1744,39 @@ async function renderOportunidades() {
     return;
   }
 
-  // Enriquecer con días desde última compra
+  // Enriquecer con fecha de última compra (fuente: historial de ventas DSO)
   const opps = candidatos.map(function(c) {
-    const dias = diasDesdeUltimaCompra(c.nombre);
-    const saldosData  = getSaldos(c.nombre, c.cuit);
-    const saldoCalc   = (saldosData?.total_saldo) || c.total_saldo || 0;
-    const tieneSaldo  = saldoCalc > 0;
-    const tieneFacs   = !!(saldosData?.facturas?.length);
+    const fechaCompra = ultimaCompraFecha(c.nombre);
+    const dias = fechaCompra
+      ? Math.floor((hoy - fechaCompra) / 86400000)
+      : null;
+    const saldosData = getSaldos(c.nombre, c.cuit);
+    const tieneSaldo = ((saldosData?.total_saldo) || c.total_saldo || 0) > 0;
 
-    // Prioridad de oportunidad:
-    // 1. Score alto + sin compra hace 30+ días + sin saldo = contactar ya
-    // 2. Score alto + sin compra hace 15+ días = seguimiento
-    // 3. Score alto + compra reciente = mantener relación
     let prioridad, motivo, color;
-    if (dias === null) {
-      // Sin datos en historial de ventas: distinguir activo vs prospecto puro
-      if (tieneSaldo || tieneFacs) {
-        prioridad = 2; motivo = 'Cliente activo — Con cuenta corriente'; color = 'var(--green)';
+    if (fechaCompra) {
+      // Hay fecha real en el historial de ventas — mostrar siempre "Última compra: DD/MM/AAAA"
+      const fechaStr = _fmtFechaCompra(fechaCompra);
+      if (dias >= 45) {
+        prioridad = 1; color = 'var(--red)';
+        motivo = 'Última compra: ' + fechaStr + ' — contactar urgente';
+      } else if (dias >= 30) {
+        prioridad = 1; color = 'var(--orange)';
+        motivo = 'Última compra: ' + fechaStr + ' — momento de visitar';
+      } else if (dias >= 15) {
+        prioridad = 2; color = 'var(--yellow)';
+        motivo = 'Última compra: ' + fechaStr;
       } else {
-        prioridad = 2; motivo = 'Sin historial de compras — cliente potencial'; color = 'var(--accent)';
+        prioridad = 3; color = 'var(--green)';
+        motivo = 'Última compra: ' + fechaStr;
       }
-    } else if (dias >= 45) {
-      prioridad = 1; motivo = 'Sin compras hace ' + dias + ' días — contactar urgente'; color = 'var(--red)';
-    } else if (dias >= 30) {
-      prioridad = 1; motivo = 'Sin compras hace ' + dias + ' días — momento de visitar'; color = 'var(--orange)';
-    } else if (dias >= 15) {
-      prioridad = 2; motivo = 'Última compra hace ' + dias + ' días'; color = 'var(--yellow)';
     } else {
-      prioridad = 3; motivo = 'Compra reciente — hace ' + dias + ' días'; color = 'var(--green)';
+      // Sin ningún registro en historial de ventas
+      prioridad = 2; color = 'var(--accent)';
+      motivo = 'Cliente Potencial — Sin compras registradas';
     }
 
-    return Object.assign({}, c, {dias, prioridad, motivo, color, tieneSaldo});
+    return Object.assign({}, c, {dias, fechaCompra, prioridad, motivo, color, tieneSaldo});
   })
   // Ordenar: server-flagged oportunidad primero, luego por prioridad/días/score
   .sort(function(a, b) {
