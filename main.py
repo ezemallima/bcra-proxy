@@ -6238,6 +6238,58 @@ def alertas_vencimiento_endpoint():
     return jsonify({'total': len(clientes), 'clientes': clientes})
 
 
+@app.route("/api/clientes-emision-20d")
+def clientes_emision_20d():
+    """Clientes de la cartera con al menos una factura emitida hace más de 20 días y saldo > 0.
+
+    Usa _buscar_por_nombre_en_idx (fuzzy match igual que /api/facturas/<cuit>) para
+    garantizar que el CUIT retornado es el real de cartera_comercial.
+    """
+    from datetime import date, timedelta
+    hoy    = date.today()
+    corte  = hoy - timedelta(days=20)
+
+    def _parse_emision(s):
+        """Parsea 'DD/MM/YYYY' a date. fechaFactura en el modelo = fecha de emisión."""
+        if not s:
+            return None
+        try:
+            d, m, y = str(s).strip().split('/')
+            return date(int(y), int(m), int(d))
+        except Exception:
+            return None
+
+    clientes = []
+    for cc in _cartera_comercial:
+        nombre   = str(cc.get('nombre', '')).strip()
+        cuit_car = str(cc.get('cuit',   '')).replace('-', '').replace(' ', '').strip()
+        if not nombre:
+            continue
+        facturas = _buscar_por_nombre_en_idx(nombre)
+        if not facturas:
+            continue
+
+        antiguas = []
+        for f in facturas:
+            saldo = float(f.get('saldo') or 0)
+            if saldo <= 0:
+                continue
+            em = _parse_emision(f.get('fechaFactura', ''))
+            if em and em <= corte:
+                antiguas.append(saldo)
+
+        if antiguas:
+            clientes.append({
+                'nombre': nombre,
+                'cuit':   cuit_car,
+                'count':  len(antiguas),
+                'monto':  round(sum(antiguas), 2),
+            })
+
+    clientes.sort(key=lambda x: x['monto'], reverse=True)
+    return jsonify({'total': len(clientes), 'clientes': clientes})
+
+
 @app.route("/upload-saldos-gestion", methods=["POST"])
 def upload_saldos_gestion():
     """Saldos semanales de gestión — actualiza la vista comercial sin tocar el DSO de cierre de mes."""

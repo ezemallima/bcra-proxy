@@ -645,17 +645,6 @@
     .tab-pane { padding: 20px 24px; box-sizing: border-box; }
   }
 
-  /* ── BANNER ALERTA VENCIMIENTO ── */
-  .alerta-venc-banner {
-    display: flex; align-items: center; justify-content: space-between;
-    background: rgba(239,68,68,.06); border: 1.5px solid rgba(239,68,68,.22);
-    border-radius: 12px; padding: 10px 14px; margin-bottom: 10px;
-    cursor: pointer; transition: background .15s; gap: 10px;
-  }
-  .alerta-venc-banner:active { background: rgba(239,68,68,.13); }
-  .avc-titulo { font-size: 13px; font-weight: 700; color: #dc2626; }
-  .avc-sub { font-size: 11px; color: var(--text2); margin-top: 2px; }
-  .avc-arrow { font-size: 12px; color: var(--azul); font-weight: 700; flex-shrink: 0; white-space: nowrap; }
 
   /* ── FILTROS AVANZADOS ── */
   #filtros-anchor { position: static; }
@@ -841,20 +830,6 @@
       <!-- Banner DSO global de cartera -->
       <div id="cartera-dso-banner" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:10px;"></div>
 
-      <!-- Banner compacto: clientes con vencimiento próximo -->
-      <div id="alertas-venc-wrap" style="display:none">
-        <div class="alerta-venc-banner" onclick="activarFiltroVence10()">
-          <div style="display:flex;align-items:center;gap:10px;min-width:0">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            <div style="min-width:0">
-              <div class="avc-titulo" id="avc-titulo">—</div>
-              <div class="avc-sub" id="avc-sub"></div>
-            </div>
-          </div>
-          <div class="avc-arrow">Ver →</div>
-        </div>
-      </div>
-
       <!-- Buscador sticky con blur -->
       <div class="sticky-search">
         <input type="text" class="buscar-input" id="buscar-cartera"
@@ -870,7 +845,7 @@
             Filtros
             <span id="filtros-badge"></span>
           </button>
-          <!-- Panel flotante — todo en un solo dropdown -->
+          <!-- Panel flotante de filtros -->
           <div id="filtros-panel">
             <div class="filtros-titulo">Vista de cartera</div>
             <div class="filtro-tipo-group">
@@ -879,14 +854,10 @@
               <label class="filtro-tipo-opt"><input type="radio" name="ftipo" value="saldo" onchange="aplicarFiltrosAvanzados()"> Con saldo pendiente</label>
             </div>
             <hr class="filtros-divider">
-            <div class="filtros-titulo">Filtros adicionales</div>
+            <div class="filtros-titulo">Filtro por antigüedad</div>
             <div class="filtro-row">
-              <span>Vence en 10 días</span>
-              <label class="toggle-sw"><input type="checkbox" id="ftoggle-vence10" onchange="aplicarFiltrosAvanzados()"><span class="slider"></span></label>
-            </div>
-            <div class="filtro-row">
-              <span>Enviado por WhatsApp</span>
-              <label class="toggle-sw"><input type="checkbox" id="ftoggle-wa" onchange="aplicarFiltrosAvanzados()"><span class="slider"></span></label>
+              <span>Facturas con +20 días de emitidas</span>
+              <label class="toggle-sw"><input type="checkbox" id="ftoggle-emit20" onchange="aplicarFiltrosAvanzados()"><span class="slider"></span></label>
             </div>
             <div class="filtro-row">
               <span>Pendiente de cobro</span>
@@ -1145,7 +1116,7 @@ async function iniciarApp(perfil) {
   }
   cargarSaldosCartera();
   cargarDSOHeader();
-  cargarAlertasVencimiento();
+  cargarEmision20d();
   cargarEstadoFacturas();
   // Polling cada 5 minutos para saldos y DSO
   setInterval(() => cargarSaldosCartera(), 5 * 60 * 1000);
@@ -2038,9 +2009,9 @@ function renderFacturas(data, nombre) {
 
   html += `<div id="total-seleccionado" style="text-align:right;font-size:13px;color:var(--text2);margin:8px 2px 4px;min-height:18px"></div>`;
 
-  html += `<button class="btn-wsp" onclick="enviarEstadoCuenta()">
+  html += `<button class="btn-wsp" id="btn-wsp-main" onclick="enviarEstadoCuenta(this)">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20.52 3.48A11.93 11.93 0 0 0 12 0C5.37 0 0 5.37 0 12c0 2.11.55 4.17 1.6 5.98L0 24l6.18-1.62A11.96 11.96 0 0 0 12 24c6.63 0 12-5.37 12-12 0-3.21-1.25-6.22-3.48-8.52zm-8.52 18.43c-1.8 0-3.56-.48-5.1-1.39l-.37-.22-3.8.99 1.02-3.68-.24-.38A9.93 9.93 0 0 1 2.07 12c0-5.48 4.45-9.93 9.93-9.93 2.65 0 5.14 1.03 7.01 2.9a9.88 9.88 0 0 1 2.92 7.03c0 5.48-4.45 9.93-9.93 9.93zm5.44-7.44c-.3-.15-1.77-.87-2.04-.97-.28-.1-.48-.15-.68.15-.2.3-.77.97-.94 1.17-.17.2-.35.22-.65.07a8.14 8.14 0 0 1-2.4-1.48 9.1 9.1 0 0 1-1.66-2.07c-.17-.3-.02-.46.13-.61.13-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.07-.15-.68-1.63-.93-2.23-.24-.58-.49-.5-.68-.51-.17-.01-.37-.01-.57-.01-.2 0-.52.07-.79.37-.27.3-1.04 1.02-1.04 2.48s1.07 2.88 1.21 3.08c.15.2 2.1 3.2 5.08 4.49.71.31 1.26.49 1.69.63.71.23 1.36.2 1.87.12.57-.08 1.77-.72 2.02-1.42.25-.7.25-1.3.17-1.42-.08-.12-.28-.2-.57-.35z" fill="currentColor"/></svg>
-    Enviar Estado de Cuenta
+    <span id="wsp-btn-label">Enviar Estado de Cuenta</span>
   </button>
 
   <!-- Barra de confirmación de rendición (se muestra cuando hay cobros pendientes de confirmar) -->
@@ -2136,12 +2107,11 @@ async function confirmarRendicion() {
 
 // ── FILTROS AVANZADOS DE CARTERA ──────────────────────────────────────────────
 
-var _filtrosAvanzados = { vence10: false, wa: false, pendiente: false };
-window._cuitsConCobradas  = new Set();
-window._cuitsConWA        = new Set();
-// Almacena los CUITs/nombres del backend para filtro vence10 (fuente de verdad)
-window._vence10CUITs      = new Set();
-window._vence10Nombres    = new Set();
+var _filtrosAvanzados = { emit20: false, pendiente: false };
+window._cuitsConCobradas = new Set();
+window._cuitsConWA       = new Set();
+// CUITs de clientes con facturas emitidas hace >20 días (fuente: backend)
+window._emit20CUITs      = new Set();
 
 function toggleFiltrosPanel(e) {
   e.stopPropagation();
@@ -2178,11 +2148,10 @@ function _actualizarBarraFiltroActivo(tipoFiltro) {
   if (!bar) return;
 
   const activos = [];
-  if (tipoFiltro === 'alertas') activos.push('Alertas +45 días');
-  if (tipoFiltro === 'saldo')   activos.push('Con saldo');
-  if (_filtrosAvanzados.vence10)   activos.push('Vence en 10 días');
-  if (_filtrosAvanzados.wa)        activos.push('Enviado por WA');
-  if (_filtrosAvanzados.pendiente) activos.push('Pendiente cobro');
+  if (tipoFiltro === 'alertas')      activos.push('Alertas +45 días');
+  if (tipoFiltro === 'saldo')        activos.push('Con saldo');
+  if (_filtrosAvanzados.emit20)      activos.push('+20 días emitidas');
+  if (_filtrosAvanzados.pendiente)   activos.push('Pendiente cobro');
 
   if (activos.length === 0) {
     bar.style.display = 'none';
@@ -2193,14 +2162,13 @@ function _actualizarBarraFiltroActivo(tipoFiltro) {
 }
 
 function aplicarFiltrosAvanzados() {
-  _filtrosAvanzados.vence10   = document.getElementById('ftoggle-vence10')?.checked  || false;
-  _filtrosAvanzados.wa        = document.getElementById('ftoggle-wa')?.checked        || false;
+  _filtrosAvanzados.emit20    = document.getElementById('ftoggle-emit20')?.checked    || false;
   _filtrosAvanzados.pendiente = document.getElementById('ftoggle-pendiente')?.checked || false;
 
   const radioSelec = document.querySelector('input[name="ftipo"]:checked');
   const tipoFiltro = radioSelec?.value || 'todos';
 
-  const extras  = [_filtrosAvanzados.vence10, _filtrosAvanzados.wa, _filtrosAvanzados.pendiente].filter(Boolean).length;
+  const extras  = [_filtrosAvanzados.emit20, _filtrosAvanzados.pendiente].filter(Boolean).length;
   const tipoAct = tipoFiltro !== 'todos' ? 1 : 0;
   const total   = extras + tipoAct;
   const badge   = document.getElementById('filtros-badge');
@@ -2213,16 +2181,13 @@ function aplicarFiltrosAvanzados() {
 }
 
 function resetFiltroCartera() {
-  // Limpiar radio
   const radioTodos = document.querySelector('input[name="ftipo"][value="todos"]');
   if (radioTodos) radioTodos.checked = true;
-  // Limpiar toggles
-  ['ftoggle-vence10','ftoggle-wa','ftoggle-pendiente'].forEach(id => {
+  ['ftoggle-emit20','ftoggle-pendiente'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.checked = false;
   });
-  _filtrosAvanzados = { vence10: false, wa: false, pendiente: false };
-  // Ocultar badge y barra
+  _filtrosAvanzados = { emit20: false, pendiente: false };
   const badge = document.getElementById('filtros-badge');
   const btnF  = document.getElementById('btn-filtros');
   const bar   = document.getElementById('filtro-activo-bar');
@@ -2232,39 +2197,16 @@ function resetFiltroCartera() {
   renderCartera('todos');
 }
 
-function activarFiltroVence10() {
-  const tog = document.getElementById('ftoggle-vence10');
-  if (tog) { tog.checked = true; }
-  aplicarFiltrosAvanzados();
-}
+// ── CLIENTES CON FACTURAS +20 DÍAS DE EMITIDAS ────────────────────────────────
 
-// ── ALERTAS DE VENCIMIENTO ────────────────────────────────────────────────────
-
-async function cargarAlertasVencimiento() {
+async function cargarEmision20d() {
   try {
-    const r = await safeFetch(API + '/api/alertas-vencimiento', {retries: 0, timeoutMs: 6000});
-    if (!r || r._gateway_error || !r.total) return;
-
-    // Guardar CUITs y nombres del backend para que _facVence10Backend funcione sin SALDOS_MAP
-    window._vence10CUITs   = new Set();
-    window._vence10Nombres = new Set();
-    (r.clientes || []).forEach(c => {
-      const cn = String(c.cuit  || '').replace(/\D/g, '').trim();
-      if (cn) window._vence10CUITs.add(cn);
-      const nn = normNombre(c.nombre || '');
-      if (nn) window._vence10Nombres.add(nn);
-    });
-
-    const wrap   = document.getElementById('alertas-venc-wrap');
-    const titulo = document.getElementById('avc-titulo');
-    const sub    = document.getElementById('avc-sub');
-    if (!wrap || !titulo) return;
-
-    const montoTotal = (r.clientes || []).reduce((s, c) => s + (c.monto || 0), 0);
-    titulo.textContent = `${r.total} cliente${r.total !== 1 ? 's' : ''} vencen en 10 días`;
-    if (sub) sub.textContent = `$${fmtM(montoTotal)} pendiente`;
-    wrap.style.display = 'block';
-  } catch(e) { console.warn('[alertas-venc]', e); }
+    const r = await safeFetch(API + '/api/clientes-emision-20d', {retries: 0, timeoutMs: 6000});
+    if (!r || r._gateway_error) return;
+    window._emit20CUITs = new Set(
+      (r.clientes || []).map(c => String(c.cuit || '').replace(/\D/g, '').trim()).filter(Boolean)
+    );
+  } catch(e) { console.warn('[emit20]', e); }
 }
 
 async function cargarEstadoFacturas() {
@@ -2278,37 +2220,8 @@ async function cargarEstadoFacturas() {
 
 function _cuitNorm(c) { return String(c.cuit||'').replace(/\D/g,'').trim(); }
 
-// Filtra por vencimiento usando los datos del backend (fuente de verdad)
-// — no depende de SALDOS_MAP (que solo tiene datos de clientes ya abiertos)
-function _facVence10Backend(c) {
-  const cn = _cuitNorm(c);
-  if (cn && window._vence10CUITs.has(cn)) return true;
-  return window._vence10Nombres.has(normNombre(c.nombre || ''));
-}
-
-// Fallback local para cuando aún no llegó la respuesta del backend
-function _facVence10Local(c) {
-  const saldos = getSaldos(c.nombre, c.cuit);
-  if (!saldos?.facturas?.length) return false;
-  const hoy = new Date(); hoy.setHours(0,0,0,0);
-  const lim = new Date(hoy); lim.setDate(lim.getDate() + 10);
-  return saldos.facturas.some(f => {
-    if (!((parseFloat(f.saldo)||0) > 0)) return false;
-    const v = parseFecha(f.fechaPago);
-    return v && v >= hoy && v <= lim;
-  });
-}
-
-function _facVence10(c) {
-  // Priorizar datos del backend (completos); fallback al local si aún no cargó
-  return window._vence10CUITs.size > 0
-    ? _facVence10Backend(c)
-    : _facVence10Local(c);
-}
-
 function _aplicarFiltrosAvanzadosLista(lista) {
-  if (_filtrosAvanzados.vence10)   lista = lista.filter(_facVence10);
-  if (_filtrosAvanzados.wa)        lista = lista.filter(c => window._cuitsConWA.has(_cuitNorm(c)));
+  if (_filtrosAvanzados.emit20)    lista = lista.filter(c => window._emit20CUITs.has(_cuitNorm(c)));
   if (_filtrosAvanzados.pendiente) lista = lista.filter(c => window._cuitsConCobradas.has(_cuitNorm(c)));
   return lista;
 }
@@ -3115,7 +3028,7 @@ function actualizarTotalSeleccionado() {
   el.textContent = n === 0 ? '' : `${n} factura${n!==1?'s':''} seleccionada${n!==1?'s':''} · Total: $${fmtFull(total)}`;
 }
 
-function enviarEstadoCuenta() {
+function enviarEstadoCuenta(btnEl) {
   const data   = window._modalFacturasData;
   const nombre = window._modalNombre || '';
   if (!data?.facturas?.length) { alert('No hay facturas pendientes para enviar.'); return; }
@@ -3177,6 +3090,14 @@ function enviarEstadoCuenta() {
     'Quedo a tu disposicion para coordinar el pago. Muchas gracias!';
 
   window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+
+  // Actualizar contador visual en el botón (nunca se deshabilita)
+  window._wspEnvioCount = (window._wspEnvioCount || 0) + 1;
+  const _cnt    = window._wspEnvioCount;
+  const _label  = document.getElementById('wsp-btn-label') || (btnEl ? btnEl.querySelector('span') : null);
+  if (_label) {
+    _label.textContent = _cnt === 1 ? 'Enviado 1 vez' : `Enviado ${_cnt} veces`;
+  }
 
   // Auto-marcar las facturas seleccionadas como enviadas por WA (en segundo plano)
   const cuit = window._modalCuit;
