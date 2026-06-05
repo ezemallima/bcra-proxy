@@ -3925,12 +3925,31 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
     }).catch(function(){});
   });
   var _bcraInd = '';
+  // max_sit autoritativo: preferir scoreObjFinal (tiene datos frescos de score)
+  // sobre maxSit del closure (que viene del fetch inicial que puede haber fallado)
+  var _sitReal = (scoreObjFinal && scoreObjFinal.max_sit != null)
+    ? scoreObjFinal.max_sit
+    : maxSit;
   if (esTimeout) {
     _bcraInd = '<div class="bcra-indicator warn"><span class="bcra-ind-icon">⚠️</span><div><div class="bcra-ind-text">BCRA sin respuesta</div><div class="bcra-ind-sub">El servicio no respondió. Puede no tener deudas registradas. Intentá de nuevo.</div></div></div>';
     document.getElementById('bcra-data').innerHTML = _bcraInd;
-  } else if (!entidades.length) {
+  } else if (!entidades.length && _sitReal <= 1) {
+    // Genuinamente sin deudas (score también lo confirma)
     _bcraInd = '<div class="bcra-indicator ok"><span class="bcra-ind-icon">✅</span><div><div class="bcra-ind-text">Sin deudas en el sistema financiero</div><div class="bcra-ind-sub">BCRA no registra deudas para este CUIT.</div></div></div>';
     document.getElementById('bcra-data').innerHTML = _bcraInd;
+  } else if (!entidades.length && _sitReal >= 2) {
+    // entidades vacías porque el fetch inicial falló, pero el score detectó deudas reales
+    _bcraInd = _sitReal >= 3
+      ? '<div class="bcra-indicator danger"><span class="bcra-ind-icon">⛔</span><div><div class="bcra-ind-text">Situación ' + _sitReal + ' — ' + sitNombre(_sitReal) + '</div><div class="bcra-ind-sub">Mora bancaria confirmada por el motor de score. Reconsultá para ver el detalle completo.</div></div></div>'
+      : '<div class="bcra-indicator warn"><span class="bcra-ind-icon">⚠️</span><div><div class="bcra-ind-text">Situación 2 — Atrasos detectados</div><div class="bcra-ind-sub">El motor de score detectó atrasos. Reconsultá para ver el detalle.</div></div></div>';
+    document.getElementById('bcra-data').innerHTML = _bcraInd;
+    // Corregir también el veredicto (fue calculado con entidades vacías → mostró "sin actividad")
+    var _vEl = document.getElementById('verdict-container');
+    if (_vEl) {
+      _vEl.innerHTML = _sitReal >= 3
+        ? '<div class="verdict-compact rechazar"><span class="vc-icon">⛔</span><span class="vc-text">Situación ' + _sitReal + ' — ' + sitNombre(_sitReal) + '</span></div>'
+        : '<div class="verdict-compact revisar"><span class="vc-icon">⚠️</span><span class="vc-text">Situación 2 — Atrasos detectados</span></div>';
+    }
   } else {
     _bcraInd = maxSit >= 3
       ? '<div class="bcra-indicator danger"><span class="bcra-ind-icon">⛔</span><div><div class="bcra-ind-text">Situación ' + maxSit + ' — ' + sitNombre(maxSit) + '</div><div class="bcra-ind-sub">Mora bancaria activa en el sistema financiero.</div></div></div>'

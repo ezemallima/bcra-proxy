@@ -2390,7 +2390,12 @@ function renderBcraModal(bcraData, chData, histData, scoreData, clienteLocal) {
     <div class="credito-monto">${_scorePending ? 'Pendiente de cálculo' : calcularCredito(scoreEst, maxSit)}</div>
   </div>`;
 
-  if (bcraData.sin_deudas || !entidades.length) {
+  // Fuente autoritativa de max_sit: scoreData (fresco) > bcraData (puede haber fallado al primer fetch)
+  const _maxSitAuth = (scoreData?.max_sit != null && scoreData.max_sit > maxSit)
+    ? scoreData.max_sit
+    : maxSit;
+
+  if ((_maxSitAuth <= 1) && (bcraData.sin_deudas || !entidades.length)) {
     html += `<div class="card"><div class="card-title">Situación BCRA</div>
     <div class="sit-grid"><div class="sit-chip"><span class="sit-chip-label">Situación</span><span class="sit-chip-val sit-1">1 — Normal</span></div>
     <div class="sit-chip"><span class="sit-chip-label">Deuda</span><span class="sit-chip-val">Sin deudas</span></div></div></div>`;
@@ -2733,7 +2738,7 @@ function renderConsulta(cuit, dd, cd, hd, serverScore, afipData) {
   // ── 3. SITUACIÓN BCRA ──
   if (dd.error_bcra) {
     html += `<div class="card"><div style="color:var(--texto2);font-size:13px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> No se pudo obtener info del BCRA.</div></div>`;
-  } else if (dd.sin_deudas||!entidades.length) {
+  } else if ((dd.sin_deudas||!entidades.length) && (serverScore?.max_sit ?? maxSit) <= 1) {
     html += `<div class="card"><div class="card-title">Situación BCRA</div><div class="sit-grid">
     <div class="sit-chip"><span class="sit-chip-label">Situación</span><span class="sit-chip-val sit-1">1 — Normal</span></div>
     <div class="sit-chip"><span class="sit-chip-label">Deuda sistema</span><span class="sit-chip-val">Sin deudas</span></div></div></div>`;
