@@ -1770,9 +1770,7 @@ async function renderOportunidades() {
         motivo = 'Última compra: ' + fechaStr;
       }
     } else {
-      // Sin ningún registro en historial de ventas
-      prioridad = 2; color = 'var(--accent)';
-      motivo = 'Cliente Potencial — Sin compras registradas';
+      prioridad = 2; color = ''; motivo = '';
     }
 
     return Object.assign({}, c, {dias, fechaCompra, prioridad, motivo, color, tieneSaldo});
