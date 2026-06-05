@@ -5,6 +5,7 @@ import requests
 import urllib3
 import os
 import json
+import sqlite3
 import time
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -25,7 +26,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 app = Flask(__name__, static_folder='static')
 CORS(app)
-app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024
+app.config['MAX_CONTENT_LENGTH'] = 512 * 1024 * 1024  # 512 MB — permite subir padrón mensual BCRA
 app.secret_key = os.environ.get('SECRET_KEY', 'vs-artel-2026-key')
 
 GEMINI_KEY      = os.environ.get('GEMINI_API_KEY', '')
@@ -254,7 +255,8 @@ CREDIT_ANALYSIS_SYSTEM_PROMPT = (
     "[citar el rango oficial exacto del prompt + validar con perfil observado + cláusula de suspensión]"
 )
 
-DATA_DIR = '/data' if os.path.exists('/data') else os.getcwd()
+DATA_DIR      = '/data' if os.path.exists('/data') else os.getcwd()
+PADRON_DB_PATH = os.path.join(DATA_DIR, 'bcra_padron.db')
 ALERTAS_FILE      = os.path.join(DATA_DIR, 'db_v17_final.json')
 ALERTAS_BCRA_FILE = os.path.join(DATA_DIR, 'alertas_bcra.json')
 DATOS_FILE        = os.path.join(DATA_DIR, 'datos_bodega.json')
@@ -344,26 +346,324 @@ def cache_set(cuit, data, error=None):
             json.dump(cache, f)
     except: pass
 
+# ── Padrón local BCRA (SQLite offline) ─────────────────────────────────────
+
+def _init_padron_db():
+    """Crea la tabla e índice único del padrón local si no existen."""
+    try:
+        conn = sqlite3.connect(PADRON_DB_PATH, check_same_thread=False)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS bcra_padron_local (
+                cuit          TEXT PRIMARY KEY,
+                denominacion  TEXT,
+                periodo       TEXT,
+                sit_max       INTEGER,
+                monto_total   INTEGER,
+                num_entidades INTEGER,
+                detalle       TEXT,
+                importado_en  TEXT
+            )
+        """)
+        # El PRIMARY KEY ya crea el índice; creamos uno explícito para auditabilidad
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_padron_cuit ON bcra_padron_local(cuit)"
+        )
+        conn.commit()
+        conn.close()
+        print(f"[padron] DB inicializada en {PADRON_DB_PATH}", flush=True)
+    except Exception as e:
+        print(f"[padron] Error al inicializar DB: {e}", flush=True)
+
+
+def consultar_padron_local(cuit_limpio):
+    """Busca el CUIT en el padrón mensual local. Retorna respuesta BCRA-compatible o None."""
+    try:
+        if not os.path.exists(PADRON_DB_PATH):
+            return None
+        conn = sqlite3.connect(PADRON_DB_PATH, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            "SELECT * FROM bcra_padron_local WHERE cuit = ?", (cuit_limpio,)
+        ).fetchone()
+        conn.close()
+        if row is None:
+            return None
+        detalle = json.loads(row['detalle'] or '[]')
+        sin_deudas = not detalle or (row['sit_max'] is None or row['sit_max'] == 0)
+        return {
+            "results": {
+                "periodos":     [{"entidades": detalle}],
+                "denominacion": row['denominacion'] or "",
+            },
+            "sin_deudas":     sin_deudas,
+            "bcra_disponible": True,
+            "fuente":          "padron_local",
+            "periodo_padron":  row['periodo'],
+        }
+    except Exception as e:
+        print(f"[padron] Error consultando {cuit_limpio}: {e}", flush=True)
+        return None
+
+
+def _padron_contar_registros():
+    """Devuelve (total_cuits, periodo_mas_reciente) del padrón local."""
+    try:
+        if not os.path.exists(PADRON_DB_PATH):
+            return 0, None
+        conn = sqlite3.connect(PADRON_DB_PATH, check_same_thread=False)
+        row = conn.execute(
+            "SELECT COUNT(*) as total, MAX(periodo) as periodo FROM bcra_padron_local"
+        ).fetchone()
+        conn.close()
+        return (row[0] or 0), (row[1] or None)
+    except Exception:
+        return 0, None
+
+
+# Estado global del proceso de importación (un import a la vez)
+_padron_import_estado: dict = {
+    "corriendo":  False,
+    "lineas":     0,
+    "insertados": 0,
+    "mensaje":    "Sin importación activa",
+    "error":      None,
+}
+
+
+def _importar_padron_worker(ruta_archivo: str, borrar_fuente: bool = True):
+    """Importa el padrón BCRA desde un archivo de texto.
+
+    Diseñado para correr en hilo de fondo. Lee línea a línea (streaming,
+    <120 MB RAM) e inserta en SQLite en lotes de 5.000.
+
+    Soporta delimitadores `;`, `|`, `,` y detección automática de columnas
+    por cabecera. El archivo original se borra al finalizar si `borrar_fuente`
+    es True (libera disco en Render).
+    """
+    global _padron_import_estado
+
+    # Mapeo flexible de nombres de columnas → campos internos
+    _ALIAS = {
+        'cuit':              'cuit',
+        'identificacion':    'cuit',
+        'id':                'cuit',
+        'denominacion':      'denominacion',
+        'razon_social':      'denominacion',
+        'nombre':            'denominacion',
+        'denom':             'denominacion',
+        'entidad':           'entidad',
+        'nom_entidad':       'entidad',
+        'nombre_entidad':    'entidad',
+        'banco':             'entidad',
+        'cod_entidad':       'entidad',
+        'situacion':         'situacion',
+        'sit':               'situacion',
+        'calificacion':      'situacion',
+        'monto':             'monto',
+        'monto_miles':       'monto',
+        'saldo':             'monto',
+        'periodo':           'periodo',
+        'periodo_informado': 'periodo',
+        'periodoInformado':  'periodo',
+        'fecha':             'periodo',
+        'dias_atraso':       'dias_atraso',
+        'diasatraso':        'dias_atraso',
+        'dias':              'dias_atraso',
+    }
+
+    _padron_import_estado = {
+        "corriendo": True, "lineas": 0, "insertados": 0,
+        "mensaje": "Iniciando...", "error": None,
+    }
+
+    conn = None
+    try:
+        # ── Detectar encoding y delimitador ─────────────────────────────────
+        for enc in ('utf-8-sig', 'utf-8', 'latin-1'):
+            try:
+                with open(ruta_archivo, 'r', encoding=enc, errors='strict') as _f:
+                    primera = _f.readline().strip()
+                encoding = enc
+                break
+            except UnicodeDecodeError:
+                encoding = 'latin-1'
+                with open(ruta_archivo, 'r', encoding='latin-1') as _f:
+                    primera = _f.readline().strip()
+
+        if '|' in primera:
+            delimitador = '|'
+        elif ';' in primera:
+            delimitador = ';'
+        elif '\t' in primera:
+            delimitador = '\t'
+        else:
+            delimitador = ','
+
+        # Detectar si la primera línea es cabecera o dato
+        tokens = [t.strip().lower() for t in primera.split(delimitador)]
+        tiene_header = any(t in _ALIAS for t in tokens)
+
+        if tiene_header:
+            idx_map = {}
+            for i, t in enumerate(tokens):
+                campo = _ALIAS.get(t)
+                if campo and campo not in idx_map:
+                    idx_map[campo] = i
+        else:
+            # Asumir formato posicional estándar BCRA: CUIT|DENOM|PERIODO|ENTIDAD|SIT|MONTO
+            idx_map = {'cuit': 0, 'denominacion': 1, 'periodo': 2, 'entidad': 3, 'situacion': 4, 'monto': 5}
+
+        _padron_import_estado['mensaje'] = f"Formato detectado: delim='{delimitador}', enc={encoding}"
+
+        # ── Preparar DB: tabla staging ───────────────────────────────────────
+        conn = sqlite3.connect(PADRON_DB_PATH, check_same_thread=False)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS _padron_staging (
+                cuit TEXT, denominacion TEXT, periodo TEXT,
+                entidad TEXT, situacion INTEGER, monto INTEGER, dias_atraso INTEGER
+            )
+        """)
+        conn.execute("DELETE FROM _padron_staging")
+        conn.commit()
+
+        # ── Lectura streaming + bulk insert ──────────────────────────────────
+        lote = []
+        lineas = 0
+
+        with open(ruta_archivo, 'r', encoding=encoding, errors='replace') as f:
+            if tiene_header:
+                next(f)  # saltar cabecera
+
+            for linea in f:
+                linea = linea.strip()
+                if not linea:
+                    continue
+                partes = linea.split(delimitador)
+
+                def _get(campo, default=''):
+                    idx = idx_map.get(campo)
+                    if idx is None or idx >= len(partes):
+                        return default
+                    return partes[idx].strip()
+
+                cuit_raw = _get('cuit').replace('-', '').replace(' ', '')
+                if len(cuit_raw) != 11 or not cuit_raw.isdigit():
+                    continue  # línea inválida
+
+                try:
+                    sit = int(_get('situacion', '0') or '0')
+                    monto = int(float(_get('monto', '0') or '0'))
+                    dias  = int(_get('dias_atraso', '0') or '0')
+                except (ValueError, TypeError):
+                    sit, monto, dias = 0, 0, 0
+
+                lote.append((
+                    cuit_raw,
+                    _get('denominacion')[:120],
+                    _get('periodo')[:6],
+                    _get('entidad')[:100],
+                    sit,
+                    monto,
+                    dias,
+                ))
+                lineas += 1
+
+                if len(lote) >= 5000:
+                    conn.executemany(
+                        "INSERT INTO _padron_staging VALUES (?,?,?,?,?,?,?)", lote
+                    )
+                    conn.commit()
+                    lote.clear()
+                    _padron_import_estado['lineas'] = lineas
+                    _padron_import_estado['mensaje'] = f"Leyendo... {lineas:,} líneas procesadas"
+
+        if lote:
+            conn.executemany("INSERT INTO _padron_staging VALUES (?,?,?,?,?,?,?)", lote)
+            conn.commit()
+
+        _padron_import_estado['lineas'] = lineas
+        _padron_import_estado['mensaje'] = "Agregando por CUIT y guardando..."
+
+        # ── Agregación SQL: staging → tabla final ────────────────────────────
+        conn.execute("DELETE FROM bcra_padron_local")
+        conn.execute("""
+            INSERT INTO bcra_padron_local
+                (cuit, denominacion, periodo, sit_max, monto_total, num_entidades, detalle, importado_en)
+            SELECT
+                cuit,
+                MAX(denominacion),
+                MAX(periodo),
+                MAX(situacion),
+                SUM(monto),
+                COUNT(*),
+                json_group_array(
+                    json_object(
+                        'entidad',    entidad,
+                        'situacion',  situacion,
+                        'monto',      monto,
+                        'diasAtraso', dias_atraso
+                    )
+                ),
+                strftime('%Y-%m-%dT%H:%M:%S', 'now')
+            FROM _padron_staging
+            GROUP BY cuit
+        """)
+        conn.execute("DELETE FROM _padron_staging")
+        conn.commit()
+
+        total_cuits, _ = _padron_contar_registros()
+        _padron_import_estado['insertados'] = total_cuits
+        _padron_import_estado['mensaje']    = f"Importación completa: {total_cuits:,} CUITs cargados"
+
+    except Exception as e:
+        _padron_import_estado['error']   = str(e)
+        _padron_import_estado['mensaje'] = f"Error durante importación: {e}"
+        print(f"[padron] Error importación: {e}", flush=True)
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        if borrar_fuente and os.path.exists(ruta_archivo):
+            try:
+                os.remove(ruta_archivo)
+                print(f"[padron] Archivo fuente borrado: {ruta_archivo}", flush=True)
+            except Exception:
+                pass
+        _padron_import_estado['corriendo'] = False
+
+
 def consultar_bcra_cached(cuit):
-    print(f"[bcra] {cuit} consultando BCRA...", flush=True)
+    # 1. Padrón local indexado — respuesta instantánea sin red
+    local = consultar_padron_local(cuit)
+    if local is not None:
+        print(f"[bcra] {cuit} desde padrón local (offline)", flush=True)
+        return local, None
+
+    print(f"[bcra] {cuit} consultando BCRA en vivo...", flush=True)
+    # 2. Caché de disco (24 h) — evita re-consultas recientes
     cached_data, cached_error = cache_get(cuit)
     if cached_data is not None:
         origen = "cache-error" if cached_error else "caché"
         print(f"[bcra] {cuit} desde {origen}", flush=True)
         return _norm_bcra_resp(cached_data), cached_error
+    # 3. Consulta en vivo (Workers + BCRA oficial en paralelo)
     data, error = consultar_bcra(cuit)
     if error or not data:
         data_cache = {
             "results": None, "sin_deudas": None,
-            "error_bcra": str(error or "sin_respuesta"),
+            "error_bcra": "bcra_saturado",
             "bcra_disponible": False,
         }
         cache_set(cuit, data_cache, error)
-        print(f"[bcra] {cuit} error: {error}", flush=True)
+        print(f"[bcra] {cuit} sin respuesta — BCRA saturado", flush=True)
         return data_cache, error
     data['bcra_disponible'] = True
     cache_set(cuit, data)
-    print(f"[bcra] {cuit} OK desde BCRA", flush=True)
+    print(f"[bcra] {cuit} OK desde BCRA en vivo", flush=True)
     return data, None
 
 verificacion_estado = {
@@ -3451,6 +3751,109 @@ def logout():
 @app.route("/supabase-session.js")
 def supabase_session_js():
     return send_from_directory('static', 'supabase-session.js')
+
+
+# ── Admin: Padrón Local BCRA ────────────────────────────────────────────────
+
+def _admin_auth(req) -> bool:
+    """Autentica la solicitud admin por header X-Admin-Pass o JSON body."""
+    pwd = req.headers.get('X-Admin-Pass', '')
+    if not pwd:
+        body = req.get_json(silent=True) or {}
+        pwd = str(body.get('admin_pass', '') or body.get('password', ''))
+    return pwd == ADMIN_PASS
+
+
+@app.route("/admin/padron-info")
+def admin_padron_info():
+    """Devuelve estadísticas del padrón local: total CUITs, período, estado import."""
+    if not _admin_auth(request):
+        return jsonify({"error": "no_autorizado"}), 403
+    total, periodo = _padron_contar_registros()
+    return jsonify({
+        "total_cuits":   total,
+        "periodo":       periodo,
+        "db_path":       PADRON_DB_PATH,
+        "db_existe":     os.path.exists(PADRON_DB_PATH),
+        "import_estado": _padron_import_estado,
+    })
+
+
+@app.route("/admin/padron-progreso")
+def admin_padron_progreso():
+    """Endpoint de polling para monitorear el progreso de la importación."""
+    if not _admin_auth(request):
+        return jsonify({"error": "no_autorizado"}), 403
+    return jsonify(_padron_import_estado)
+
+
+@app.route("/admin/importar-padron", methods=["POST"])
+def admin_importar_padron():
+    """Inicia la importación del padrón mensual BCRA en un hilo de fondo.
+
+    Modos de operación:
+      A) Archivo subido (form-data campo 'archivo'): acepta hasta 512 MB.
+      B) URL remota (JSON campo 'url'): el servidor descarga el archivo directamente.
+      C) Ruta en disco (JSON campo 'ruta'): usa un archivo ya presente en /data.
+
+    Retorna inmediatamente con {"estado": "iniciado"}.
+    Consultar /admin/padron-progreso para seguimiento.
+    """
+    if not _admin_auth(request):
+        return jsonify({"error": "no_autorizado"}), 403
+
+    if _padron_import_estado.get('corriendo'):
+        return jsonify({"error": "importacion_en_curso", "estado": _padron_import_estado}), 409
+
+    ruta_tmp = None
+    borrar   = True
+
+    # Modo A: archivo subido via multipart
+    if 'archivo' in request.files:
+        f = request.files['archivo']
+        if not f.filename:
+            return jsonify({"error": "archivo_vacio"}), 400
+        ruta_tmp = os.path.join(DATA_DIR, f'padron_upload_{int(time.time())}.txt')
+        f.save(ruta_tmp)
+
+    # Modo B: URL para descargar
+    elif request.is_json and request.json.get('url'):
+        url_padron = request.json['url']
+        ruta_tmp   = os.path.join(DATA_DIR, f'padron_download_{int(time.time())}.txt')
+        try:
+            with requests.get(url_padron, stream=True, timeout=300, verify=False) as r:
+                r.raise_for_status()
+                with open(ruta_tmp, 'wb') as out:
+                    for chunk in r.iter_content(chunk_size=1024 * 256):
+                        out.write(chunk)
+        except Exception as e:
+            return jsonify({"error": f"descarga_fallida: {e}"}), 502
+
+    # Modo C: ruta en disco
+    elif request.is_json and request.json.get('ruta'):
+        ruta_tmp = request.json['ruta']
+        borrar   = bool(request.json.get('borrar', False))
+        if not os.path.exists(ruta_tmp):
+            return jsonify({"error": "archivo_no_encontrado", "ruta": ruta_tmp}), 404
+    else:
+        return jsonify({
+            "error": "sin_fuente",
+            "modos": ["archivo (multipart)", "url (json)", "ruta (json)"],
+        }), 400
+
+    # Iniciar importación en hilo de fondo
+    t = threading.Thread(
+        target=_importar_padron_worker,
+        args=(ruta_tmp, borrar),
+        daemon=True,
+    )
+    t.start()
+
+    return jsonify({
+        "estado":  "iniciado",
+        "archivo": os.path.basename(ruta_tmp),
+        "progreso_url": "/admin/padron-progreso",
+    })
 
 @app.route("/todos-los-clientes")
 def get_todos_los_clientes():
@@ -6889,6 +7292,7 @@ def _startup_v168():
         print(f"[startup] Error: {e}", flush=True)
 
 _startup_v168()
+_init_padron_db()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
