@@ -35,6 +35,13 @@ CUIT_API_KEY    = os.environ.get('API_KEY_CUIT', '')
 CUIT_API_URL    = os.environ.get('API_SOLVENCY_URL', '')
 SCRAPERAPI_KEY  = os.environ.get('SCRAPERAPI_KEY', '')
 
+# ── Oxylabs Web Unblocker (proxy residencial anti-bloqueo) ───────────────────
+# Credenciales configurables por env var; caen back a los valores fijos del plan.
+OXYLABS_USER = os.environ.get('OXYLABS_USER', 'vende_seguro_czafQ')
+OXYLABS_PASS = os.environ.get('OXYLABS_PASS', 'Tombacapo96+')
+OXYLABS_HOST = 'unblock.oxylabs.io'
+OXYLABS_PORT = 60000
+
 ADMIN_CUIT = '30710295022'
 ADMIN_PASS = 'Artel2026'
 
@@ -636,6 +643,53 @@ def _importar_padron_worker(ruta_archivo: str, borrar_fuente: bool = True):
         _padron_import_estado['corriendo'] = False
 
 
+def _guardar_en_padron_local(cuit: str, data: dict):
+    """Convierte una respuesta BCRA en vivo y la persiste en bcra_padron_local.
+
+    Llamado automáticamente tras cada consulta exitosa para que futuras búsquedas
+    del mismo CUIT respondan desde la base local (<1ms, sin red).
+    """
+    try:
+        results    = data.get('results') or {}
+        periodos   = results.get('periodos') or []
+        denom      = results.get('denominacion') or ''
+        # Tomar el período más reciente (viene ordenado del más nuevo al más viejo)
+        entidades  = []
+        periodo_id = ''
+        if periodos:
+            primer_p   = periodos[0] if isinstance(periodos[0], dict) else {}
+            entidades  = primer_p.get('entidades') or []
+            periodo_id = str(primer_p.get('periodo') or '')
+
+        if not periodo_id:
+            # Sin período explícito: usar AAAAMM del momento actual
+            periodo_id = time.strftime('%Y%m')
+
+        sit_max    = max((int(e.get('situacion') or 0) for e in entidades), default=0)
+        monto_tot  = sum(int(e.get('monto') or 0)     for e in entidades)
+        detalle_js = json.dumps([{
+            'entidad':    str(e.get('entidad') or ''),
+            'situacion':  int(e.get('situacion') or 0),
+            'monto':      int(e.get('monto') or 0),
+            'diasAtraso': int(e.get('diasAtraso') or e.get('diasAtrasoPago') or 0),
+        } for e in entidades], ensure_ascii=False)
+
+        conn = sqlite3.connect(PADRON_DB_PATH, check_same_thread=False)
+        conn.execute("""
+            INSERT OR REPLACE INTO bcra_padron_local
+                (cuit, denominacion, periodo, sit_max, monto_total, num_entidades, detalle, importado_en)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            cuit, denom[:120], periodo_id, sit_max, monto_tot,
+            len(entidades), detalle_js, time.strftime('%Y-%m-%dT%H:%M:%S'),
+        ))
+        conn.commit()
+        conn.close()
+        print(f"[padron] {cuit} guardado en padrón local (sit={sit_max}, monto={monto_tot})", flush=True)
+    except Exception as e:
+        print(f"[padron] Error al guardar {cuit}: {e}", flush=True)
+
+
 def consultar_bcra_cached(cuit):
     # 1. Padrón local indexado — respuesta instantánea sin red
     local = consultar_padron_local(cuit)
@@ -650,7 +704,7 @@ def consultar_bcra_cached(cuit):
         origen = "cache-error" if cached_error else "caché"
         print(f"[bcra] {cuit} desde {origen}", flush=True)
         return _norm_bcra_resp(cached_data), cached_error
-    # 3. Consulta en vivo (Workers + BCRA oficial en paralelo)
+    # 3. Consulta en vivo vía Oxylabs → Workers → BCRA oficial
     data, error = consultar_bcra(cuit)
     if error or not data:
         data_cache = {
@@ -659,11 +713,13 @@ def consultar_bcra_cached(cuit):
             "bcra_disponible": False,
         }
         cache_set(cuit, data_cache, error)
-        print(f"[bcra] {cuit} sin respuesta — BCRA saturado", flush=True)
+        print(f"[bcra] {cuit} sin respuesta — saturado", flush=True)
         return data_cache, error
     data['bcra_disponible'] = True
     cache_set(cuit, data)
-    print(f"[bcra] {cuit} OK desde BCRA en vivo", flush=True)
+    # 4. Auto-guardar en padrón local para servir sin red la próxima vez
+    _guardar_en_padron_local(cuit, data)
+    print(f"[bcra] {cuit} OK en vivo → guardado en padrón local", flush=True)
     return data, None
 
 verificacion_estado = {
@@ -750,22 +806,32 @@ def _norm_bcra_resp(data) -> dict:
 def _bcra_get(url: str, timeout: int = 0) -> requests.Response:
     """Transporte HTTP unificado para URLs del BCRA y scrapers públicos (AFIP/ANSES).
 
-    Con SCRAPERAPI_KEY: enruta via ScraperAPI (timeout estricto 12s, IPs rotativas,
-    SSL gestionado por el proxy — no requiere verify=False).
-    Sin SCRAPERAPI_KEY: conexión directa legacy (timeout 5s, SSL ignore).
+    Prioridad de transporte:
+      1. Oxylabs Web Unblocker — proxies residenciales con IA anti-bloqueo (inmune a 403)
+      2. ScraperAPI              — IPs rotativas (si SCRAPERAPI_KEY configurado)
+      3. Directo                 — fallback legacy (propenso a bloqueos)
     """
+    _t = timeout if timeout > 0 else 15
+
+    # ── 1. Oxylabs Web Unblocker ─────────────────────────────────────────────
+    if OXYLABS_USER and OXYLABS_PASS:
+        _proxy_url = f"http://{OXYLABS_USER}:{OXYLABS_PASS}@{OXYLABS_HOST}:{OXYLABS_PORT}"
+        return requests.get(
+            url,
+            proxies={"http": _proxy_url, "https": _proxy_url},
+            timeout=_t,
+            verify=False,  # Oxylabs gestiona SSL del destino
+        )
+
+    # ── 2. ScraperAPI (fallback si no hay Oxylabs) ───────────────────────────
     if SCRAPERAPI_KEY:
-        _t = timeout if timeout > 0 else 12   # timeout estricto ScraperAPI
         return requests.get(
             'http://api.scraperapi.com',
-            params={
-                'api_key':      SCRAPERAPI_KEY,
-                'url':          url,
-                'country_code': 'ar',
-            },
+            params={'api_key': SCRAPERAPI_KEY, 'url': url, 'country_code': 'ar'},
             timeout=_t,
         )
-    _t = timeout if timeout > 0 else 5   # timeout directo: 5s con fallback a caché
+
+    # ── 3. Directo (último recurso) ──────────────────────────────────────────
     return requests.get(url, timeout=_t, verify=False)
 
 
@@ -3854,6 +3920,115 @@ def admin_importar_padron():
         "archivo": os.path.basename(ruta_tmp),
         "progreso_url": "/admin/padron-progreso",
     })
+
+
+# ── Admin: Pre-cacheo de la cartera actual ──────────────────────────────────
+
+_precacheo_estado: dict = {
+    "corriendo":   False,
+    "total":       0,
+    "procesados":  0,
+    "exitosos":    0,
+    "saltados":    0,
+    "errores":     0,
+    "cliente_actual": "",
+    "mensaje":     "Sin pre-cacheo activo",
+}
+
+
+def _precachear_cartera_worker(delay_seg: float = 1.5):
+    """Recorre _cartera_comercial, consulta BCRA por cada CUIT y guarda en padrón local.
+
+    Salta CUITs que ya existen en bcra_padron_local para no repetir trabajo.
+    `delay_seg` entre clientes evita saturar el proxy en el burst inicial.
+    """
+    global _precacheo_estado
+
+    pendientes = [
+        str(c.get('cuit', '')).replace('-', '').replace(' ', '').strip()
+        for c in _cartera_comercial
+        if c.get('cuit')
+    ]
+    pendientes = [c for c in pendientes if len(c) == 11 and c.isdigit()]
+    pendientes = list(dict.fromkeys(pendientes))  # deduplicar manteniendo orden
+
+    _precacheo_estado = {
+        "corriendo": True, "total": len(pendientes), "procesados": 0,
+        "exitosos": 0, "saltados": 0, "errores": 0,
+        "cliente_actual": "", "mensaje": f"Iniciando: {len(pendientes)} CUITs en cartera",
+    }
+
+    for cuit in pendientes:
+        _precacheo_estado['cliente_actual'] = cuit
+
+        # Saltar si ya está en padrón local
+        if consultar_padron_local(cuit) is not None:
+            _precacheo_estado['saltados']   += 1
+            _precacheo_estado['procesados'] += 1
+            _precacheo_estado['mensaje'] = f"Saltado (ya en padrón): {cuit}"
+            continue
+
+        _precacheo_estado['mensaje'] = f"Consultando BCRA: {cuit}..."
+        try:
+            data, error = consultar_bcra(cuit)
+            if data and not error:
+                _guardar_en_padron_local(cuit, data)
+                _precacheo_estado['exitosos'] += 1
+                sit = (data.get('results') or {})
+                _precacheo_estado['mensaje'] = f"OK: {cuit}"
+            else:
+                _precacheo_estado['errores'] += 1
+                _precacheo_estado['mensaje'] = f"Sin respuesta: {cuit}"
+        except Exception as e:
+            _precacheo_estado['errores'] += 1
+            _precacheo_estado['mensaje'] = f"Error en {cuit}: {e}"
+
+        _precacheo_estado['procesados'] += 1
+        time.sleep(delay_seg)
+
+    total_ok = _precacheo_estado['exitosos']
+    _precacheo_estado['corriendo'] = False
+    _precacheo_estado['mensaje']   = (
+        f"Pre-cacheo completo: {total_ok} CUITs guardados, "
+        f"{_precacheo_estado['saltados']} ya estaban, "
+        f"{_precacheo_estado['errores']} errores"
+    )
+    print(f"[padron] Pre-cacheo finalizado: {_precacheo_estado['mensaje']}", flush=True)
+
+
+@app.route("/admin/precachear-cartera", methods=["POST"])
+def admin_precachear_cartera():
+    """Inicia el pre-cacheo de todos los CUITs de la cartera en un hilo de fondo.
+
+    Parámetros opcionales (JSON):
+      - delay: float — segundos entre consultas (default 1.5, mínimo 0.5)
+    """
+    if not _admin_auth(request):
+        return jsonify({"error": "no_autorizado"}), 403
+    if _precacheo_estado.get('corriendo'):
+        return jsonify({"error": "precacheo_en_curso", "estado": _precacheo_estado}), 409
+
+    body  = request.get_json(silent=True) or {}
+    delay = max(0.5, float(body.get('delay', 1.5)))
+
+    t = threading.Thread(target=_precachear_cartera_worker, args=(delay,), daemon=True)
+    t.start()
+
+    return jsonify({
+        "estado":        "iniciado",
+        "total_cuits":   len(_cartera_comercial),
+        "delay_seg":     delay,
+        "progreso_url":  "/admin/precacheo-progreso",
+    })
+
+
+@app.route("/admin/precacheo-progreso")
+def admin_precacheo_progreso():
+    """Progreso en tiempo real del pre-cacheo de la cartera."""
+    if not _admin_auth(request):
+        return jsonify({"error": "no_autorizado"}), 403
+    return jsonify(_precacheo_estado)
+
 
 @app.route("/todos-los-clientes")
 def get_todos_los_clientes():

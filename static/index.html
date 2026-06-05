@@ -3504,7 +3504,7 @@ async function consultarCliente() {
       mostrarResultado(raw, null, true, estadoAfip, domicilioAfip, nombreFinal);
       var _satEl = document.getElementById('bcra-data');
       if (_satEl) {
-        _satEl.innerHTML = '<div class="bcra-indicator warn"><span class="bcra-ind-icon">⚠️</span><div><div class="bcra-ind-text">Datos de BCRA en vivo temporalmente saturados</div><div class="bcra-ind-sub">No disponible en este momento. Contactar soporte.</div></div></div>';
+        _satEl.innerHTML = '<div class="bcra-indicator warn"><span class="bcra-ind-icon">⚠️</span><div><div class="bcra-ind-text">Central de Deudores temporalmente saturada</div><div class="bcra-ind-sub">Reintentar en unos minutos.</div></div></div>';
       }
       return;
     }
