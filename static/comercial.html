@@ -1724,8 +1724,10 @@ async function renderOportunidades() {
   // Enriquecer con días desde última compra
   const opps = candidatos.map(function(c) {
     const dias = diasDesdeUltimaCompra(c.nombre);
-    const saldosData = getSaldos(c.nombre);
-    const tieneSaldo = saldosData && saldosData.total_saldo > 0;
+    const saldosData  = getSaldos(c.nombre, c.cuit);
+    const saldoCalc   = (saldosData?.total_saldo) || c.total_saldo || 0;
+    const tieneSaldo  = saldoCalc > 0;
+    const tieneFacs   = !!(saldosData?.facturas?.length);
 
     // Prioridad de oportunidad:
     // 1. Score alto + sin compra hace 30+ días + sin saldo = contactar ya
@@ -1733,7 +1735,12 @@ async function renderOportunidades() {
     // 3. Score alto + compra reciente = mantener relación
     let prioridad, motivo, color;
     if (dias === null) {
-      prioridad = 2; motivo = 'Sin historial de compras — cliente potencial'; color = 'var(--accent)';
+      // Sin datos en historial de ventas: distinguir activo vs prospecto puro
+      if (tieneSaldo || tieneFacs) {
+        prioridad = 2; motivo = 'Cliente activo — Con cuenta corriente'; color = 'var(--green)';
+      } else {
+        prioridad = 2; motivo = 'Sin historial de compras — cliente potencial'; color = 'var(--accent)';
+      }
     } else if (dias >= 45) {
       prioridad = 1; motivo = 'Sin compras hace ' + dias + ' días — contactar urgente'; color = 'var(--red)';
     } else if (dias >= 30) {
