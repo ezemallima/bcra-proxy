@@ -356,7 +356,13 @@ def cache_set(cuit, data, error=None):
 # ── Padrón local BCRA (SQLite offline) ─────────────────────────────────────
 
 def _init_padron_db():
-    """Crea la tabla e índice único del padrón local si no existen."""
+    """Crea la tabla e índice único del padrón local si no existen.
+
+    Ejecuta una purga única (versionada) de entradas corruptas generadas por el
+    pre-cacheo masivo: respuestas vacías de la API legacy que no reporta clientes
+    en Sit 1 sin mora. La purga solo corre una vez por versión de esquema.
+    """
+    _SCHEMA_VER = 'purge_v2'
     try:
         conn = sqlite3.connect(PADRON_DB_PATH, check_same_thread=False)
         conn.execute("""
@@ -371,11 +377,36 @@ def _init_padron_db():
                 importado_en  TEXT
             )
         """)
-        # El PRIMARY KEY ya crea el índice; creamos uno explícito para auditabilidad
         conn.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_padron_cuit ON bcra_padron_local(cuit)"
         )
+        # Tabla de metadatos para control de versión de schema/purgas
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS _padron_meta (
+                key   TEXT PRIMARY KEY,
+                valor TEXT
+            )
+        """)
         conn.commit()
+
+        # Purga única: eliminar todas las entradas sin entidades reales.
+        # Estas fueron guardadas por el pre-cacheo masivo cuando la API legacy
+        # devolvió 404 para clientes en Sit 1 que no tienen mora (falso negativo).
+        ya_purgado = conn.execute(
+            "SELECT valor FROM _padron_meta WHERE key = ?", (_SCHEMA_VER,)
+        ).fetchone()
+        if ya_purgado is None:
+            cur = conn.execute(
+                "DELETE FROM bcra_padron_local WHERE num_entidades = 0 OR detalle = '[]' OR detalle IS NULL OR detalle = ''"
+            )
+            eliminados = cur.rowcount
+            conn.execute(
+                "INSERT OR REPLACE INTO _padron_meta (key, valor) VALUES (?, ?)",
+                (_SCHEMA_VER, time.strftime('%Y-%m-%dT%H:%M:%S'))
+            )
+            conn.commit()
+            print(f"[padron] Purga {_SCHEMA_VER}: {eliminados} entradas corruptas eliminadas", flush=True)
+
         conn.close()
         print(f"[padron] DB inicializada en {PADRON_DB_PATH}", flush=True)
     except Exception as e:
@@ -396,7 +427,13 @@ def consultar_padron_local(cuit_limpio):
         if row is None:
             return None
         detalle = json.loads(row['detalle'] or '[]')
-        sin_deudas = not detalle or (row['sit_max'] is None or row['sit_max'] == 0)
+        # Entradas sin entidades son basura de pre-cacheo con 404 falso (Sit 1 sin mora).
+        # Retornar None obliga a una consulta en vivo en lugar de servir datos vacíos.
+        if not detalle:
+            return None
+        # sin_deudas solo es True cuando realmente no hay entidades reportantes.
+        # Sit 1 con monto > 0 NO es "sin deudas": tiene crédito activo al día.
+        sin_deudas = len(detalle) == 0
         return {
             "results": {
                 "periodos":     [{"entidades": detalle}],
@@ -661,11 +698,19 @@ def _guardar_en_padron_local(cuit: str, data: dict):
             entidades  = primer_p.get('entidades') or []
             periodo_id = str(primer_p.get('periodo') or '')
 
+        # No persistir si no hay entidades: evita cachear respuestas vacías (404 falsos
+        # de clientes en Sit 1 sin mora que solo aparecen en CDI v1.0, no en legacy).
+        if not entidades:
+            print(f"[padron] {cuit} no guardado — respuesta sin entidades (posible 404 falso de API legacy)", flush=True)
+            return
+
         if not periodo_id:
             # Sin período explícito: usar AAAAMM del momento actual
             periodo_id = time.strftime('%Y%m')
 
         sit_max    = max((int(e.get('situacion') or 0) for e in entidades), default=0)
+        # Los montos del BCRA CDI vienen en miles de pesos — se guardan en miles
+        # para consistencia con el motor de scoring. El frontend multiplica ×1000 al mostrar.
         monto_tot  = sum(int(e.get('monto') or 0)     for e in entidades)
         detalle_js = json.dumps([{
             'entidad':    str(e.get('entidad') or ''),

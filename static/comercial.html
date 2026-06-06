@@ -2427,16 +2427,19 @@ function renderBcraModal(bcraData, chData, histData, scoreData, clienteLocal) {
     ? scoreData.max_sit
     : maxSit;
 
-  if ((_maxSitAuth <= 1) && (bcraData.sin_deudas || !entidades.length)) {
+  // "Sin deudas" solo cuando realmente no hay entidades reportantes.
+  // Sit 1 con monto > 0 = deuda financiera activa al día — NUNCA es "sin deudas".
+  if (!entidades.length) {
     html += `<div class="card"><div class="card-title">Situación BCRA</div>
     <div class="sit-grid"><div class="sit-chip"><span class="sit-chip-label">Situación</span><span class="sit-chip-val sit-1">1 — Normal</span></div>
-    <div class="sit-chip"><span class="sit-chip-label">Deuda</span><span class="sit-chip-val">Sin deudas</span></div></div></div>`;
+    <div class="sit-chip"><span class="sit-chip-label">Deuda</span><span class="sit-chip-val">Sin historial crediticio</span></div></div></div>`;
   } else {
-    html += `<div class="card"><div class="card-title">Situación BCRA — ${periodos[0]?.periodo||''}</div>
+    const _tituloSit = (maxSit === 1 && montoTotal > 0) ? 'Sit. 1 — Deuda Financiera Activa' : `Situación BCRA`;
+    html += `<div class="card"><div class="card-title">${_tituloSit} — ${periodos[0]?.periodo||''}</div>
     <div class="sit-grid">
       <div class="sit-chip"><span class="sit-chip-label">Peor sit.</span><span class="sit-chip-val sit-${maxSit}">Sit ${maxSit}</span></div>
       <div class="sit-chip"><span class="sit-chip-label">Entidades</span><span class="sit-chip-val">${entidades.length}</span></div>
-      <div class="sit-chip"><span class="sit-chip-label">Monto</span><span class="sit-chip-val">$${fmtM(montoTotal*1000)}</span></div>
+      <div class="sit-chip"><span class="sit-chip-label">Monto total</span><span class="sit-chip-val">$${fmtM(montoTotal*1000)}</span></div>
     </div>
     ${entidades.map(e=>`<div class="divider" style="margin:8px 0"></div>
     <div class="row-data"><span class="row-key">${esc(e.entidad||'')}</span><span class="row-val sit-${e.situacion||1}">Sit ${e.situacion||1} — $${fmtM((e.monto||0)*1000)}</span></div>`).join('')}
@@ -2770,12 +2773,14 @@ function renderConsulta(cuit, dd, cd, hd, serverScore, afipData) {
   // ── 3. SITUACIÓN BCRA ──
   if (dd.error_bcra) {
     html += `<div class="card"><div style="color:var(--texto2);font-size:13px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> No se pudo obtener info del BCRA.</div></div>`;
-  } else if ((dd.sin_deudas||!entidades.length) && (serverScore?.max_sit ?? maxSit) <= 1) {
+  // "Sin deudas" solo cuando realmente no hay entidades — nunca por sin_deudas flag solo.
+  } else if (!entidades.length) {
     html += `<div class="card"><div class="card-title">Situación BCRA</div><div class="sit-grid">
     <div class="sit-chip"><span class="sit-chip-label">Situación</span><span class="sit-chip-val sit-1">1 — Normal</span></div>
-    <div class="sit-chip"><span class="sit-chip-label">Deuda sistema</span><span class="sit-chip-val">Sin deudas</span></div></div></div>`;
+    <div class="sit-chip"><span class="sit-chip-label">Deuda sistema</span><span class="sit-chip-val">Sin historial crediticio</span></div></div></div>`;
   } else {
-    html += `<div class="card"><div class="card-title">Situación BCRA — ${periodos[0]?.periodo||''}</div><div class="sit-grid">
+    const _titSit = (maxSit === 1 && montoTotal > 0) ? 'Sit. 1 — Deuda Financiera Activa' : 'Situación BCRA';
+    html += `<div class="card"><div class="card-title">${_titSit} — ${periodos[0]?.periodo||''}</div><div class="sit-grid">
     <div class="sit-chip"><span class="sit-chip-label">Peor sit.</span><span class="sit-chip-val sit-${maxSit}">Sit. ${maxSit}</span></div>
     <div class="sit-chip"><span class="sit-chip-label">Entidades</span><span class="sit-chip-val">${entidades.length}</span></div>
     <div class="sit-chip"><span class="sit-chip-label">Monto total</span><span class="sit-chip-val">$${fmtM(montoTotal*1000)}</span></div></div>
