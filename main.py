@@ -35,19 +35,10 @@ CUIT_API_KEY    = os.environ.get('API_KEY_CUIT', '')
 CUIT_API_URL    = os.environ.get('API_SOLVENCY_URL', '')
 SCRAPERAPI_KEY  = os.environ.get('SCRAPERAPI_KEY', '')
 
-# ── Proxies residenciales anti-bloqueo ──────────────────────────────────────
-# Canal principal: Oxylabs Web Unblocker
-OXYLABS_USER = os.environ.get('OXYLABS_USER', 'vende_seguro_czafQ')
-OXYLABS_PASS = os.environ.get('OXYLABS_PASS', 'Tombacapo96+')
-OXYLABS_HOST = 'unblock.oxylabs.io'
-OXYLABS_PORT = 60000
-
-# Canal de respaldo: Bright Data Web Unlocker
-# Requiere credenciales de zona (no el API token de gestión).
-# Obtener en: Dashboard → Proxies & Scraping → Web Unlocker → Access Parameters
-# Formato usuario: brd-customer-XXXXXXXX-zone-NOMBRE
-BRIGHTDATA_USER = os.environ.get('BRIGHTDATA_USER', '')   # completar en Render env vars
-BRIGHTDATA_PASS = os.environ.get('BRIGHTDATA_PASS', '')   # completar en Render env vars
+# ── Bright Data Web Unlocker — motor de consultas en vivo ───────────────────
+# Proxy residencial de producción. Cadena: Bright Data → ScraperAPI → directo.
+BRIGHTDATA_USER = os.environ.get('BRIGHTDATA_USER', 'brd-customer-hl_cc5957d6-zone-vendeseguro')
+BRIGHTDATA_PASS = os.environ.get('BRIGHTDATA_PASS', 'qwq77117ou11')
 BRIGHTDATA_HOST = os.environ.get('BRIGHTDATA_HOST', 'brd.superproxy.io')
 BRIGHTDATA_PORT = int(os.environ.get('BRIGHTDATA_PORT', '33335'))
 
@@ -713,7 +704,7 @@ def consultar_bcra_cached(cuit):
         origen = "cache-error" if cached_error else "caché"
         print(f"[bcra] {cuit} desde {origen}", flush=True)
         return _norm_bcra_resp(cached_data), cached_error
-    # 3. Consulta en vivo vía Oxylabs → Workers → BCRA oficial
+    # 3. Consulta en vivo vía Bright Data → Workers → BCRA oficial
     data, error = consultar_bcra(cuit)
     if error or not data:
         data_cache = {
@@ -813,50 +804,32 @@ def _norm_bcra_resp(data) -> dict:
 
 
 def _bcra_get(url: str, timeout: int = 0) -> requests.Response:
-    """Transporte HTTP unificado con failover automático entre proxies residenciales.
+    """Transporte HTTP unificado para consultas al BCRA y scrapers públicos.
 
     Cadena de prioridad:
-      1. Oxylabs Web Unblocker   — principal (inmune a 403, IA anti-bloqueo)
-      2. Bright Data Web Unlocker — failover automático si Oxylabs falla/agota cuota
-      3. ScraperAPI               — terciario (si está configurado)
-      4. Directo                  — último recurso (propenso a bloqueos)
-
-    El conmutador Oxylabs→Bright Data es automático: cualquier excepción de red
-    o HTTP ≥400 en Oxylabs activa inmediatamente Bright Data sin intervención manual.
+      1. Bright Data Web Unlocker — motor principal (proxy residencial, inmune a 403)
+      2. ScraperAPI               — fallback si Bright Data falla
+      3. Directo                  — último recurso
     """
     _t = timeout if timeout > 0 else 15
 
-    # ── 1. Oxylabs Web Unblocker (canal principal) ───────────────────────────
-    if OXYLABS_USER and OXYLABS_PASS:
-        _oxy_proxy = f"http://{OXYLABS_USER}:{OXYLABS_PASS}@{OXYLABS_HOST}:{OXYLABS_PORT}"
-        try:
-            r = requests.get(
-                url,
-                proxies={"http": _oxy_proxy, "https": _oxy_proxy},
-                timeout=_t,
-                verify=False,
-            )
-            # Conmutar a Bright Data si Oxylabs devuelve error de cuota/autenticación
-            if r.status_code in (407, 429, 503):
-                raise requests.RequestException(f"Oxylabs {r.status_code} — conmutando a Bright Data")
-            return r
-        except requests.RequestException as _e:
-            print(f"[proxy] Oxylabs falló ({_e}) — activando Bright Data failover", flush=True)
-
-    # ── 2. Bright Data Web Unlocker (canal de respaldo) ──────────────────────
+    # ── 1. Bright Data Web Unlocker (motor principal) ────────────────────────
     if BRIGHTDATA_USER and BRIGHTDATA_PASS:
         _brd_proxy = f"http://{BRIGHTDATA_USER}:{BRIGHTDATA_PASS}@{BRIGHTDATA_HOST}:{BRIGHTDATA_PORT}"
         try:
-            return requests.get(
+            r = requests.get(
                 url,
                 proxies={"http": _brd_proxy, "https": _brd_proxy},
                 timeout=_t,
                 verify=False,
             )
+            if r.status_code not in (407, 502, 503):
+                return r
+            raise requests.RequestException(f"Bright Data HTTP {r.status_code}")
         except requests.RequestException as _e:
             print(f"[proxy] Bright Data falló ({_e}) — cayendo a ScraperAPI/directo", flush=True)
 
-    # ── 3. ScraperAPI ────────────────────────────────────────────────────────
+    # ── 2. ScraperAPI (fallback) ─────────────────────────────────────────────
     if SCRAPERAPI_KEY:
         return requests.get(
             'http://api.scraperapi.com',
@@ -864,7 +837,7 @@ def _bcra_get(url: str, timeout: int = 0) -> requests.Response:
             timeout=_t,
         )
 
-    # ── 4. Directo (último recurso) ──────────────────────────────────────────
+    # ── 3. Directo (último recurso) ──────────────────────────────────────────
     return requests.get(url, timeout=_t, verify=False)
 
 
