@@ -1118,14 +1118,17 @@ async function iniciarApp(perfil) {
   cargarDSOHeader();
   cargarEmision20d();
   cargarEstadoFacturas();
-  // Polling cada 5 minutos para saldos y DSO
-  setInterval(() => cargarSaldosCartera(), 5 * 60 * 1000);
+  // Saldos: polling cada 90s (detecta nuevos reportes subidos por el admin rápidamente)
+  setInterval(() => cargarSaldosCartera(), 90 * 1000);
   setInterval(() => cargarDSOHeader(),     5 * 60 * 1000);
-  // Polling de scores cada 10 minutos — detecta degradaciones BCRA (Sit >= 2) en background
+  // Scores: polling cada 10 minutos — detecta degradaciones BCRA en background
   setInterval(() => refrescarScores(), 10 * 60 * 1000);
-  // Refresh de scores al volver al tab (usuario estaba en otra pestaña)
+  // Al volver al tab: refrescar scores Y verificar si hay nuevos saldos
   document.addEventListener('visibilitychange', function() {
-    if (document.visibilityState === 'visible') refrescarScores();
+    if (document.visibilityState === 'visible') {
+      refrescarScores();
+      cargarSaldosCartera(); // detecta inmediatamente si el admin subió un reporte nuevo
+    }
   });
   // Sync cross-tab: detecta cuando la App Principal sube nuevos saldos
   window.addEventListener('storage', e => {
@@ -1564,12 +1567,13 @@ function renderCartera(filtro) {
     const score        = c.score ?? null;
 
     // ── Carriles de alerta completamente separados ───────────────────
-    // esAlertaBCRA: SOLO situación BCRA > 1 (Sit 2/3/4/5).
+    // esAlertaBCRA: sit > 1 siempre alerta, excepto sit 2 con score >= 400 (mora técnica menor).
+    // Sit 3 o superior SIEMPRE genera alerta, sin importar el score.
     // c.alerta viene del servidor y puede reflejar criterios internos
     // (logística, límite) que NO son riesgo bancario → NO pisa este flag.
-    // _esMoraTecnica: sit>=3 pero score>=400 → scoring ya aplicó materialidad
-    // y consideró al cliente aceptable → probable monto sub-umbral (peaje, etc.)
-    const _esMoraTecnica = sit >= 3 && score !== null && score >= 400;
+    // _esMoraTecnica: SOLO sit===2 con score>=400 (atraso leve, scoring lo absorbió).
+    // sit>=3 es riesgo real — la alerta nunca se suprime por score alto.
+    const _esMoraTecnica = sit === 2 && score !== null && score >= 400;
     const esAlertaBCRA = sit > 1 && !_esMoraTecnica;
 
     // esExcedido: deuda Odoo >= límite de crédito asignado (carril comercial)
@@ -2009,7 +2013,7 @@ function renderFacturas(data, nombre) {
       <div class="factura-row1">
         <div style="display:flex;align-items:center;gap:8px;min-width:0">
           <!-- ✓ Checkbox cobrado: tildable/destildable — se confirma con el botón Rendición -->
-          <input type="checkbox" id="${cobId}" class="chk-cobrado" data-saldo="${f.saldo}" data-idx="${idx}"
+          <input type="checkbox" id="${cobId}" class="chk-cobrado" data-saldo="${f.saldo}" data-idx="${idx}" data-nro="${nroData}"
             ${cobradaConfirmada ? 'checked disabled title="Cobro ya confirmado"' : ''}
             onchange="toggleCobrado(this,${parseFloat(f.saldo)||0})">
           <!-- Checkbox selección WA (para "Enviar Estado de Cuenta") -->
@@ -2123,7 +2127,35 @@ async function confirmarRendicion() {
   });
 
   window._cuitsConCobradas = window._cuitsConCobradas || new Set();
-  if (ok > 0) window._cuitsConCobradas.add(String(cuit).replace(/\D/g, ''));
+  if (ok > 0) {
+    window._cuitsConCobradas.add(String(cuit).replace(/\D/g, ''));
+
+    // Actualizar SALDOS_MAP en memoria para que el fallback local tenga el estado correcto
+    const _nc = String(cuit).replace(/\D/g, '');
+    const _nrosOk = new Set(
+      chks.filter((c,i) => resultados[i].status === 'fulfilled' && resultados[i].value.ok)
+          .map(c => c.dataset.nro)
+    );
+    const _applyToCobradas = (entry) => {
+      if (!entry?.facturas) return;
+      entry.facturas.forEach(f => {
+        if (_nrosOk.has(f.nroFactura)) f._cobrada = true;
+      });
+      entry.total_saldo = entry.facturas.reduce(
+        (s, f) => s + (f._cobrada ? 0 : (parseFloat(f.saldo) || 0)), 0
+      );
+    };
+    const _cached = SALDOS_MAP['__c:' + _nc];
+    if (_cached) _applyToCobradas(_cached);
+    if (window._modalFacturasData) _applyToCobradas(window._modalFacturasData);
+
+    // Reflejar el nuevo saldo en el badge de la tarjeta del listado
+    const _cardSaldo = document.querySelector(`.cliente-card[data-cuit="${cuit}"] .card-saldo-monto`);
+    if (_cardSaldo && _cached) {
+      const _svEl = _cardSaldo.querySelector('svg');
+      _cardSaldo.innerHTML = (_svEl ? _svEl.outerHTML + ' ' : '') + '$' + fmtFull(_cached.total_saldo || 0);
+    }
+  }
 
   const barra = document.getElementById('barra-rendicion');
   if (barra) barra.style.display = 'none';
