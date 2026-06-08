@@ -574,6 +574,7 @@ var _search        = '';
 var _filterBucket  = '';
 var _dsoPorCliente = {};
 var _activeTab     = 'resumen';
+var _dsoGlobal     = null;  // DSO oficial (agotamiento) — se fija al cargar, no cambia con filtros
 
 // ─── Utilidades ───────────────────────────────────────────────────────────
 function fmt(n) { if (!n && n!==0) return '—'; return Math.round(n).toLocaleString('es-AR'); }
@@ -654,7 +655,7 @@ async function cargarDatos() {
     // Tab counters
     var clientes = _data.clientes || [];
     var zonas    = [...new Set(clientes.map(function(c){ return c.ciudad || 'Sin ciudad'; }))];
-    var criticos = clientes.filter(function(c){ return (c.ultimaSit||1) >= 3 || (c.buckets.d90||0)+(c.buckets.d120||0)+(c.buckets.d120plus||0) > 0; }).length;
+    var criticos = clientes.filter(function(c){ return (c.ultimaSit||1) >= 3 || (c.buckets.d120||0)+(c.buckets.d120plus||0) > 0; }).length;
 
     document.getElementById('tab-count-clientes').textContent = clientes.length;
     document.getElementById('tab-count-zonas').textContent    = zonas.length + ' zonas';
@@ -674,38 +675,58 @@ async function actualizarKPIDSOGlobal() {
     if (!r.ok) return;
     const d = await r.json();
     if (!d || d.dso == null) return;
+    // Guardar en variable global — renderKPIsAndAging lo usa cuando no hay filtro activo
+    _dsoGlobal = d.dso;
+    // Header widget (siempre fijo — nunca se toca por filtros de tabla)
     var el = document.getElementById('header-dso-dir');
     var num = document.getElementById('header-dso-dir-num');
-    var sub = document.getElementById('header-dso-dir-sub');
-    if (el) { el.style.opacity = '1'; }
+    if (el)  el.style.opacity = '1';
     if (num) { num.textContent = d.dso + 'd'; num.style.color = colorDSO(d.dso); }
-    // También actualizar KPI si está visible
-    document.querySelectorAll('.kpi-card').forEach(function(card) {
-      var lbl = card.querySelector('.kpi-label');
-      if (lbl && lbl.textContent.trim() === 'DSO Promedio') {
-        var color = colorDSO(d.dso);
-        card.querySelector('.kpi-value').textContent = d.dso + 'd';
-        card.querySelector('.kpi-value').style.color = color;
-        card.style.setProperty('--kpi-color', color);
-      }
-    });
+    // Actualizar la tarjeta KPI "DSO Promedio" solo si no hay filtro activo
+    if (!_filterBucket) {
+      document.querySelectorAll('.kpi-card').forEach(function(card) {
+        var lbl = card.querySelector('.kpi-label');
+        if (lbl && lbl.textContent.trim() === 'DSO Promedio') {
+          var color = colorDSO(d.dso);
+          card.querySelector('.kpi-value').textContent = d.dso + 'd';
+          card.querySelector('.kpi-value').style.color = color;
+          card.style.setProperty('--kpi-color', color);
+        }
+      });
+    }
   } catch(e) {}
 }
 
 // ─── CÁLCULO DE TOTALES ───────────────────────────────────────────────────
-function calcTotales(lista) {
+// dsoSoloBuckets: si se pasa un array de buckets, el DSO solo suma facturas
+// de esos buckets — evita que facturas recientes (d30) bajen el promedio al
+// filtrar por tramos críticos. Cuando es null usa todas las facturas.
+function calcTotales(lista, dsoSoloBuckets) {
   var ts = 0, tb = {d30:0,d60:0,d90:0,d120:0,d120plus:0};
-  var n_vencido = 0, n_critico = 0, n_riesgo = 0, suma_pond = 0;
+  var n_vencido = 0, n_critico = 0, n_riesgo = 0;
+  var suma_pond = 0, saldo_dso = 0;
   lista.forEach(function(c) {
     ts += c.saldo_total;
     BUCKETS.forEach(function(bk){ tb[bk] += (c.buckets[bk]||0); });
     if ((c.buckets.d60||0)+(c.buckets.d90||0)+(c.buckets.d120||0)+(c.buckets.d120plus||0) > 0) n_vencido++;
-    if ((c.buckets.d90||0)+(c.buckets.d120||0)+(c.buckets.d120plus||0) > 0) n_critico++;
+    // n_critico: solo clientes con deuda estrictamente >90d (d120 + d120plus)
+    if ((c.buckets.d120||0)+(c.buckets.d120plus||0) > 0) n_critico++;
     if (c.score && c.score < 400) n_riesgo++;
-    c.facturas.forEach(function(f){ suma_pond += f.saldo * (f.dias||0); });
+    c.facturas.forEach(function(f) {
+      var bk = f.bucket || 'd30';
+      if (!dsoSoloBuckets || dsoSoloBuckets.indexOf(bk) >= 0) {
+        suma_pond += f.saldo * (f.dias || 0);
+        saldo_dso += f.saldo;
+      }
+    });
   });
-  return { total_saldo:ts, total_buckets:tb, dso_global: ts>0?Math.round(suma_pond/ts):0,
-           n_clientes:lista.length, n_vencido, n_critico, n_riesgo };
+  var base = dsoSoloBuckets ? saldo_dso : ts;
+  return {
+    total_saldo: ts, total_buckets: tb,
+    dso_global:  base > 0 ? Math.round(suma_pond / base) : 0,
+    dso_es_atraso: !!dsoSoloBuckets,
+    n_clientes: lista.length, n_vencido, n_critico, n_riesgo,
+  };
 }
 
 // ─── TAB 1: RESUMEN EJECUTIVO ─────────────────────────────────────────────
@@ -723,14 +744,26 @@ function renderResumen(el) {
 function renderKPIsAndAging(stats) {
   var total = stats.total_saldo || 1;
   var tb = stats.total_buckets || {};
-  var critico = (tb.d90||0)+(tb.d120||0)+(tb.d120plus||0);
+  // Crítico +90d: SOLO d120 (91–120d) + d120plus (>120d)
+  // d90 ya tiene su propia columna "61–90 días" — NO sumar dos veces
+  var critico = (tb.d120||0)+(tb.d120plus||0);
+  // Verificación de integridad: la suma d30+d60+d90+critico debe = total_saldo
+  // (si hay diferencia indica que la fuente de datos tiene facturas no clasificadas)
+
+  // DSO: cuando hay filtro de bucket activo mostramos "Atraso Prom." del tramo
+  // (siempre >90d para el filtro Crítico). El DSO Oficial global del header
+  // viene del endpoint /dso-global-saldos y no se altera por este recalculo.
+  var dsoVal   = stats.dso_es_atraso ? stats.dso_global : (_dsoGlobal || stats.dso_global);
+  var dsoLabel = stats.dso_es_atraso ? 'Atraso Prom.' : 'DSO Promedio';
+  var dsoSub   = stats.dso_es_atraso ? 'días mora en tramo' : 'días ponderado';
+
   var kpis = [
     { label:'Saldo Total',   value:fmt(stats.total_saldo),      sub:fmtFull(stats.total_saldo)+' ARS', color:'#2563eb', bucket:'' },
     { label:'0–30 días',     value:fmt(tb.d30||0),              sub:pct(tb.d30,total)+'% del total',   color:'#16a34a', bucket:'d30' },
     { label:'31–60 días',    value:fmt(tb.d60||0),              sub:pct(tb.d60,total)+'% del total',   color:'#ca8a04', bucket:'d60' },
     { label:'61–90 días',    value:fmt(tb.d90||0),              sub:pct(tb.d90,total)+'% del total',   color:'#ea580c', bucket:'d90' },
     { label:'Crítico +90d',  value:fmt(critico),                sub:pct(critico,total)+'% del total',  color:'#dc2626', bucket:'d120plus' },
-    { label:'DSO Promedio',  value:stats.dso_global+'d',        sub:'días ponderado',                  color:colorDSO(stats.dso_global), bucket:'' },
+    { label:dsoLabel,        value:dsoVal+'d',                  sub:dsoSub,                            color:colorDSO(dsoVal), bucket:'' },
     { label:'Clientes',      value:stats.n_clientes,            sub:stats.n_vencido+' con vto >30d',   color:'#7c3aed', bucket:'' },
     { label:'Críticos +90d', value:stats.n_critico,             sub:stats.n_riesgo+' score < 400',     color:'#dc2626', bucket:'d120plus' },
   ];
@@ -797,12 +830,20 @@ function renderTabla() {
   }
   if (_filterBucket) {
     lista = lista.filter(function(c) {
-      if (_filterBucket === 'd120plus') return (c.buckets.d90||0)+(c.buckets.d120||0)+(c.buckets.d120plus||0) > 0;
+      // d120plus = "Crítico +90d" → solo clientes con deuda estrictamente >90d
+      if (_filterBucket === 'd120plus') return (c.buckets.d120||0)+(c.buckets.d120plus||0) > 0;
       return (c.buckets[_filterBucket]||0) > 0;
     });
   }
+  // DSO recalibrado: cuando hay filtro de bucket, solo contamos facturas de ese tramo
+  // para que el "Atraso Prom." sea siempre mayor al umbral del filtro (ej. >90d).
+  var dsoBuckets = null;
+  if (_filterBucket === 'd120plus') dsoBuckets = ['d120','d120plus'];
+  else if (_filterBucket === 'd90')  dsoBuckets = ['d90','d120','d120plus'];
+  else if (_filterBucket === 'd60')  dsoBuckets = ['d60','d90','d120','d120plus'];
+  else if (_filterBucket === 'd30')  dsoBuckets = ['d30'];
   // Actualizar KPIs y aging con filtros aplicados
-  var statsF = calcTotales(lista);
+  var statsF = calcTotales(lista, dsoBuckets);
   var kpiEl = document.getElementById('kpi-grid');
   var agingEl = document.getElementById('aging-section');
   if (kpiEl && agingEl) {
