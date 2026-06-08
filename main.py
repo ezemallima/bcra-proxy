@@ -3160,6 +3160,39 @@ def ejecutar_verificacion(cartera_data):
     verificacion_estado["total"] = len(cartera_data)
     verificacion_estado["mensaje"] = "Iniciando verificacion..."
 
+    # Invalidar padrón local y disk cache para todos los clientes — garantiza datos BCRA frescos.
+    # Sin esto, el padrón (sin TTL) devuelve snapshots históricos (ej: Sit 1 de meses atrás).
+    _cartera_cuits_v = {
+        str(c.get('cuit', '') or '').replace('-', '').replace(' ', '').strip()
+        for c in cartera_data if isinstance(c, dict)
+    }
+    try:
+        if os.path.exists(PADRON_DB_PATH) and _cartera_cuits_v:
+            conn_p = sqlite3.connect(PADRON_DB_PATH, check_same_thread=False)
+            placeholders = ','.join('?' * len(_cartera_cuits_v))
+            cur_p = conn_p.execute(
+                f"DELETE FROM bcra_padron_local WHERE cuit IN ({placeholders})",
+                list(_cartera_cuits_v)
+            )
+            conn_p.commit(); conn_p.close()
+            print(f"[verif] Padrón local purgado: {cur_p.rowcount} entradas eliminadas", flush=True)
+    except Exception as _ep:
+        print(f"[verif] Advertencia purga padrón: {_ep}", flush=True)
+    try:
+        _bc_path = os.path.join(DATA_DIR, 'bcra_cache.json')
+        if os.path.exists(_bc_path) and _cartera_cuits_v:
+            with open(_bc_path, 'r', encoding='utf-8') as _f:
+                _bc = json.load(_f)
+            _inv = [k for k in list(_bc.keys()) if k in _cartera_cuits_v]
+            for _k in _inv:
+                del _bc[_k]
+            if _inv:
+                with open(_bc_path, 'w', encoding='utf-8') as _f:
+                    json.dump(_bc, _f)
+                print(f"[verif] bcra_cache invalidado: {len(_inv)} CUITs", flush=True)
+    except Exception as _ec:
+        print(f"[verif] Advertencia purga cache: {_ec}", flush=True)
+
     palabras_riesgo = [
         'rechaz', 'no paga', 'cuidado', 'mora', 'deuda', 'incobrable',
         'estafa', 'desapareci', 'fuga', 'impago', 'quiebra', 'concurso',
