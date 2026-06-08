@@ -5201,6 +5201,26 @@ def _ejecutar_proceso_integral(cartera_data: list):
     total       = len(cartera_data)
     _pi_alertas = []   # acumula alertas BCRA detectadas en este proceso
 
+    _cartera_cuits_pi = {
+        str(c.get('cuit', '')).replace('-', '').replace(' ', '').strip()
+        for c in cartera_data if isinstance(c, dict)
+    }
+
+    # Purgar padrón local SQLite — consultar_bcra_cached lo prioriza sobre todo y no tiene TTL.
+    # Sin esto, datos históricos (ej: Sit 2 del mes de importación) tapan el estado BCRA actual.
+    try:
+        if os.path.exists(PADRON_DB_PATH) and _cartera_cuits_pi:
+            conn_pi = sqlite3.connect(PADRON_DB_PATH, check_same_thread=False)
+            ph_pi = ','.join('?' * len(_cartera_cuits_pi))
+            cur_pi = conn_pi.execute(
+                f"DELETE FROM bcra_padron_local WHERE cuit IN ({ph_pi})",
+                list(_cartera_cuits_pi)
+            )
+            conn_pi.commit(); conn_pi.close()
+            print(f"[proceso-integral] Padrón local purgado: {cur_pi.rowcount} entradas", flush=True)
+    except Exception as _ep:
+        print(f"[proceso-integral] Advertencia purga padrón: {_ep}", flush=True)
+
     # Limpiar bcra_cache para todos los clientes de la cartera en un solo write —
     # garantiza que el proceso use datos BCRA frescos, no stale de 24h.
     try:
@@ -5208,11 +5228,7 @@ def _ejecutar_proceso_integral(cartera_data: list):
         if os.path.exists(_bc_path):
             with open(_bc_path, 'r', encoding='utf-8') as _f:
                 _bc = json.load(_f)
-            _cartera_cuits = {
-                str(c.get('cuit', '')).replace('-', '').replace(' ', '').strip()
-                for c in cartera_data if isinstance(c, dict)
-            }
-            _invalidados = [k for k in list(_bc.keys()) if k in _cartera_cuits]
+            _invalidados = [k for k in list(_bc.keys()) if k in _cartera_cuits_pi]
             for _k in _invalidados:
                 del _bc[_k]
             if _invalidados:
@@ -5441,7 +5457,26 @@ def iniciar_proceso_integral():
         return jsonify({"error": "Ya hay un proceso en curso — esperá que termine"}), 400
     if verificacion_estado.get("corriendo"):
         return jsonify({"error": "Hay una verificación BCRA en curso — esperá que termine"}), 400
-    cartera = [c for c in _cartera_comercial if str(c.get("cuit", "")).strip()]
+    # Cargar sit. anteriores desde db_v17_final.json para comparación correcta de degradación
+    _sit_prev_pi: dict = {}
+    try:
+        if os.path.exists(ALERTAS_FILE):
+            with open(ALERTAS_FILE, 'r', encoding='utf-8') as _f:
+                _prev_pi = json.load(_f)
+            for _c in _prev_pi.get('cartera', []):
+                _nc = str(_c.get('cuit', '') or '').replace('-', '').replace(' ', '').strip()
+                if _nc and _c.get('ultimaSit'):
+                    _sit_prev_pi[_nc] = int(_c['ultimaSit'])
+    except Exception as _ep:
+        print(f"[proceso-integral] Advertencia sit. previas: {_ep}", flush=True)
+
+    cartera = []
+    for c in _cartera_comercial:
+        _cuit_pi = str(c.get("cuit", "") or "").strip()
+        if not _cuit_pi:
+            continue
+        _nc_pi = _cuit_pi.replace('-', '').replace(' ', '')
+        cartera.append({**c, "ultimaSit": _sit_prev_pi.get(_nc_pi, 1)})
     if not cartera:
         return jsonify({"error": "Cartera vacía — cargá cartera_comercial.json en el servidor"}), 400
     # ── Marcar como corriendo ANTES de lanzar el thread (elimina race condition) ──
