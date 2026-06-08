@@ -7070,6 +7070,248 @@ def upload_saldos_gestion():
         print(f"[gestion] Error: {traceback.format_exc()}", flush=True)
         return jsonify({"error": str(e)}), 500
 
+# ─── CARTERA: carga masiva desde Odoo ────────────────────────────────────────
+
+# Palabras que indican que una entrada es dirección de entrega/sucursal, no razón social
+_CARTERA_DISCARD_KW = [
+    # Logística / entrega
+    'ENTREGA', ' ENVIO', ' ENVÍO', 'DELIVERY', ' RETIRO', 'EXPEDICION',
+    'EXPEDICIÓN', 'DESPACHO', 'PICKING', 'ENVÍOS', 'ENVIOS',
+    # Sucursales / depósitos
+    ' SUCURSAL', ' SUC.', ' SUC ', 'DEPOSITO', 'DEPÓSITO',
+    'ALMACEN', 'ALMACÉN', 'BODEGA', 'PLANTA ', '(DEPOSITO', '(DEPÓSITO',
+    # Indicadores de calle / dirección
+    ' AV.', ' AV ', 'AVDA.', 'AVDA ', 'AVENIDA ', 'CALLE ', ' C/ ', ' C/',
+    ' PASAJE', ' PJE.', ' PJE ', ' RUTA ', ' RN ', 'RN.', ' KM ',
+    ' PISO ', ' PISO.', 'DPTO', 'DEPTO', 'OFICINA ', ' OF.', ' OF ',
+    ' LOCAL ', ' LOCAL.', '(LOCAL', 'PUERTA',
+    # Ordinales / numeración de locales
+    ' 1ER ', ' 2DO ', ' 3ER ', ' 4TO ', ' 1° ', ' 2° ', ' 3° ',
+    ' (2)', ' (3)', ' #2', ' #3', ' N°2', ' N°3',
+    # Direcciones cardinales (sucursales)
+    ' NORTE', ' SUR', ' ESTE', ' OESTE', ' CENTRO',
+]
+
+_LEGAL_SUFFIXES = [
+    'S.R.L', 'SRL', 'S.A.', 'S.A.S', 'SAS', 'S.C.A', 'S.E.',
+    'E.I.R.L', 'EIRL', 'LTDA', 'S.A.P.E.M', 'S.E.M', 'U.T.E',
+]
+
+
+def _limpiar_cuit_upload(raw) -> str:
+    """Normaliza cualquier variante de CUIT a 11 dígitos sin separadores."""
+    if raw is None:
+        return ''
+    s = str(raw).strip()
+    # Excel suele devolver CUITs como float: 30714840203.0 → 30714840203
+    if '.' in s:
+        s = s.split('.')[0]
+    s = s.replace('-', '').replace(' ', '').replace('.', '')
+    return s if s.isdigit() and 10 <= len(s) <= 11 else ''
+
+
+def _score_nombre_cartera(nombre: str) -> int:
+    """Score heurístico: 0 = razón social limpia, >100 = dirección/entrega probable."""
+    import re as _re
+    n = (nombre or '').upper().strip()
+    score = 0
+    for kw in _CARTERA_DISCARD_KW:
+        if kw in n:
+            score += 100
+    # Número al final = posible número de calle (ej: "EMPRESA 1234")
+    if _re.search(r'\s\d{3,}$', n):
+        score += 50
+    # Paréntesis = aclaraciones de entrega o sucursal
+    if '(' in n:
+        score += 30
+    # Nombres más cortos son preferidos (razón social base)
+    score += len(nombre)
+    # Bonificación por sufijo legal (S.R.L., S.A., etc.)
+    if any(s in n for s in _LEGAL_SUFFIXES):
+        score -= 20
+    return score
+
+
+def _razon_descarte(nombre: str) -> str:
+    import re as _re
+    n = nombre.upper()
+    for kw in _CARTERA_DISCARD_KW:
+        if kw in n:
+            return f'Contiene "{kw.strip()}"'
+    if _re.search(r'\s\d{3,}$', n):
+        return 'Termina con número de calle'
+    if '(' in n:
+        return 'Contiene paréntesis (aclaración)'
+    return 'Nombre más largo para el mismo CUIT'
+
+
+@app.route("/upload-cartera", methods=["POST"])
+def upload_cartera_endpoint():
+    """Parsea archivo Odoo, deduplica por CUIT descartando entradas de entrega."""
+    try:
+        if 'file' not in request.files:
+            return jsonify({"error": "Sin archivo"}), 400
+        file = request.files['file']
+        nombre_arch = (file.filename or '').lower()
+
+        import io, csv as _csv
+
+        # ── Leer filas ────────────────────────────────────────────────────────
+        if nombre_arch.endswith('.csv'):
+            contenido = file.read().decode('utf-8-sig', errors='replace')
+            todas = list(_csv.reader(io.StringIO(contenido)))
+        else:
+            import openpyxl
+            wb = openpyxl.load_workbook(io.BytesIO(file.read()))
+            ws = wb.active
+            todas = [[str(v) if v is not None else '' for v in row]
+                     for row in ws.iter_rows(values_only=True)]
+
+        if not todas:
+            return jsonify({"error": "Archivo vacío"}), 400
+
+        headers = [str(h or '').strip() for h in todas[0]]
+
+        # ── Detección de columnas ─────────────────────────────────────────────
+        def find_col(kws):
+            for i, h in enumerate(headers):
+                hu = h.upper()
+                if any(kw.upper() in hu for kw in kws):
+                    return i
+            return -1
+
+        col_n  = find_col(['NOMBRE', 'NAME', 'RAZON', 'CLIENTE', 'PARTNER', 'EMPRESA', 'COMPANY'])
+        col_c  = find_col(['CUIT', 'NIF', 'RUC', 'VAT', 'IDENTIFICACION', 'TAX', 'RUT', 'FISCAL', 'ID FISCAL'])
+        col_v  = find_col(['VENDEDOR', 'SALESPERSON', 'COMERCIAL', 'REPRESENTANTE'])
+        col_ci = find_col(['CIUDAD', 'CITY', 'LOCALIDAD', 'MUNICIPIO', 'POBLACION', 'PROVINCIA'])
+        col_e  = find_col(['EMAIL', 'CORREO', 'MAIL'])
+        col_l  = find_col(['LIMITE', 'LIMIT', 'CREDITO', 'CREDIT'])
+        col_t  = find_col(['TIPO DE CONTACTO', 'TIPO CONTACTO', 'TYPE', 'TIPO'])
+
+        if col_n < 0:
+            return jsonify({
+                "error": f"No se encontró columna de nombre. Encabezados detectados: {headers[:10]}"
+            }), 400
+
+        def gv(row, col):
+            if col < 0 or col >= len(row):
+                return ''
+            v = row[col]
+            return str(v).strip() if v is not None else ''
+
+        # ── Procesar filas ────────────────────────────────────────────────────
+        grupos   = {}   # cuit → [entries]
+        sin_cuit = []
+        total_filas = 0
+
+        for row in todas[1:]:
+            nombre = gv(row, col_n)
+            if not nombre or nombre.upper() in ('FALSE', 'NONE', ''):
+                continue
+            total_filas += 1
+
+            # Descartar si la columna Tipo indica explícitamente dirección/entrega
+            tipo = gv(row, col_t).upper()
+            if tipo and any(kw in tipo for kw in ['ENTREGA', 'DELIVERY', 'DIRECCION', 'ENVIO', 'SHIPPING']):
+                continue
+
+            cuit = _limpiar_cuit_upload(gv(row, col_c)) if col_c >= 0 else ''
+            entry = {
+                'nombre':        nombre,
+                'cuit':          cuit,
+                'vendedor':      gv(row, col_v),
+                'ciudad':        gv(row, col_ci),
+                'email':         gv(row, col_e),
+                'limiteCredito': float(gv(row, col_l) or 0) if gv(row, col_l) else 0.0,
+            }
+
+            if cuit:
+                grupos.setdefault(cuit, []).append(entry)
+            else:
+                sin_cuit.append(entry)
+
+        # ── Deduplicar por CUIT ───────────────────────────────────────────────
+        resultado   = []
+        descartados = []
+        duplicados  = 0
+
+        for cuit, entradas in grupos.items():
+            if len(entradas) == 1:
+                resultado.append(entradas[0])
+            else:
+                scored = sorted(entradas, key=lambda e: _score_nombre_cartera(e['nombre']))
+                resultado.append(scored[0])
+                for dup in scored[1:]:
+                    duplicados += 1
+                    descartados.append({
+                        'nombre': dup['nombre'],
+                        'cuit':   cuit,
+                        'motivo': _razon_descarte(dup['nombre']),
+                    })
+
+        resultado.extend(sin_cuit)
+
+        print(
+            f"[upload-cartera] {total_filas} filas → {len(resultado)} clientes "
+            f"({duplicados} dupl. eliminados, {len(sin_cuit)} sin CUIT)",
+            flush=True,
+        )
+        return jsonify({
+            "ok": True,
+            "total_filas":          total_filas,
+            "total_clientes":       len(resultado),
+            "duplicados_eliminados": duplicados,
+            "sin_cuit":             len(sin_cuit),
+            "clientes":             resultado[:1000],
+            "descartados":          descartados[:200],
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"[upload-cartera] Error: {traceback.format_exc()}", flush=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/confirmar-upload-cartera", methods=["POST"])
+def confirmar_upload_cartera():
+    """Reemplaza cartera_comercial.json con la lista procesada y recarga en memoria."""
+    global _cartera_comercial
+    try:
+        data = request.get_json(force=True)
+        clientes = data.get('clientes', [])
+        if not clientes:
+            return jsonify({"error": "Lista vacía"}), 400
+
+        cartera_nueva = []
+        for c in clientes:
+            nombre = str(c.get('nombre', '') or '').strip()
+            if not nombre:
+                continue
+            cartera_nueva.append({
+                'nombre':        nombre,
+                'cuit':          _limpiar_cuit_upload(c.get('cuit', '')) or str(c.get('cuit', '')),
+                'vendedor':      str(c.get('vendedor', '') or '').strip(),
+                'ciudad':        str(c.get('ciudad', '') or '').strip(),
+                'email':         str(c.get('email', '') or '').strip(),
+                'limiteCredito': float(c.get('limiteCredito') or 0),
+            })
+
+        tmp = _CC_FILE + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(cartera_nueva, f, ensure_ascii=False, indent=2)
+            f.flush(); os.fsync(f.fileno())
+        os.replace(tmp, _CC_FILE)
+        _cartera_comercial = cartera_nueva
+
+        print(f"[cartera] Importada: {len(cartera_nueva)} clientes", flush=True)
+        return jsonify({"ok": True, "total": len(cartera_nueva)})
+
+    except Exception as e:
+        import traceback
+        print(f"[confirmar-cartera] Error: {traceback.format_exc()}", flush=True)
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/saldos-timestamp")
 def get_saldos_timestamp():
     """Devuelve timestamp de la última carga de saldos para detección de actualizaciones."""
