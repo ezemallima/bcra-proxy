@@ -329,6 +329,24 @@ try:
 except Exception as e:
     print(f"[comercial] Error cargando cartera: {e}", flush=True)
 
+
+def _cc_desde_disco() -> list:
+    """Lee cartera_comercial.json desde disco — necesario en entornos multi-worker
+    (gunicorn) donde cada worker tiene su propio espacio de memoria y el upload
+    puede haber ocurrido en un worker distinto al que inicia el proceso."""
+    global _cartera_comercial
+    try:
+        _p = _CC_FILE if os.path.exists(_CC_FILE) else os.path.join(os.getcwd(), 'cartera_comercial.json')
+        with open(_p, 'r', encoding='utf-8') as _f:
+            fresh = json.load(_f)
+        if len(fresh) != len(_cartera_comercial):
+            print(f"[cc-reload] disco={len(fresh)} mem={len(_cartera_comercial)} → actualizando", flush=True)
+            _cartera_comercial = fresh
+        return fresh
+    except Exception as _e:
+        print(f"[cc-reload] Error leyendo disco ({_e}), usando memoria", flush=True)
+        return _cartera_comercial
+
 def cache_get(cuit):
     try:
         cf = os.path.join(DATA_DIR, 'bcra_cache.json') if os.path.exists(DATA_DIR) else '/tmp/bcra_cache.json'
@@ -5175,9 +5193,10 @@ def verificar_cartera():
         except Exception as _ep:
             print(f"[verif] Advertencia: no se pudo leer sit. previas: {_ep}", flush=True)
 
-        # Siempre usar cartera_comercial.json como fuente canónica — ignorar lista del cliente
+        # Leer desde disco — multi-worker: el worker que hizo el upload puede ser distinto a éste
+        _cc_base_v = _cc_desde_disco()
         cartera_data = []
-        for c in _cartera_comercial:
+        for c in _cc_base_v:
             _cuit = str(c.get("cuit") or "").strip()
             if not _cuit:
                 continue
@@ -5474,8 +5493,10 @@ def iniciar_proceso_integral():
     except Exception as _ep:
         print(f"[proceso-integral] Advertencia sit. previas: {_ep}", flush=True)
 
+    # Leer desde disco — multi-worker: el worker que hizo el upload puede ser distinto a éste
+    _cc_base_pi = _cc_desde_disco()
     cartera = []
-    for c in _cartera_comercial:
+    for c in _cc_base_pi:
         _cuit_pi = str(c.get("cuit", "") or "").strip()
         if not _cuit_pi:
             continue
