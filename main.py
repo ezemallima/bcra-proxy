@@ -7284,7 +7284,7 @@ def upload_cartera_endpoint():
             "total_clientes":       len(resultado),
             "duplicados_eliminados": duplicados,
             "sin_cuit":             len(sin_cuit),
-            "clientes":             resultado[:1000],
+            "clientes":             resultado,
             "descartados":          descartados[:200],
         })
 
