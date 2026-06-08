@@ -359,118 +359,128 @@ body {
 .saldo-cell { font-family: 'Roboto Mono', monospace; font-weight: 600; font-size: 12px; }
 .invoice-tfoot td { padding: 8px 10px; font-weight: 700; font-size: 11px; color: var(--text2); background: var(--bg); }
 
-/* ── OPORTUNIDADES POR ZONA ── */
-.zona-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
-.zona-card {
+/* ── VENDOR CARDS GRID ── */
+.vd-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+.vd-card {
   background: var(--white);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
   box-shadow: var(--shadow);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: box-shadow 0.15s, border-color 0.15s;
 }
-.zona-header {
-  padding: 14px 18px;
+.vd-card:hover { border-color: var(--blue-mid); box-shadow: var(--shadow-md); }
+.vd-card-header {
+  padding: 18px 20px 14px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.vd-avatar {
+  width: 44px; height: 44px;
+  border-radius: 50%;
   background: var(--blue);
   color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  font-size: 15px;
+  font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  letter-spacing: -0.5px;
+}
+.vd-name { font-size: 14px; font-weight: 700; color: var(--text); line-height: 1.2; }
+.vd-meta { font-size: 11px; color: var(--text3); margin-top: 2px; }
+.vd-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 1px solid var(--border);
+}
+.vd-stat {
+  padding: 14px 18px;
+  text-align: center;
   cursor: pointer;
   transition: background 0.12s;
+  border-right: 1px solid var(--border);
 }
-.zona-header:hover { background: var(--blue-dark); }
-.zona-name { font-size: 14px; font-weight: 700; }
-.zona-meta { font-size: 11px; opacity: 0.8; margin-top: 2px; }
-.zona-kpis { display: flex; gap: 16px; }
-.zona-kpi { text-align: right; }
-.zona-kpi-val { font-size: 16px; font-weight: 800; line-height: 1; }
-.zona-kpi-lbl { font-size: 9px; opacity: 0.75; text-transform: uppercase; letter-spacing: 0.4px; }
-.zona-body { display: none; padding: 0; }
-.zona-card.open .zona-body { display: block; }
-.zona-card.open .zona-chevron { transform: rotate(180deg); }
-.zona-chevron { transition: transform 0.2s; }
-.zona-client-row {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  padding: 9px 18px;
-  border-bottom: 1px solid var(--border);
-  align-items: center;
-  gap: 12px;
-  font-size: 12px;
+.vd-stat:last-child { border-right: none; }
+.vd-stat:hover { background: var(--bg); }
+.vd-stat-num {
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+  margin-bottom: 4px;
 }
-.zona-client-row:last-child { border-bottom: none; }
-.zona-client-name { font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.zona-client-sub { font-size: 10px; color: var(--text3); margin-top: 1px; }
-.cupo-badge {
-  padding: 2px 9px;
-  border-radius: 12px;
-  font-size: 11px;
-  font-weight: 700;
-  font-family: 'Roboto Mono', monospace;
-  white-space: nowrap;
-}
-.cupo-pos { background: var(--green-bg); color: var(--green); }
-.cupo-neg { background: var(--red-bg); color: var(--red); }
-.cupo-zero { background: var(--bg); color: var(--text3); }
-
-/* ── SEMÁFORO DE RIESGO ── */
-.semaforo-section { margin-bottom: 20px; }
-.semaforo-section-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 13px 18px;
-  border-radius: var(--radius) var(--radius) 0 0;
-  font-size: 13px;
-  font-weight: 700;
-}
-.sem-rojo   { background: var(--red);    color: #fff; }
-.sem-naranja { background: var(--orange); color: #fff; }
-.sem-amarillo { background: var(--yellow); color: #fff; }
-.semaforo-body {
-  background: var(--white);
-  border: 1px solid var(--border);
-  border-top: none;
-  border-radius: 0 0 var(--radius) var(--radius);
-  box-shadow: var(--shadow);
-  overflow: hidden;
-}
-.sem-row {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1.5fr;
-  padding: 11px 18px;
-  border-bottom: 1px solid var(--border);
-  align-items: center;
-  gap: 12px;
-  font-size: 12px;
-}
-.sem-row:last-child { border-bottom: none; }
-.sem-row:hover { background: var(--bg); }
-.sem-nombre { font-weight: 600; font-size: 13px; color: var(--text); }
-.sem-sub { font-size: 10px; color: var(--text3); margin-top: 1px; }
-.sem-sit-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  border-radius: 12px;
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-.sem-header-row {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1.5fr;
-  padding: 8px 18px;
-  background: var(--bg);
-  border-bottom: 1px solid var(--border);
+.vd-stat-lbl {
   font-size: 10px;
   font-weight: 700;
-  color: var(--text3);
   text-transform: uppercase;
   letter-spacing: 0.6px;
-  gap: 12px;
 }
-.sem-empty { padding: 24px 18px; font-size: 13px; color: var(--text3); text-align: center; }
+.vd-stat.blue .vd-stat-num { color: var(--blue); }
+.vd-stat.blue .vd-stat-lbl { color: var(--blue-text); }
+.vd-stat.blue:hover { background: var(--blue-light); }
+.vd-stat.red  .vd-stat-num { color: var(--red); }
+.vd-stat.red  .vd-stat-lbl { color: #b91c1c; }
+.vd-stat.red:hover  { background: var(--red-bg); }
+.vd-stat.gray .vd-stat-num { color: var(--text3); }
+.vd-stat.gray .vd-stat-lbl { color: var(--text3); }
+.vd-card-footer {
+  padding: 10px 18px;
+  display: flex;
+  gap: 8px;
+}
+.vd-btn {
+  flex: 1;
+  padding: 7px 10px;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1.5px solid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  transition: background 0.12s;
+  white-space: nowrap;
+}
+.vd-btn-blue { border-color: var(--blue); color: var(--blue); background: transparent; }
+.vd-btn-blue:hover { background: var(--blue-light); }
+.vd-btn-red { border-color: var(--red); color: var(--red); background: transparent; }
+.vd-btn-red:hover { background: var(--red-bg); }
+/* Modal table */
+.vd-th {
+  padding: 9px 16px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--blue-text);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  border-bottom: 1px solid var(--blue-mid);
+  white-space: nowrap;
+}
+.vd-td {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text2);
+  vertical-align: middle;
+}
+.vd-tr:last-child .vd-td { border-bottom: none; }
+.vd-tr:hover .vd-td { background: #f8faff; }
+.vd-badge {
+  display: inline-flex; align-items: center;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
 
 /* ── LOADING / SPINNER ── */
 .loading-wrap {
@@ -543,21 +553,42 @@ body {
     Resumen Ejecutivo
     <span class="tab-count" id="tab-count-clientes">—</span>
   </button>
-  <button class="tab-btn" onclick="switchTab('zona')" id="tab-zona">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-    Oportunidades por Zona
-    <span class="tab-count" id="tab-count-zonas">—</span>
-  </button>
-  <button class="tab-btn" onclick="switchTab('semaforo')" id="tab-semaforo">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-    Semáforo de Riesgo
-    <span class="tab-count red" id="tab-count-criticos">—</span>
+  <button class="tab-btn" onclick="switchTab('vendedor')" id="tab-vendedor">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    Por Vendedor
+    <span class="tab-count" id="tab-count-vendedores">—</span>
   </button>
 </nav>
 
 <main class="main" id="main-content">
   <div class="loading-wrap"><div class="spinner"></div><div>Cargando datos...</div></div>
 </main>
+
+<!-- MODAL OVERLAY — no expande la página, se superpone -->
+<div id="vd-modal" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(15,23,42,0.55);backdrop-filter:blur(2px);align-items:flex-start;justify-content:center;padding:40px 20px;overflow-y:auto;" onclick="closeVdModal(event)">
+  <div style="background:#fff;border-radius:14px;width:min(96vw,860px);box-shadow:0 24px 60px rgba(0,0,0,0.25);overflow:hidden;margin:auto;" onclick="event.stopPropagation()">
+    <!-- Modal header -->
+    <div id="vd-modal-header" style="background:var(--blue);color:#fff;padding:16px 22px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+      <div>
+        <div id="vd-modal-title" style="font-size:15px;font-weight:700;"></div>
+        <div id="vd-modal-sub" style="font-size:11px;opacity:0.8;margin-top:2px;"></div>
+      </div>
+      <button onclick="closeVdModal()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:#fff;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        Cerrar y Volver
+      </button>
+    </div>
+    <!-- Modal body -->
+    <div style="overflow-x:auto;max-height:calc(80vh - 80px);overflow-y:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr id="vd-modal-thead" style="background:var(--blue-light);position:sticky;top:0;"></tr>
+        </thead>
+        <tbody id="vd-modal-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
 
 <script>
 // ─── Constantes ────────────────────────────────────────────────────────────
@@ -631,8 +662,7 @@ function renderActiveTab() {
   var el = document.getElementById('main-content');
   if (!_data) return;
   if (_activeTab === 'resumen')   renderResumen(el);
-  if (_activeTab === 'zona')      renderZona(el);
-  if (_activeTab === 'semaforo')  renderSemaforo(el);
+  if (_activeTab === 'vendedor')  renderVendedor(el);
 }
 
 // ─── Carga de datos ───────────────────────────────────────────────────────
@@ -653,13 +683,11 @@ async function cargarDatos() {
     document.getElementById('header-fecha').textContent = 'Al ' + _data.fecha_hoy;
 
     // Tab counters
-    var clientes = _data.clientes || [];
-    var zonas    = [...new Set(clientes.map(function(c){ return c.ciudad || 'Sin ciudad'; }))];
-    var criticos = clientes.filter(function(c){ return (c.ultimaSit||1) >= 3 || (c.buckets.d120||0)+(c.buckets.d120plus||0) > 0; }).length;
+    var clientes   = _data.clientes || [];
+    var vendedores = [...new Set(clientes.map(function(c){ return c.vendedor||'Sin vendedor'; }))];
 
-    document.getElementById('tab-count-clientes').textContent = clientes.length;
-    document.getElementById('tab-count-zonas').textContent    = zonas.length + ' zonas';
-    document.getElementById('tab-count-criticos').textContent = criticos;
+    document.getElementById('tab-count-clientes').textContent   = clientes.length;
+    document.getElementById('tab-count-vendedores').textContent = vendedores.length;
 
     renderActiveTab();
     actualizarKPIDSOGlobal();
@@ -926,131 +954,143 @@ function renderClientRow(c, idx) {
     +'</table></div></div>';
 }
 
-// ─── TAB 2: OPORTUNIDADES POR ZONA ────────────────────────────────────────
-function renderZona(el) {
-  var clientes = _data.clientes || [];
-  var zonaMap = {};
-  clientes.forEach(function(c) {
-    var z = (c.ciudad || 'Sin ciudad').trim() || 'Sin ciudad';
-    if (!zonaMap[z]) zonaMap[z] = { clientes:[], cupo_total:0, saldo_total:0, n_criticos:0 };
-    var cupo = Math.max(0, (c.limiteCredito||0) - (c.saldo_total||0));
-    zonaMap[z].clientes.push({ ...c, cupo_disponible: cupo });
-    zonaMap[z].cupo_total   += cupo;
-    zonaMap[z].saldo_total  += c.saldo_total||0;
-    if ((c.ultimaSit||1) >= 3 || (c.buckets.d90||0)+(c.buckets.d120||0)+(c.buckets.d120plus||0)>0) zonaMap[z].n_criticos++;
+// ─── TAB 2: POR VENDEDOR ──────────────────────────────────────────────────
+// Clasificación de un cliente para su vendedor
+function _esOportunidad(c) {
+  // Score excelente (≥700) sin bloqueo activo
+  return (c.score >= 700 || c.rango === 'Excelente') && !c.bloquear;
+}
+function _esCritico(c) {
+  // Factura >20 días desde emisión, situación BCRA ≥2 o degradación detectada
+  return (c.ultimaSit||1) >= 2
+    || c.alerta_temprana
+    || (c.facturas||[]).some(function(f){ return (f.dias||0) > 20; });
+}
+
+function _getVendedorMap() {
+  var map = {};
+  (_data.clientes || []).forEach(function(c) {
+    var v = (c.vendedor || 'Sin vendedor').trim();
+    if (!map[v]) map[v] = { nombre:v, total:0, oport:[], criticos:[], saldo:0 };
+    map[v].total++;
+    map[v].saldo += c.saldo_total||0;
+    if (_esOportunidad(c)) map[v].oport.push(c);
+    if (_esCritico(c))     map[v].criticos.push(c);
   });
-  var zonas = Object.keys(zonaMap).sort(function(a,b){ return zonaMap[b].cupo_total - zonaMap[a].cupo_total; });
+  return map;
+}
 
-  var html = '<div class="zona-grid">';
-  zonas.forEach(function(z, zi) {
-    var zd = zonaMap[z];
-    var clsSorted = zd.clientes.slice().sort(function(a,b){ return b.cupo_disponible - a.cupo_disponible; });
-    var clientRows = clsSorted.map(function(c) {
-      var cupo = c.cupo_disponible;
-      var cupoClass = cupo > 0 ? 'cupo-pos' : (cupo < 0 ? 'cupo-neg' : 'cupo-zero');
-      var cupoTxt = cupo > 0 ? '+'+fmt(cupo) : (cupo < 0 ? '−'+fmt(Math.abs(cupo)) : '0');
-      var sc = c.score;
-      var scColor = colorScore(sc);
-      return '<div class="zona-client-row">'
-        +'<div>'
-        +'<div class="zona-client-name">'+esc(c.nombre||'—')+'</div>'
-        +'<div class="zona-client-sub">'+esc(c.vendedor||'')+'</div>'
-        +'</div>'
-        +(sc!=null ? '<span class="cupo-badge" style="background:'+scColor+'18;color:'+scColor+';border:1px solid '+scColor+'33">'+sc+'</span>' : '<span></span>')
-        +'<span class="cupo-badge '+cupoClass+'">'+cupoTxt+'</span>'
-        +'</div>';
-    }).join('');
-
-    html += '<div class="zona-card" id="zona-'+zi+'">'
-      +'<div class="zona-header" onclick="toggleZona('+zi+')">'
-      +'<div><div class="zona-name">'+esc(z)+'</div><div class="zona-meta">'+zd.clientes.length+' cliente'+(zd.clientes.length!==1?'s':'')+(zd.n_criticos?' · '+zd.n_criticos+' crítico'+(zd.n_criticos!==1?'s':''):'')+'</div></div>'
-      +'<div class="zona-kpis">'
-      +'<div class="zona-kpi"><div class="zona-kpi-val">'+fmt(zd.cupo_total)+'</div><div class="zona-kpi-lbl">Cupo disp.</div></div>'
-      +'<div class="zona-kpi"><div class="zona-kpi-val">'+fmt(zd.saldo_total)+'</div><div class="zona-kpi-lbl">Saldo</div></div>'
-      +'<svg class="zona-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
+function renderVendedor(el) {
+  var map = _getVendedorMap();
+  var vendedores = Object.keys(map).sort();
+  if (!vendedores.length) {
+    el.innerHTML = '<div class="empty-row">Sin vendedores en la cartera.</div>';
+    return;
+  }
+  var html = '<div class="vd-grid">';
+  vendedores.forEach(function(v) {
+    var d = map[v];
+    var initials = v.trim().split(/\s+/).slice(0,2).map(function(w){ return w[0]||''; }).join('').toUpperCase();
+    var nOp  = d.oport.length;
+    var nCr  = d.criticos.length;
+    html += '<div class="vd-card">'
+      // Header
+      +'<div class="vd-card-header">'
+      +'<div class="vd-avatar">'+esc(initials)+'</div>'
+      +'<div>'
+      +'<div class="vd-name">'+esc(v)+'</div>'
+      +'<div class="vd-meta">'+d.total+' cliente'+(d.total!==1?'s':'')+' · '+fmt(d.saldo)+' saldo</div>'
+      +'</div></div>'
+      // Stats
+      +'<div class="vd-stats">'
+      +'<div class="vd-stat '+(nOp>0?'blue':'gray')+'" onclick="openVdModal(\'oport\',\''+esc(v)+'\')" title="Ver clientes con oportunidad">'
+      +'<div class="vd-stat-num">'+nOp+'</div>'
+      +'<div class="vd-stat-lbl">Oportunidades</div>'
+      +'</div>'
+      +'<div class="vd-stat '+(nCr>0?'red':'gray')+'" onclick="openVdModal(\'critico\',\''+esc(v)+'\')" title="Ver clientes críticos">'
+      +'<div class="vd-stat-num">'+nCr+'</div>'
+      +'<div class="vd-stat-lbl">Críticos</div>'
       +'</div>'
       +'</div>'
-      +'<div class="zona-body">'+clientRows+'</div>'
+      // Buttons
+      +'<div class="vd-card-footer">'
+      +'<button class="vd-btn vd-btn-blue" onclick="openVdModal(\'oport\',\''+esc(v)+'\')">'
+      +'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>'
+      +'Oportunidades</button>'
+      +'<button class="vd-btn vd-btn-red" onclick="openVdModal(\'critico\',\''+esc(v)+'\')">'
+      +'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
+      +'Críticos</button>'
+      +'</div>'
       +'</div>';
   });
   html += '</div>';
-
-  // Nota si no hay limiteCredito configurado
-  var sinLimite = clientes.filter(function(c){ return !(c.limiteCredito>0); }).length;
-  if (sinLimite > 0) {
-    html = '<div style="padding:10px 14px;background:#fef9c3;border:1px solid #fde68a;border-radius:8px;font-size:12px;color:#92400e;margin-bottom:14px;">'
-      +'⚠️ '+sinLimite+' cliente'+(sinLimite!==1?'s':'')+' sin límite de crédito configurado. El cupo disponible aparece en $0 para esos clientes.'
-      +'</div>' + html;
-  }
   el.innerHTML = html;
 }
 
-function toggleZona(zi) {
-  var card = document.getElementById('zona-'+zi);
-  if (card) card.classList.toggle('open');
+// ─── MODAL DE DETALLE ─────────────────────────────────────────────────────
+function openVdModal(tipo, vendedor) {
+  var map  = _getVendedorMap();
+  var d    = map[vendedor];
+  if (!d) return;
+  var lista = tipo === 'oport' ? d.oport : d.criticos;
+  var isOp  = tipo === 'oport';
+
+  document.getElementById('vd-modal-title').textContent =
+    (isOp ? '📈 Oportunidades · ' : '⚠️ Críticos · ') + vendedor;
+  document.getElementById('vd-modal-sub').textContent =
+    lista.length + ' cliente' + (lista.length!==1?'s':'')
+    + (isOp ? ' con score Excelente (≥700) sin bloqueo'
+             : ' con facturas >20d, BCRA Sit.≥2 o alerta de score');
+
+  // Encabezado tabla
+  document.getElementById('vd-modal-thead').innerHTML =
+    ['Cliente','CUIT','Ciudad','Score','Estado','Saldo'].map(function(h){
+      return '<th class="vd-th">'+h+'</th>';
+    }).join('');
+
+  // Filas — orden por saldo desc
+  var sorted = lista.slice().sort(function(a,b){ return (b.saldo_total||0)-(a.saldo_total||0); });
+  document.getElementById('vd-modal-tbody').innerHTML = sorted.map(function(c) {
+    var sc = c.score;
+    var scColor = colorScore(sc);
+    var sit = c.ultimaSit||1;
+    var cuitFmt = c.cuit && c.cuit.length===11
+      ? c.cuit.slice(0,2)+'-'+c.cuit.slice(2,10)+'-'+c.cuit.slice(10) : (c.cuit||'—');
+    var estado = '';
+    if (!isOp) {
+      // Mostrar el motivo de criticidad más relevante
+      if ((c.ultimaSit||1)>=3) estado = '<span class="vd-badge" style="background:#fee2e2;color:#dc2626">BCRA Sit.'+sit+'</span>';
+      else if ((c.ultimaSit||1)===2) estado = '<span class="vd-badge" style="background:#fef9c3;color:#ca8a04">BCRA Sit.2</span>';
+      else if (c.alerta_temprana) estado = '<span class="vd-badge" style="background:#ffedd5;color:#ea580c">Alerta score</span>';
+      else {
+        var diasMax = Math.max.apply(null,(c.facturas||[]).map(function(f){ return f.dias||0; }));
+        estado = '<span class="vd-badge" style="background:#fee2e2;color:#dc2626">'+diasMax+'d vencido</span>';
+      }
+    } else {
+      estado = '<span class="vd-badge" style="background:#dcfce7;color:#16a34a">'+esc(c.rango||'Excelente')+'</span>';
+    }
+    return '<tr class="vd-tr">'
+      +'<td class="vd-td" style="font-weight:600;color:var(--text);min-width:160px;">'+esc(c.nombre||'—')+'</td>'
+      +'<td class="vd-td" style="font-family:\'Roboto Mono\',monospace;font-size:12px;white-space:nowrap;">'+cuitFmt+'</td>'
+      +'<td class="vd-td" style="white-space:nowrap;">'+esc(c.ciudad||'—')+'</td>'
+      +'<td class="vd-td" style="white-space:nowrap;">'
+      +(sc!=null ? '<span class="vd-badge" style="background:'+scColor+'18;color:'+scColor+';border:1px solid '+scColor+'33">'+sc+'</span>' : '—')
+      +'</td>'
+      +'<td class="vd-td">'+estado+'</td>'
+      +'<td class="vd-td" style="font-family:\'Roboto Mono\',monospace;font-weight:700;color:var(--text);white-space:nowrap;text-align:right;">'+fmt(c.saldo_total)+'</td>'
+      +'</tr>';
+  }).join('');
+
+  var modal = document.getElementById('vd-modal');
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
 }
 
-// ─── TAB 3: SEMÁFORO DE RIESGO ────────────────────────────────────────────
-function renderSemaforo(el) {
-  var clientes = _data.clientes || [];
-
-  // Clasificar — un cliente puede aparecer en una sola categoría (la peor)
-  var rojos = [], naranjas = [], amarillos = [];
-  clientes.forEach(function(c) {
-    var sc = c.score||999;
-    var sit = c.ultimaSit||1;
-    var venc90 = (c.buckets.d90||0)+(c.buckets.d120||0)+(c.buckets.d120plus||0);
-    var venc60 = (c.buckets.d60||0);
-    var venc30 = (c.buckets.d30||0);
-    var alerta = c.alerta_temprana;
-
-    if (sit >= 3 || sc < 200 || venc90 > 0) {
-      rojos.push(c);
-    } else if (sit === 2 || (sc >= 200 && sc < 400) || venc60 > 0) {
-      naranjas.push(c);
-    } else if (alerta || (sc >= 400 && sc < 600) || venc30 > 500000) {
-      amarillos.push(c);
-    }
-  });
-
-  function buildSemSection(titulo, cssClass, lista, badgeClass, bucketKey) {
-    var sortedLista = lista.slice().sort(function(a,b){ return (b.saldo_total||0)-(a.saldo_total||0); });
-    var rows = '';
-    if (!sortedLista.length) {
-      rows = '<div class="sem-empty">✓ Sin clientes en esta categoría</div>';
-    } else {
-      rows = '<div class="sem-header-row"><div>Cliente</div><div>Score / BCRA</div><div>Saldo</div><div>Aging crítico</div></div>'
-        + sortedLista.map(function(c) {
-          var sc = c.score;
-          var scColor = colorScore(sc);
-          var sit = c.ultimaSit||1;
-          var venc60plus = (c.buckets.d60||0)+(c.buckets.d90||0)+(c.buckets.d120||0)+(c.buckets.d120plus||0);
-          var vencLabel = venc60plus > 0 ? fmt(venc60plus)+' +60d' : '—';
-          var cuitFmt = c.cuit && c.cuit.length===11 ? c.cuit.slice(0,2)+'-'+c.cuit.slice(2,10)+'-'+c.cuit.slice(10) : (c.cuit||'');
-          return '<div class="sem-row">'
-            +'<div><div class="sem-nombre">'+esc(c.nombre||'—')+'</div><div class="sem-sub">'+esc(c.vendedor||'')+(c.ciudad?' · '+esc(c.ciudad):'')+'</div></div>'
-            +'<div>'
-            +(sc!=null ? '<span class="sem-sit-badge" style="background:'+scColor+'18;color:'+scColor+';border:1px solid '+scColor+'33">'+sc+' '+esc(c.rango||'')+'</span><br>' : '')
-            +'<span class="sem-sit-badge '+sitClass(sit)+'" style="margin-top:3px;display:inline-flex">'+sitLabel(sit)+'</span>'
-            +'</div>'
-            +'<div style="font-family:\'Roboto Mono\',monospace;font-weight:700;color:var(--text)">'+fmt(c.saldo_total)+'</div>'
-            +'<div style="font-weight:700;color:'+(venc60plus>0?'var(--red)':'var(--text3)')+'">'+vencLabel+'</div>'
-            +'</div>';
-        }).join('');
-    }
-    return '<div class="semaforo-section">'
-      +'<div class="semaforo-section-header '+cssClass+'">'
-      +'<span style="font-size:18px;">'+(badgeClass==='rojo'?'🔴':(badgeClass==='naranja'?'🟠':'🟡'))+'</span>'
-      +'<span>'+titulo+'</span>'
-      +'<span style="margin-left:auto;background:rgba(255,255,255,0.2);padding:2px 10px;border-radius:12px;font-size:12px;">'+sortedLista.length+' cliente'+(sortedLista.length!==1?'s':'')+'</span>'
-      +'</div>'
-      +'<div class="semaforo-body">'+rows+'</div>'
-      +'</div>';
-  }
-
-  el.innerHTML = buildSemSection('Alto Riesgo — BCRA Sit.3+ · Score <200 · Deuda +90d', 'sem-rojo', rojos, 'rojo')
-    + buildSemSection('Atención — BCRA Sit.2 · Score 200–400 · Deuda 31–90d', 'sem-naranja', naranjas, 'naranja')
-    + buildSemSection('Alerta Temprana — Score 400–600 · Deuda >30d · Degradación detectada', 'sem-amarillo', amarillos, 'amarillo');
+function closeVdModal(evt) {
+  if (evt && evt.target !== document.getElementById('vd-modal')) return;
+  var modal = document.getElementById('vd-modal');
+  modal.style.display = 'none';
+  document.body.style.overflow = '';
 }
 
 // ─── Interacciones comunes ─────────────────────────────────────────────────
