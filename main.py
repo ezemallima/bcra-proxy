@@ -37,10 +37,14 @@ SCRAPERAPI_KEY  = os.environ.get('SCRAPERAPI_KEY', '')
 
 # ── Bright Data Web Unlocker — motor de consultas en vivo ───────────────────
 # Proxy residencial de producción. Cadena: Bright Data → ScraperAPI → directo.
-BRIGHTDATA_USER = os.environ.get('BRIGHTDATA_USER', 'brd-customer-hl_cc5957d6-zone-vendeseguro')
-BRIGHTDATA_PASS = os.environ.get('BRIGHTDATA_PASS', 'qwq77117ou11')
-BRIGHTDATA_HOST = os.environ.get('BRIGHTDATA_HOST', 'brd.superproxy.io')
-BRIGHTDATA_PORT = int(os.environ.get('BRIGHTDATA_PORT', '33335'))
+# BRIGHTDATA_API_KEY es la API Key oficial del panel de administración (tiene prioridad sobre BRIGHTDATA_PASS).
+BRIGHTDATA_USER    = os.environ.get('BRIGHTDATA_USER', 'brd-customer-hl_cc5957d6-zone-vendeseguro')
+BRIGHTDATA_API_KEY = os.environ.get('BRIGHTDATA_API_KEY', '')
+BRIGHTDATA_PASS    = os.environ.get('BRIGHTDATA_PASS', '')   # fallback legacy; preferir BRIGHTDATA_API_KEY
+BRIGHTDATA_HOST    = os.environ.get('BRIGHTDATA_HOST', 'brd.superproxy.io')
+BRIGHTDATA_PORT    = int(os.environ.get('BRIGHTDATA_PORT', '33335'))
+# Contraseña efectiva: API Key si está cargada, sino BRIGHTDATA_PASS
+_BRD_PASSWORD      = BRIGHTDATA_API_KEY or BRIGHTDATA_PASS
 
 ADMIN_CUIT = '30710295022'
 ADMIN_PASS = 'Artel2026'
@@ -856,11 +860,11 @@ def _bcra_get(url: str, timeout: int = 0) -> requests.Response:
       2. ScraperAPI               — fallback si Bright Data falla
       3. Directo                  — último recurso
     """
-    _t = timeout if timeout > 0 else 15
+    _t = timeout if timeout > 0 else 12
 
     # ── 1. Bright Data Web Unlocker (motor principal) ────────────────────────
-    if BRIGHTDATA_USER and BRIGHTDATA_PASS:
-        _brd_proxy = f"http://{BRIGHTDATA_USER}:{BRIGHTDATA_PASS}@{BRIGHTDATA_HOST}:{BRIGHTDATA_PORT}"
+    if BRIGHTDATA_USER and _BRD_PASSWORD:
+        _brd_proxy = f"http://{BRIGHTDATA_USER}:{_BRD_PASSWORD}@{BRIGHTDATA_HOST}:{BRIGHTDATA_PORT}"
         try:
             r = requests.get(
                 url,
@@ -1162,7 +1166,7 @@ def _consultar_respaldo(cuit: str):
         'Accept': 'application/json',
     }
     try:
-        r = requests.get(url, headers=headers, timeout=5, verify=False)
+        r = requests.get(url, headers=headers, timeout=12, verify=False)
         print(f"[respaldo] {cuit} HTTP {r.status_code}", flush=True)
         if r.status_code == 404:
             return {"results": {"denominacion": "", "periodos": []}, "sin_deudas": True}, None
@@ -1243,12 +1247,12 @@ def consultar_bcra(cuit, reintentos=3):
         return None, via
 
     endpoints = (
-        # Wrapper Vercel primero (rápido, sin rate-limit) + todos los workers (4s) + BCRA oficial (10s)
-        [(BCRA_WRAPPER_BASE + '/central-deudores/' + cuit, 3.5, 'bcra_wrapper')]
-        + [(w + "/deudas/" + cuit, 4, f"Worker{i+1}") for i, w in enumerate(BCRA_WORKERS)]
+        # Wrapper Vercel + workers (12s) + BCRA oficial (12s)
+        [(BCRA_WRAPPER_BASE + '/central-deudores/' + cuit, 12, 'bcra_wrapper')]
+        + [(w + "/deudas/" + cuit, 12, f"Worker{i+1}") for i, w in enumerate(BCRA_WORKERS)]
         + [
-            (f"https://api.bcra.gob.ar/CentralDeInformacion/v1.0/Deudas/{cuit}", 10, 'bcra_cdi'),
-            (f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/{cuit}",    10, 'bcra_legacy'),
+            (f"https://api.bcra.gob.ar/CentralDeInformacion/v1.0/Deudas/{cuit}", 12, 'bcra_cdi'),
+            (f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/{cuit}",    12, 'bcra_legacy'),
         ]
     )
 
@@ -1256,7 +1260,7 @@ def consultar_bcra(cuit, reintentos=3):
     with ThreadPoolExecutor(max_workers=len(endpoints)) as ex:
         futs = {ex.submit(_fetch, url, tmt, via): via for url, tmt, via in endpoints}
         try:
-            for fut in as_completed(futs, timeout=12):
+            for fut in as_completed(futs, timeout=25):
                 result, via = fut.result()
                 if result == 'NOT_FOUND':
                     got_404 = True
