@@ -3690,6 +3690,16 @@ def api_director_data():
             nombre_a_cuit[_nombre_raw.upper()] = _ck       # exacto
             nombre_a_cuit[_norm_nombre(_nombre_raw)] = _ck  # normalizado sin puntuación
 
+    # Índice CUIT → ciudad, limiteCredito desde _cartera_comercial
+    cc_info_map: dict = {}
+    for _cc in _cartera_comercial:
+        _ck = _nc(str(_cc.get('cuit') or ''))
+        if _ck:
+            cc_info_map[_ck] = {
+                'ciudad':        str(_cc.get('ciudad') or '').strip(),
+                'limiteCredito': float(_cc.get('limiteCredito') or 0),
+            }
+
     # Cargar scores desde alertas_cartera.json (CUIT como clave)
     scores_map: dict = {}
     try:
@@ -3700,10 +3710,12 @@ def api_director_data():
                 _cuit_e = _nc(str(_ce.get('cuit') or ''))
                 if _cuit_e and _ce.get('scoreCompleto'):
                     scores_map[_cuit_e] = {
-                        'score':  _ce.get('scoreCompleto'),
-                        'rango':  _ce.get('scoreRango') or '—',
-                        'color':  _ce.get('scoreColor') or '#6b7280',
-                        'bloquear': bool(_ce.get('bloquear_oportunidad')),
+                        'score':          _ce.get('scoreCompleto'),
+                        'rango':          _ce.get('scoreRango') or '—',
+                        'color':          _ce.get('scoreColor') or '#6b7280',
+                        'bloquear':       bool(_ce.get('bloquear_oportunidad')),
+                        'ultimaSit':      int(_ce.get('ultimaSit') or 1),
+                        'alerta_temprana': bool(_ce.get('alerta_temprana')),
                     }
     except Exception: pass
 
@@ -3817,18 +3829,23 @@ def api_director_data():
         saldo_total = c['saldo_total']
         suma_pond = sum(f['saldo'] * f['dias'] for f in c['facturas'])
         dso = round(suma_pond / saldo_total) if saldo_total > 0 else 0
+        _ci = cc_info_map.get(c['cuit'], {})
         clientes_list.append({
-            'nombre':      c['nombre'],
-            'cuit':        c['cuit'],
-            'vendedor':    c['vendedor'],
-            'saldo_total': round(saldo_total),
-            'dso':         dso,
-            'score':       sc['score']  if sc else None,
-            'rango':       sc['rango']  if sc else '—',
-            'score_color': sc['color']  if sc else '#6b7280',
-            'bloquear':    sc['bloquear'] if sc else False,
-            'buckets':     {k: round(v) for k, v in c['buckets'].items()},
-            'facturas':    sorted(c['facturas'], key=lambda x: x['dias'], reverse=True),
+            'nombre':          c['nombre'],
+            'cuit':            c['cuit'],
+            'vendedor':        c['vendedor'],
+            'ciudad':          _ci.get('ciudad', ''),
+            'limiteCredito':   _ci.get('limiteCredito', 0),
+            'saldo_total':     round(saldo_total),
+            'dso':             dso,
+            'score':           sc['score']           if sc else None,
+            'rango':           sc['rango']            if sc else '—',
+            'score_color':     sc['color']            if sc else '#6b7280',
+            'bloquear':        sc['bloquear']         if sc else False,
+            'ultimaSit':       sc['ultimaSit']        if sc else 1,
+            'alerta_temprana': sc['alerta_temprana']  if sc else False,
+            'buckets':         {k: round(v) for k, v in c['buckets'].items()},
+            'facturas':        sorted(c['facturas'], key=lambda x: x['dias'], reverse=True),
         })
 
     clientes_list.sort(key=lambda x: x['saldo_total'], reverse=True)
