@@ -5245,8 +5245,14 @@ async function confirmarUploadCartera() {
     status.style.color = '#166534';
     btn.textContent = '✓ Importado';
     _carteraUploadData = null;
-    // Recargar cartera en el frontend
-    if (typeof cargarCarteraServidor === 'function') cargarCarteraServidor();
+    // Limpiar caché local y recargar la cartera completa en la app principal
+    localStorage.removeItem('piat_cartera');
+    localStorage.removeItem('piat_alertas');
+    cartera = [];
+    alertas = [];
+    if (typeof cargarCarteraServidor === 'function') await cargarCarteraServidor();
+    if (typeof renderCartera === 'function') renderCartera();
+    if (typeof actualizarMetricas === 'function') actualizarMetricas();
   } catch(e) {
     status.textContent = '✗ Error de red: ' + e.message;
     status.style.color = '#dc2626';

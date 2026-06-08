@@ -7173,19 +7173,41 @@ def upload_cartera_endpoint():
         headers = [str(h or '').strip() for h in todas[0]]
 
         # ── Detección de columnas ─────────────────────────────────────────────
+        # Normaliza tildes/acentos para comparación robusta con exports de Odoo
+        def _nh(s):
+            return (s.upper()
+                    .replace('Á','A').replace('É','E').replace('Í','I')
+                    .replace('Ó','O').replace('Ú','U').replace('Ü','U')
+                    .replace('Ñ','N'))
+
+        headers_n = [_nh(h) for h in headers]
+
         def find_col(kws):
-            for i, h in enumerate(headers):
-                hu = h.upper()
-                if any(kw.upper() in hu for kw in kws):
+            for i, hn in enumerate(headers_n):
+                if any(_nh(kw) in hn for kw in kws):
                     return i
             return -1
 
-        col_n  = find_col(['NOMBRE', 'NAME', 'RAZON', 'CLIENTE', 'PARTNER', 'EMPRESA', 'COMPANY'])
-        col_c  = find_col(['CUIT', 'NIF', 'RUC', 'VAT', 'IDENTIFICACION', 'TAX', 'RUT', 'FISCAL', 'ID FISCAL'])
+        # CUIT del cliente: busca "CUIT" que NO sea de vendedor/proveedor.
+        # Prioriza columnas que contengan "CLIENTE" junto a "CUIT".
+        def find_cuit_cliente():
+            best = -1
+            for i, hn in enumerate(headers_n):
+                if 'CUIT' in hn or 'NIF' in hn:
+                    if 'VENDEDOR' in hn or 'PROVEEDOR' in hn:
+                        continue              # excluir CUIT VENDEDOR
+                    if 'CLIENTE' in hn:
+                        return i              # match exacto "cuit cliente"
+                    if best < 0:
+                        best = i              # candidato genérico
+            return best
+
+        col_n  = find_col(['CLIENTE', 'NOMBRE', 'NAME', 'RAZON', 'PARTNER', 'EMPRESA', 'COMPANY'])
+        col_c  = find_cuit_cliente()
         col_v  = find_col(['VENDEDOR', 'SALESPERSON', 'COMERCIAL', 'REPRESENTANTE'])
         col_ci = find_col(['CIUDAD', 'CITY', 'LOCALIDAD', 'MUNICIPIO', 'POBLACION', 'PROVINCIA'])
         col_e  = find_col(['EMAIL', 'CORREO', 'MAIL'])
-        col_l  = find_col(['LIMITE', 'LIMIT', 'CREDITO', 'CREDIT'])
+        col_l  = find_col(['LIMITE DE CREDITO', 'LIMITE', 'LIMIT', 'CREDITO', 'CREDIT'])
         col_t  = find_col(['TIPO DE CONTACTO', 'TIPO CONTACTO', 'TYPE', 'TIPO'])
 
         if col_n < 0:
