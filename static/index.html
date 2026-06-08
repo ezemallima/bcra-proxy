@@ -5625,8 +5625,14 @@ async function verificarTodos(forzar) {
             datos.cartera.forEach(function(c) {
               var idx = cartera.findIndex(function(lc) { return lc.cuit === c.cuit; });
               if (idx >= 0) {
-                cartera[idx].ultimaSit = c.ultimaSit;
+                cartera[idx].ultimaSit   = c.ultimaSit;
                 cartera[idx].ultimaVerif = c.ultimaVerif;
+                if (c.scoreCompleto) {
+                  cartera[idx].scoreCompleto = c.scoreCompleto;
+                  cartera[idx].scoreRango    = c.scoreRango;
+                  cartera[idx].scoreColor    = c.scoreColor;
+                  cartera[idx].scoreEmoji    = c.scoreEmoji;
+                }
               }
             });
             localStorage.setItem('piat_cartera', JSON.stringify(cartera));

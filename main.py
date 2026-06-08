@@ -2269,9 +2269,9 @@ def _safe_periodos(lst) -> list:
 # ── Detección de falsas deudas ──────────────────────────────────────────────
 # Umbral y ventana configurables sin reescribir código.
 FALSE_DEBT_CONFIG: dict = {
-    'umbral_monto_ars':          500_000,  # Monto máx para considerar deuda no representativa
+    'umbral_monto_ars':          200_000,  # Monto máx para considerar deuda no representativa (reducido de 500k — evita ocultar deudas reales en contexto inflacionario)
     'ventana_degradacion_meses': 6,        # Meses máx desde sit.1 → sit≥2 para validar degradación
-    'min_entidades_normales':    1,        # Entidades en sit.1 requeridas para aislar la anomalía
+    'min_entidades_normales':    2,        # Entidades en sit.1 requeridas para aislar la anomalía (aumentado de 1 → más evidencia de perfil limpio requerida)
 }
 
 
@@ -5125,18 +5125,34 @@ def verificar_cartera():
     if verificacion_estado["corriendo"]:
         return jsonify({"error": "Ya hay una verificacion en curso"}), 400
     try:
+        # Cargar situaciones previas desde db_v17_final.json para comparación correcta de degradación
+        _sit_previas: dict = {}
+        try:
+            if os.path.exists(ALERTAS_FILE):
+                with open(ALERTAS_FILE, 'r', encoding='utf-8') as _f:
+                    _prev = json.load(_f)
+                for _c in _prev.get('cartera', []):
+                    _nc = str(_c.get('cuit', '') or '').replace('-', '').replace(' ', '').strip()
+                    if _nc and _c.get('ultimaSit'):
+                        _sit_previas[_nc] = {'ultimaSit': _c['ultimaSit'], 'ultimaVerif': _c.get('ultimaVerif')}
+        except Exception as _ep:
+            print(f"[verif] Advertencia: no se pudo leer sit. previas: {_ep}", flush=True)
+
         # Siempre usar cartera_comercial.json como fuente canónica — ignorar lista del cliente
-        cartera_data = [
-            {
-                "cuit":      str(c.get("cuit") or "").strip(),
-                "nombre":    str(c.get("nombre") or "").strip(),
-                "ciudad":    str(c.get("ciudad") or "").strip(),
-                "ultimaSit": c.get("ultimaSit", 1),
-                "ultimaVerif": c.get("ultimaVerif"),
-            }
-            for c in _cartera_comercial
-            if str(c.get("cuit") or "").strip()
-        ]
+        cartera_data = []
+        for c in _cartera_comercial:
+            _cuit = str(c.get("cuit") or "").strip()
+            if not _cuit:
+                continue
+            _nc = _cuit.replace('-', '').replace(' ', '')
+            _prev_entry = _sit_previas.get(_nc, {})
+            cartera_data.append({
+                "cuit":        _cuit,
+                "nombre":      str(c.get("nombre") or "").strip(),
+                "ciudad":      str(c.get("ciudad") or "").strip(),
+                "ultimaSit":   _prev_entry.get('ultimaSit', 1),
+                "ultimaVerif": _prev_entry.get('ultimaVerif'),
+            })
         if not cartera_data:
             return jsonify({"error": "cartera_comercial.json está vacía o sin CUITs"}), 400
         t = threading.Thread(target=ejecutar_verificacion, args=(cartera_data,), daemon=True)
