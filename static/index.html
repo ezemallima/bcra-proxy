@@ -388,6 +388,8 @@
   .alr-wrap { margin-bottom: 7px; }
   .alr-wrap > .alr-card { margin-bottom: 0; border-radius: 12px 12px 0 0; transition: border-radius 0.15s; }
   .alr-wrap > .alr-card.collapsed { border-radius: 12px; }
+  .alert-card.collapsed { border-radius: 12px !important; }
+  .alert-card:not(.collapsed) { border-radius: 12px 12px 0 0 !important; }
   .alr-acc { background:#f8fafc; border:1px solid #e2e8f0; border-top:none; border-radius:0 0 12px 12px; overflow:hidden; }
   .alr-fac-table { width:100%; border-collapse:collapse; font-size:12px; }
   .alr-fac-table thead tr { background:#eff6ff; }
@@ -6107,7 +6109,9 @@ function _renderMorasTable(listaEl) {
   alertas.forEach(function(a) {
     var diasColor = a.dias_max_atraso > 90 ? '#7f1d1d' : a.dias_max_atraso > 60 ? '#dc2626' : '#ca8a04';
     var diasBg    = a.dias_max_atraso > 90 ? 'rgba(127,29,29,0.08)' : a.dias_max_atraso > 60 ? 'rgba(220,38,38,0.08)' : 'rgba(202,138,4,0.08)';
-    html += '<div class="alert-card" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 14px;flex-wrap:wrap;">';
+    var cuitRow   = (a.cuit||'').replace(/-/g,'').replace(/\s/g,'');
+    html += '<div class="alr-wrap" id="alr-wrap-'+cuitRow+'">';
+    html += '<div class="alert-card collapsed" id="alr-card-'+cuitRow+'" onclick="toggleAlrAccordion(\''+cuitRow+'\')" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 14px;flex-wrap:wrap;margin-bottom:0;border-radius:12px 12px 0 0;transition:border-radius 0.15s;">';
     html += '<div style="flex:1;min-width:0;">'
       + '<div style="font-weight:700;font-size:14px;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(a.nombre) + '</div>';
     if (a.cuit) html += '<div style="font-size:11px;color:#64748b;font-family:monospace;margin-top:1px;">' + a.cuit + '</div>';
@@ -6121,7 +6125,12 @@ function _renderMorasTable(listaEl) {
       + '<div style="font-weight:800;font-size:22px;color:' + diasColor + ';font-family:\'Syne\',sans-serif;line-height:1;">' + a.dias_max_atraso + '</div>'
       + '<div style="font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;margin-top:1px;">días</div>'
       + '</div>';
-    if (a.cuit) html += '<button onclick="event.stopPropagation();verCliente(\'' + a.cuit + '\')" style="font-size:11px;font-weight:600;padding:4px 10px;background:#dc2626;color:#fff;border:none;border-radius:6px;cursor:pointer;letter-spacing:0.2px;">Ver</button>';
+    html += '<div style="display:flex;align-items:center;gap:6px;">';
+    if (a.cuit) html += '<button onclick="event.stopPropagation();verCliente(\'' + a.cuit + '\')" style="font-size:11px;font-weight:600;padding:4px 10px;background:#dc2626;color:#fff;border:none;border-radius:6px;cursor:pointer;letter-spacing:0.2px;">🔍 Ver</button>';
+    html += '<svg id="alr-chev-'+cuitRow+'" class="alr-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+    html += '</div>';
+    html += '</div>';
+    html += '<div class="alr-acc" id="alr-acc-'+cuitRow+'" style="display:none"></div>';
     html += '</div>';
   });
   listaEl.innerHTML = html;
