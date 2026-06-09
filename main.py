@@ -3812,13 +3812,26 @@ def api_director_data():
         bucket = _bucket(dias)
         clientes_map[key]['saldo_total']     += saldo
         clientes_map[key]['buckets'][bucket] += saldo
+        fp       = _parse_f(f.get('fechaPago', ''))
+        dias_venc = max(0, (hoy - fp).days) if fp else 0
+        # Formato DD/MM/YYYY para presentación en el frontend
+        def _iso_to_dmy(s):
+            if not s: return ''
+            try:
+                y, m, d = str(s).split('-')
+                return f"{d}/{m}/{y}"
+            except Exception:
+                return str(s)
+        fecha_fac_fmt = _iso_to_dmy(f.get('fechaFactura', ''))
+        fecha_pago_fmt = _iso_to_dmy(f.get('fechaPago', ''))
         clientes_map[key]['facturas'].append({
             'nro':           str(f.get('nroFactura') or ''),
-            'fecha_factura': f.get('fechaFactura', ''),
-            'fecha_pago':    f.get('fechaPago', ''),
+            'fecha_factura': fecha_fac_fmt,
+            'fecha_pago':    fecha_pago_fmt,
             'total':         float(f.get('totalFactura') or 0),
             'saldo':         saldo,
             'dias':          dias,
+            'dias_venc':     dias_venc,
             'bucket':        bucket,
         })
 

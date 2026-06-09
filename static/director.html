@@ -977,10 +977,10 @@ function _esOportunidad(c) {
   return (c.score >= 700 || c.rango === 'Excelente') && !c.bloquear;
 }
 function _esCritico(c) {
-  // Factura >20 días desde emisión, situación BCRA ≥2 o degradación detectada
+  // Moroso: factura con >30d desde vencimiento, BCRA Sit.≥2 o degradación de score
   return (c.ultimaSit||1) >= 2
     || c.alerta_temprana
-    || (c.facturas||[]).some(function(f){ return (f.dias||0) > 20; });
+    || (c.facturas||[]).some(function(f){ return (f.dias_venc||0) > 30; });
 }
 
 function _getVendedorMap() {
@@ -1056,7 +1056,7 @@ function openVdModal(tipo, vendedor) {
   document.getElementById('vd-modal-sub').textContent =
     lista.length + ' cliente' + (lista.length!==1?'s':'')
     + (isOp ? ' con score Excelente (≥700) sin bloqueo'
-             : ' con facturas >20d, BCRA Sit.≥2 o alerta de score');
+             : ' con facturas vencidas >30d, BCRA Sit.≥2 o alerta de score');
 
   // Encabezado tabla — col extra para el ícono de expansión
   document.getElementById('vd-modal-thead').innerHTML =
@@ -1078,7 +1078,7 @@ function openVdModal(tipo, vendedor) {
       else if ((c.ultimaSit||1)===2) estado = '<span class="vd-badge" style="background:#fef9c3;color:#ca8a04">BCRA Sit.2</span>';
       else if (c.alerta_temprana) estado = '<span class="vd-badge" style="background:#ffedd5;color:#ea580c">Alerta score</span>';
       else {
-        var diasMax = Math.max.apply(null,(c.facturas||[]).map(function(f){ return f.dias||0; }));
+        var diasMax = Math.max.apply(null,(c.facturas||[]).map(function(f){ return f.dias_venc||0; }));
         estado = '<span class="vd-badge" style="background:#fee2e2;color:#dc2626">'+diasMax+'d vencido</span>';
       }
     } else {
@@ -1091,10 +1091,16 @@ function openVdModal(tipo, vendedor) {
     var fmtL = function(n){ return Math.round(n||0).toLocaleString('es-AR'); };
     var facRows = facs.length
       ? facs.map(function(f) {
-          var cd = colorDias(f.dias||0);
-          var diasTxt = (f.dias||0)===0 ? 'Al día' : (f.dias||0)+'d';
+          var dv = f.dias_venc || 0;
+          var cd = dv <= 0  ? { bg:'#dcfce7', color:'#16a34a' }
+                 : dv <= 30 ? { bg:'#fef9c3', color:'#854d0e' }
+                 : dv <= 60 ? { bg:'#ffedd5', color:'#9a3412' }
+                 : dv <= 90 ? { bg:'#fee2e2', color:'#dc2626' }
+                 :            { bg:'#fce7f3', color:'#9d174d' };
+          var diasTxt = dv <= 0 ? 'Al día' : dv + 'd venc.';
+          var nroFmt = f.nro || (f.fecha_pago ? 'venc. '+f.fecha_pago : '—');
           return '<tr>'
-            +'<td style="padding:7px 14px;font-family:\'Roboto Mono\',monospace;font-size:11px;white-space:nowrap;border-bottom:1px solid var(--border);">'+(f.nro||'—')+'</td>'
+            +'<td style="padding:7px 14px;font-family:\'Roboto Mono\',monospace;font-size:11px;white-space:nowrap;border-bottom:1px solid var(--border);">'+esc(nroFmt)+'</td>'
             +'<td style="padding:7px 14px;white-space:nowrap;border-bottom:1px solid var(--border);">'+(f.fecha_factura||'—')+'</td>'
             +'<td style="padding:7px 14px;text-align:center;border-bottom:1px solid var(--border);"><span class="inv-dias-pill" style="background:'+cd.bg+';color:'+cd.color+'">'+diasTxt+'</span></td>'
             +'<td style="padding:7px 14px;text-align:right;font-weight:600;font-family:\'Roboto Mono\',monospace;border-bottom:1px solid var(--border);">$'+fmtL(f.saldo)+'</td>'
@@ -1108,7 +1114,7 @@ function openVdModal(tipo, vendedor) {
 
     var invHtml = '<div class="inv-inner">'
       + '<table class="inv-fac-table"><thead><tr>'
-      + '<th>N° Comprobante</th><th>Fecha Emisión</th><th style="text-align:center">Antigüedad</th><th style="text-align:right">Saldo Pendiente</th>'
+      + '<th>N° Comprobante</th><th>Fecha Emisión</th><th style="text-align:center">Días desde venc.</th><th style="text-align:right">Saldo Pendiente</th>'
       + '</tr></thead><tbody>'+facRows+'</tbody></table></div>';
 
     return '<tr class="vd-tr-exp" id="vd-tr-'+idx+'" onclick="toggleInvRow('+idx+')">'
