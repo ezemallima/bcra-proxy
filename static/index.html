@@ -3651,7 +3651,10 @@ async function consultarCliente() {
       var _resc  = todosChq.filter(_chqIsLevantado).length;
       var _nopag = todosChq.filter(function(c){ return !_chqIsLevantado(c); }).length;
       chequesEl.innerHTML = buildChequesRiesgoHtml(todosChq, _cid);
-      setTimeout(function(){ initChequesDonut(_cid, _resc, _nopag); }, 60);
+      setTimeout(function(){
+        initChequesDonut(_cid, _resc, _nopag);
+        initChequesMonthlyChart(_cid + '-monthly', todosChq);
+      }, 60);
     }
   } catch(e) {
     if (e && e.name === 'AbortError') return;
@@ -3698,20 +3701,22 @@ function buildCtaCteHtml(data) {
       + '</div><div style="font-size:13px;color:#64748b;">Sin deuda registrada en Bodega Piattelli</div>';
   }
 
-  // DSO: días netos promedio (fechaFactura → fechaPago = fecha vencimiento)
+  // DSO: antigüedad ponderada por saldo = sum(saldo × días_desde_emisión) / saldo_total
+  // Mismo método que el Panel Director — mide cuántos días tiene el dinero pendiente
   var parseFecha = function(f) {
     if (!f) return null;
     var p = String(f).split('/');
     return p.length === 3 ? new Date(+p[2], +p[1]-1, +p[0]) : new Date(f);
   };
-  var conFechas = facturas.filter(function(f){ return f.fechaFactura && f.fechaPago && f.totalFactura > 0; });
   var dsoCliente = null;
-  if (conFechas.length) {
-    var diasDso = conFechas.map(function(f){
-      var d1 = parseFecha(f.fechaFactura), d2 = parseFecha(f.fechaPago);
-      return (d1 && d2) ? Math.max(0, Math.round((d2-d1)/86400000)) : null;
-    }).filter(function(d){ return d !== null && d < 365; });
-    if (diasDso.length) dsoCliente = Math.round(diasDso.reduce(function(s,d){return s+d;},0)/diasDso.length);
+  if (totalSaldo > 0) {
+    var hoyMs = Date.now();
+    var sumaPond = facturas.reduce(function(s,f){
+      var ff = parseFecha(f.fechaFactura);
+      var dias = ff ? Math.max(0, Math.round((hoyMs - ff.getTime()) / 86400000)) : 0;
+      return s + (f.saldo || 0) * dias;
+    }, 0);
+    dsoCliente = Math.round(sumaPond / totalSaldo);
   }
 
   var pendientes = facturas.filter(function(f){ return (f.saldo||0) > 0; });
@@ -3943,6 +3948,27 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
     var _usandoFallback = false;
     if (scoreServidor && scoreServidor.score) {
       scoreObjFinal = scoreServidor;
+      // Si el servidor incluyó cheques en la respuesta, usarlos directamente
+      // evita la carrera entre /fetch-score y /deudas/{cuit}/cheques
+      if (scoreServidor.cheques_data && typeof scoreServidor.cheques_data === 'object') {
+        window._chequesUltimaConsulta = scoreServidor.cheques_data;
+        var _todosChqS = _normalizarCheques(scoreServidor.cheques_data);
+        var _chqCard = document.getElementById('cheques-rechazados-card');
+        var _chqData = document.getElementById('cheques-rechazados-data');
+        if (_chqCard && _chqData) {
+          _chqCard.style.display = 'block';
+          _chqCard.style.borderLeft = _todosChqS.length ? '4px solid #ef4444' : '4px solid #10b981';
+          _chqCard.style.background = 'transparent';
+          var _cidS = 'chq-sc-' + Date.now();
+          var _rescS  = _todosChqS.filter(_chqIsLevantado).length;
+          var _nopagS = _todosChqS.filter(function(c){ return !_chqIsLevantado(c); }).length;
+          _chqData.innerHTML = buildChequesRiesgoHtml(_todosChqS, _cidS);
+          setTimeout(function(){
+            initChequesDonut(_cidS, _rescS, _nopagS);
+            initChequesMonthlyChart(_cidS + '-monthly', _todosChqS);
+          }, 60);
+        }
+      }
     } else {
       _usandoFallback = true;
       var _scoreMora = buscarEnMoras ? buscarEnMoras(cuit) : null;
@@ -3976,6 +4002,11 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
       else if (window._ultimoBcraData && window._ultimoBcraData.results && window._ultimoBcraData.results.periodos) _periHist = window._ultimoBcraData.results.periodos;
       renderBcraHistoryChart(_periHist);
       renderBcraHeatmap(_periHist);
+      // Si cheques llegaron con el score, re-renderizar el gráfico para mostrar
+      // los marcadores de cheques rechazados (overlay de _extraerMesesCheques)
+      if (scoreServidor && scoreServidor.cheques_data) {
+        renderBcraHistoryChart(_periHist);
+      }
     }
     // Guardar score correcto — tanto en alertas como en cartera local
     var alertaIdx = alertas.findIndex(function(a){ return a.cuit === cuit; });
@@ -4884,6 +4915,48 @@ async function exportarReporte() {
         doc.text(String(c.motivo||'-').substring(0,20), 165, y+3.5);
         y += 6;
       });
+      if (chqPdf.length > 10) {
+        doc.setFontSize(6.5); doc.setFont('helvetica','italic'); doc.setTextColor(148,163,184);
+        doc.text('... y ' + (chqPdf.length - 10) + ' cheque(s) adicional(es)', 12, y+3); y += 6;
+      }
+      // Mini gráfico: distribución mensual de rechazos (últimos 24 meses)
+      if (y > 250) { doc.addPage(); y = 15; }
+      y += 2;
+      doc.setFontSize(7.5); doc.setFont('helvetica','bold'); doc.setTextColor(71,85,105);
+      doc.text('Distribución mensual de rechazos (24m)', 10, y); y += 5;
+      var hoyPdf = new Date();
+      var mLabels = [], mCounts = [];
+      for (var mi = 23; mi >= 0; mi--) {
+        var md = new Date(hoyPdf.getFullYear(), hoyPdf.getMonth() - mi, 1);
+        mLabels.push(('0'+(md.getMonth()+1)).slice(-2) + '/' + String(md.getFullYear()).slice(-2));
+        mCounts.push(0);
+      }
+      chqPdf.forEach(function(c){
+        var f = c.fecha ? new Date(c.fecha) : null;
+        if (!f || isNaN(f)) return;
+        var lbl = ('0'+(f.getMonth()+1)).slice(-2) + '/' + String(f.getFullYear()).slice(-2);
+        var idx = mLabels.indexOf(lbl);
+        if (idx !== -1) mCounts[idx]++;
+      });
+      var maxCnt = Math.max.apply(null, mCounts) || 1;
+      var barMaxH = 10, barW = (W - 20) / 24;
+      // Draw bars
+      for (var bi = 0; bi < 24; bi++) {
+        var bx = 10 + bi * barW;
+        var bh = (mCounts[bi] / maxCnt) * barMaxH;
+        if (mCounts[bi] > 0) {
+          doc.setFillColor(239,68,68);
+        } else {
+          doc.setFillColor(226,232,240);
+        }
+        doc.rect(bx + 0.5, y + (barMaxH - bh), barW - 1, bh || 0.5, 'F');
+      }
+      // X-axis labels: every 6 months
+      doc.setFontSize(5); doc.setFont('helvetica','normal'); doc.setTextColor(148,163,184);
+      for (var li2 = 0; li2 < 24; li2 += 6) {
+        doc.text(mLabels[li2], 10 + li2 * barW + barW/2, y + barMaxH + 3.5, {align:'center'});
+      }
+      y += barMaxH + 7;
       y += 4;
     }
   }
@@ -4898,13 +4971,18 @@ async function exportarReporte() {
     var saldoTotalPdf = saldosPdf.total_saldo || 0;
     doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(71,85,105);
     doc.text('Saldo pendiente: $' + Math.round(saldoTotalPdf).toLocaleString('es-AR') + '  |  Facturas: ' + saldosPdf.facturas.length, 10, y+6);
-    // DSO del cliente
-    var pagadasPdf = (saldosPdf.facturas||[]).filter(function(f){ return f.fechaPago && (f.totalFactura||0) > 0; });
+    // DSO: antigüedad ponderada por saldo (igual que Panel Director)
+    var parseFePdf = function(s){ if(!s) return null; var p=String(s).split('/'); return p.length===3?new Date(+p[2],+p[1]-1,+p[0]):new Date(s); };
     var dsoPdf = null;
-    if (pagadasPdf.length) {
-      var parseFePdf = function(s){ if(!s) return null; var p=String(s).split('/'); return p.length===3?new Date(+p[2],+p[1]-1,+p[0]):new Date(s); };
-      var diasPdf = pagadasPdf.map(function(f){ var d1=parseFePdf(f.fechaFactura),d2=parseFePdf(f.fechaPago); return (d1&&d2)?Math.max(0,Math.round((d2-d1)/86400000)):null; }).filter(function(d){ return d!==null&&d<365; });
-      if (diasPdf.length) dsoPdf = Math.round(diasPdf.reduce(function(s,d){return s+d;},0)/diasPdf.length);
+    var saldoTotalPdfDso = (saldosPdf.facturas||[]).reduce(function(s,f){ return s+(f.saldo||0); }, 0);
+    if (saldoTotalPdfDso > 0) {
+      var hoyMsPdf = Date.now();
+      var sumaPondPdf = (saldosPdf.facturas||[]).reduce(function(s,f){
+        var ff = parseFePdf(f.fechaFactura);
+        var dias = ff ? Math.max(0, Math.round((hoyMsPdf - ff.getTime()) / 86400000)) : 0;
+        return s + (f.saldo||0) * dias;
+      }, 0);
+      dsoPdf = Math.round(sumaPondPdf / saldoTotalPdfDso);
     }
     if (dsoPdf !== null) doc.text('DSO cliente: ' + dsoPdf + ' dias promedio', 130, y+6);
     y += 13;
@@ -6497,6 +6575,30 @@ function _chqParseFecha(f) {
     return new Date(f);
   } catch(e) { return null; }
 }
+// Normaliza la respuesta cruda del API /deudas/{cuit}/cheques al array flat
+// que esperan buildChequesRiesgoHtml e initChequesMonthlyChart
+function _normalizarCheques(chData) {
+  var arr = [];
+  if (!chData) return arr;
+  var src = (chData.results !== undefined) ? (chData.results || {}) : chData;
+  (src.causales || []).forEach(function(causal) {
+    (causal.entidades || []).forEach(function(ent) {
+      (ent.detalle || []).forEach(function(ch) {
+        arr.push({
+          fecha:      ch.fechaRechazo || null,
+          motivo:     causal.causal || '-',
+          monto:      ch.monto || 0,
+          levantado:  !!ch.fechaPago,
+          entidad:    ent.entidad || ent.nombre || '-',
+          nroCheque:  ch.nroCheque || ch.numero || '-',
+          fechaPago:  ch.fechaPago || null
+        });
+      });
+    });
+  });
+  return arr;
+}
+
 function buildChequesRiesgoHtml(cheques, canvasId) {
   var fmt = function(n){ return (n||0).toLocaleString('es-AR'); };
   if (!cheques || !cheques.length)
@@ -6549,6 +6651,7 @@ function buildChequesRiesgoHtml(cheques, canvasId) {
       '<tbody>' + tableRows + '</tbody>' +
     '</table>' +
   '</div>';
+  var monthlyCanvasId = canvasId + '-monthly';
   return '<div class="chq-panel">' + banner +
     '<div class="chq-chart-row">' +
       '<canvas id="' + canvasId + '" width="120" height="120" style="flex-shrink:0"></canvas>' +
@@ -6561,6 +6664,10 @@ function buildChequesRiesgoHtml(cheques, canvasId) {
         '<div class="chq-sum-row"><span class="chq-sum-key">Recuperado</span><span class="chq-sum-val" style="color:#10b981">$' + fmt(montoResc) + '</span></div>' +
         '<div class="chq-sum-row"><span class="chq-sum-key">Pendiente</span><span class="chq-sum-val' + (montoNoPag>0?' danger':'') + '">$' + fmt(montoNoPag) + '</span></div>' +
       '</div>' +
+    '</div>' +
+    '<div style="margin-top:14px;">' +
+      '<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Rechazos por mes (24m)</div>' +
+      '<canvas id="' + monthlyCanvasId + '" height="70" style="width:100%;max-width:100%;display:block;"></canvas>' +
     '</div>' +
     '<div class="chq-ia"><span class="chq-ia-label">Análisis de Tendencia</span><span class="chq-ia-text">' + iaText + '</span></div>' +
     tabla +
@@ -6586,6 +6693,46 @@ function initChequesDonut(canvasId, rescN, nopagN) {
           return ' '+c.label+': '+c.parsed+' ('+pct+'%)';
         }}}},
       animation: { duration: 500 } }
+  });
+}
+
+function initChequesMonthlyChart(canvasId, cheques) {
+  var ctx = document.getElementById(canvasId);
+  if (!ctx || typeof Chart === 'undefined') return;
+  // Generar etiquetas para los últimos 24 meses
+  var hoy = new Date();
+  var labels = [], counts = [], colors = [];
+  for (var i = 23; i >= 0; i--) {
+    var d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
+    labels.push(('0'+(d.getMonth()+1)).slice(-2) + '/' + String(d.getFullYear()).slice(-2));
+    counts.push(0);
+  }
+  // Contar rechazos por mes
+  (cheques || []).forEach(function(c) {
+    var f = _chqParseFecha(c.fecha);
+    if (!f) return;
+    var lbl = ('0'+(f.getMonth()+1)).slice(-2) + '/' + String(f.getFullYear()).slice(-2);
+    var idx = labels.indexOf(lbl);
+    if (idx !== -1) counts[idx]++;
+  });
+  // Colorear barras: rojo si hay rechazos, verde si hay meses sin rechazo
+  for (var j = 0; j < counts.length; j++) {
+    colors.push(counts[j] > 0 ? '#ef4444' : '#e2e8f0');
+  }
+  new Chart(ctx, {
+    type: 'bar',
+    data: { labels: labels, datasets: [{ data: counts, backgroundColor: colors, borderRadius: 3, borderSkipped: false }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false },
+        tooltip: { callbacks: { label: function(c){ return ' ' + c.parsed + ' rechazo(s)'; } } } },
+      scales: {
+        x: { ticks: { font: { size: 9 }, maxRotation: 45, color: '#94a3b8' }, grid: { display: false } },
+        y: { ticks: { font: { size: 9 }, color: '#94a3b8', stepSize: 1, precision: 0 }, grid: { color: '#f1f5f9' },
+             min: 0, suggestedMax: Math.max(3, Math.max.apply(null, counts) + 1) }
+      },
+      animation: { duration: 400 }
+    }
   });
 }
 
@@ -6665,7 +6812,10 @@ async function consultarCheque() {
       var _resc2 = cheques.filter(_chqIsLevantado).length;
       var _nopag2 = cheques.filter(function(c){ return !_chqIsLevantado(c); }).length;
       chEl.innerHTML = buildChequesRiesgoHtml(cheques, _cid2);
-      setTimeout(function(){ initChequesDonut(_cid2, _resc2, _nopag2); }, 60);
+      setTimeout(function(){
+        initChequesDonut(_cid2, _resc2, _nopag2);
+        initChequesMonthlyChart(_cid2 + '-monthly', cheques);
+      }, 60);
     }
   }
 

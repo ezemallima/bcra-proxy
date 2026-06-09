@@ -5720,8 +5720,8 @@ def limpiar_solvency():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
-def _score_response(score_data: dict, solvency: dict = None) -> dict:
-    """Pasamanos transparente: devuelve score_data completo + campos de solvencia.
+def _score_response(score_data: dict, solvency: dict = None, cheq_data: dict = None) -> dict:
+    """Pasamanos transparente: devuelve score_data completo + campos de solvencia + cheques.
     Usa json.dumps(default=str) para serializar sin excepciones de tipo."""
     sol = solvency if isinstance(solvency, dict) else {}
     # Serializar y deserializar con default=str para eliminar cualquier tipo
@@ -5756,6 +5756,10 @@ def _score_response(score_data: dict, solvency: dict = None) -> dict:
     _safe.setdefault("mora_tecnica",         False)
     _safe.setdefault("nota_mora_tecnica",    None)
     _safe.setdefault("semaforo",             'verde' if (_safe.get('score') or 0) >= 700 else ('amarillo' if (_safe.get('score') or 0) >= 400 else 'rojo'))
+
+    # Cheques rechazados — incluidos para que el frontend los muestre sin fetch extra
+    if isinstance(cheq_data, dict):
+        _safe["cheques_data"] = cheq_data
 
     # LOG DE CONTROL: campos críticos que el frontend necesita
     print(
@@ -5896,7 +5900,9 @@ def _calcular_score_handler(cuit: str):
         solvency     = get_solvency_data(cuit_limpio)
         if not isinstance(solvency, dict): solvency = {}
         _actualizar_score_en_cartera(cuit_limpio, score_data, solvency)
-        return jsonify(_score_response(score_data, solvency))
+        # Incluir cheques en la respuesta: calcular_score_servidor ya los cacheó en disco
+        cheq_cached = _cheques_cache_get(cuit_limpio)
+        return jsonify(_score_response(score_data, solvency, cheq_cached))
     except Exception as e:
         import traceback
         print(f"[score] ERROR {cuit_limpio}: {e}\n{traceback.format_exc()}", flush=True)
@@ -7081,8 +7087,33 @@ def upload_saldos_gestion():
         wb = openpyxl.load_workbook(io.BytesIO(file.read()))
         ws = wb.active
         primera = [str(c or '').strip() for c in next(ws.iter_rows(min_row=1, max_row=1, values_only=True))]
-        tiene_header = any(p.upper() in ('VENDEDOR', 'CLIENTE', 'SALDO', 'TOTAL', 'FACTURA', 'NUMERO') for p in primera)
+        tiene_header = any(p.upper() in ('VENDEDOR', 'CLIENTE', 'SALDO', 'TOTAL', 'FACTURA', 'NUMERO', 'VENCIM', 'EMISION', 'ADEUDADO', 'PENDIENTE') for p in primera)
         min_row = 2 if tiene_header else 1
+
+        # Detección posicional por nombre de encabezado (tolerante a variantes Odoo)
+        if tiene_header:
+            hu = [str(c or '').upper().strip() for c in primera]
+            _ci = lambda *kws: next((i for i, h in enumerate(hu) if any(k in h for k in kws)), None)
+            _col_v  = _ci('VENDEDOR', 'SALESPERSON', 'RESPONSABLE', 'COMERCIAL')
+            _col_c  = _ci('CLIENTE', 'PARTNER', 'CONTACTO', 'EMPRESA', 'RAZON')
+            _col_nf = _ci('FACTURA', 'NUMERO', 'N°', 'NRO', 'COMPROBANTE', 'INVOICE', 'REFERENCIA')
+            # Fecha factura: busca "EMISION" o "FECHA FAC" primero; si no, primera "FECHA" sin "VENCIM"/"PAG"
+            _col_ff = _ci('EMISION', 'FECHA FAC', 'FECHA DE FAC') or \
+                      next((i for i, h in enumerate(hu) if 'FECHA' in h and 'VENCIM' not in h and 'PAG' not in h and 'DUE' not in h), None)
+            _col_fp = _ci('VENCIM', 'DUE DATE', 'FECHA VEN', 'FECHA PAG', 'FECHA PAGO')
+            _col_t  = _ci('TOTAL FAC', 'TOTAL COMP', 'IMPORTE TOTAL', 'AMOUNT DUE') or \
+                      next((i for i, h in enumerate(hu) if 'TOTAL' in h and 'SALDO' not in h and 'ADEUDADO' not in h and 'PENDIENTE' not in h), None)
+            _col_s  = _ci('SALDO PEND', 'IMPORTE ADEUD', 'ADEUDADO', 'PENDIENTE DE COBRO', 'IMPORTE PEND', 'SALDO PENDIENTE') or _ci('SALDO')
+            col_v  = _col_v  if _col_v  is not None else 0
+            col_c  = _col_c  if _col_c  is not None else 1
+            col_nf = _col_nf if _col_nf is not None else 2
+            col_ff = _col_ff if _col_ff is not None else 3
+            col_fp = _col_fp if _col_fp is not None else 4
+            col_t  = _col_t  if _col_t  is not None else 5
+            col_s  = _col_s  if _col_s  is not None else 6
+        else:
+            col_v = 0; col_c = 1; col_nf = 2; col_ff = 3; col_fp = 4; col_t = 5; col_s = 6
+
         def fmt_fecha(d):
             if not d: return ''
             if hasattr(d, 'strftime'): return d.strftime('%d/%m/%Y')
@@ -7094,7 +7125,13 @@ def upload_saldos_gestion():
         for row in ws.iter_rows(min_row=min_row, values_only=True):
             if not row: continue
             vals = list(row) + [None] * 9
-            vendedor, cliente, nro_fac, fecha_fac, fecha_pago, total, saldo = vals[:7]
+            vendedor  = vals[col_v]
+            cliente   = vals[col_c]
+            nro_fac   = vals[col_nf]
+            fecha_fac = vals[col_ff]
+            fecha_pago = vals[col_fp]
+            total     = vals[col_t]
+            saldo     = vals[col_s]
             if not cliente: continue
             try: saldo_f = float(saldo or 0)
             except: saldo_f = 0
@@ -7852,8 +7889,31 @@ def upload_saldos_facturas():
 
         # Detectar si primera fila es encabezado textual
         primera = [str(c or '').strip() for c in next(ws.iter_rows(min_row=1, max_row=1, values_only=True))]
-        tiene_header = any(p.upper() in ('VENDEDOR', 'CLIENTE', 'SALDO', 'TOTAL', 'FACTURA', 'NUMERO') for p in primera)
+        tiene_header = any(p.upper() in ('VENDEDOR', 'CLIENTE', 'SALDO', 'TOTAL', 'FACTURA', 'NUMERO', 'VENCIM', 'EMISION', 'ADEUDADO', 'PENDIENTE') for p in primera)
         min_row = 2 if tiene_header else 1
+
+        # Detección posicional por nombre de encabezado (tolerante a variantes Odoo)
+        if tiene_header:
+            hu = [str(c or '').upper().strip() for c in primera]
+            _ci = lambda *kws: next((i for i, h in enumerate(hu) if any(k in h for k in kws)), None)
+            _col_v  = _ci('VENDEDOR', 'SALESPERSON', 'RESPONSABLE', 'COMERCIAL')
+            _col_c  = _ci('CLIENTE', 'PARTNER', 'CONTACTO', 'EMPRESA', 'RAZON')
+            _col_nf = _ci('FACTURA', 'NUMERO', 'N°', 'NRO', 'COMPROBANTE', 'INVOICE', 'REFERENCIA')
+            _col_ff = _ci('EMISION', 'FECHA FAC', 'FECHA DE FAC') or \
+                      next((i for i, h in enumerate(hu) if 'FECHA' in h and 'VENCIM' not in h and 'PAG' not in h and 'DUE' not in h), None)
+            _col_fp = _ci('VENCIM', 'DUE DATE', 'FECHA VEN', 'FECHA PAG', 'FECHA PAGO')
+            _col_t  = _ci('TOTAL FAC', 'TOTAL COMP', 'IMPORTE TOTAL', 'AMOUNT DUE') or \
+                      next((i for i, h in enumerate(hu) if 'TOTAL' in h and 'SALDO' not in h and 'ADEUDADO' not in h and 'PENDIENTE' not in h), None)
+            _col_s  = _ci('SALDO PEND', 'IMPORTE ADEUD', 'ADEUDADO', 'PENDIENTE DE COBRO', 'IMPORTE PEND', 'SALDO PENDIENTE') or _ci('SALDO')
+            col_v  = _col_v  if _col_v  is not None else 0
+            col_c  = _col_c  if _col_c  is not None else 1
+            col_nf = _col_nf if _col_nf is not None else 2
+            col_ff = _col_ff if _col_ff is not None else 3
+            col_fp = _col_fp if _col_fp is not None else 4
+            col_t  = _col_t  if _col_t  is not None else 5
+            col_s  = _col_s  if _col_s  is not None else 6
+        else:
+            col_v = 0; col_c = 1; col_nf = 2; col_ff = 3; col_fp = 4; col_t = 5; col_s = 6
 
         def fmt_fecha(d):
             if not d: return ''
@@ -7867,7 +7927,13 @@ def upload_saldos_facturas():
         for row in ws.iter_rows(min_row=min_row, values_only=True):
             if not row: continue
             vals = list(row) + [None] * 9
-            vendedor, cliente, nro_fac, fecha_fac, fecha_pago, total, saldo = vals[:7]
+            vendedor   = vals[col_v]
+            cliente    = vals[col_c]
+            nro_fac    = vals[col_nf]
+            fecha_fac  = vals[col_ff]
+            fecha_pago = vals[col_fp]
+            total      = vals[col_t]
+            saldo      = vals[col_s]
             if not cliente: continue
             try: saldo_f = float(saldo or 0)
             except: saldo_f = 0
