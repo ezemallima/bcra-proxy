@@ -384,6 +384,22 @@
   .alr-card-meta { font-size: 11px; color: var(--texto-suave); margin-top: 1px; }
   .alr-card-right { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; text-align: right; }
 
+  /* ── ACORDEÓN FACTURAS en tarjetas de alertas ── */
+  .alr-wrap { margin-bottom: 7px; }
+  .alr-wrap > .alr-card { margin-bottom: 0; border-radius: 12px 12px 0 0; transition: border-radius 0.15s; }
+  .alr-wrap > .alr-card.collapsed { border-radius: 12px; }
+  .alr-acc { background:#f8fafc; border:1px solid #e2e8f0; border-top:none; border-radius:0 0 12px 12px; overflow:hidden; }
+  .alr-fac-table { width:100%; border-collapse:collapse; font-size:12px; }
+  .alr-fac-table thead tr { background:#eff6ff; }
+  .alr-fac-table th { padding:8px 12px; text-align:left; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; color:#1e40af; white-space:nowrap; border-bottom:2px solid #bfdbfe; }
+  .alr-fac-table td { padding:7px 12px; border-bottom:1px solid #f1f5f9; color:#334155; white-space:nowrap; }
+  .alr-fac-table tbody tr:last-child td { border-bottom:none; }
+  .alr-fac-table tbody tr:hover td { background:#f0f7ff; }
+  .alr-fac-dias { display:inline-block; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:700; }
+  .alr-acc-msg { padding:14px 16px; font-size:12px; color:#64748b; }
+  .alr-chevron { transition:transform 0.2s; display:inline-block; }
+  .alr-chevron.open { transform:rotate(180deg); }
+
   /* ── FICHA BUSCADOR v29 ── */
   .ficha-card { background: #fff; border-radius: 16px; border: 1px solid rgba(226,232,240,0.8); box-shadow: var(--card-shadow); overflow: hidden; transition: all 0.22s; margin-bottom: 12px; }
   .ficha-card:hover { box-shadow: var(--card-shadow-hover); border-color: #bfdbfe; }
@@ -6222,7 +6238,8 @@ function _renderAlertasList() {
     var verificadoTxt = c.ultimaVerif ? c.ultimaVerif : 'Sin verificar';
     var sd = _alrScoreData(c);
     var _cuitRow = c.cuit.replace(/-/g,'');
-    var html = '<div class="alr-card ' + cardClass + '" onclick="verCliente(\'' + c.cuit + '\')">';
+    var html = '<div class="alr-wrap" id="alr-wrap-'+_cuitRow+'">';
+    html += '<div class="alr-card ' + cardClass + ' collapsed" id="alr-card-'+_cuitRow+'" onclick="toggleAlrAccordion(\''+_cuitRow+'\')">';
     html += '<div class="alr-card-avatar ' + avatarClass + '">' + initials + '</div>';
     html += '<div class="alr-card-body">';
     if (statusClass) html += '<div class="alr-card-status ' + statusClass + '">' + statusTxt + '</div>';
@@ -6239,10 +6256,97 @@ function _renderAlertasList() {
     }
     html += '</div>';
     if (c.ultimaSit) html += getBadge(c.ultimaSit);
-    html += '<button onclick="event.stopPropagation();verCliente(\''+c.cuit+'\')" style="margin-top:6px;font-size:11px;font-weight:600;padding:4px 10px;background:#2563eb;color:#fff;border:none;border-radius:6px;cursor:pointer;letter-spacing:0.2px;">🔍 Ver</button>';
+    html += '<div style="display:flex;align-items:center;gap:6px;margin-top:6px;">';
+    html += '<button onclick="event.stopPropagation();verCliente(\''+c.cuit+'\')" style="font-size:11px;font-weight:600;padding:4px 10px;background:#2563eb;color:#fff;border:none;border-radius:6px;cursor:pointer;letter-spacing:0.2px;">🔍 Ver</button>';
+    html += '<svg id="alr-chev-'+_cuitRow+'" class="alr-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+    html += '</div>';
     html += '</div></div>';
+    html += '<div class="alr-acc" id="alr-acc-'+_cuitRow+'" style="display:none"></div>';
+    html += '</div>';
     return html;
   }).join('');
+}
+
+// ── Acordeón de comprobantes — caché en sesión, se invalida al recargar ──────
+var _alrAccCache = {};
+
+function _diasDesdeEmision(fechaStr) {
+  if (!fechaStr) return null;
+  var p = String(fechaStr).split('/');
+  var d = p.length === 3 ? new Date(+p[2], +p[1]-1, +p[0]) : new Date(fechaStr);
+  if (isNaN(d)) return null;
+  return Math.floor((Date.now() - d.getTime()) / 86400000);
+}
+
+function _colorDiasAlr(dias) {
+  if (!dias || dias <= 0) return { bg:'#dcfce7', color:'#166534' };
+  if (dias <= 30)         return { bg:'#dbeafe', color:'#1d4ed8' };
+  if (dias <= 60)         return { bg:'#fef9c3', color:'#854d0e' };
+  if (dias <= 90)         return { bg:'#ffedd5', color:'#9a3412' };
+  return { bg:'#fee2e2', color:'#991b1b' };
+}
+
+function _buildFacTableHtml(facturas) {
+  var pendientes = (facturas||[]).filter(function(f){ return (f.saldo||0) > 0; });
+  if (!pendientes.length) {
+    return '<div class="alr-acc-msg">Sin comprobantes pendientes de cobro.</div>';
+  }
+  var sorted = pendientes.slice().sort(function(a,b){ return (b.saldo||0)-(a.saldo||0); });
+  var fmtL = function(n){ return Math.round(n||0).toLocaleString('es-AR'); };
+  var rows = sorted.map(function(f) {
+    var nro   = f.nroFactura || f.nro_factura || '—';
+    var fecha = f.fechaFactura || f.fecha_factura || '—';
+    var dias  = _diasDesdeEmision(fecha);
+    var cd    = _colorDiasAlr(dias);
+    var diasTxt = dias != null ? dias + 'd' : '—';
+    return '<tr>'
+      + '<td>' + esc(nro) + '</td>'
+      + '<td style="white-space:nowrap">' + esc(fecha) + '</td>'
+      + '<td style="text-align:center"><span class="alr-fac-dias" style="background:'+cd.bg+';color:'+cd.color+'">'+diasTxt+'</span></td>'
+      + '<td style="text-align:right;font-weight:600">$' + fmtL(f.saldo) + '</td>'
+      + '</tr>';
+  }).join('');
+  var total = pendientes.reduce(function(s,f){ return s+(f.saldo||0); },0);
+  return '<table class="alr-fac-table">'
+    + '<thead><tr>'
+    + '<th>N° Comprobante</th><th>Fecha Emisión</th>'
+    + '<th style="text-align:center">Antigüedad</th>'
+    + '<th style="text-align:right">Saldo Pendiente</th>'
+    + '</tr></thead>'
+    + '<tbody>' + rows + '</tbody>'
+    + '<tfoot><tr>'
+    + '<td colspan="3" style="padding:8px 12px;font-size:11px;font-weight:700;color:#475569;border-top:2px solid #bfdbfe;">Total pendiente</td>'
+    + '<td style="padding:8px 12px;text-align:right;font-weight:800;font-size:13px;color:#1e40af;border-top:2px solid #bfdbfe;">$' + fmtL(total) + '</td>'
+    + '</tr></tfoot>'
+    + '</table>';
+}
+
+async function toggleAlrAccordion(cuitRow) {
+  var acc  = document.getElementById('alr-acc-'  + cuitRow);
+  var card = document.getElementById('alr-card-' + cuitRow);
+  var chev = document.getElementById('alr-chev-' + cuitRow);
+  if (!acc) return;
+  var isOpen = acc.style.display !== 'none';
+  if (isOpen) {
+    acc.style.display = 'none';
+    if (card) card.classList.add('collapsed');
+    if (chev) chev.classList.remove('open');
+    return;
+  }
+  acc.style.display = 'block';
+  if (card) card.classList.remove('collapsed');
+  if (chev) chev.classList.add('open');
+  if (_alrAccCache[cuitRow]) { acc.innerHTML = _alrAccCache[cuitRow]; return; }
+  acc.innerHTML = '<div class="alr-acc-msg">Cargando comprobantes...</div>';
+  try {
+    var r = await fetch('/saldos-cuit/' + cuitRow, { signal: AbortSignal.timeout(8000) });
+    var d = await r.json();
+    var html = _buildFacTableHtml(d.facturas);
+    _alrAccCache[cuitRow] = html;
+    acc.innerHTML = html;
+  } catch(e) {
+    acc.innerHTML = '<div class="alr-acc-msg" style="color:#dc2626">Error al cargar comprobantes.</div>';
+  }
 }
 
 function renderBuscador(filtro) {

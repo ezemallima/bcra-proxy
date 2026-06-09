@@ -482,6 +482,22 @@ body {
   white-space: nowrap;
 }
 
+/* ── Sub-tabla de comprobantes en modal ── */
+.inv-row > td { padding: 0; }
+.inv-inner { padding: 0 0 0 32px; background: #f8fafc; border-bottom: 2px solid var(--blue-mid); }
+.inv-fac-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.inv-fac-table thead tr { background: var(--blue-light); }
+.inv-fac-table th { padding: 7px 14px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--blue-text); white-space: nowrap; border-bottom: 1px solid var(--blue-mid); }
+.inv-fac-table td { padding: 7px 14px; border-bottom: 1px solid var(--border); color: var(--text); white-space: nowrap; }
+.inv-fac-table tbody tr:last-child td { border-bottom: none; }
+.inv-fac-table tbody tr:hover td { background: #eff6ff; }
+.inv-fac-total td { font-weight: 700; background: var(--blue-light); border-top: 2px solid var(--blue-mid) !important; }
+.vd-tr-exp { cursor: pointer; }
+.vd-tr-exp:hover .vd-td { background: #f0f7ff; }
+.vd-expand-icon { display: inline-block; transition: transform 0.18s; font-style: normal; font-size: 10px; margin-right: 5px; color: var(--text3); }
+.vd-tr-exp.open .vd-expand-icon { transform: rotate(90deg); }
+.inv-dias-pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700; }
+
 /* ── LOADING / SPINNER ── */
 .loading-wrap {
   display: flex; flex-direction: column; align-items: center;
@@ -1042,15 +1058,15 @@ function openVdModal(tipo, vendedor) {
     + (isOp ? ' con score Excelente (≥700) sin bloqueo'
              : ' con facturas >20d, BCRA Sit.≥2 o alerta de score');
 
-  // Encabezado tabla
+  // Encabezado tabla — col extra para el ícono de expansión
   document.getElementById('vd-modal-thead').innerHTML =
-    ['Cliente','CUIT','Ciudad','Score','Estado','Saldo'].map(function(h){
-      return '<th class="vd-th">'+h+'</th>';
+    ['','Cliente','CUIT','Ciudad','Score','Estado','Saldo'].map(function(h){
+      return '<th class="vd-th" style="'+(h===''?'width:28px;padding:9px 6px;':'')+'">'+h+'</th>';
     }).join('');
 
-  // Filas — orden por saldo desc
+  // Filas — orden por saldo desc; cada cliente lleva una fila de comprobantes oculta
   var sorted = lista.slice().sort(function(a,b){ return (b.saldo_total||0)-(a.saldo_total||0); });
-  document.getElementById('vd-modal-tbody').innerHTML = sorted.map(function(c) {
+  document.getElementById('vd-modal-tbody').innerHTML = sorted.map(function(c, idx) {
     var sc = c.score;
     var scColor = colorScore(sc);
     var sit = c.ultimaSit||1;
@@ -1058,7 +1074,6 @@ function openVdModal(tipo, vendedor) {
       ? c.cuit.slice(0,2)+'-'+c.cuit.slice(2,10)+'-'+c.cuit.slice(10) : (c.cuit||'—');
     var estado = '';
     if (!isOp) {
-      // Mostrar el motivo de criticidad más relevante
       if ((c.ultimaSit||1)>=3) estado = '<span class="vd-badge" style="background:#fee2e2;color:#dc2626">BCRA Sit.'+sit+'</span>';
       else if ((c.ultimaSit||1)===2) estado = '<span class="vd-badge" style="background:#fef9c3;color:#ca8a04">BCRA Sit.2</span>';
       else if (c.alerta_temprana) estado = '<span class="vd-badge" style="background:#ffedd5;color:#ea580c">Alerta score</span>';
@@ -1069,7 +1084,35 @@ function openVdModal(tipo, vendedor) {
     } else {
       estado = '<span class="vd-badge" style="background:#dcfce7;color:#16a34a">'+esc(c.rango||'Excelente')+'</span>';
     }
-    return '<tr class="vd-tr">'
+
+    // Sub-tabla de comprobantes (saldo>0), ordenada por saldo desc
+    var facs = (c.facturas||[]).filter(function(f){ return (f.saldo||0)>0; })
+                               .sort(function(a,b){ return (b.saldo||0)-(a.saldo||0); });
+    var fmtL = function(n){ return Math.round(n||0).toLocaleString('es-AR'); };
+    var facRows = facs.length
+      ? facs.map(function(f) {
+          var cd = colorDias(f.dias||0);
+          var diasTxt = (f.dias||0)===0 ? 'Al día' : (f.dias||0)+'d';
+          return '<tr>'
+            +'<td style="padding:7px 14px;font-family:\'Roboto Mono\',monospace;font-size:11px;white-space:nowrap;border-bottom:1px solid var(--border);">'+(f.nro||'—')+'</td>'
+            +'<td style="padding:7px 14px;white-space:nowrap;border-bottom:1px solid var(--border);">'+(f.fecha_factura||'—')+'</td>'
+            +'<td style="padding:7px 14px;text-align:center;border-bottom:1px solid var(--border);"><span class="inv-dias-pill" style="background:'+cd.bg+';color:'+cd.color+'">'+diasTxt+'</span></td>'
+            +'<td style="padding:7px 14px;text-align:right;font-weight:600;font-family:\'Roboto Mono\',monospace;border-bottom:1px solid var(--border);">$'+fmtL(f.saldo)+'</td>'
+            +'</tr>';
+        }).join('')
+        + '<tr class="inv-fac-total">'
+        + '<td colspan="3" style="padding:7px 14px;font-size:11px;font-weight:700;color:var(--blue-text);letter-spacing:0.3px;">Total pendiente</td>'
+        + '<td style="padding:7px 14px;text-align:right;font-size:13px;font-weight:800;color:var(--blue-text);font-family:\'Roboto Mono\',monospace;">$'+fmtL(facs.reduce(function(s,f){return s+(f.saldo||0);},0))+'</td>'
+        + '</tr>'
+      : '<tr><td colspan="4" style="padding:10px 14px;color:var(--text3);font-style:italic;">Sin comprobantes pendientes.</td></tr>';
+
+    var invHtml = '<div class="inv-inner">'
+      + '<table class="inv-fac-table"><thead><tr>'
+      + '<th>N° Comprobante</th><th>Fecha Emisión</th><th style="text-align:center">Antigüedad</th><th style="text-align:right">Saldo Pendiente</th>'
+      + '</tr></thead><tbody>'+facRows+'</tbody></table></div>';
+
+    return '<tr class="vd-tr-exp" id="vd-tr-'+idx+'" onclick="toggleInvRow('+idx+')">'
+      +'<td class="vd-td" style="padding:10px 6px;text-align:center;"><span class="vd-expand-icon">▶</span></td>'
       +'<td class="vd-td" style="font-weight:600;color:var(--text);min-width:160px;">'+esc(c.nombre||'—')+'</td>'
       +'<td class="vd-td" style="font-family:\'Roboto Mono\',monospace;font-size:12px;white-space:nowrap;">'+cuitFmt+'</td>'
       +'<td class="vd-td" style="white-space:nowrap;">'+esc(c.ciudad||'—')+'</td>'
@@ -1078,6 +1121,9 @@ function openVdModal(tipo, vendedor) {
       +'</td>'
       +'<td class="vd-td">'+estado+'</td>'
       +'<td class="vd-td" style="font-family:\'Roboto Mono\',monospace;font-weight:700;color:var(--text);white-space:nowrap;text-align:right;">'+fmt(c.saldo_total)+'</td>'
+      +'</tr>'
+      +'<tr class="inv-row" id="inv-row-'+idx+'" style="display:none">'
+      +'<td colspan="7">'+invHtml+'</td>'
       +'</tr>';
   }).join('');
 
@@ -1091,6 +1137,15 @@ function closeVdModal(evt) {
   var modal = document.getElementById('vd-modal');
   modal.style.display = 'none';
   document.body.style.overflow = '';
+}
+
+function toggleInvRow(idx) {
+  var row  = document.getElementById('inv-row-' + idx);
+  var head = document.getElementById('vd-tr-'   + idx);
+  if (!row) return;
+  var open = row.style.display !== 'none';
+  row.style.display = open ? 'none' : 'table-row';
+  if (head) head.classList.toggle('open', !open);
 }
 
 // ─── Interacciones comunes ─────────────────────────────────────────────────
