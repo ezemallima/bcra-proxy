@@ -3690,7 +3690,7 @@ def api_director_data():
             nombre_a_cuit[_nombre_raw.upper()] = _ck       # exacto
             nombre_a_cuit[_norm_nombre(_nombre_raw)] = _ck  # normalizado sin puntuación
 
-    # Índice CUIT → ciudad, limiteCredito desde _cartera_comercial
+    # Índice CUIT → ciudad, limiteCredito, vendedor desde _cartera_comercial
     cc_info_map: dict = {}
     for _cc in _cartera_comercial:
         _ck = _nc(str(_cc.get('cuit') or ''))
@@ -3698,6 +3698,7 @@ def api_director_data():
             cc_info_map[_ck] = {
                 'ciudad':        str(_cc.get('ciudad') or '').strip(),
                 'limiteCredito': float(_cc.get('limiteCredito') or 0),
+                'vendedor':      str(_cc.get('vendedor') or '').strip(),
             }
 
     # Cargar scores desde alertas_cartera.json (CUIT como clave)
@@ -3782,10 +3783,19 @@ def api_director_data():
             pass
     if not _fuente_director:
         _fuente_director = _saldos_gestion if _saldos_gestion else _saldos_facturas
-    # Enriquecer vendedor en los registros que no lo traigan
+    # Enriquecer vendedor: 1) _vend_enrich (saldos_gestion) → 2) cartera_comercial
     for _fd in _fuente_director:
         if not str(_fd.get('vendedor') or '').strip():
-            _fd['vendedor'] = _vend_enrich.get(_norm_nombre(str(_fd.get('cliente') or '')), '')
+            _cli_norm_fd = _norm_nombre(str(_fd.get('cliente') or ''))
+            _cuit_fd     = _nc(str(_fd.get('cuit') or ''))
+            # Si tampoco viene CUIT, intentar resolverlo por nombre (igual que abajo)
+            if not _cuit_fd:
+                _cuit_fd = nombre_a_cuit.get(str(_fd.get('cliente') or '').upper(), '') \
+                        or nombre_a_cuit.get(_cli_norm_fd, '')
+            _fd['vendedor'] = (
+                _vend_enrich.get(_cli_norm_fd, '')
+                or cc_info_map.get(_cuit_fd, {}).get('vendedor', '')
+            )
 
     # Agrupar facturas por cliente
     clientes_map: dict = {}
