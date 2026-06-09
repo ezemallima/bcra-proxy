@@ -36,15 +36,16 @@ CUIT_API_URL    = os.environ.get('API_SOLVENCY_URL', '')
 SCRAPERAPI_KEY  = os.environ.get('SCRAPERAPI_KEY', '')
 
 # ── Bright Data Web Unlocker — motor de consultas en vivo ───────────────────
-# Proxy residencial de producción. Cadena: Bright Data → ScraperAPI → directo.
-# BRIGHTDATA_API_KEY es la API Key oficial del panel de administración (tiene prioridad sobre BRIGHTDATA_PASS).
+# Proxy residencial zona 'vendeseguro'. Credenciales en Render env vars.
+# BRIGHTDATA_PASS   = contraseña de la zona residencial (prioridad absoluta)
+# BRIGHTDATA_API_KEY = API key de administración (solo fallback legacy)
 BRIGHTDATA_USER    = os.environ.get('BRIGHTDATA_USER', 'brd-customer-hl_cc5957d6-zone-vendeseguro')
+BRIGHTDATA_PASS    = os.environ.get('BRIGHTDATA_PASS', '')
 BRIGHTDATA_API_KEY = os.environ.get('BRIGHTDATA_API_KEY', '')
-BRIGHTDATA_PASS    = os.environ.get('BRIGHTDATA_PASS', '')   # fallback legacy; preferir BRIGHTDATA_API_KEY
 BRIGHTDATA_HOST    = os.environ.get('BRIGHTDATA_HOST', 'brd.superproxy.io')
 BRIGHTDATA_PORT    = int(os.environ.get('BRIGHTDATA_PORT', '33335'))
-# Contraseña efectiva: API Key si está cargada, sino BRIGHTDATA_PASS
-_BRD_PASSWORD      = BRIGHTDATA_API_KEY or BRIGHTDATA_PASS
+# Contraseña efectiva: zona residencial (BRIGHTDATA_PASS) tiene prioridad sobre API key
+_BRD_PASSWORD      = BRIGHTDATA_PASS or BRIGHTDATA_API_KEY
 
 ADMIN_CUIT = '30710295022'
 ADMIN_PASS = 'Artel2026'
