@@ -4395,6 +4395,7 @@ def guardar_cliente():
 def get_cartera_por_vendedor(vendedor):
     """Fuente: cartera_comercial.json (todos los clientes del vendedor).
     Saldo viene del cruce con _saldos_gestion. Nunca limita a clientes con saldo."""
+    _saldos_gestion_desde_disco()   # sincroniza si otro worker subió datos
     from urllib.parse import unquote
     v = unquote(vendedor).strip().lower()
 
@@ -6683,6 +6684,15 @@ _saldos_gestion = _saldos_gestion_loaded if _saldos_gestion_loaded else list(_sa
 if not _saldos_gestion_loaded:
     print("[gestion] Usando saldos_facturas como fallback inicial para gestión", flush=True)
 
+# Mtime tracking para detectar uploads en otros workers (gunicorn multi-worker)
+_SG_FILE       = os.path.join(DATA_DIR, 'saldos_gestion_vendedores.json')
+_SG_MTIME: float = 0.0
+_SG_LAST_CHECK: float = 0.0
+try:
+    _SG_MTIME = os.path.getmtime(_SG_FILE) if os.path.exists(_SG_FILE) else 0.0
+except Exception:
+    pass
+
 # Caché del DSO global ponderado (Σ dso_i×saldo_i / Σ saldo_i) calculado en /api/dso-todos.
 # Lo lee /api/director-data para incluirlo en su respuesta sin necesidad de un segundo fetch.
 _dso_global_ponderado_cache: int | None = None
@@ -6710,6 +6720,32 @@ def _rebuild_saldos_index():
     _saldos_idx_nombre = idx_n
     print(f"[idx] {len(idx_c)} CUITs · {len(idx_n)} nombres indexados "
           f"({len(fuente)} registros)", flush=True)
+
+def _saldos_gestion_desde_disco() -> None:
+    """Detecta si saldos_gestion_vendedores.json cambió en disco (upload en otro worker)
+    y recarga _saldos_gestion + índices si es así. Debounce de 10s para no estatear
+    el filesystem en cada request. Seguro para gunicorn sync-workers (no hay threading)."""
+    global _saldos_gestion, _SG_MTIME, _SG_LAST_CHECK
+    now = time.time()
+    if now - _SG_LAST_CHECK < 10:
+        return                     # revisado hace menos de 10s — no restat
+    _SG_LAST_CHECK = now
+    if not os.path.exists(_SG_FILE):
+        return
+    try:
+        mtime = os.path.getmtime(_SG_FILE)
+        if mtime <= _SG_MTIME:
+            return                 # archivo no cambió
+        with open(_SG_FILE, 'r', encoding='utf-8') as f:
+            fresh = json.load(f)
+        if not isinstance(fresh, list) or not fresh:
+            return
+        _saldos_gestion = fresh
+        _SG_MTIME = mtime
+        _rebuild_saldos_index()
+        print(f"[sg-reload] worker detectó upload externo — {len(fresh)} registros recargados", flush=True)
+    except Exception as _e:
+        print(f"[sg-reload] error ({_e}), manteniendo memoria", flush=True)
 
 def _buscar_por_nombre_en_idx(nombre: str) -> list:
     """Match estricto de 2 niveles — sin fuzzy ni aproximaciones por palabras genéricas.
@@ -6787,6 +6823,7 @@ def get_solvencia_endpoint(cuit):
 
 @app.route("/saldos-cliente/<cliente>")
 def get_saldos_cliente(cliente):
+    _saldos_gestion_desde_disco()
     from urllib.parse import unquote
     nombre_original = unquote(cliente)
     cn = _norm_nombre(nombre_original)
@@ -6828,6 +6865,7 @@ def get_saldos_cliente(cliente):
 @app.route("/saldos-cuit/<cuit>")
 def get_saldos_cuit(cuit):
     """Busca facturas por CUIT (prioridad absoluta). Si no hay CUIT en registros, cae a nombre + fuzzy."""
+    _saldos_gestion_desde_disco()
     from urllib.parse import unquote
     cuit_limpio = str(unquote(cuit)).replace('-', '').replace(' ', '').strip()
     fuente_g = _saldos_gestion if _saldos_gestion else _saldos_facturas
@@ -6878,6 +6916,7 @@ def api_facturas_por_cuit(cuit):
     normal es siempre por nombre. El CUIT se usa como llave para encontrar el
     nombre canónico en cartera_comercial.
     """
+    _saldos_gestion_desde_disco()   # sincroniza si otro worker subió datos
     from urllib.parse import unquote
     cuit_limpio = str(unquote(cuit)).replace('-', '').replace(' ', '').strip()
     nombre_hint = request.args.get('nombre', '').strip()
@@ -7156,6 +7195,13 @@ def upload_saldos_gestion():
         _saldos_gestion  = saldos
         _saldos_facturas = list(saldos)   # sincronizar SSoT para que el índice siempre sea fresco
         _rebuild_saldos_index()
+        # Actualizar mtime tracking para que este worker no recargue innecesariamente
+        global _SG_MTIME, _SG_LAST_CHECK
+        try:
+            _SG_MTIME = os.path.getmtime(sg_path)
+        except Exception:
+            pass
+        _SG_LAST_CHECK = time.time()
         # Auto-sync: corregir asignaciones de vendedor en cartera_comercial según el reporte
         try:
             _cambios = _sync_cartera_vendedores(saldos)
@@ -7967,6 +8013,13 @@ def upload_saldos_facturas():
         _saldos_facturas = saldos
         _saldos_gestion  = list(saldos)   # SSoT: facturas siempre sincroniza gestión
         _rebuild_saldos_index()
+        # Actualizar mtime tracking (upload_saldos_facturas también persiste gestión a disco)
+        global _SG_MTIME, _SG_LAST_CHECK
+        try:
+            _SG_MTIME = os.path.getmtime(_SG_FILE) if os.path.exists(_SG_FILE) else time.time()
+        except Exception:
+            pass
+        _SG_LAST_CHECK = time.time()
         print(f"[saldos] {len(saldos)} facturas importadas (Odoo positional) — gestión sincronizada", flush=True)
         return jsonify({"ok": True, "total": len(saldos)})
     except Exception as e:
