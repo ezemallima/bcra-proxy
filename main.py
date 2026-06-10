@@ -46,6 +46,15 @@ BRIGHTDATA_HOST    = os.environ.get('BRIGHTDATA_HOST', 'brd.superproxy.io')
 BRIGHTDATA_PORT    = int(os.environ.get('BRIGHTDATA_PORT', '33335'))
 # Contraseña efectiva: zona residencial (BRIGHTDATA_PASS) tiene prioridad sobre API key
 _BRD_PASSWORD      = BRIGHTDATA_PASS or BRIGHTDATA_API_KEY
+# Log diagnóstico al iniciar — ayuda a detectar credenciales incorrectas o ausentes
+_brd_pass_src = 'BRIGHTDATA_PASS' if BRIGHTDATA_PASS else ('BRIGHTDATA_API_KEY' if BRIGHTDATA_API_KEY else 'NINGUNA')
+_brd_pass_len = len(_BRD_PASSWORD)
+print(
+    f"[brightdata] user={BRIGHTDATA_USER} | host={BRIGHTDATA_HOST}:{BRIGHTDATA_PORT} | "
+    f"pass_src={_brd_pass_src} | pass_len={_brd_pass_len} | "
+    f"{'OK — credenciales configuradas' if _brd_pass_len > 0 else 'ADVERTENCIA — sin contraseña, Bright Data deshabilitado'}",
+    flush=True
+)
 
 ADMIN_CUIT = '30710295022'
 ADMIN_PASS = 'Artel2026'
@@ -2977,7 +2986,7 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
         return None
 
     hist_data = _cache_load(f'historial_{cuit_limpio}.json')
-    cheq_data = _cache_load(f'cheques_{cuit_limpio}.json')
+    cheq_data = _cheques_cache_get(cuit_limpio)   # usa TTL diferenciado: 1h "sin cheques", 24h con datos
 
     if not hist_data:
         for _wu in [w + "/deudas/" + cuit_limpio + "/historial" for w in BCRA_WORKERS][:2]:
@@ -3012,12 +3021,13 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
                             json.dump({'payload': cheq_data, 'ts': time.time()}, f)
                     except: pass
                     break
-                elif r.status_code == 404:
-                    cheq_data = {"results": {"causales": []}, "sin_deudas": True}
-                    break
+                # No hacer break en 404: los workers devuelven 404 cuando no
+                # soportan el sub-path /cheques, no porque el CUIT no tenga cheques.
+                # Solo el BCRA oficial puede confirmar ausencia de antecedentes.
             except Exception as ec:
                 print(f"[score wrapper] cheq worker {cuit_limpio}: {ec}", flush=True)
         if not cheq_data:
+            # Consulta directa al BCRA — única fuente confiable para cheques
             _cd, _ = _consultar_bcra_directo(cuit_limpio, 'cheques')
             if _cd:
                 cheq_data = _cd
@@ -6115,9 +6125,25 @@ def _cheques_cache_get(cuit):
         if os.path.exists(path):
             with open(path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            if time.time() - data.get('ts', 0) < 86400:
-                print(f"[cheques] {cuit} desde caché disco", flush=True)
-                return data.get('payload')
+            edad = time.time() - data.get('ts', 0)
+            payload = data.get('payload')
+            if not isinstance(payload, dict):
+                return None
+            _causales = (payload.get('results') or {}).get('causales') or []
+            if _causales:
+                # Tiene cheques reales → caché válido 24h
+                if edad < 86400:
+                    print(f"[cheques] {cuit} desde caché disco ({len(_causales)} causales)", flush=True)
+                    return payload
+            else:
+                # "Sin antecedentes" → caché corto de 1h.
+                # Los workers devuelven 404 aunque el CUIT tenga cheques (no soportan
+                # el sub-path), por lo que un "sin cheques" cacheado puede ser falso.
+                # Re-intentar cada hora asegura que el BCRA oficial confirme la ausencia.
+                if edad < 3600:
+                    print(f"[cheques] {cuit} sin antecedentes (caché 1h)", flush=True)
+                    return payload
+                print(f"[cheques] {cuit} caché 'sin cheques' expirado — reintentando BCRA", flush=True)
     except: pass
     return None
 
@@ -6141,7 +6167,12 @@ def get_cheques(cuit):
         try:
             r = _bcra_get(url, timeout=tmt) if 'bcra.gob.ar' in url else requests.get(url, timeout=tmt, verify=False)
             if r.status_code == 404:
-                return 'NOT_FOUND', via
+                # Solo los endpoints BCRA oficiales tienen autoridad para decir
+                # que un CUIT no tiene cheques. Los workers Cloudflare devuelven
+                # 404 cuando no soportan el sub-path — eso no es "sin cheques".
+                if 'bcra.gob.ar' in url:
+                    return 'NOT_FOUND', via
+                return None, via   # worker 404 = ruta no soportada, no "sin datos"
             if r.status_code == 200 and len(r.text.strip()) > 10:
                 d = _norm_bcra_resp(r.json())
                 if d.get('results') is not None:
