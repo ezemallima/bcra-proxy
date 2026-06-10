@@ -3612,6 +3612,7 @@ async function consultarCliente() {
 
   // Cheques rechazados BCRA — siempre mostrar el módulo
   window._chequesUltimaConsulta = null;
+  window._chequesDirectOK = false;  // flag: el fetch directo ya renderizó con datos reales
   var chequesCard = document.getElementById('cheques-rechazados-card');
   var chequesEl = document.getElementById('cheques-rechazados-data');
   if (chequesCard && chequesEl) {
@@ -3651,6 +3652,7 @@ async function consultarCliente() {
       var _resc  = todosChq.filter(_chqIsLevantado).length;
       var _nopag = todosChq.filter(function(c){ return !_chqIsLevantado(c); }).length;
       chequesEl.innerHTML = buildChequesRiesgoHtml(todosChq, _cid);
+      if (todosChq.length > 0) window._chequesDirectOK = true;
       setTimeout(function(){
         initChequesDonut(_cid, _resc, _nopag);
         initChequesMonthlyChart(_cid + '-monthly', todosChq);
@@ -3948,9 +3950,10 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
     var _usandoFallback = false;
     if (scoreServidor && scoreServidor.score) {
       scoreObjFinal = scoreServidor;
-      // Si el servidor incluyó cheques en la respuesta, usarlos directamente
-      // evita la carrera entre /fetch-score y /deudas/{cuit}/cheques
-      if (scoreServidor.cheques_data && typeof scoreServidor.cheques_data === 'object') {
+      // Fallback: si el fetch directo de cheques no trajo datos, inyectar desde el score.
+      // Si el fetch directo ya renderizó con cheques reales, NO sobreescribir —
+      // el doble render destruye el canvas inicializado y deja el área negra.
+      if (scoreServidor.cheques_data && typeof scoreServidor.cheques_data === 'object' && !window._chequesDirectOK) {
         window._chequesUltimaConsulta = scoreServidor.cheques_data;
         var _todosChqS = _normalizarCheques(scoreServidor.cheques_data);
         var _chqCard = document.getElementById('cheques-rechazados-card');
@@ -6667,7 +6670,7 @@ function buildChequesRiesgoHtml(cheques, canvasId) {
     '</div>' +
     '<div style="margin-top:14px;">' +
       '<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Rechazos por mes (24m)</div>' +
-      '<canvas id="' + monthlyCanvasId + '" height="70" style="width:100%;max-width:100%;display:block;"></canvas>' +
+      '<canvas id="' + monthlyCanvasId + '" style="display:block;width:100%;height:80px;"></canvas>' +
     '</div>' +
     '<div class="chq-ia"><span class="chq-ia-label">Análisis de Tendencia</span><span class="chq-ia-text">' + iaText + '</span></div>' +
     tabla +
@@ -6719,11 +6722,17 @@ function initChequesMonthlyChart(canvasId, cheques) {
   for (var j = 0; j < counts.length; j++) {
     colors.push(counts[j] > 0 ? '#ef4444' : '#e2e8f0');
   }
+  // responsive:false con dimensiones fijas evita la expansión infinita del canvas
+  // cuando el contenedor padre no tiene altura explícita (causa "todo negro y bajar mucho")
+  ctx.style.width  = '100%';
+  ctx.style.height = '80px';
+  ctx.width  = ctx.parentElement ? ctx.parentElement.offsetWidth || 400 : 400;
+  ctx.height = 80;
   new Chart(ctx, {
     type: 'bar',
     data: { labels: labels, datasets: [{ data: counts, backgroundColor: colors, borderRadius: 3, borderSkipped: false }] },
     options: {
-      responsive: true, maintainAspectRatio: false,
+      responsive: false,
       plugins: { legend: { display: false },
         tooltip: { callbacks: { label: function(c){ return ' ' + c.parsed + ' rechazo(s)'; } } } },
       scales: {
