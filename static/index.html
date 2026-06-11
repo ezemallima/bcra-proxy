@@ -3807,23 +3807,10 @@ function buildCtaCteHtml(data) {
       + '</div><div style="font-size:13px;color:#64748b;">Sin deuda registrada en Bodega Piattelli</div>';
   }
 
-  // DSO: antigüedad ponderada por saldo = sum(saldo × días_desde_emisión) / saldo_total
-  // Mismo método que el Panel Director — mide cuántos días tiene el dinero pendiente
-  var parseFecha = function(f) {
-    if (!f) return null;
-    var p = String(f).split('/');
-    return p.length === 3 ? new Date(+p[2], +p[1]-1, +p[0]) : new Date(f);
-  };
-  var dsoCliente = null;
-  if (totalSaldo > 0) {
-    var hoyMs = Date.now();
-    var sumaPond = facturas.reduce(function(s,f){
-      var ff = parseFecha(f.fechaFactura);
-      var dias = ff ? Math.max(0, Math.round((hoyMs - ff.getTime()) / 86400000)) : 0;
-      return s + (f.saldo || 0) * dias;
-    }, 0);
-    dsoCliente = Math.round(sumaPond / totalSaldo);
-  }
+  // DSO: usa el valor calculado por el servidor (reporte mensual completo).
+  // Mismo método que la app de Director: Σ(saldo × días_desde_emisión) / Σ(saldo),
+  // pero con historial completo de facturas (no solo el upload semanal).
+  var dsoCliente = (data.dso_aging != null) ? data.dso_aging : null;
 
   var pendientes = facturas.filter(function(f){ return (f.saldo||0) > 0; });
 
