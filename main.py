@@ -6927,6 +6927,46 @@ def get_saldos_cliente(cliente):
     total_saldo = sum(f.get('saldo', 0) for f in result)
     return jsonify({"facturas": result, "total_saldo": total_saldo, "cantidad": len(result)})
 
+def _calc_dso_aging_mensual(cuit_limpio: str) -> int | None:
+    """DSO aging desde dso_saldos_actual.json (reporte mensual completo) filtrando por CUIT.
+    Usa Σ(saldo × días_desde_fecha_factura) / Σ(saldo). Retorna None si no hay datos."""
+    from datetime import date
+    _path = os.path.join(DATA_DIR, 'dso_saldos_actual.json')
+    if not os.path.exists(_path):
+        return None
+    try:
+        _saldos = json.load(open(_path, 'r', encoding='utf-8')).get('saldos', [])
+    except Exception:
+        return None
+    hoy = date.today()
+    cuit_n = cuit_limpio.replace('-', '').replace(' ', '').strip()
+    suma_pond, suma_saldo = 0.0, 0.0
+    for f in _saldos:
+        if str(f.get('cuit', '')).replace('-', '').replace(' ', '').strip() != cuit_n:
+            continue
+        saldo = float(f.get('saldo') or 0)
+        if saldo <= 0:
+            continue
+        ff_str = str(f.get('fecha_factura') or f.get('fechaFactura') or '').strip()
+        dias = 0
+        try:
+            if '/' in ff_str:
+                p = ff_str.split('/')
+                ff = date(int(p[2]), int(p[1]), int(p[0]))
+                dias = max(0, (hoy - ff).days)
+            elif '-' in ff_str and len(ff_str) >= 10:
+                p = ff_str.split('-')
+                ff = date(int(p[0]), int(p[1]), int(p[2]))
+                dias = max(0, (hoy - ff).days)
+        except Exception:
+            dias = 0
+        suma_pond  += saldo * dias
+        suma_saldo += saldo
+    if suma_saldo <= 0:
+        return None
+    return round(suma_pond / suma_saldo)
+
+
 def _calc_dso_aging(facturas: list) -> int | None:
     """DSO por antigüedad: Σ(saldo × días_desde_fechaFactura) / Σ(saldo).
     Acepta fechaFactura en DD/MM/YYYY o YYYY-MM-DD (ISO).  Retorna None si saldo total = 0."""
@@ -6971,7 +7011,7 @@ def get_saldos_cuit(cuit):
         total_saldo = sum(f.get('saldo', 0) for f in result)
         nombre_m = result[0].get('cliente', '')
         enriched, monto_v30, alerta30 = _enrich_con_mora(result)
-        dso_aging = _calc_dso_aging(enriched)
+        dso_aging = _calc_dso_aging_mensual(cuit_limpio) or _calc_dso_aging(enriched)
         print(f"[saldos-cuit] CUIT {cuit_limpio}: {len(enriched)} facturas, vencido30=${monto_v30:,.0f}, dso_aging={dso_aging}", flush=True)
         return jsonify({"facturas": enriched, "total_saldo": total_saldo, "cantidad": len(enriched),
                         "monto_pendiente_vencido": monto_v30, "alerta_mora_30": alerta30,
@@ -6997,7 +7037,7 @@ def get_saldos_cuit(cuit):
                     print(f"[saldos-cuit] Fuzzy '{nombre_en_cartera}' → {len(result)} facturas", flush=True)
         total_saldo = sum(f.get('saldo', 0) for f in result)
         enriched, monto_v30, alerta30 = _enrich_con_mora(result)
-        dso_aging = _calc_dso_aging(enriched)
+        dso_aging = _calc_dso_aging_mensual(cuit_limpio) or _calc_dso_aging(enriched)
         print(f"[saldos-cuit] Nombre '{nombre_en_cartera}': {len(enriched)} facturas, vencido30=${monto_v30:,.0f}, dso_aging={dso_aging}", flush=True)
         return jsonify({"facturas": enriched, "total_saldo": total_saldo, "cantidad": len(enriched),
                         "monto_pendiente_vencido": monto_v30, "alerta_mora_30": alerta30,
