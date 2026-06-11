@@ -6892,6 +6892,30 @@ def get_saldos_cliente(cliente):
     total_saldo = sum(f.get('saldo', 0) for f in result)
     return jsonify({"facturas": result, "total_saldo": total_saldo, "cantidad": len(result)})
 
+def _calc_dso_aging(facturas: list) -> int | None:
+    """DSO por antigüedad: Σ(saldo × días_desde_fechaFactura) / Σ(saldo).
+    Usa fechaFactura en formato DD/MM/YYYY.  Retorna None si saldo total = 0."""
+    from datetime import date
+    hoy = date.today()
+    suma_pond, suma_saldo = 0.0, 0.0
+    for f in facturas:
+        saldo = float(f.get('saldo') or 0)
+        if saldo <= 0:
+            continue
+        ff_str = str(f.get('fechaFactura') or '')
+        try:
+            d, m, y = ff_str.strip().split('/')
+            ff = date(int(y), int(m), int(d))
+            dias = max(0, (hoy - ff).days)
+        except Exception:
+            dias = 0
+        suma_pond  += saldo * dias
+        suma_saldo += saldo
+    if suma_saldo <= 0:
+        return None
+    return round(suma_pond / suma_saldo)
+
+
 @app.route("/saldos-cuit/<cuit>")
 def get_saldos_cuit(cuit):
     """Busca facturas por CUIT (prioridad absoluta). Si no hay CUIT en registros, cae a nombre + fuzzy."""
@@ -6906,9 +6930,11 @@ def get_saldos_cuit(cuit):
         total_saldo = sum(f.get('saldo', 0) for f in result)
         nombre_m = result[0].get('cliente', '')
         enriched, monto_v30, alerta30 = _enrich_con_mora(result)
-        print(f"[saldos-cuit] CUIT {cuit_limpio}: {len(enriched)} facturas, vencido30=${monto_v30:,.0f}", flush=True)
+        dso_aging = _calc_dso_aging(enriched)
+        print(f"[saldos-cuit] CUIT {cuit_limpio}: {len(enriched)} facturas, vencido30=${monto_v30:,.0f}, dso_aging={dso_aging}", flush=True)
         return jsonify({"facturas": enriched, "total_saldo": total_saldo, "cantidad": len(enriched),
                         "monto_pendiente_vencido": monto_v30, "alerta_mora_30": alerta30,
+                        "dso_aging": dso_aging,
                         "metodo": "cuit", "nombre_match": nombre_m})
     # Prioridad 2: nombre canónico desde cartera_comercial → exact → fuzzy
     nombre_en_cartera = next(
@@ -6930,13 +6956,23 @@ def get_saldos_cuit(cuit):
                     print(f"[saldos-cuit] Fuzzy '{nombre_en_cartera}' → {len(result)} facturas", flush=True)
         total_saldo = sum(f.get('saldo', 0) for f in result)
         enriched, monto_v30, alerta30 = _enrich_con_mora(result)
-        print(f"[saldos-cuit] Nombre '{nombre_en_cartera}': {len(enriched)} facturas, vencido30=${monto_v30:,.0f}", flush=True)
+        dso_aging = _calc_dso_aging(enriched)
+        print(f"[saldos-cuit] Nombre '{nombre_en_cartera}': {len(enriched)} facturas, vencido30=${monto_v30:,.0f}, dso_aging={dso_aging}", flush=True)
         return jsonify({"facturas": enriched, "total_saldo": total_saldo, "cantidad": len(enriched),
                         "monto_pendiente_vencido": monto_v30, "alerta_mora_30": alerta30,
+                        "dso_aging": dso_aging,
                         "metodo": "nombre", "nombre_match": nombre_en_cartera})
     print(f"[saldos-cuit] CUIT {cuit_limpio}: sin match en cartera_comercial", flush=True)
     return jsonify({"facturas": [], "total_saldo": 0, "cantidad": 0,
                     "monto_pendiente_vencido": 0, "alerta_mora_30": False, "metodo": "nulo"})
+
+
+@app.route("/api/cartera-saldos")
+@require_login
+def api_cartera_saldos():
+    """Portfolio de saldos — mismos datos que /api/director-data, accesible a todos los usuarios logueados."""
+    return api_director_data.__wrapped__()
+
 
 @app.route("/api/facturas/<cuit>")
 def api_facturas_por_cuit(cuit):

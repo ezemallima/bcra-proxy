@@ -576,6 +576,78 @@
   .bcra-hm-leg-item { display:flex; align-items:center; gap:5px; font-size:10px; color:#64748b; }
   .bcra-hm-leg-cell { width:12px; height:12px; border-radius:2px; flex-shrink:0; border:1px solid rgba(0,0,0,0.07); }
   #bcra-hm-tip { position:fixed; background:#0f172a; color:#f1f5f9; font-size:11px; line-height:1.6; padding:7px 11px; border-radius:7px; pointer-events:none; z-index:9999; display:none; max-width:230px; box-shadow:0 4px 14px rgba(0,0,0,0.35); white-space:pre; }
+
+  /* ── PORTFOLIO MODULE ─────────────────────────────────────────────────── */
+  .pf-spinner { width:24px; height:24px; border:3px solid #e2e8f0; border-top-color:#2563eb; border-radius:50%; animation:spin 0.8s linear infinite; flex-shrink:0; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .pf-kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:16px; }
+  .pf-kpi-card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:14px 16px; cursor:pointer; transition:box-shadow 0.15s,transform 0.15s; position:relative; overflow:hidden; }
+  .pf-kpi-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:var(--pf-kpi-color,#2563eb); }
+  .pf-kpi-card:hover { box-shadow:0 4px 16px rgba(0,0,0,0.1); transform:translateY(-1px); }
+  .pf-kpi-card.pf-active-filter { border-color:var(--pf-kpi-color,#2563eb); box-shadow:0 0 0 2px var(--pf-kpi-color,#2563eb)33; }
+  .pf-kpi-label { font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.6px; margin-bottom:6px; }
+  .pf-kpi-value { font-size:22px; font-weight:800; color:var(--pf-kpi-color,#0f172a); line-height:1; margin-bottom:4px; font-family:'Syne',sans-serif; }
+  .pf-kpi-sub { font-size:11px; color:#94a3b8; }
+  .pf-aging-card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px 18px; margin-bottom:16px; }
+  .pf-aging-title { font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.7px; margin-bottom:12px; }
+  .pf-aging-bar-wrap { height:22px; border-radius:6px; overflow:hidden; display:flex; margin-bottom:10px; background:#f1f5f9; }
+  .pf-aging-seg { height:100%; transition:width 0.5s cubic-bezier(0.34,1.2,0.64,1); }
+  .pf-aging-legend { display:flex; gap:14px; flex-wrap:wrap; }
+  .pf-aging-leg-item { display:flex; align-items:center; gap:5px; font-size:11px; color:#475569; }
+  .pf-aging-leg-dot { width:10px; height:10px; border-radius:2px; flex-shrink:0; }
+  .pf-aging-leg-pct { font-weight:700; color:#0f172a; }
+  .pf-controls { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
+  .pf-search-wrap { position:relative; flex:1; min-width:200px; }
+  .pf-search-icon { position:absolute; left:10px; top:50%; transform:translateY(-50%); color:#94a3b8; pointer-events:none; }
+  .pf-search-box { width:100%; padding:8px 10px 8px 32px; border:1px solid #e2e8f0; border-radius:8px; font-size:13px; color:#0f172a; background:#fff; box-sizing:border-box; outline:none; }
+  .pf-search-box:focus { border-color:#2563eb; }
+  .pf-filter-select { padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:13px; color:#0f172a; background:#fff; cursor:pointer; outline:none; }
+  .pf-sort-btn { padding:7px 13px; border:1px solid #e2e8f0; border-radius:8px; font-size:12px; font-weight:600; color:#475569; background:#fff; cursor:pointer; transition:all 0.15s; white-space:nowrap; }
+  .pf-sort-btn:hover { border-color:#2563eb; color:#2563eb; }
+  .pf-sort-btn.pf-active { border-color:#2563eb; color:#2563eb; background:#eff6ff; }
+  .pf-results-count { font-size:12px; color:#94a3b8; margin-left:auto; }
+  .pf-table-card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; }
+  .pf-table-head { display:grid; grid-template-columns:2fr 90px 70px 120px 160px 40px; gap:0; padding:10px 18px; background:#f8fafc; border-bottom:1px solid #e2e8f0; font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.5px; }
+  .pf-client-row { border-bottom:1px solid #f1f5f9; }
+  .pf-client-row:last-child { border-bottom:none; }
+  .pf-client-row-main { display:grid; grid-template-columns:2fr 90px 70px 120px 160px 40px; gap:0; padding:12px 18px; align-items:center; cursor:pointer; transition:background 0.12s; }
+  .pf-client-row-main:hover { background:#f8faff; }
+  .pf-client-row.pf-expanded .pf-client-row-main { background:#eff6ff; }
+  .pf-client-name { font-size:14px; font-weight:700; color:#0f172a; }
+  .pf-client-cuit { font-size:11px; color:#64748b; margin-top:2px; }
+  .pf-client-vend { color:#2563eb; font-weight:600; }
+  .pf-score-badge { display:inline-block; padding:3px 10px; border-radius:20px; font-size:13px; font-weight:800; border:1.5px solid; }
+  .pf-score-rango { font-size:10px; font-weight:600; margin-top:3px; }
+  .pf-dso-val { font-size:20px; font-weight:800; line-height:1; }
+  .pf-dso-label { font-size:10px; color:#64748b; }
+  .pf-saldo-total { font-size:15px; font-weight:800; font-family:'Syne',sans-serif; color:#0f172a; }
+  .pf-mini-aging { display:flex; flex-direction:column; gap:4px; }
+  .pf-mini-bar-wrap { height:8px; border-radius:4px; overflow:hidden; display:flex; background:#f1f5f9; }
+  .pf-mini-bar-seg { height:100%; }
+  .pf-mini-aging-labels { display:flex; gap:6px; flex-wrap:wrap; }
+  .pf-mini-label { font-size:10px; color:#475569; }
+  .pf-expand-btn { width:28px; height:28px; border:1px solid #e2e8f0; border-radius:7px; background:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#64748b; transition:all 0.15s; }
+  .pf-expand-btn:hover { border-color:#2563eb; color:#2563eb; }
+  .pf-client-row.pf-expanded .pf-expand-btn { transform:rotate(180deg); background:#eff6ff; color:#2563eb; border-color:#2563eb; }
+  .pf-invoice-detail { display:none; padding:0 18px 14px; border-top:1px solid #eff6ff; background:#f8faff; }
+  .pf-client-row.pf-expanded .pf-invoice-detail { display:block; }
+  .pf-invoice-table { width:100%; border-collapse:collapse; font-size:12px; margin-top:10px; }
+  .pf-invoice-table th { padding:7px 10px; text-align:left; font-size:10px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.5px; border-bottom:1px solid #e2e8f0; background:#f8fafc; }
+  .pf-invoice-table td { padding:8px 10px; border-bottom:1px solid #f1f5f9; color:#334155; vertical-align:middle; }
+  .pf-invoice-table tr:last-child td { border-bottom:none; }
+  .pf-invoice-table tr:hover td { background:#f0f7ff; }
+  .pf-invoice-nro { font-family:'Roboto Mono',monospace; font-size:11px; font-weight:600; color:#0f172a; }
+  .pf-invoice-tfoot td { padding:8px 10px; font-weight:700; font-size:11px; color:#334155; background:#f1f5f9; }
+  .pf-dias-pill { display:inline-block; padding:2px 8px; border-radius:12px; font-size:11px; font-weight:700; }
+  .pf-empty-row { padding:32px; text-align:center; color:#94a3b8; font-size:14px; }
+  @media (max-width:768px) {
+    .pf-kpi-grid { grid-template-columns:repeat(2,1fr); }
+    .pf-table-head { display:none; }
+    .pf-client-row-main { grid-template-columns:1fr 70px 40px; }
+    .pf-client-row-main>*:nth-child(n+2):nth-child(-n+5) { display:none; }
+    .pf-client-row-main>*:nth-child(2), .pf-client-row-main>*:nth-child(6) { display:block; }
+  }
+
   @media (max-width:768px) {
     .bcra-hm-th-entity { min-width:82px; width:82px; }
     .bcra-hm-th-monto { left:82px; min-width:56px; width:56px; padding-right:8px !important; }
@@ -698,6 +770,10 @@
       <button class="tab" onclick="switchTab('cartera',this)" title="Cartera de clientes">
         <span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
         <span class="sb-label">Cartera</span>
+      </button>
+      <button class="tab" onclick="switchTab('portfolio',this)" title="Portfolio de saldos">
+        <span class="sb-ico"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
+        <span class="sb-label">Portfolio</span>
       </button>
       <button class="tab" onclick="switchTab('dso',this)" title="Días de venta pendiente">
         <span class="sb-ico"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
@@ -937,6 +1013,26 @@
       <input type="text" id="buscar-cartera-admin" class="buscador-input" placeholder="Buscar cliente por nombre o CUIT..." oninput="filtrarListaCartera(this.value)" translate="no" autocomplete="off" spellcheck="false" />
     </div>
     <div id="lista-clientes"><div class="empty-state">No hay clientes en seguimiento.</div></div>
+  </div>
+
+  <!-- ══ PORTFOLIO DE SALDOS ══════════════════════════════════════════════ -->
+  <div id="portfolio" class="section">
+    <div id="pf-loading" style="display:flex;align-items:center;justify-content:center;padding:60px 0;gap:14px;">
+      <div class="pf-spinner"></div>
+      <span style="color:#64748b;font-size:14px;">Cargando portfolio...</span>
+    </div>
+    <div id="pf-error" style="display:none;padding:32px;text-align:center;color:#dc2626;font-weight:600;"></div>
+    <div id="pf-content" style="display:none;">
+      <div id="pf-kpi-grid"></div>
+      <div id="pf-aging-section"></div>
+      <div id="pf-controls"></div>
+      <div class="pf-table-card">
+        <div class="pf-table-head">
+          <div>Cliente</div><div>Score</div><div>DSO</div><div>Saldo Total</div><div>Aging</div><div></div>
+        </div>
+        <div id="pf-clientes-body"></div>
+      </div>
+    </div>
   </div>
 
   <div id="dso" class="section">
@@ -2460,8 +2556,12 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
     var enCart = cartera.find(function(c){ return c.cuit === cuit; });
     var nombreCliente = enCart ? enCart.nombre.split(',')[0].trim() : '';
     var dsoCliente = null;
+    // Prioridad 0: DSO por antigüedad de facturas (el mismo cálculo que el Director)
+    if (window._dsoClienteActual != null) {
+      dsoCliente = { dso: window._dsoClienteActual, nombre: nombreCliente };
+    }
     // Prioridad 1: dso_datos del cálculo actual
-    if (typeof dso_datos !== 'undefined' && dso_datos && nombreCliente) {
+    if (!dsoCliente && typeof dso_datos !== 'undefined' && dso_datos && nombreCliente) {
       var nombreBase = nombreCliente.split(' ')[0].toLowerCase();
       dsoCliente = dso_datos.find(function(d){
         return d.nombre && d.nombre.toLowerCase().indexOf(nombreBase) !== -1;
@@ -3331,7 +3431,7 @@ function filtrarWSPReciente(threads) {
 }
 function buscarEnMoras(cuit) { return morasIndex ? morasIndex[cuit.replace(/-/g,'')] || null : null; }
 
-var _pageTitles = {consulta:'Consultar CUIT', cheques:'Análisis de Cheques', historial:'Historial de Consultas', buscador:'Buscador Premium', cartera:'Gestión de Cartera', dso:'Módulo DSO', alertas:'Alertas BCRA', red:'Red de Bodegas', configuracion:'Configuración'};
+var _pageTitles = {consulta:'Consultar CUIT', cheques:'Análisis de Cheques', historial:'Historial de Consultas', buscador:'Buscador Premium', cartera:'Gestión de Cartera', portfolio:'Portfolio de Saldos', dso:'Módulo DSO', alertas:'Alertas BCRA', red:'Red de Bodegas', configuracion:'Configuración'};
 
 var _alertasFilter  = null; // 'critico' | 'advertencia' | 'exceso' | null
 var _alertasMoraData = null; // cache de /api/alertas-mora
@@ -3385,6 +3485,7 @@ function switchTab(tab, el) {
   if (tab === 'cheques') { document.getElementById('cheque-resultado').style.display='none'; }
   if (tab === 'historial') renderHistorial();
   if (tab === 'cartera') renderCartera();
+  if (tab === 'portfolio') cargarPortfolio();
   if (tab === 'buscador') renderBuscador('');
   if (tab === 'alertas') {
     _alertasFilter = null;
@@ -3518,6 +3619,7 @@ async function consultarCliente() {
   window._ultimoScoreVende = null;
   window._ultimoHistorial = null;
   window._saldosCliente = null;
+  window._dsoClienteActual = null;
   window._chequesUltimaConsulta = null;
 
   const mora = buscarEnMoras(raw);
@@ -3676,6 +3778,7 @@ async function consultarCliente() {
       var saldosData = await saldosR.json();
       console.log('[saldos] Datos:', saldosData.facturas ? saldosData.facturas.length + ' facturas' : 'sin facturas', '| saldo total:', saldosData.total_saldo, '| nombre match:', saldosData.nombre_match || '—');
       window._saldosCliente = saldosData;
+      window._dsoClienteActual = saldosData.dso_aging != null ? saldosData.dso_aging : null;
       renderSaldosInterno(saldosData, raw);
     } else {
       console.warn('[saldos] HTTP error:', saldosR.status);
@@ -4278,7 +4381,9 @@ async function analizarCliente() {
       ? ' ($' + _montoRiesgo.toLocaleString('es-AR') + ' en riesgo)' : '';
     return _activos + ' sin levantar / ' + _norm.length + ' total' + _mStr;
   })();
-  var dDSO       = _dv('DSO individual');
+  var dDSO = (window._dsoClienteActual != null)
+    ? window._dsoClienteActual + ' días (antigüedad de facturas)'
+    : _dv('DSO individual');
   var dPiattelli = _dv('Historial Piattelli');
   var dBodegas   = _dv('Red de Bodegas');
   var dConc      = _dv('Concentración deuda BCRA');
@@ -5874,6 +5979,7 @@ function mostrarErrorCuitInexistente(raw) {
   window._ultimoBcraData = null;
   window._ultimoScoreVende = null;
   window._saldosCliente = null;
+  window._dsoClienteActual = null;
   window._chequesUltimaConsulta = null;
 }
 
@@ -5908,6 +6014,7 @@ function nuevaConsulta() {
   if (inp) { inp.value = ''; inp.focus(); }
   // Limpiar estado global de la consulta anterior
   window._saldosCliente = null;
+  window._dsoClienteActual = null;
   window._ultimoBcraData = null;
   window._chequesUltimaConsulta = null;
   window._bcraHmTip = {};
@@ -6985,6 +7092,352 @@ init()
     var splash = document.getElementById('splash-screen');
     if (splash) splash.classList.add('hidden');
   });
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MÓDULO PORTFOLIO DE SALDOS
+// Replica el Director app (mismos KPIs, aging, filtros) accesible a todos los
+// usuarios logueados vía /api/cartera-saldos.
+// Namespace: _pf* para evitar colisiones con el resto de la app.
+// ══════════════════════════════════════════════════════════════════════════════
+(function() {
+  // ── Constantes ──────────────────────────────────────────────────────────
+  var PF_BUCKETS       = ['d30','d60','d90','d120','d120plus'];
+  var PF_BUCKET_LABELS = { d30:'0–30d', d60:'31–60d', d90:'61–90d', d120:'91–120d', d120plus:'+120d' };
+  var PF_BUCKET_COLORS = { d30:'#16a34a', d60:'#ca8a04', d90:'#ea580c', d120:'#dc2626', d120plus:'#7f1d1d' };
+
+  // ── Estado ───────────────────────────────────────────────────────────────
+  var _pfData         = null;
+  var _pfSortKey      = 'saldo_total';
+  var _pfSortDir      = -1;
+  var _pfFilterVend   = '';
+  var _pfSearch       = '';
+  var _pfFilterBucket = '';
+  var _pfDsoGlobal    = null;
+  var _pfLoaded       = false; // evita recargar si los datos ya están en memoria
+
+  // ── Utilidades ───────────────────────────────────────────────────────────
+  function _pfFmt(n)     { if (!n && n !== 0) return '—'; return Math.round(n).toLocaleString('es-AR'); }
+  function _pfFmtFull(n) { if (!n && n !== 0) return '0'; return Math.round(n).toLocaleString('es-AR'); }
+  function _pfEsc(s)     { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function _pfPct(v,t)   { if (!t||!v) return '0'; return (v/t*100).toFixed(1).replace('.0',''); }
+
+  function _pfColorScore(s) {
+    if (!s) return '#6b7280';
+    if (s >= 700) return '#16a34a';
+    if (s >= 400) return '#ca8a04';
+    if (s >= 200) return '#ea580c';
+    return '#dc2626';
+  }
+  function _pfColorDSO(d) {
+    if (d <= 15) return '#16a34a';
+    if (d <= 30) return '#2563eb';
+    if (d <= 60) return '#ca8a04';
+    if (d <= 90) return '#ea580c';
+    return '#dc2626';
+  }
+  function _pfColorDias(d) {
+    if (d === 0)  return { bg:'#dcfce7', color:'#16a34a' };
+    if (d <= 30)  return { bg:'#dbeafe', color:'#2563eb' };
+    if (d <= 60)  return { bg:'#fef9c3', color:'#ca8a04' };
+    if (d <= 90)  return { bg:'#ffedd5', color:'#ea580c' };
+    return { bg:'#fee2e2', color:'#dc2626' };
+  }
+
+  // ── Cálculo de totales (igual que director) ──────────────────────────────
+  function _pfCalcTotales(lista, dsoSoloBuckets) {
+    var ts = 0, tb = {d30:0,d60:0,d90:0,d120:0,d120plus:0};
+    var n_vencido = 0, n_critico = 0, n_riesgo = 0;
+    var suma_pond = 0, saldo_dso = 0;
+    lista.forEach(function(c) {
+      ts += c.saldo_total || 0;
+      PF_BUCKETS.forEach(function(bk){ tb[bk] += (c.buckets[bk]||0); });
+      if ((c.buckets.d60||0)+(c.buckets.d90||0)+(c.buckets.d120||0)+(c.buckets.d120plus||0) > 0) n_vencido++;
+      if ((c.buckets.d120||0)+(c.buckets.d120plus||0) > 0) n_critico++;
+      if (c.score && c.score < 400) n_riesgo++;
+      (c.facturas||[]).forEach(function(f) {
+        var bk = f.bucket || 'd30';
+        if (!dsoSoloBuckets || dsoSoloBuckets.indexOf(bk) >= 0) {
+          suma_pond += (f.saldo||0) * (f.dias||0);
+          saldo_dso += (f.saldo||0);
+        }
+      });
+    });
+    var base = dsoSoloBuckets ? saldo_dso : ts;
+    return {
+      total_saldo: ts, total_buckets: tb,
+      dso_global: base > 0 ? Math.round(suma_pond / base) : 0,
+      dso_es_atraso: !!dsoSoloBuckets,
+      n_clientes: lista.length, n_vencido: n_vencido, n_critico: n_critico, n_riesgo: n_riesgo
+    };
+  }
+
+  // ── Renderizar KPIs + Aging ──────────────────────────────────────────────
+  function _pfRenderKPIsAndAging(stats) {
+    var total = stats.total_saldo || 1;
+    var tb = stats.total_buckets || {};
+    var critico = (tb.d120||0) + (tb.d120plus||0);
+    var dsoVal   = stats.dso_es_atraso ? stats.dso_global : (_pfDsoGlobal || stats.dso_global);
+    var dsoLabel = stats.dso_es_atraso ? 'Atraso Prom.' : 'DSO Promedio';
+    var dsoSub   = stats.dso_es_atraso ? 'días mora en tramo' : 'días ponderado';
+
+    var kpis = [
+      { label:'Saldo Total',   value:'$'+_pfFmt(stats.total_saldo),  sub:_pfFmtFull(stats.total_saldo)+' ARS',    color:'#2563eb',  bucket:'' },
+      { label:'0–30 días',     value:'$'+_pfFmt(tb.d30||0),          sub:_pfPct(tb.d30,total)+'% del total',      color:'#16a34a',  bucket:'d30' },
+      { label:'31–60 días',    value:'$'+_pfFmt(tb.d60||0),          sub:_pfPct(tb.d60,total)+'% del total',      color:'#ca8a04',  bucket:'d60' },
+      { label:'61–90 días',    value:'$'+_pfFmt(tb.d90||0),          sub:_pfPct(tb.d90,total)+'% del total',      color:'#ea580c',  bucket:'d90' },
+      { label:'Crítico +90d',  value:'$'+_pfFmt(critico),            sub:_pfPct(critico,total)+'% del total',     color:'#dc2626',  bucket:'d120plus' },
+      { label:dsoLabel,        value:dsoVal+'d',                     sub:dsoSub,                                  color:_pfColorDSO(dsoVal), bucket:'' },
+      { label:'Clientes',      value:stats.n_clientes,               sub:stats.n_vencido+' con vto >30d',         color:'#7c3aed',  bucket:'' },
+      { label:'Críticos +90d', value:stats.n_critico,                sub:stats.n_riesgo+' score < 400',           color:'#dc2626',  bucket:'d120plus' }
+    ];
+
+    var kpiHtml = '<div class="pf-kpi-grid" id="pf-kpi-grid-inner">';
+    kpis.forEach(function(k) {
+      var isActive = k.bucket && k.bucket === _pfFilterBucket;
+      kpiHtml += '<div class="pf-kpi-card'+(isActive?' pf-active-filter':'')+'"'
+        +' style="--pf-kpi-color:'+k.color+'"'
+        +' onclick="_pfSetFilterBucket(\''+k.bucket+'\')"'
+        +'><div class="pf-kpi-label">'+_pfEsc(k.label)+'</div>'
+        +'<div class="pf-kpi-value">'+k.value+'</div>'
+        +'<div class="pf-kpi-sub">'+k.sub+'</div>'
+        +'</div>';
+    });
+    kpiHtml += '</div>';
+
+    var agingHtml = '<div class="pf-aging-card" id="pf-aging-inner">'
+      +'<div class="pf-aging-title">Antigüedad de Cartera — desde fecha de factura</div>'
+      +'<div class="pf-aging-bar-wrap">';
+    PF_BUCKETS.forEach(function(bk) {
+      var v = tb[bk]||0, w = total > 0 ? (v/total*100).toFixed(1) : 0;
+      if (w > 0) agingHtml += '<div class="pf-aging-seg" style="width:'+w+'%;background:'+PF_BUCKET_COLORS[bk]+'"></div>';
+    });
+    agingHtml += '</div><div class="pf-aging-legend">';
+    PF_BUCKETS.forEach(function(bk) {
+      var v = tb[bk]||0;
+      agingHtml += '<div class="pf-aging-leg-item"><div class="pf-aging-leg-dot" style="background:'+PF_BUCKET_COLORS[bk]+'"></div>'
+        +PF_BUCKET_LABELS[bk]+': '+_pfFmt(v)+' <span class="pf-aging-leg-pct">'+_pfPct(v,total)+'%</span></div>';
+    });
+    agingHtml += '</div></div>';
+    return kpiHtml + agingHtml;
+  }
+
+  // ── Renderizar controles ─────────────────────────────────────────────────
+  function _pfRenderControls(vendedores) {
+    return '<div class="pf-controls" id="pf-controls-inner">'
+      +'<div class="pf-search-wrap">'
+      +'<svg class="pf-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>'
+      +'<input class="pf-search-box" placeholder="Buscar cliente o CUIT..." oninput="_pfOnSearch(this.value)" value="'+_pfEsc(_pfSearch)+'">'
+      +'</div>'
+      +'<select class="pf-filter-select" onchange="_pfOnFilterVend(this.value)">'
+      +'<option value="">Todos los vendedores</option>'
+      +vendedores.map(function(v){ return '<option value="'+_pfEsc(v)+'"'+(_pfEsc(v)===_pfFilterVend?' selected':'')+'>'+_pfEsc(v)+'</option>'; }).join('')
+      +'</select>'
+      +'<button class="pf-sort-btn'+(_pfSortKey==='saldo_total'?' pf-active':'')+'" onclick="_pfSetSort(\'saldo_total\')">Saldo ↕</button>'
+      +'<button class="pf-sort-btn'+(_pfSortKey==='dso'?' pf-active':'')+'" onclick="_pfSetSort(\'dso\')">DSO ↕</button>'
+      +'<button class="pf-sort-btn'+(_pfSortKey==='score'?' pf-active':'')+'" onclick="_pfSetSort(\'score\')">Score ↕</button>'
+      +'<span class="pf-results-count" id="pf-results-count"></span>'
+      +'</div>';
+  }
+
+  // ── Renderizar fila de cliente ───────────────────────────────────────────
+  function _pfRenderClientRow(c, idx) {
+    var sc      = c.score;
+    var scColor = _pfColorScore(sc);
+    var dsoVal  = c.dso || 0;
+    var dsoColor = _pfColorDSO(dsoVal);
+    var total   = c.saldo_total || 1;
+    var tb      = c.buckets || {};
+
+    var scoreBadge = sc != null
+      ? '<div class="pf-score-badge" style="color:'+scColor+';border-color:'+scColor+'44;background:'+scColor+'18">'+sc+'</div>'
+        +'<div class="pf-score-rango" style="color:'+scColor+'">'+_pfEsc(c.rango||'')+'</div>'
+      : '<div style="font-size:11px;color:#64748b;">Sin score</div>';
+
+    var dsoBadge = '<div class="pf-dso-val" style="color:'+dsoColor+'">'+dsoVal+'</div><div class="pf-dso-label">días</div>';
+
+    var miniBar = '<div class="pf-mini-aging"><div class="pf-mini-bar-wrap">';
+    PF_BUCKETS.forEach(function(bk) {
+      var v = tb[bk]||0, w = total > 0 ? (v/total*100).toFixed(1) : 0;
+      if (w > 0) miniBar += '<div class="pf-mini-bar-seg" style="width:'+w+'%;background:'+PF_BUCKET_COLORS[bk]+'"></div>';
+    });
+    miniBar += '</div><div class="pf-mini-aging-labels">';
+    PF_BUCKETS.forEach(function(bk) {
+      var v = tb[bk]||0;
+      if (v > 0) miniBar += '<div class="pf-mini-label" style="color:'+PF_BUCKET_COLORS[bk]+'">'+PF_BUCKET_LABELS[bk]+': <strong>'+_pfFmt(v)+'</strong></div>';
+    });
+    miniBar += '</div></div>';
+
+    var invoiceRows = (c.facturas||[]).map(function(f) {
+      var cd = _pfColorDias(f.dias||0);
+      var diasLbl = (f.dias||0) === 0 ? 'Al día' : (f.dias||0)+'d';
+      return '<tr>'
+        +'<td><div class="pf-invoice-nro">'+_pfEsc(f.nro||'—')+'</div></td>'
+        +'<td>'+_pfEsc(f.fecha_factura||'—')+'</td>'
+        +'<td>'+_pfEsc(f.fecha_pago||'—')+'</td>'
+        +'<td style="text-align:right;font-family:\'Roboto Mono\',monospace;">'+_pfFmtFull(f.total||0)+'</td>'
+        +'<td style="text-align:right"><span style="color:#ea580c;font-weight:700;font-family:\'Roboto Mono\',monospace;">'+_pfFmtFull(f.saldo||0)+'</span></td>'
+        +'<td style="text-align:center"><span class="pf-dias-pill" style="background:'+cd.bg+';color:'+cd.color+'">'+diasLbl+'</span></td>'
+        +'</tr>';
+    }).join('');
+    var invTotal = (c.facturas||[]).reduce(function(s,f){ return s+(f.saldo||0); }, 0);
+    var cuitFmt = c.cuit && c.cuit.length===11
+      ? c.cuit.slice(0,2)+'-'+c.cuit.slice(2,10)+'-'+c.cuit.slice(10)
+      : (c.cuit||'');
+
+    return '<div class="pf-client-row" id="pf-row-'+idx+'">'
+      +'<div class="pf-client-row-main" onclick="_pfToggleRow('+idx+')">'
+      +'<div><div class="pf-client-name">'+_pfEsc(c.nombre||'—')+'</div>'
+      +'<div class="pf-client-cuit">'+cuitFmt+' · <span class="pf-client-vend">'+_pfEsc(c.vendedor||'—')+'</span></div></div>'
+      +'<div>'+scoreBadge+'</div>'
+      +'<div>'+dsoBadge+'</div>'
+      +'<div><div class="pf-saldo-total">$'+_pfFmt(c.saldo_total||0)+'</div></div>'
+      +'<div>'+miniBar+'</div>'
+      +'<div><button class="pf-expand-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button></div>'
+      +'</div>'
+      +'<div class="pf-invoice-detail">'
+      +'<table class="pf-invoice-table"><thead><tr>'
+      +'<th>N° Factura</th><th>Emisión</th><th>Vence</th><th style="text-align:right">Total</th><th style="text-align:right">Saldo</th><th style="text-align:center">Estado</th>'
+      +'</tr></thead><tbody>'+invoiceRows+'</tbody>'
+      +'<tfoot><tr class="pf-invoice-tfoot">'
+      +'<td colspan="4">TOTAL PENDIENTE</td>'
+      +'<td style="text-align:right;color:#ea580c;font-family:\'Roboto Mono\',monospace;">'+_pfFmtFull(invTotal)+'</td>'
+      +'<td></td></tr></tfoot></table></div></div>';
+  }
+
+  // ── Renderizar tabla con filtros/orden ───────────────────────────────────
+  function _pfRenderTabla() {
+    if (!_pfData) return;
+    var lista = (_pfData.clientes||[]).slice();
+    if (_pfFilterVend) lista = lista.filter(function(c){ return c.vendedor === _pfFilterVend; });
+    if (_pfSearch) {
+      var q = _pfSearch.toLowerCase();
+      lista = lista.filter(function(c){
+        return (c.nombre||'').toLowerCase().indexOf(q) >= 0
+          || (c.cuit||'').indexOf(q) >= 0
+          || (c.vendedor||'').toLowerCase().indexOf(q) >= 0;
+      });
+    }
+    if (_pfFilterBucket) {
+      lista = lista.filter(function(c) {
+        if (_pfFilterBucket === 'd120plus') return (c.buckets.d120||0)+(c.buckets.d120plus||0) > 0;
+        return (c.buckets[_pfFilterBucket]||0) > 0;
+      });
+    }
+    var dsoBuckets = null;
+    if (_pfFilterBucket === 'd120plus') dsoBuckets = ['d120','d120plus'];
+    else if (_pfFilterBucket === 'd90')  dsoBuckets = ['d90','d120','d120plus'];
+    else if (_pfFilterBucket === 'd60')  dsoBuckets = ['d60','d90','d120','d120plus'];
+    else if (_pfFilterBucket === 'd30')  dsoBuckets = ['d30'];
+
+    var statsF = _pfCalcTotales(lista, dsoBuckets);
+    var kpiEl   = document.getElementById('pf-kpi-grid-inner');
+    var agingEl = document.getElementById('pf-aging-inner');
+    if (kpiEl && agingEl) {
+      var tmp = document.createElement('div');
+      tmp.innerHTML = _pfRenderKPIsAndAging(statsF);
+      kpiEl.replaceWith(tmp.querySelector('#pf-kpi-grid-inner'));
+      agingEl.replaceWith(tmp.querySelector('#pf-aging-inner'));
+    }
+    lista.sort(function(a, b) {
+      var va = a[_pfSortKey], vb = b[_pfSortKey];
+      if (va == null) va = _pfSortDir > 0 ? -Infinity : Infinity;
+      if (vb == null) vb = _pfSortDir > 0 ? -Infinity : Infinity;
+      return (va - vb) * _pfSortDir;
+    });
+    var countEl = document.getElementById('pf-results-count');
+    if (countEl) countEl.textContent = lista.length + ' clientes';
+    var body = document.getElementById('pf-clientes-body');
+    if (!body) return;
+    if (!lista.length) {
+      body.innerHTML = '<div class="pf-empty-row">Sin clientes con los filtros aplicados.</div>';
+      return;
+    }
+    body.innerHTML = lista.map(function(c,i){ return _pfRenderClientRow(c,i); }).join('');
+  }
+
+  // ── Renderizar resumen completo ──────────────────────────────────────────
+  function _pfRenderResumen() {
+    var clientes   = _pfData.clientes || [];
+    var vendedores = [];
+    clientes.forEach(function(c) {
+      var v = c.vendedor || 'Sin vendedor';
+      if (vendedores.indexOf(v) < 0) vendedores.push(v);
+    });
+    vendedores.sort();
+
+    var stats = _pfCalcTotales(clientes);
+    var kpiEl   = document.getElementById('pf-kpi-grid');
+    var agingEl = document.getElementById('pf-aging-section');
+    var ctrlEl  = document.getElementById('pf-controls');
+    if (kpiEl)   kpiEl.innerHTML   = _pfRenderKPIsAndAging(stats);
+    if (agingEl) agingEl.innerHTML = '';
+    if (ctrlEl)  ctrlEl.innerHTML  = _pfRenderControls(vendedores);
+    _pfRenderTabla();
+  }
+
+  // ── Handlers de controles ────────────────────────────────────────────────
+  window._pfOnSearch = function(v) {
+    _pfSearch = v;
+    _pfRenderTabla();
+  };
+  window._pfOnFilterVend = function(v) {
+    _pfFilterVend = v;
+    _pfRenderTabla();
+  };
+  window._pfSetSort = function(k) {
+    if (_pfSortKey === k) { _pfSortDir *= -1; }
+    else { _pfSortKey = k; _pfSortDir = -1; }
+    document.querySelectorAll('.pf-sort-btn').forEach(function(b){ b.classList.remove('pf-active'); });
+    _pfRenderTabla();
+  };
+  window._pfSetFilterBucket = function(b) {
+    _pfFilterBucket = (_pfFilterBucket === b) ? '' : b;
+    _pfRenderTabla();
+  };
+  window._pfToggleRow = function(idx) {
+    var row = document.getElementById('pf-row-'+idx);
+    if (row) row.classList.toggle('pf-expanded');
+  };
+
+  // ── Carga principal ──────────────────────────────────────────────────────
+  window.cargarPortfolio = async function(force) {
+    var loadEl   = document.getElementById('pf-loading');
+    var errEl    = document.getElementById('pf-error');
+    var contentEl = document.getElementById('pf-content');
+    if (!loadEl || !contentEl) return;
+
+    // Reusar datos ya cargados a menos que se fuerce recarga
+    if (_pfLoaded && _pfData && !force) {
+      _pfRenderResumen();
+      return;
+    }
+
+    loadEl.style.display = 'flex';
+    errEl.style.display  = 'none';
+    contentEl.style.display = 'none';
+
+    try {
+      var [rCartera, rDso] = await Promise.all([
+        fetch('/api/cartera-saldos'),
+        fetch('/dso-global-saldos').catch(function(){ return {ok:false}; })
+      ]);
+      if (!rCartera.ok) throw new Error('HTTP ' + rCartera.status + ' al cargar cartera-saldos');
+      _pfData = await rCartera.json();
+      if (rDso && rDso.ok) {
+        var dsoData = await rDso.json();
+        if (dsoData && dsoData.dso != null) _pfDsoGlobal = dsoData.dso;
+      }
+      _pfLoaded = true;
+      loadEl.style.display = 'none';
+      contentEl.style.display = 'block';
+      _pfRenderResumen();
+    } catch(e) {
+      loadEl.style.display = 'none';
+      errEl.style.display  = 'block';
+      errEl.textContent = 'Error al cargar el portfolio: ' + e.message;
+    }
+  };
+}());
 </script>
 <!-- Modal agregar cliente — fuera de cualquier sección para que funcione desde cualquier pestaña -->
 <div id="modal-agregar-cliente" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;align-items:center;justify-content:center;">
