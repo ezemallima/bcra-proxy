@@ -1288,8 +1288,16 @@ async function cargarSaldosCartera(forzar = false) {
           '?nombre=' + encodeURIComponent(c.nombre || ''),
           { retries: 0, timeoutMs: 8000 }
         );
-        if (!d || d.metodo === 'nulo') return; // cliente no encontrado — preservar dato del BLOQUE 1
         const nc = String(c.cuit||'').replace(/\D/g,'').trim();
+        if (!d || d.metodo === 'nulo') {
+          // Marcar como consultado-sin-facturas: el servidor confirmó que este cliente
+          // no tiene facturas pendientes en el reporte actual. Poner centinela para que
+          // cargarSaldosDSOFallback() no sobreescriba con datos viejos de dso_saldos_actual.json.
+          const _vacio = { facturas: [], total_saldo: 0, _consultado: true };
+          SALDOS_MAP[normNombre(c.nombre)] = _vacio;
+          if (nc) SALDOS_MAP['__c:'+nc] = _vacio;
+          return;
+        }
         SALDOS_MAP[normNombre(c.nombre)] = d;
         if (nc) SALDOS_MAP['__c:'+nc] = d;
         // Sincronizar CARTERA_LOCAL para que el fallback de renderCartera sea consistente
@@ -1331,7 +1339,7 @@ async function cargarSaldosDSOFallback() {
     });
     let agregados = 0;
     Object.keys(porCliente).forEach(function(k) {
-      if (SALDOS_MAP[k] && (SALDOS_MAP[k].facturas || []).length > 0) return; // ya tiene datos reales
+      if (SALDOS_MAP[k]) return; // ya procesado por el endpoint real (aunque tenga $0 — no sobreescribir con DSO viejo)
       const facturas = porCliente[k];
       const total = facturas.reduce((s, f) => s + f.saldo, 0);
       if (total > 0) {
@@ -1547,7 +1555,10 @@ function renderCartera(filtro) {
   }
   else if (filtro === 'riesgo') lista = lista.filter(c => (c.ultimaSit||1) >= 3);
   else if (filtro === 'buenos') lista = lista.filter(c => (c.score||0) >= 700);
-  else if (filtro === 'saldo') lista = lista.filter(c => getSaldos(c.nombre, c.cuit));
+  else if (filtro === 'saldo') lista = lista.filter(c => {
+    const _sd = getSaldos(c.nombre, c.cuit);
+    return _sd && ((_sd.total_saldo || 0) > 0 || (_sd.facturas || []).some(f => (parseFloat(f.saldo) || 0) > 0));
+  });
   // Filtro secundario por vendedor (solo activo en modo supervisor)
   if (_filtroVendedor) lista = lista.filter(c => (c.vendedor||'').toLowerCase() === _filtroVendedor);
   if (_carteraFiltrada) lista = lista.filter(c => matchBusqueda(c.nombre, _carteraFiltrada, c.cuit));
