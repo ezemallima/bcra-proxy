@@ -891,7 +891,9 @@ def _bcra_get(url: str, timeout: int = 0) -> requests.Response:
     _t = timeout if timeout > 0 else 12
 
     # ── 1. Bright Data Web Unlocker (motor principal) ────────────────────────
-    if BRIGHTDATA_USER and _BRD_PASSWORD:
+    # BCRA bloquea proxies residenciales → skip para bcra.gob.ar y usar directo
+    _is_bcra_api = 'bcra.gob.ar' in url
+    if BRIGHTDATA_USER and _BRD_PASSWORD and not _is_bcra_api:
         _brd_proxy = f"http://{BRIGHTDATA_USER}:{_BRD_PASSWORD}@{BRIGHTDATA_HOST}:{BRIGHTDATA_PORT}"
         try:
             r = requests.get(
