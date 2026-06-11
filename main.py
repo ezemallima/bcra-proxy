@@ -3877,6 +3877,41 @@ def api_director_data():
             'facturas':        sorted(c['facturas'], key=lambda x: x['dias'], reverse=True),
         })
 
+    # ── Enriquecer DSO con reporte mensual (dso_saldos_actual.json) ────────────
+    # El reporte mensual tiene el historial COMPLETO de facturas abiertas → DSO más preciso
+    # que _saldos_gestion que puede omitir facturas viejas.
+    # Clave primaria: CUIT (matching exacto). Fallback: nombre normalizado.
+    _dso_act_path = os.path.join(DATA_DIR, 'dso_saldos_actual.json')
+    if os.path.exists(_dso_act_path):
+        try:
+            _dso_act = json.load(open(_dso_act_path, 'r', encoding='utf-8')).get('saldos', [])
+            _dso_cuit_idx: dict = {}
+            _dso_nom_idx:  dict = {}
+            for _da in _dso_act:
+                _da_s = float(_da.get('saldo') or 0)
+                if _da_s <= 0:
+                    continue
+                _da_ff = _parse_f(_da.get('fecha_factura') or _da.get('fechaFactura') or '')
+                _da_d  = max(0, (hoy - _da_ff).days) if _da_ff else 0
+                _da_c  = _nc(str(_da.get('cuit') or ''))
+                _da_n  = _norm_nombre(str(_da.get('cliente') or ''))
+                if _da_c:
+                    _dso_cuit_idx.setdefault(_da_c, {'sp': 0.0, 'ss': 0.0})
+                    _dso_cuit_idx[_da_c]['sp'] += _da_s * _da_d
+                    _dso_cuit_idx[_da_c]['ss'] += _da_s
+                if _da_n:
+                    _dso_nom_idx.setdefault(_da_n, {'sp': 0.0, 'ss': 0.0})
+                    _dso_nom_idx[_da_n]['sp'] += _da_s * _da_d
+                    _dso_nom_idx[_da_n]['ss'] += _da_s
+            for _cl in clientes_list:
+                _cl_c = _nc(str(_cl.get('cuit') or ''))
+                _cl_n = _norm_nombre(str(_cl.get('nombre') or ''))
+                _ent  = _dso_cuit_idx.get(_cl_c) or _dso_nom_idx.get(_cl_n)
+                if _ent and _ent['ss'] > 0:
+                    _cl['dso'] = round(_ent['sp'] / _ent['ss'])
+        except Exception as _e:
+            print(f"[director-data] DSO enrich error: {_e}", flush=True)
+
     clientes_list.sort(key=lambda x: x['saldo_total'], reverse=True)
 
     # Totales globales

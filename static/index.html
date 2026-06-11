@@ -7114,7 +7114,6 @@ init()
   var _pfSearch          = '';
   var _pfFilterBucket    = '';
   var _pfDsoGlobal       = null;
-  var _pfDsoPorCliente   = {};  // DSO por agotamiento desde /api/dso-todos (mismo origen que Director)
   var _pfLoaded          = false;
 
   // ── Utilidades ───────────────────────────────────────────────────────────
@@ -7122,8 +7121,6 @@ init()
   function _pfFmtFull(n) { if (!n && n !== 0) return '0'; return Math.round(n).toLocaleString('es-AR'); }
   function _pfEsc(s)     { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   function _pfPct(v,t)   { if (!t||!v) return '0'; return (v/t*100).toFixed(1).replace('.0',''); }
-  // Normalización idéntica a normNombreDir en director.html
-  function _pfNormNombre(s) { return String(s||'').trim().toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^A-Z0-9 ]/g,' ').replace(/\s+/g,' ').trim(); }
 
   function _pfColorScore(s) {
     if (!s) return '#6b7280';
@@ -7247,9 +7244,8 @@ init()
   function _pfRenderClientRow(c, idx) {
     var sc      = c.score;
     var scColor = _pfColorScore(sc);
-    // Misma lógica que el Director: preferir DSO de /api/dso-todos (agotamiento), caer a c.dso (antigüedad)
-    var _dsoExh = _pfDsoPorCliente[_pfNormNombre(c.nombre||'')];
-    var dsoVal  = (typeof _dsoExh === 'number' && _dsoExh > 0) ? _dsoExh : (c.dso || 0);
+    // c.dso viene enriquecido desde dso_saldos_actual.json en el backend (misma fuente que Director)
+    var dsoVal  = c.dso || 0;
     var dsoColor = _pfColorDSO(dsoVal);
     var total   = c.saldo_total || 1;
     var tb      = c.buckets || {};
@@ -7423,20 +7419,15 @@ init()
     contentEl.style.display = 'none';
 
     try {
-      var [rCartera, rDso, rTodos] = await Promise.all([
+      var [rCartera, rDso] = await Promise.all([
         fetch('/api/cartera-saldos'),
-        fetch('/dso-global-saldos').catch(function(){ return {ok:false}; }),
-        fetch('/api/dso-todos').catch(function(){ return {ok:false}; })
+        fetch('/dso-global-saldos').catch(function(){ return {ok:false}; })
       ]);
       if (!rCartera.ok) throw new Error('HTTP ' + rCartera.status + ' al cargar cartera-saldos');
       _pfData = await rCartera.json();
       if (rDso && rDso.ok) {
         var dsoData = await rDso.json();
         if (dsoData && dsoData.dso != null) _pfDsoGlobal = dsoData.dso;
-      }
-      if (rTodos && rTodos.ok) {
-        var todosData = await rTodos.json();
-        _pfDsoPorCliente = (todosData && todosData.por_cliente) || {};
       }
       _pfLoaded = true;
       loadEl.style.display = 'none';
