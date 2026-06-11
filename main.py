@@ -6206,7 +6206,7 @@ def get_cheques(cuit):
     with ThreadPoolExecutor(max_workers=len(endpoints_chq)) as ex:
         futs = {ex.submit(_fetch_chq, url, tmt, via): via for url, tmt, via in endpoints_chq}
         try:
-            for fut in as_completed(futs, timeout=12):
+            for fut in as_completed(futs, timeout=20):
                 result, via = fut.result()
                 if result == 'NOT_FOUND':
                     got_404_chq = True
@@ -6269,7 +6269,7 @@ def get_historial(cuit):
     with ThreadPoolExecutor(max_workers=len(endpoints_hist)) as ex:
         futs = {ex.submit(_fetch_hist, url, tmt, via): via for url, tmt, via in endpoints_hist}
         try:
-            for fut in as_completed(futs, timeout=12):
+            for fut in as_completed(futs, timeout=20):
                 result, via = fut.result()
                 if result == 'NOT_FOUND':
                     got_404_hist = True   # no retornar aún — otro endpoint puede tener datos
