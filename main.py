@@ -35,15 +35,16 @@ CUIT_API_KEY    = os.environ.get('API_KEY_CUIT', '')
 CUIT_API_URL    = os.environ.get('API_SOLVENCY_URL', '')
 SCRAPERAPI_KEY  = os.environ.get('SCRAPERAPI_KEY', '')
 
-# ── Bright Data Web Unlocker — motor de consultas en vivo ───────────────────
-# Proxy residencial zona 'vendeseguro'. Credenciales en Render env vars.
-# BRIGHTDATA_PASS   = contraseña de la zona residencial (prioridad absoluta)
+# ── Bright Data Residential Proxies — motor de consultas en vivo ─────────────
+# Zona 'vendeseguro' configurada como Residential Proxies (AR).
+# Puerto 22225 = Residential Proxies (antes 33335 era Web Unlocker).
+# BRIGHTDATA_PASS   = contraseña de la zona residencial (var de entorno en Render)
 # BRIGHTDATA_API_KEY = API key de administración (solo fallback legacy)
 BRIGHTDATA_USER    = os.environ.get('BRIGHTDATA_USER', 'brd-customer-hl_cc5957d6-zone-vendeseguro')
 BRIGHTDATA_PASS    = os.environ.get('BRIGHTDATA_PASS', '')
 BRIGHTDATA_API_KEY = os.environ.get('BRIGHTDATA_API_KEY', '')
 BRIGHTDATA_HOST    = os.environ.get('BRIGHTDATA_HOST', 'brd.superproxy.io')
-BRIGHTDATA_PORT    = int(os.environ.get('BRIGHTDATA_PORT', '33335'))
+BRIGHTDATA_PORT    = int(os.environ.get('BRIGHTDATA_PORT', '22225'))
 # Contraseña efectiva: zona residencial (BRIGHTDATA_PASS) tiene prioridad sobre API key
 _BRD_PASSWORD      = BRIGHTDATA_PASS or BRIGHTDATA_API_KEY
 # Log diagnóstico al iniciar — ayuda a detectar credenciales incorrectas o ausentes
@@ -890,14 +891,20 @@ def _bcra_get(url: str, timeout: int = 0) -> requests.Response:
     """
     _t = timeout if timeout > 0 else 12
 
-    # ── 1. Bright Data Web Unlocker (motor principal) ────────────────────────
-    # BCRA bloquea proxies residenciales → skip para bcra.gob.ar y usar directo
-    _is_bcra_api = 'bcra.gob.ar' in url
-    if BRIGHTDATA_USER and _BRD_PASSWORD and not _is_bcra_api:
+    # ── 1. Bright Data Residential Proxies (motor principal) ─────────────────
+    # IPs residenciales AR → BCRA no las bloquea (son IPs de usuarios reales)
+    if BRIGHTDATA_USER and _BRD_PASSWORD:
         _brd_proxy = f"http://{BRIGHTDATA_USER}:{_BRD_PASSWORD}@{BRIGHTDATA_HOST}:{BRIGHTDATA_PORT}"
+        _brd_headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "es-AR,es;q=0.9,en;q=0.8",
+            "Accept-Encoding": "gzip, deflate, br",
+        }
         try:
             r = requests.get(
                 url,
+                headers=_brd_headers,
                 proxies={"http": _brd_proxy, "https": _brd_proxy},
                 timeout=_t,
                 verify=False,
