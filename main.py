@@ -3750,53 +3750,45 @@ def api_director_data():
                     }
     except Exception: pass
 
-    # Índice de enriquecimiento desde _saldos_gestion: (cliente_norm, YYYYMMDD) → datos faltantes.
-    # dso_saldos_actual.json no trae nroFactura, totalFactura ni fechaPago; se recuperan aquí.
-    _gs_enrich: dict = {}
+    # Sincronizar desde disco: otro worker puede haber subido saldos más recientes.
+    _saldos_gestion_desde_disco()
+
+    # Índice vendedor desde _saldos_gestion (siempre tiene campo vendedor).
     _vend_enrich: dict = {}
     for _fv in (_saldos_gestion if _saldos_gestion else _saldos_facturas):
-        _cn  = _norm_nombre(str(_fv.get('cliente') or ''))
-        _cv  = str(_fv.get('vendedor') or '').strip()
-        _gff = _parse_f(str(_fv.get('fechaFactura') or ''))
+        _cn = _norm_nombre(str(_fv.get('cliente') or ''))
+        _cv = str(_fv.get('vendedor') or '').strip()
         if _cn and _cv:
             _vend_enrich[_cn] = _cv
-        if _cn and _gff:
-            _gs_enrich[(_cn, _gff.strftime('%Y%m%d'))] = {
-                'nroFactura':   str(_fv.get('nroFactura') or ''),
-                'totalFactura': float(_fv.get('totalFactura') or 0),
-                'fechaPago':    str(_fv.get('fechaPago') or ''),
-            }
 
-    # Priorizar dso_saldos_actual.json (archivo subido vía DSO tool, siempre más reciente).
-    # Normaliza los nombres de campo y enriquece campos faltantes desde _saldos_gestion.
-    # Fallback a _saldos_gestion si el archivo DSO todavía no fue subido en esta sesión.
+    # Fuente de facturas para el panel Director:
+    # 1. _saldos_gestion (upload comercial, más frecuente) — tiene precedencia si está cargado.
+    # 2. dso_saldos_actual.json — fallback solo si aún no se subió reporte de gestión.
+    # El indicador DSO global del header usa SIEMPRE /dso-global-saldos (solo DSO mensual).
     _fuente_director = []
-    _dso_path = os.path.join(DATA_DIR, 'dso_saldos_actual.json')
-    if os.path.exists(_dso_path):
-        try:
-            with open(_dso_path, 'r', encoding='utf-8') as _fdso:
-                _raw_dso = json.load(_fdso).get('saldos', [])
-            for _s in _raw_dso:
-                _cli_n = _norm_nombre(_s.get('cliente', ''))
-                _ff    = _parse_f(_s.get('fecha_factura', _s.get('fechaFactura', '')))
-                _enr   = _gs_enrich.get((_cli_n, _ff.strftime('%Y%m%d') if _ff else ''), {})
-                _fuente_director.append({
-                    'cliente':      _s.get('cliente', ''),
-                    'cuit':         _s.get('cuit', ''),
-                    'vendedor':     _s.get('vendedor', ''),
-                    'fechaFactura': _s.get('fecha_factura', _s.get('fechaFactura', '')),
-                    'fechaPago':    (_s.get('fecha_pago') or _s.get('fechaPago')
-                                     or _enr.get('fechaPago', '')),
-                    'saldo':        _s.get('saldo', 0),
-                    'nroFactura':   (_s.get('nroFactura') or _s.get('nro_factura')
-                                     or _enr.get('nroFactura', '')),
-                    'totalFactura': (_s.get('totalFactura') or _s.get('total_factura')
-                                     or _enr.get('totalFactura', 0)),
-                })
-        except Exception:
-            pass
-    if not _fuente_director:
-        _fuente_director = _saldos_gestion if _saldos_gestion else _saldos_facturas
+    if _saldos_gestion:
+        _fuente_director = _saldos_gestion
+    else:
+        _dso_path = os.path.join(DATA_DIR, 'dso_saldos_actual.json')
+        if os.path.exists(_dso_path):
+            try:
+                with open(_dso_path, 'r', encoding='utf-8') as _fdso:
+                    _raw_dso = json.load(_fdso).get('saldos', [])
+                for _s in _raw_dso:
+                    _fuente_director.append({
+                        'cliente':      _s.get('cliente', ''),
+                        'cuit':         _s.get('cuit', ''),
+                        'vendedor':     _s.get('vendedor', ''),
+                        'fechaFactura': _s.get('fecha_factura', _s.get('fechaFactura', '')),
+                        'fechaPago':    _s.get('fecha_pago', _s.get('fechaPago', '')),
+                        'saldo':        _s.get('saldo', 0),
+                        'nroFactura':   _s.get('nroFactura', _s.get('nro_factura', '')),
+                        'totalFactura': _s.get('totalFactura', _s.get('total_factura', 0)),
+                    })
+            except Exception:
+                pass
+        if not _fuente_director:
+            _fuente_director = _saldos_facturas
     # Enriquecer vendedor: 1) _vend_enrich (saldos_gestion) → 2) cartera_comercial
     for _fd in _fuente_director:
         if not str(_fd.get('vendedor') or '').strip():
