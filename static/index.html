@@ -4260,11 +4260,24 @@ async function analizarCliente() {
       : scorePreAnalisis.max_sit === 1 ? 'Sin irregularidades en los últimos 24m'
       : 'Historial en análisis';
   }
-  var dCheques   = _dv('Cheques rechazados');
-  // 0 cheques si no hay registro local pero el perfil es limpio
-  if ((dCheques === 'N/D' || !dCheques) && scorePreAnalisis && scorePreAnalisis.max_sit != null) {
-    dCheques = '0 cheques rechazados';
-  }
+  // Construir dCheques desde _chequesUltimaConsulta (fuente real).
+  // _dv('Cheques rechazados') solo funciona en modo fallback local; el score del servidor
+  // no incluye un campo detalle[] con esa estructura, así que se ignora en path normal.
+  var dCheques = (function() {
+    var _chqRaw = window._chequesUltimaConsulta;
+    if (!_chqRaw || _chqRaw.error_bcra) return _dv('Cheques rechazados') || 'Sin datos de cheques';
+    if (_chqRaw.sin_deudas === true) return '0 cheques rechazados';
+    var _norm = _normalizarCheques(_chqRaw);
+    if (_norm.length === 0) return '0 cheques rechazados';
+    var _activos = _norm.filter(function(c){ return !_chqIsLevantado(c); }).length;
+    var _montoRiesgo = _norm.filter(function(c){ return !_chqIsLevantado(c); })
+                            .reduce(function(s,c){ return s+(c.monto||0); }, 0);
+    if (_activos === 0)
+      return _norm.length + ' cheque(s) — todos regularizados';
+    var _mStr = _montoRiesgo > 0
+      ? ' ($' + _montoRiesgo.toLocaleString('es-AR') + ' en riesgo)' : '';
+    return _activos + ' sin levantar / ' + _norm.length + ' total' + _mStr;
+  })();
   var dDSO       = _dv('DSO individual');
   var dPiattelli = _dv('Historial Piattelli');
   var dBodegas   = _dv('Red de Bodegas');
@@ -4483,6 +4496,31 @@ async function analizarCliente() {
     _fdTextoPrompt += 'INSTRUCCIÓN CRÍTICA: No menciones estas entidades en ninguna sección del análisis. No las uses para justificar ningún veredicto negativo. Analizá el perfil como si estas entidades no existieran.\n';
   }
 
+  // ── Cheques detalle para el prompt IA ──────────────────────────────────────
+  var chequesBCRATexto = (function() {
+    var _chqRaw = window._chequesUltimaConsulta;
+    if (!_chqRaw || _chqRaw.error_bcra) return 'No disponible.';
+    if (_chqRaw.sin_deudas === true) return 'Sin cheques rechazados registrados en BCRA.';
+    var _norm = _normalizarCheques(_chqRaw);
+    if (_norm.length === 0) return 'Sin cheques rechazados registrados en BCRA.';
+    var _activos = _norm.filter(function(c){ return !_chqIsLevantado(c); });
+    var _ok      = _norm.filter(function(c){ return  _chqIsLevantado(c); });
+    var txt = 'Total: ' + _norm.length + ' | Sin levantar: ' + _activos.length + ' | Regularizados: ' + _ok.length + '\n';
+    if (_activos.length > 0) {
+      txt += 'CHEQUES SIN LEVANTAR (alto riesgo):\n';
+      _activos.forEach(function(c) {
+        txt += '  • Fecha: ' + (c.fecha||'s/d') + ' | Entidad: ' + c.entidad + ' | Monto: $' + (c.monto||0).toLocaleString('es-AR') + ' | Motivo: ' + c.motivo + '\n';
+      });
+    }
+    if (_ok.length > 0) {
+      txt += 'CHEQUES REGULARIZADOS:\n';
+      _ok.forEach(function(c) {
+        txt += '  • Fecha: ' + (c.fecha||'s/d') + ' | Entidad: ' + c.entidad + ' | Monto: $' + (c.monto||0).toLocaleString('es-AR') + ' | Abonado: ' + (c.fechaPago||'s/d') + '\n';
+      });
+    }
+    return txt;
+  })();
+
   function _renderExclusionBadge() {
     if (!_fdExcluidas.length) return '';
     var _items = _fdExcluidas.map(function(ent) {
@@ -4514,6 +4552,7 @@ async function analizarCliente() {
     + 'Deuda total en sistema financiero: ' + deudaLabel + '\n'
     + (condicionesActuales ? condicionesActuales : '')
     + '\n═══ HISTORIAL BCRA 24 MESES (DATOS POR ENTIDAD) ═══\n' + historialBCRATexto
+    + '\n═══ CHEQUES RECHAZADOS BCRA (DETALLE) ═══\n' + chequesBCRATexto
     + '\n═══ INFORME VERAZ/NOSIS ═══\n' + datosVeraz
     + '\n═══ HISTORIAL COMERCIAL (BODEGAS + INTERNO) ═══\n' + datosHistorial
     + '\n═══ DIRECTIVAS DE ANÁLISIS (OBLIGATORIO) ═══\n'
