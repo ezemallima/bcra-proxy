@@ -626,8 +626,8 @@
   .pf-mini-bar-seg { height:100%; }
   .pf-mini-aging-labels { display:flex; gap:6px; flex-wrap:wrap; }
   .pf-mini-label { font-size:10px; color:#475569; }
-  .pf-expand-btn { width:28px; height:28px; border:1px solid #e2e8f0; border-radius:7px; background:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#64748b; transition:all 0.15s; }
-  .pf-expand-btn:hover { border-color:#2563eb; color:#2563eb; }
+  .pf-expand-btn { width:28px; height:28px; padding:0 !important; border:1px solid #e2e8f0; border-radius:7px; background:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#64748b; transition:all 0.15s; flex-shrink:0; }
+  .pf-expand-btn:hover { border-color:#2563eb; color:#2563eb; background:#eff6ff; }
   .pf-client-row.pf-expanded .pf-expand-btn { transform:rotate(180deg); background:#eff6ff; color:#2563eb; border-color:#2563eb; }
   .pf-invoice-detail { display:none; padding:0 18px 14px; border-top:1px solid #eff6ff; background:#f8faff; }
   .pf-client-row.pf-expanded .pf-invoice-detail { display:block; }
@@ -7107,20 +7107,23 @@ init()
   var PF_BUCKET_COLORS = { d30:'#16a34a', d60:'#ca8a04', d90:'#ea580c', d120:'#dc2626', d120plus:'#7f1d1d' };
 
   // ── Estado ───────────────────────────────────────────────────────────────
-  var _pfData         = null;
-  var _pfSortKey      = 'saldo_total';
-  var _pfSortDir      = -1;
-  var _pfFilterVend   = '';
-  var _pfSearch       = '';
-  var _pfFilterBucket = '';
-  var _pfDsoGlobal    = null;
-  var _pfLoaded       = false; // evita recargar si los datos ya están en memoria
+  var _pfData            = null;
+  var _pfSortKey         = 'saldo_total';
+  var _pfSortDir         = -1;
+  var _pfFilterVend      = '';
+  var _pfSearch          = '';
+  var _pfFilterBucket    = '';
+  var _pfDsoGlobal       = null;
+  var _pfDsoPorCliente   = {};  // DSO por agotamiento desde /api/dso-todos (mismo origen que Director)
+  var _pfLoaded          = false;
 
   // ── Utilidades ───────────────────────────────────────────────────────────
   function _pfFmt(n)     { if (!n && n !== 0) return '—'; return Math.round(n).toLocaleString('es-AR'); }
   function _pfFmtFull(n) { if (!n && n !== 0) return '0'; return Math.round(n).toLocaleString('es-AR'); }
   function _pfEsc(s)     { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   function _pfPct(v,t)   { if (!t||!v) return '0'; return (v/t*100).toFixed(1).replace('.0',''); }
+  // Normalización idéntica a normNombreDir en director.html
+  function _pfNormNombre(s) { return String(s||'').trim().toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^A-Z0-9 ]/g,' ').replace(/\s+/g,' ').trim(); }
 
   function _pfColorScore(s) {
     if (!s) return '#6b7280';
@@ -7244,7 +7247,9 @@ init()
   function _pfRenderClientRow(c, idx) {
     var sc      = c.score;
     var scColor = _pfColorScore(sc);
-    var dsoVal  = c.dso || 0;
+    // Misma lógica que el Director: preferir DSO de /api/dso-todos (agotamiento), caer a c.dso (antigüedad)
+    var _dsoExh = _pfDsoPorCliente[_pfNormNombre(c.nombre||'')];
+    var dsoVal  = (typeof _dsoExh === 'number' && _dsoExh > 0) ? _dsoExh : (c.dso || 0);
     var dsoColor = _pfColorDSO(dsoVal);
     var total   = c.saldo_total || 1;
     var tb      = c.buckets || {};
@@ -7418,15 +7423,20 @@ init()
     contentEl.style.display = 'none';
 
     try {
-      var [rCartera, rDso] = await Promise.all([
+      var [rCartera, rDso, rTodos] = await Promise.all([
         fetch('/api/cartera-saldos'),
-        fetch('/dso-global-saldos').catch(function(){ return {ok:false}; })
+        fetch('/dso-global-saldos').catch(function(){ return {ok:false}; }),
+        fetch('/api/dso-todos').catch(function(){ return {ok:false}; })
       ]);
       if (!rCartera.ok) throw new Error('HTTP ' + rCartera.status + ' al cargar cartera-saldos');
       _pfData = await rCartera.json();
       if (rDso && rDso.ok) {
         var dsoData = await rDso.json();
         if (dsoData && dsoData.dso != null) _pfDsoGlobal = dsoData.dso;
+      }
+      if (rTodos && rTodos.ok) {
+        var todosData = await rTodos.json();
+        _pfDsoPorCliente = (todosData && todosData.por_cliente) || {};
       }
       _pfLoaded = true;
       loadEl.style.display = 'none';
