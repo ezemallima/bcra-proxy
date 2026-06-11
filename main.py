@@ -47,6 +47,11 @@ BRIGHTDATA_HOST    = os.environ.get('BRIGHTDATA_HOST', 'brd.superproxy.io')
 BRIGHTDATA_PORT    = int(os.environ.get('BRIGHTDATA_PORT', '22225'))
 # Contraseña efectiva: zona residencial (BRIGHTDATA_PASS) tiene prioridad sobre API key
 _BRD_PASSWORD      = BRIGHTDATA_PASS or BRIGHTDATA_API_KEY
+
+# ── Rate limiter global para API de BCRA — máx 2 llamadas directas simultáneas ─
+# Evita que consultas concurrentes saturen la IP de Render y generen rate-limit.
+_bcra_api_sem = _threading.Semaphore(2)
+
 # Log diagnóstico al iniciar — ayuda a detectar credenciales incorrectas o ausentes
 _brd_pass_src = 'BRIGHTDATA_PASS' if BRIGHTDATA_PASS else ('BRIGHTDATA_API_KEY' if BRIGHTDATA_API_KEY else 'NINGUNA')
 _brd_pass_len = len(_BRD_PASSWORD)
@@ -891,9 +896,11 @@ def _bcra_get(url: str, timeout: int = 0) -> requests.Response:
     """
     _t = timeout if timeout > 0 else 12
 
-    # ── 1. Bright Data Residential Proxies (motor principal) ─────────────────
-    # IPs residenciales AR → BCRA no las bloquea (son IPs de usuarios reales)
-    if BRIGHTDATA_USER and _BRD_PASSWORD:
+    # ── 1. Bright Data Residential Proxies ───────────────────────────────────
+    # Habilitado solo para dominios NO-BCRA (scraping de AFIP, Infocred, etc.)
+    # BCRA bloquea las IPs residenciales de BD con 502 → el directo es más rápido
+    _is_bcra_api = 'bcra.gob.ar' in url
+    if BRIGHTDATA_USER and _BRD_PASSWORD and not _is_bcra_api:
         _brd_proxy = f"http://{BRIGHTDATA_USER}:{_BRD_PASSWORD}@{BRIGHTDATA_HOST}:{BRIGHTDATA_PORT}"
         _brd_headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
@@ -923,8 +930,9 @@ def _bcra_get(url: str, timeout: int = 0) -> requests.Response:
             timeout=_t,
         )
 
-    # ── 3. Directo (último recurso) ──────────────────────────────────────────
-    return requests.get(url, timeout=_t, verify=False)
+    # ── 3. Directo — con semáforo para limitar llamadas concurrentes a BCRA ───
+    with _bcra_api_sem:
+        return requests.get(url, timeout=_t, verify=False)
 
 
 def _map_detalle_bcra(raw: dict) -> dict:
@@ -6536,6 +6544,66 @@ def _fecha_valida(fecha_str, desde):
 @app.route("/health")
 def health():
     return jsonify({"status": "ok", "gemini": bool(GEMINI_KEY), "comercial": len(_cartera_comercial)})
+
+
+_warm_estado = {"corriendo": False, "progreso": 0, "total": 0, "ultimo": ""}
+
+@app.route("/warm-padron", methods=["POST", "GET"])
+def warm_padron():
+    """Pre-calienta el padrón local consultando BCRA para todos los CUITs
+    de la cartera que no tienen datos recientes (< 20h). Diseñado para
+    ejecutarse de noche via cron (ej: cron-job.org a las 3am AR)."""
+    if _warm_estado["corriendo"]:
+        return jsonify({"status": "ya_corriendo", **_warm_estado}), 200
+
+    def _run():
+        _warm_estado["corriendo"] = True
+        try:
+            if not os.path.exists(ALERTAS_FILE):
+                return
+            with open(ALERTAS_FILE, 'r', encoding='utf-8') as f:
+                cartera = json.load(f)
+            cuits = [
+                str(c.get('cuit', '')).replace('-', '').replace(' ', '').strip()
+                for c in cartera if isinstance(c, dict) and c.get('cuit')
+            ]
+            cuits = [c for c in cuits if len(c) >= 10]
+            _warm_estado["total"] = len(cuits)
+            print(f"[warm-padron] Iniciando pre-calentamiento: {len(cuits)} CUITs", flush=True)
+
+            ahora = time.time()
+            TTL_HORAS = 20 * 3600  # solo refresca si tiene más de 20 horas
+
+            for i, cuit in enumerate(cuits):
+                _warm_estado["progreso"] = i + 1
+                _warm_estado["ultimo"] = cuit
+                try:
+                    # Skip si el padrón local tiene datos recientes
+                    local = consultar_padron_local(cuit)
+                    if local and local.get('bcra_disponible'):
+                        continue
+                    # Consultar BCRA con reintentos mínimos
+                    data, err = consultar_bcra(cuit)
+                    if data and not err:
+                        _guardar_en_padron_local(cuit, data)
+                        print(f"[warm-padron] {i+1}/{len(cuits)} {cuit} OK", flush=True)
+                    else:
+                        print(f"[warm-padron] {i+1}/{len(cuits)} {cuit} sin datos", flush=True)
+                except Exception as e:
+                    print(f"[warm-padron] {cuit} error: {e}", flush=True)
+                # 2 segundos entre consultas para no triggerear rate-limit de BCRA
+                time.sleep(2)
+        finally:
+            _warm_estado["corriendo"] = False
+            print("[warm-padron] Finalizado", flush=True)
+
+    _threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"status": "iniciado", "total": _warm_estado["total"]}), 202
+
+
+@app.route("/warm-padron/estado")
+def warm_padron_estado():
+    return jsonify(_warm_estado), 200
 
 @app.route("/cache/limpiar/<cuit>", methods=["POST", "GET"])
 def limpiar_cache_cuit(cuit):
