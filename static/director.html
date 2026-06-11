@@ -915,7 +915,7 @@ function renderClientRow(c, idx) {
   var scColor = colorScore(sc);
   var _dsoNorm = normNombreDir(c.nombre||'');
   var _dsoExh  = _dsoPorCliente[_dsoNorm];
-  var dsoVal   = (typeof _dsoExh==='number' && _dsoExh>0) ? _dsoExh : (c.dso||0);
+  var dsoVal   = (c.dso && c.dso > 0) ? c.dso : ((typeof _dsoExh==='number' && _dsoExh>0) ? _dsoExh : 0);
   var dsoColor = colorDSO(dsoVal);
   var total    = c.saldo_total || 1;
   var tb       = c.buckets || {};
