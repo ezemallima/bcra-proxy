@@ -3584,16 +3584,16 @@ async function consultarCliente() {
       }
       return;
     }
-    // ── BLOQUEO CUIT INEXISTENTE ─────────────────────────────────────────────
-    // Solo cuando BCRA devolvió error real (results=null) — NO cuando devuelve
-    // "sin deudas" (sin_deudas=true con results vacío), que es un CUIT válido sin
-    // historial bancario. Y solo si además AFIP falla y no está en cartera interna.
+    // ── VALIDACIÓN DE CUIT ────────────────────────────────────────────────────
+    // El árbitro final es el score server: tiene lógica multi-fuente (BCRA +
+    // solvencia + cartera interna). No bloquear solo porque BCRA/AFIP estén
+    // offline — eso produce falsos "CUIT NO EXISTE" para clientes válidos.
     var _bcraError = !bcraData.results || !!bcraData.error_bcra;
     if (_bcraError && !afipTieneNombre && !enCarteraLocal) {
-      mostrarErrorCuitInexistente(raw);
-      return;
-    }
-    if (bcraData.error === 'timeout') {
+      // BCRA offline + AFIP sin nombre: continuar flujo con estado "timeout".
+      // Si el CUIT es genuinamente inválido, el score devolverá cuit_inexistente.
+      mostrarResultado(raw, null, true, estadoAfip, domicilioAfip, nombreFinal);
+    } else if (bcraData.error === 'timeout') {
       mostrarResultado(raw, null, true, estadoAfip, domicilioAfip, nombreFinal);
     } else {
       window._ultimoBcraData = bcraData;
@@ -3602,8 +3602,8 @@ async function consultarCliente() {
   } catch(e) {
     if (e && e.name === 'AbortError') return;
     if (!nombreFinal) nombreFinal = cuitFmtLocal;
-    // Si BCRA falla y AFIP tampoco tenía datos reales → bloquear
-    if (!afipTieneNombre && !enCarteraLocal) { mostrarErrorCuitInexistente(raw); return; }
+    // BCRA con error de red: continuar flujo — score determina si el CUIT es válido.
+    // Bloquear aquí causa falsos "CUIT NO EXISTE" cuando el padrón está temporalmente offline.
     mostrarResultado(raw, null, true, estadoAfip, domicilioAfip, nombreFinal);
   }
 
@@ -3979,7 +3979,15 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
       scoreObjFinal  = calcularVendeScore(cuit, data, _scoreMora, _scoreWsp, historial, window._chequesUltimaConsulta || null);
     }
     var scoreElF = document.getElementById('vende-score-container');
-    // Bloquear score para CUITs sin Razón Social identificada
+    // Si AFIP/BCRA estaban offline al cargar, el nombre puede ser el CUIT formateado.
+    // Si el score trajo razón social (de solvencia ARCA/ANSES), rescatar y actualizar UI.
+    if (_esFantasma && scoreServidor && scoreServidor.razon_social) {
+      nombreMostrar = scoreServidor.razon_social;
+      _esFantasma = false;
+      var _elNomHeader = document.querySelector('#cliente-header .nombre-cliente');
+      if (_elNomHeader) _elNomHeader.textContent = nombreMostrar;
+    }
+    // Bloquear score para CUITs sin Razón Social identificada por ninguna fuente
     if (_esFantasma) {
       if (scoreElF) scoreElF.innerHTML =
         '<div style="padding:20px 12px;background:#fff7ed;border:1.5px solid #fb923c;border-radius:12px;text-align:center;">' +

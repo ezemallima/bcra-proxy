@@ -2991,7 +2991,7 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
     if not hist_data:
         for _wu in [w + "/deudas/" + cuit_limpio + "/historial" for w in BCRA_WORKERS][:2]:
             try:
-                r = requests.get(_wu, timeout=5, verify=False)
+                r = requests.get(_wu, timeout=12, verify=False)
                 if r.status_code == 200 and len(r.text.strip()) > 10:
                     hist_data = _norm_bcra_resp(r.json())
                     try:
@@ -3010,31 +3010,34 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
                         json.dump({'payload': hist_data, 'ts': time.time()}, f)
                 except: pass
 
-    if not cheq_data:
-        for _wu in [w + "/deudas/" + cuit_limpio + "/cheques" for w in BCRA_WORKERS][:2]:
-            try:
-                r = requests.get(_wu, timeout=5, verify=False)
-                if r.status_code == 200 and len(r.text.strip()) > 10:
-                    cheq_data = _norm_bcra_resp(r.json())
+    # Módulo cheques — aislado con fallback absoluto.
+    # Un timeout o error en este módulo NO debe abortar el cálculo del score.
+    try:
+        if not cheq_data:
+            for _wu in [w + "/deudas/" + cuit_limpio + "/cheques" for w in BCRA_WORKERS][:2]:
+                try:
+                    r = requests.get(_wu, timeout=12, verify=False)
+                    if r.status_code == 200 and len(r.text.strip()) > 10:
+                        cheq_data = _norm_bcra_resp(r.json())
+                        try:
+                            with open(os.path.join(DATA_DIR, f'cheques_{cuit_limpio}.json'), 'w') as f:
+                                json.dump({'payload': cheq_data, 'ts': time.time()}, f)
+                        except: pass
+                        break
+                    # Workers devuelven 404 cuando no soportan /cheques — ignorar.
+                except Exception as ec:
+                    print(f"[score wrapper] cheq worker {cuit_limpio}: {ec}", flush=True)
+            if not cheq_data:
+                _cd, _ = _consultar_bcra_directo(cuit_limpio, 'cheques')
+                if _cd:
+                    cheq_data = _cd
                     try:
                         with open(os.path.join(DATA_DIR, f'cheques_{cuit_limpio}.json'), 'w') as f:
                             json.dump({'payload': cheq_data, 'ts': time.time()}, f)
                     except: pass
-                    break
-                # No hacer break en 404: los workers devuelven 404 cuando no
-                # soportan el sub-path /cheques, no porque el CUIT no tenga cheques.
-                # Solo el BCRA oficial puede confirmar ausencia de antecedentes.
-            except Exception as ec:
-                print(f"[score wrapper] cheq worker {cuit_limpio}: {ec}", flush=True)
-        if not cheq_data:
-            # Consulta directa al BCRA — única fuente confiable para cheques
-            _cd, _ = _consultar_bcra_directo(cuit_limpio, 'cheques')
-            if _cd:
-                cheq_data = _cd
-                try:
-                    with open(os.path.join(DATA_DIR, f'cheques_{cuit_limpio}.json'), 'w') as f:
-                        json.dump({'payload': cheq_data, 'ts': time.time()}, f)
-                except: pass
+    except Exception as _cheq_err:
+        print(f"[cheques][FALLBACK] {cuit_limpio}: error en módulo cheques ({_cheq_err}) — score continúa sin antecedentes", flush=True)
+        cheq_data = None
 
     if not isinstance(bcra_data, dict):
         bcra_data = _norm_bcra_resp(bcra_data) if bcra_data else {}
@@ -5749,6 +5752,8 @@ def _score_response(score_data: dict, solvency: dict = None, cheq_data: dict = N
     _safe["inferencia_ingresos"]  = sol.get('ingresos_anuales')
     _safe["fuente_ingresos"]      = sol.get('fuente_ingresos')
     _safe["actividad_principal"]  = sol.get('actividad_principal')
+    # Razón social para rescatar el nombre cuando AFIP y BCRA estuvieron offline
+    _safe["razon_social"]         = (sol.get('razon_social') or sol.get('nombre') or '').strip()
 
     # ── Campos futuros — se poblan cuando ARCA/ANSES/Juicios estén integrados ──
     # antiguedad_fiscal: años desde inscripción en ARCA/AFIP (int o None)
@@ -6075,7 +6080,7 @@ def get_afip(cuit):
 
     # 4. API BCRA — historial (solo si los datos internos no alcanzaron)
     try:
-        r = requests.get("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit_limpio, timeout=5, verify=False)
+        r = requests.get("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit_limpio, timeout=12, verify=False)
         if r.status_code == 200:
             den2 = _norm_bcra_resp(r.json()).get('results', {}).get('denominacion', '').strip()
             if den2: return jsonify({"nombre": den2, "fuente": "bcra_hist"})
@@ -6083,14 +6088,16 @@ def get_afip(cuit):
 
     # 5. API BCRA — deudas vigentes
     try:
-        r = requests.get("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit_limpio, timeout=5, verify=False)
+        r = requests.get("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit_limpio, timeout=12, verify=False)
         if r.status_code == 200:
             den3 = _norm_bcra_resp(r.json()).get('results', {}).get('denominacion', '').strip()
             if den3: return jsonify({"nombre": den3, "fuente": "bcra_live"})
     except Exception: pass
 
+    # Ninguna fuente devolvió denominación — puede ser padrón temporalmente offline.
+    # El frontend trata fuente=fallback como "sin nombre real" y deja que el score decida.
     print(f"[afip] Sin nombre para CUIT {cuit_limpio} — devolviendo formato", flush=True)
-    return jsonify({"nombre": cuit_fmt, "fuente": "fallback"})
+    return jsonify({"nombre": cuit_fmt, "fuente": "fallback", "afip_offline": True})
 
 @app.route("/deudas/<cuit>")
 def get_deudas(cuit):
@@ -6183,7 +6190,7 @@ def get_cheques(cuit):
 
     endpoints_chq = (
         [(BCRA_WRAPPER_BASE + '/cheques-rechazados/' + cuit_limpio, 3.5, 'bcra_wrapper')]
-        + [(w + "/deudas/" + cuit_limpio + "/cheques", 4, f"Worker{i+1}") for i, w in enumerate(BCRA_WORKERS[:4])]
+        + [(w + "/deudas/" + cuit_limpio + "/cheques", 12, f"Worker{i+1}") for i, w in enumerate(BCRA_WORKERS[:4])]
         + [
             (f"https://api.bcra.gob.ar/CentralDeInformacion/v1.0/ChequesRechazados/{cuit_limpio}", 10, "bcra_cdi"),
             (f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/{cuit_limpio}", 10, "bcra_legacy"),
@@ -6246,7 +6253,7 @@ def get_historial(cuit):
         return None, via
 
     endpoints_hist = (
-        [(w + "/deudas/" + cuit_limpio + "/historial", 4, f"Worker{i+1}") for i, w in enumerate(BCRA_WORKERS[:4])]
+        [(w + "/deudas/" + cuit_limpio + "/historial", 12, f"Worker{i+1}") for i, w in enumerate(BCRA_WORKERS[:4])]
         + [
             (f"https://api.bcra.gob.ar/CentralDeInformacion/v1.0/Deudas/Historicas/{cuit_limpio}", 10, "bcra_cdi"),
             (f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/{cuit_limpio}",    10, "bcra_legacy"),
