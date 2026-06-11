@@ -6894,7 +6894,7 @@ def get_saldos_cliente(cliente):
 
 def _calc_dso_aging(facturas: list) -> int | None:
     """DSO por antigüedad: Σ(saldo × días_desde_fechaFactura) / Σ(saldo).
-    Usa fechaFactura en formato DD/MM/YYYY.  Retorna None si saldo total = 0."""
+    Acepta fechaFactura en DD/MM/YYYY o YYYY-MM-DD (ISO).  Retorna None si saldo total = 0."""
     from datetime import date
     hoy = date.today()
     suma_pond, suma_saldo = 0.0, 0.0
@@ -6902,11 +6902,17 @@ def _calc_dso_aging(facturas: list) -> int | None:
         saldo = float(f.get('saldo') or 0)
         if saldo <= 0:
             continue
-        ff_str = str(f.get('fechaFactura') or '')
+        ff_str = str(f.get('fechaFactura') or '').strip()
+        dias = 0
         try:
-            d, m, y = ff_str.strip().split('/')
-            ff = date(int(y), int(m), int(d))
-            dias = max(0, (hoy - ff).days)
+            if '/' in ff_str:                   # DD/MM/YYYY
+                p = ff_str.split('/')
+                ff = date(int(p[2]), int(p[1]), int(p[0]))
+                dias = max(0, (hoy - ff).days)
+            elif '-' in ff_str and len(ff_str) >= 10:  # YYYY-MM-DD (ISO)
+                p = ff_str.split('-')
+                ff = date(int(p[0]), int(p[1]), int(p[2]))
+                dias = max(0, (hoy - ff).days)
         except Exception:
             dias = 0
         suma_pond  += saldo * dias
