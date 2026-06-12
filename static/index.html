@@ -1963,12 +1963,21 @@ async function procesarDSO() {
           }
         });
         if (saldosParaGuardar.length > 0) {
+          // Pasar fecha_corte al servidor para que el DSO se calcule al cierre del reporte,
+          // no con la fecha de hoy (el archivo puede subirse días después del cierre).
+          var _fcISO = null;
+          if (fechaCorteMs) {
+            var _fcd = new Date(fechaCorteMs);
+            _fcISO = _fcd.getFullYear() + '-'
+              + String(_fcd.getMonth()+1).padStart(2,'0') + '-'
+              + String(_fcd.getDate()).padStart(2,'0');
+          }
           fetch('/dso-saldos', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ saldos: saldosParaGuardar })
+            body: JSON.stringify({ saldos: saldosParaGuardar, fecha_corte: _fcISO })
           }).then(function(r) { return r.json(); })
-            .then(function(d) { console.log('[DSO] Saldos guardados:', d.agregados, 'nuevos, total:', d.total); })
+            .then(function(d) { console.log('[DSO] Saldos guardados:', d.agregados, 'nuevos, total:', d.total, 'corte:', _fcISO); })
             .catch(function(e) { console.warn('[DSO] Error guardando saldos:', e); });
         }
       } catch(e) { console.warn('[DSO] Error preparando saldos:', e); }

@@ -7084,13 +7084,27 @@ def save_dso_saldos():
         if not nuevos:
             return jsonify({"error": "Sin saldos"}), 400
         from datetime import datetime, date as _date
-        hoy   = datetime.now()
-        hoy_d = hoy.date()
+        hoy = datetime.now()
+
+        # La fecha de corte define el "hoy" para el cálculo de días pendientes.
+        # Si el body incluye fecha_corte (YYYY-MM-DD), se usa esa fecha en lugar de today().
+        # Esto es necesario cuando el reporte corresponde a un cierre anterior (ej: 31/05/2026).
+        fecha_corte_str = str(body.get('fecha_corte') or '').strip()
+        try:
+            if fecha_corte_str and len(fecha_corte_str) >= 10:
+                p = fecha_corte_str[:10].split('-')
+                corte_d = _date(int(p[0]), int(p[1]), int(p[2]))
+            else:
+                corte_d = hoy.date()
+        except Exception:
+            corte_d = hoy.date()
+
         f_actual = os.path.join(DATA_DIR, 'dso_saldos_actual.json')
         with open(f_actual, 'w', encoding='utf-8') as f:
-            json.dump({"saldos": nuevos, "ultima_actualizacion": hoy.strftime('%d/%m/%Y %H:%M')}, f, ensure_ascii=False)
+            json.dump({"saldos": nuevos, "ultima_actualizacion": hoy.strftime('%d/%m/%Y %H:%M'),
+                       "fecha_corte": corte_d.strftime('%Y-%m-%d')}, f, ensure_ascii=False)
 
-        # Pre-calcular DSO por cliente a la fecha de este upload (valor congelado).
+        # Pre-calcular DSO por cliente a la fecha de corte (valor congelado).
         # Se guarda en dso_individual_actual.json y NO se recalcula al subir saldos de gestión.
         _acc_cuit: dict = {}   # cuit_limpio → {sp, ss}
         _acc_nom:  dict = {}   # nombre_norm → {sp, ss}
@@ -7103,10 +7117,10 @@ def save_dso_saldos():
             try:
                 if '/' in ff_str:
                     p = ff_str.split('/')
-                    dias = max(0, (hoy_d - _date(int(p[2]), int(p[1]), int(p[0]))).days)
+                    dias = max(0, (corte_d - _date(int(p[2]), int(p[1]), int(p[0]))).days)
                 elif '-' in ff_str and len(ff_str) >= 10:
                     p = ff_str.split('-')
-                    dias = max(0, (hoy_d - _date(int(p[0]), int(p[1]), int(p[2][:4]))).days)
+                    dias = max(0, (corte_d - _date(int(p[0]), int(p[1]), int(p[2][:4]))).days)
             except Exception:
                 dias = 0
             c_cuit = str(s.get('cuit', '')).replace('-', '').replace(' ', '').strip()
@@ -7123,10 +7137,11 @@ def save_dso_saldos():
         f_ind = os.path.join(DATA_DIR, 'dso_individual_actual.json')
         with open(f_ind, 'w', encoding='utf-8') as f:
             json.dump({"por_cuit": dso_por_cuit, "por_nombre": dso_por_nombre,
-                       "fecha": hoy.strftime('%Y-%m-%d')}, f, ensure_ascii=False)
+                       "fecha_corte": corte_d.strftime('%Y-%m-%d')}, f, ensure_ascii=False)
 
         total = sum(s.get('saldo', 0) for s in nuevos)
         print(f"[dso-saldos] Wipe & write: {len(nuevos)} saldos ${total:,.0f} | "
+              f"fecha_corte={corte_d} | "
               f"DSO pre-calculado: {len(dso_por_cuit)} CUITs / {len(dso_por_nombre)} nombres", flush=True)
         return jsonify({"ok": True, "agregados": len(nuevos), "total": len(nuevos)})
     except Exception as e:
