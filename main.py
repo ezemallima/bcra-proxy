@@ -632,15 +632,33 @@ def _import_cheques_zip(date_str: str = None) -> bool:
     al_path  = None
 
     try:
-        # 1. Descarga streaming del ZIP (~10 MB comprimido, ~58 MB expandido)
+        # 1. Descarga streaming del ZIP (~10-15 MB comprimido, ~58 MB expandido)
+        # Bright Data residencial como primera opción: el BCRA bloquea IPs de datacenter.
+        # Si no hay proxy configurado, intenta directo como fallback.
+        _proxies = None
+        if BRIGHTDATA_USER and _BRD_PASSWORD:
+            _proxy_url = f"http://{BRIGHTDATA_USER}:{_BRD_PASSWORD}@{BRIGHTDATA_HOST}:{BRIGHTDATA_PORT}"
+            _proxies = {"http": _proxy_url, "https": _proxy_url}
+            print(f"[cheques_db] Usando Bright Data para descarga", flush=True)
+
         _cheques_db_estado['ultimo_paso'] = f"Descargando {url}"
         print(f"[cheques_db] Descargando {url}", flush=True)
         try:
-            resp = requests.get(url, timeout=180, verify=False, stream=True)
+            resp = requests.get(url, timeout=180, verify=False, stream=True, proxies=_proxies)
         except Exception as e_dl:
-            _cheques_db_estado['ultimo_paso'] = f"ERROR red: {e_dl}"
-            print(f"[cheques_db] Error de red: {e_dl}", flush=True)
-            return False
+            # Si falla con proxy, reintentar directo
+            if _proxies:
+                print(f"[cheques_db] Proxy falló ({e_dl}), reintentando directo", flush=True)
+                try:
+                    resp = requests.get(url, timeout=180, verify=False, stream=True)
+                except Exception as e_dl2:
+                    _cheques_db_estado['ultimo_paso'] = f"ERROR red: {e_dl2}"
+                    print(f"[cheques_db] Error directo: {e_dl2}", flush=True)
+                    return False
+            else:
+                _cheques_db_estado['ultimo_paso'] = f"ERROR red: {e_dl}"
+                print(f"[cheques_db] Error de red: {e_dl}", flush=True)
+                return False
         if resp.status_code == 404:
             _cheques_db_estado['ultimo_paso'] = f"ERROR 404: archivo {date_str} no existe en BCRA aún"
             print(f"[cheques_db] 404 — archivo {date_str} no disponible", flush=True)
