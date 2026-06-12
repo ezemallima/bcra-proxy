@@ -1988,6 +1988,13 @@ def get_solvency_data(cuit):
                     cached_data = cached_data[0] if cached_data else {}
                 if not isinstance(cached_data, dict):
                     cached_data = {}
+                # Si el caché no tiene tipo_persona, inferirlo desde prefijo CUIT
+                if not cached_data.get('tipo_persona'):
+                    _pref = cuit_limpio[:2]
+                    if _pref in ('20', '23', '24', '27'):
+                        cached_data['tipo_persona'] = 'FISICA'
+                    elif _pref in ('30', '33', '34'):
+                        cached_data['tipo_persona'] = 'JURIDICA'
                 # Sanity: re-inferir si el caché guardó ingresos=0 con tipo/cat válidos
                 if not cached_data.get('ingresos_anuales') and (
                     cached_data.get('categoria_monotrib') or cached_data.get('tipo_persona')
@@ -2077,6 +2084,15 @@ def get_solvency_data(cuit):
 
     # ── Post-proceso: campos enriquecidos ─────────────────────────────────────
     if data is not None:
+        # tipo_persona desde prefijo CUIT si TangoFactura no lo aportó.
+        # CUIT 20/23/24/27 = Persona Física; 30/33/34 = Persona Jurídica.
+        if not data.get('tipo_persona'):
+            _pref = cuit_limpio[:2]
+            if _pref in ('20', '23', '24', '27'):
+                data['tipo_persona'] = 'FISICA'
+            elif _pref in ('30', '33', '34'):
+                data['tipo_persona'] = 'JURIDICA'
+
         # antiguedad_fiscal: años desde inicio de actividades (0 si no disponible)
         data.setdefault('antiguedad_fiscal', data.get('antiguedad_anos') or 0)
 
