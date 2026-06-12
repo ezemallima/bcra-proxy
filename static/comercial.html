@@ -2713,6 +2713,70 @@ function renderConsulta(cuit, dd, cd, hd, serverScore, afipData) {
     </div>
   </div>`;
 
+  // ── ARCA / AFIP — indicador fiscal (solo si hay datos reales) ──
+  {
+    const _arcaFecha  = serverScore?.fecha_inscripcion || null;
+    const _arcaCat    = serverScore?.categoria_monotrib || null;
+    const _arcaTipo   = serverScore?.tipo_persona || null;
+    const _arcaActiv  = serverScore?.actividad_principal || '';
+    const _arcaAnt    = serverScore?.antiguedad_fiscal || null;
+    const _arcaFuente = serverScore?.fuente_ingresos || '';
+    const _fuente_ok  = _arcaFuente && !['bcra_inferido','bcra_fallback','bcra_floor_scorer','sin_datos',''].includes(_arcaFuente);
+    const _hayArca    = _fuente_ok && (_arcaFecha || _arcaCat || _arcaTipo || _arcaActiv);
+
+    if (_hayArca) {
+      // Régimen fiscal
+      let regLabel = '', regTipo = '', regColor = '#3b82f6';
+      if (_arcaCat) {
+        regLabel = `Cat. ${_arcaCat}`;
+        regTipo  = 'Monotributo';
+        regColor = '#2563eb';
+      } else if (/JURIDICA/i.test(_arcaTipo||'')) {
+        regTipo  = 'Persona Jurídica';
+        regColor = '#7c3aed';
+      } else if (/FISICA/i.test(_arcaTipo||'')) {
+        regTipo  = 'Persona Física';
+        regColor = '#475569';
+      } else if (/INSCRIPTO|RI/i.test(_arcaTipo||'')) {
+        regTipo  = 'Resp. Inscripto';
+        regColor = '#0891b2';
+      }
+
+      // Fecha de inscripción formateada
+      let fechaPill = '';
+      if (_arcaFecha) {
+        try {
+          const d   = new Date(_arcaFecha + 'T12:00:00');
+          const mes = d.toLocaleDateString('es-AR', {month:'short'});
+          const año = d.getFullYear();
+          const ant = _arcaAnt > 0 ? ` · ${_arcaAnt} año${_arcaAnt!==1?'s':''}` : '';
+          fechaPill = `<span style="display:inline-flex;align-items:center;gap:5px;background:rgba(100,116,139,0.07);border:1px solid rgba(100,116,139,0.18);border-radius:20px;padding:4px 11px;font-size:11px;color:var(--texto2)">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            Inscripto <strong>${mes}. ${año}</strong>${ant}
+          </span>`;
+        } catch(e) {}
+      }
+
+      // Actividad principal (truncada)
+      let activPill = '';
+      if (_arcaActiv) {
+        const actTrim = _arcaActiv.length > 40 ? _arcaActiv.slice(0,38)+'…' : _arcaActiv;
+        activPill = `<span style="display:inline-flex;align-items:center;background:rgba(100,116,139,0.07);border:1px solid rgba(100,116,139,0.18);border-radius:20px;padding:4px 11px;font-size:11px;color:var(--texto2);max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(_arcaActiv)}">${esc(actTrim)}</span>`;
+      }
+
+      // Pill de régimen
+      const regPill = (regTipo||regLabel) ? `<span style="display:inline-flex;align-items:center;gap:5px;background:${regColor}14;border:1px solid ${regColor}38;border-radius:20px;padding:4px 11px;font-size:11px;font-weight:600;color:${regColor}">
+        ${regTipo ? `<span style="opacity:0.8">${esc(regTipo)}</span>` : ''}
+        ${regLabel ? `<span style="background:${regColor};color:#fff;border-radius:12px;padding:1px 8px;font-size:11px;font-weight:800">${esc(regLabel)}</span>` : ''}
+      </span>` : '';
+
+      html += `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:9px 13px;margin-bottom:8px;background:var(--card-bg);border:1px solid var(--border);border-radius:10px">
+        <span style="font-size:9px;font-weight:800;letter-spacing:1px;color:#94a3b8;text-transform:uppercase;margin-right:4px;white-space:nowrap">ARCA</span>
+        ${regPill}${fechaPill}${activPill}
+      </div>`;
+    }
+  }
+
   // ── 2. CHEQUES — prioridad visual ──
   html += `<div class="card"><div class="card-title">Cheques rechazados BCRA</div>`;
   if (!dchq.length) {
