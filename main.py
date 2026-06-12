@@ -7149,6 +7149,28 @@ def save_dso_saldos():
         print(f"[dso-saldos] Error: {traceback.format_exc()}", flush=True)
         return jsonify({"error": str(e)}), 500
 
+@app.route("/dso-individual-debug")
+def dso_individual_debug():
+    """Diagnóstico: muestra el contenido de dso_individual_actual.json."""
+    _path = os.path.join(DATA_DIR, 'dso_individual_actual.json')
+    if not os.path.exists(_path):
+        return jsonify({"existe": False, "mensaje": "Archivo no encontrado — el upload DSO no generó el archivo"})
+    try:
+        data = json.load(open(_path, 'r', encoding='utf-8'))
+        por_cuit   = data.get('por_cuit', {})
+        por_nombre = data.get('por_nombre', {})
+        return jsonify({
+            "existe": True,
+            "fecha_corte": data.get('fecha_corte'),
+            "clientes_por_cuit":   len(por_cuit),
+            "clientes_por_nombre": len(por_nombre),
+            "muestra_cuit":   dict(list(por_cuit.items())[:10]),
+            "muestra_nombre": dict(list(por_nombre.items())[:10]),
+        })
+    except Exception as e:
+        return jsonify({"existe": True, "error": str(e)}), 500
+
+
 @app.route("/dso-cheques", methods=["GET"])
 def get_dso_cheques():
     try:
