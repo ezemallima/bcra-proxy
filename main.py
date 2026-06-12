@@ -701,16 +701,24 @@ def _import_cheques_zip(date_str: str = None) -> bool:
         print(f"[cheques_db] ZIP válido descargado: {tam_mb:.1f} MB", flush=True)
 
         # 2. Extraer solo el archivo 'al*' (snapshot completo)
+        # El archivo puede estar en la raíz o dentro de un subdirectorio del ZIP.
         _cheques_db_estado['ultimo_paso'] = "Extrayendo ZIP"
         with _zipfile.ZipFile(zip_path, 'r') as zf:
-            names  = zf.namelist()
-            al_name = next((n for n in names if n.lower().startswith('al')), None)
+            names   = zf.namelist()
+            print(f"[cheques_db] Contenido ZIP: {names}", flush=True)
+            # Buscar por basename para manejar subdirectorios dentro del ZIP
+            al_name = next(
+                (n for n in names if os.path.basename(n).lower().startswith('al') and not n.endswith('/')),
+                None
+            )
             if not al_name:
-                print(f"[cheques_db] No se encontró archivo 'al*' en ZIP. Contenido: {names}", flush=True)
+                _cheques_db_estado['ultimo_paso'] = f"ERROR: sin 'al*' en ZIP. Contenido: {names}"
+                print(f"[cheques_db] No se encontró 'al*'. Nombres: {names}", flush=True)
                 return False
             zf.extract(al_name, DATA_DIR)
-            al_path = os.path.join(DATA_DIR, al_name)
-        print(f"[cheques_db] Extraído {al_name}", flush=True)
+            # zf.extract preserva la estructura de directorios del ZIP
+            al_path = os.path.join(DATA_DIR, al_name.replace('\\', os.sep).replace('/', os.sep))
+        print(f"[cheques_db] Extraído: {al_name} → {al_path}", flush=True)
 
         # 3. Parsear el archivo de ancho fijo e importar a SQLite en lotes
         conn = sqlite3.connect(PADRON_DB_PATH, check_same_thread=False)
