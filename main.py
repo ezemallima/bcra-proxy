@@ -1481,39 +1481,10 @@ def gemini_request(payload, timeout=250, system_prompt=None):
 
     return None, "No hay APIs de IA disponibles."
 
-BCRA_WORKER   = "https://little-feather-5b68.ezequielmallima.workers.dev"
-BCRA_WORKER_2 = "https://square-pine-e6b4.ezequielmallima.workers.dev"
-BCRA_WORKER_3 = "https://fancy-feather-7ead.ezequielmallima.workers.dev"
-BCRA_WORKER_4 = "https://summer-wood-9639.ezequielmallima.workers.dev"
-# orange-recipe-3bb1.ezetombacapo.workers.dev eliminado — cuenta inactiva
-BCRA_WORKERS  = [BCRA_WORKER, BCRA_WORKER_2, BCRA_WORKER_3, BCRA_WORKER_4]
+# Workers de Cloudflare eliminados: BCRA recomienda IP controlada (Render) + caché intensivo.
+# Fuente de datos crediticios: Banco Central de la República Argentina (BCRA) — api.bcra.gob.ar
 
-# ── Circuit breaker para workers — evita saturar threads cuando están caídos ──
-import threading as _threading
-_wcb = {'failures': 0, 'open_until': 0.0}
-_wcb_lock = _threading.Lock()
-_WCB_OPEN_AFTER = 1    # abre tras la primera ronda donde todos los workers fallan
-_WCB_OPEN_SECS  = 7200 # queda abierto 2 horas (evita retries en cada reinicio)
-
-def _wcb_is_open() -> bool:
-    return time.time() < _wcb['open_until']
-
-def _wcb_on_success():
-    with _wcb_lock:
-        if _wcb['open_until'] > 0:
-            print("[worker_cb] Worker OK → circuito cerrado", flush=True)
-        _wcb['failures'] = 0
-        _wcb['open_until'] = 0.0
-
-def _wcb_on_all_failed():
-    with _wcb_lock:
-        _wcb['failures'] += 1
-        if _wcb['failures'] >= _WCB_OPEN_AFTER:
-            _wcb['open_until'] = time.time() + _WCB_OPEN_SECS
-            _wcb['failures'] = 0
-            print(f"[worker_cb] Circuito ABIERTO — workers saltados por {_WCB_OPEN_SECS}s", flush=True)
-
-# ── API de respaldo — se activa solo si todos los workers fallan ──────────────
+# ── API de respaldo — se activa solo si todos los endpoints directos fallan ───
 # Cargar en Render: RESPALDO_API_URL=https://proveedor.com/bcra  RESPALDO_API_KEY=xxx
 RESPALDO_API_URL = os.environ.get('RESPALDO_API_URL', '').rstrip('/')
 RESPALDO_API_KEY = os.environ.get('RESPALDO_API_KEY', '')
@@ -1627,9 +1598,8 @@ def _consultar_respaldo(cuit: str):
 
 
 def consultar_bcra(cuit, reintentos=3):
-    """Workers + BCRA oficial en PARALELO — el primero que responde gana.
-    Si los workers están caídos, BCRA responde igual sin esperar a que fallen
-    secuencialmente. Circuit breaker salta workers si llevan 3 fallas seguidas."""
+    """Consulta deudas BCRA usando la IP directa de Render (canal oficial recomendado por BCRA).
+    Fuente: Banco Central de la República Argentina (BCRA) — api.bcra.gob.ar"""
 
     def _parse_bcra(raw):
         _res = raw.get('results') if isinstance(raw, dict) else None
@@ -1643,37 +1613,29 @@ def consultar_bcra(cuit, reintentos=3):
 
     def _fetch(url, tmt, via):
         try:
-            r = _bcra_get(url, timeout=tmt) if 'bcra.gob.ar' in url else requests.get(url, timeout=tmt, verify=False)
+            r = _bcra_get(url, timeout=tmt)
             if r.status_code == 404:
                 return 'NOT_FOUND', via
             if r.status_code == 200 and len(r.text.strip()) > 10:
                 d = _parse_bcra(r.json())
                 if d:
-                    if via.startswith('Worker'):
-                        _wcb_on_success()
                     return d, via
         except Exception as e:
             print(f"[bcra] {cuit} {via} error: {e}", flush=True)
         return None, via
 
-    _cb_open = _wcb_is_open()
-    # Workers sanos responden en <1s; 2s es suficiente y reduce latencia cuando están caídos
-    _w_eps = [] if _cb_open else [(w + "/deudas/" + cuit, 2, f"Worker{i+1}") for i, w in enumerate(BCRA_WORKERS)]
-    endpoints = (
-        [(BCRA_WRAPPER_BASE + '/central-deudores/' + cuit, 12, 'bcra_wrapper')]
-        + _w_eps
-        + [
-            (f"https://api.bcra.gob.ar/CentralDeInformacion/v1.0/Deudas/{cuit}", 12, 'bcra_cdi'),
-            (f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/{cuit}",    12, 'bcra_legacy'),
-        ]
-    )
+    endpoints = [
+        (BCRA_WRAPPER_BASE + '/central-deudores/' + cuit, 12, 'bcra_wrapper'),
+        (f"https://api.bcra.gob.ar/CentralDeInformacion/v1.0/Deudas/{cuit}", 12, 'bcra_cdi'),
+        (f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/{cuit}",    12, 'bcra_legacy'),
+    ]
 
     got_404 = False
-    _best = [None, None]  # [result, via]
+    _best = [None, None]
     with ThreadPoolExecutor(max_workers=len(endpoints)) as ex:
         futs = {ex.submit(_fetch, url, tmt, via): via for url, tmt, via in endpoints}
         try:
-            for fut in as_completed(futs, timeout=25):
+            for fut in as_completed(futs, timeout=20):
                 result, via = fut.result()
                 if result == 'NOT_FOUND':
                     got_404 = True
@@ -1685,17 +1647,9 @@ def consultar_bcra(cuit, reintentos=3):
             pass
 
     if _best[0]:
-        # Si ganó bcra_legacy/cdi (workers todos fallaron), actualizar circuito
-        if _w_eps and not (_best[1] or '').startswith('Worker'):
-            _wcb_on_all_failed()
         return _best[0], None
-
     if got_404:
         return {"results": {"denominacion": "", "periodos": []}, "sin_deudas": True}, None
-
-    # Todos fallaron — abrir circuito si había workers activos
-    if _w_eps:
-        _wcb_on_all_failed()
     data_rb, _ = _consultar_respaldo(cuit)
     if data_rb is not None:
         return data_rb, None
@@ -3400,27 +3354,13 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
     cheq_data = _cheques_cache_get(cuit_limpio)   # usa TTL diferenciado: 1h "sin cheques", 24h con datos
 
     if not hist_data:
-        if not _wcb_is_open():
-            for _wu in [w + "/deudas/" + cuit_limpio + "/historial" for w in BCRA_WORKERS][:2]:
-                try:
-                    r = requests.get(_wu, timeout=4, verify=False)
-                    if r.status_code == 200 and len(r.text.strip()) > 10:
-                        hist_data = _norm_bcra_resp(r.json())
-                        try:
-                            with open(os.path.join(DATA_DIR, f'historial_{cuit_limpio}.json'), 'w') as f:
-                                json.dump({'payload': hist_data, 'ts': time.time()}, f)
-                        except: pass
-                        break
-                except Exception as eh:
-                    print(f"[score wrapper] hist worker {cuit_limpio}: {eh}", flush=True)
-        if not hist_data:
-            _hd, _ = _consultar_bcra_directo(cuit_limpio, 'historial')
-            if _hd:
-                hist_data = _hd
-                try:
-                    with open(os.path.join(DATA_DIR, f'historial_{cuit_limpio}.json'), 'w') as f:
-                        json.dump({'payload': hist_data, 'ts': time.time()}, f)
-                except: pass
+        _hd, _ = _consultar_bcra_directo(cuit_limpio, 'historial')
+        if _hd:
+            hist_data = _hd
+            try:
+                with open(os.path.join(DATA_DIR, f'historial_{cuit_limpio}.json'), 'w') as f:
+                    json.dump({'payload': hist_data, 'ts': time.time()}, f)
+            except: pass
 
     # Módulo cheques — aislado con fallback absoluto.
     # Un timeout o error en este módulo NO debe abortar el cálculo del score.
@@ -3432,28 +3372,13 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
                 _cheques_cache_set(cuit_limpio, cheq_data)
                 print(f"[score] cheq {cuit_limpio} desde DB local", flush=True)
         if not cheq_data:
-            if not _wcb_is_open():
-                for _wu in [w + "/deudas/" + cuit_limpio + "/cheques" for w in BCRA_WORKERS][:2]:
-                    try:
-                        r = requests.get(_wu, timeout=4, verify=False)
-                        if r.status_code == 200 and len(r.text.strip()) > 10:
-                            cheq_data = _norm_bcra_resp(r.json())
-                            try:
-                                with open(os.path.join(DATA_DIR, f'cheques_{cuit_limpio}.json'), 'w') as f:
-                                    json.dump({'payload': cheq_data, 'ts': time.time()}, f)
-                            except: pass
-                            break
-                        # Workers devuelven 404 cuando no soportan /cheques — ignorar.
-                    except Exception as ec:
-                        print(f"[score wrapper] cheq worker {cuit_limpio}: {ec}", flush=True)
-            if not cheq_data:
-                _cd, _ = _consultar_bcra_directo(cuit_limpio, 'cheques')
-                if _cd:
-                    cheq_data = _cd
-                    try:
-                        with open(os.path.join(DATA_DIR, f'cheques_{cuit_limpio}.json'), 'w') as f:
-                            json.dump({'payload': cheq_data, 'ts': time.time()}, f)
-                    except: pass
+            _cd, _ = _consultar_bcra_directo(cuit_limpio, 'cheques')
+            if _cd:
+                cheq_data = _cd
+                try:
+                    with open(os.path.join(DATA_DIR, f'cheques_{cuit_limpio}.json'), 'w') as f:
+                        json.dump({'payload': cheq_data, 'ts': time.time()}, f)
+                except: pass
     except Exception as _cheq_err:
         print(f"[cheques][FALLBACK] {cuit_limpio}: error en módulo cheques ({_cheq_err}) — score continúa sin antecedentes", flush=True)
         cheq_data = None
@@ -6573,12 +6498,10 @@ def _cheques_cache_get(cuit):
                     print(f"[cheques] {cuit} desde caché disco ({len(_causales)} causales)", flush=True)
                     return payload
             else:
-                # "Sin antecedentes" → caché corto de 1h.
-                # Los workers devuelven 404 aunque el CUIT tenga cheques (no soportan
-                # el sub-path), por lo que un "sin cheques" cacheado puede ser falso.
-                # Re-intentar cada hora asegura que el BCRA oficial confirme la ausencia.
-                if edad < 3600:
-                    print(f"[cheques] {cuit} sin antecedentes (caché 1h)", flush=True)
+                # "Sin antecedentes" → caché 24h. Datos BCRA son estáticos durante el día
+                # (actualización mensual). API directa desde Render es el canal confiable.
+                if edad < 86400:
+                    print(f"[cheques] {cuit} sin antecedentes (caché 24h)", flush=True)
                     return payload
                 print(f"[cheques] {cuit} caché 'sin cheques' expirado — reintentando BCRA", flush=True)
     except: pass
@@ -6625,15 +6548,11 @@ def get_cheques(cuit):
             print(f"[cheques] {via} error para {cuit_limpio}: {e}", flush=True)
         return None, via
 
-    _w_eps_chq = [] if _wcb_is_open() else [(w + "/deudas/" + cuit_limpio + "/cheques", 5, f"Worker{i+1}") for i, w in enumerate(BCRA_WORKERS[:4])]
-    endpoints_chq = (
-        [(BCRA_WRAPPER_BASE + '/cheques-rechazados/' + cuit_limpio, 3.5, 'bcra_wrapper')]
-        + _w_eps_chq
-        + [
-            (f"https://api.bcra.gob.ar/CentralDeInformacion/v1.0/ChequesRechazados/{cuit_limpio}", 10, "bcra_cdi"),
-            (f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/{cuit_limpio}", 10, "bcra_legacy"),
-        ]
-    )
+    endpoints_chq = [
+        (BCRA_WRAPPER_BASE + '/cheques-rechazados/' + cuit_limpio, 3.5, 'bcra_wrapper'),
+        (f"https://api.bcra.gob.ar/CentralDeInformacion/v1.0/ChequesRechazados/{cuit_limpio}", 10, "bcra_cdi"),
+        (f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/{cuit_limpio}", 10, "bcra_legacy"),
+    ]
     got_404_chq = False
     with ThreadPoolExecutor(max_workers=len(endpoints_chq)) as ex:
         futs = {ex.submit(_fetch_chq, url, tmt, via): via for url, tmt, via in endpoints_chq}
@@ -6690,14 +6609,10 @@ def get_historial(cuit):
             print(f"[historial] {via} error para {cuit_limpio}: {e}", flush=True)
         return None, via
 
-    _w_eps_hist = [] if _wcb_is_open() else [(w + "/deudas/" + cuit_limpio + "/historial", 5, f"Worker{i+1}") for i, w in enumerate(BCRA_WORKERS[:4])]
-    endpoints_hist = (
-        _w_eps_hist
-        + [
-            (f"https://api.bcra.gob.ar/CentralDeInformacion/v1.0/Deudas/Historicas/{cuit_limpio}", 10, "bcra_cdi"),
-            (f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/{cuit_limpio}",    10, "bcra_legacy"),
-        ]
-    )
+    endpoints_hist = [
+        (f"https://api.bcra.gob.ar/CentralDeInformacion/v1.0/Deudas/Historicas/{cuit_limpio}", 10, "bcra_cdi"),
+        (f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/{cuit_limpio}",    10, "bcra_legacy"),
+    ]
     got_404_hist = False
     with ThreadPoolExecutor(max_workers=len(endpoints_hist)) as ex:
         futs = {ex.submit(_fetch_hist, url, tmt, via): via for url, tmt, via in endpoints_hist}
