@@ -4296,19 +4296,19 @@ def api_director_data():
             'facturas':        sorted(c['facturas'], key=lambda x: x['dias'], reverse=True),
         })
 
-    # ── Enriquecer DSO con reporte mensual — usa la misma función que get_saldos_cuit ──
-    # _calc_dso_aging_mensual lee dso_saldos_actual.json y hace matching CUIT + _norm_dso_match.
-    # Se reutiliza para garantizar consistencia entre Director, Portfolio y Cartera individual.
+    # ── Reemplazar DSO con valor congelado del reporte mensual (dso_individual_actual.json) ──
+    # _get_dso_individual devuelve el DSO calculado una sola vez al momento del upload mensual.
+    # No varía día a día. Si no hay dato estático, conserva el DSO calculado desde saldos de gestión.
     _enriq_count = 0
     for _cl in clientes_list:
-        _dso_m = _calc_dso_aging_mensual(
+        _dso_m = _get_dso_individual(
             str(_cl.get('cuit') or '').replace('-', '').replace(' ', '').strip(),
             str(_cl.get('nombre') or '')
         )
         if _dso_m is not None:
             _cl['dso'] = _dso_m
             _enriq_count += 1
-    print(f"[director-dso] enriquecidos: {_enriq_count}/{len(clientes_list)} via _calc_dso_aging_mensual", flush=True)
+    print(f"[director-dso] DSO estático: {_enriq_count}/{len(clientes_list)} via dso_individual_actual.json", flush=True)
 
     clientes_list.sort(key=lambda x: x['saldo_total'], reverse=True)
 
@@ -7083,13 +7083,51 @@ def save_dso_saldos():
         nuevos = body.get('saldos', [])
         if not nuevos:
             return jsonify({"error": "Sin saldos"}), 400
-        from datetime import datetime
-        hoy = datetime.now()
+        from datetime import datetime, date as _date
+        hoy   = datetime.now()
+        hoy_d = hoy.date()
         f_actual = os.path.join(DATA_DIR, 'dso_saldos_actual.json')
         with open(f_actual, 'w', encoding='utf-8') as f:
             json.dump({"saldos": nuevos, "ultima_actualizacion": hoy.strftime('%d/%m/%Y %H:%M')}, f, ensure_ascii=False)
+
+        # Pre-calcular DSO por cliente a la fecha de este upload (valor congelado).
+        # Se guarda en dso_individual_actual.json y NO se recalcula al subir saldos de gestión.
+        _acc_cuit: dict = {}   # cuit_limpio → {sp, ss}
+        _acc_nom:  dict = {}   # nombre_norm → {sp, ss}
+        for s in nuevos:
+            saldo = float(s.get('saldo') or 0)
+            if saldo <= 0:
+                continue
+            ff_str = str(s.get('fecha_factura') or s.get('fechaFactura') or '').strip()
+            dias = 0
+            try:
+                if '/' in ff_str:
+                    p = ff_str.split('/')
+                    dias = max(0, (hoy_d - _date(int(p[2]), int(p[1]), int(p[0]))).days)
+                elif '-' in ff_str and len(ff_str) >= 10:
+                    p = ff_str.split('-')
+                    dias = max(0, (hoy_d - _date(int(p[0]), int(p[1]), int(p[2][:4]))).days)
+            except Exception:
+                dias = 0
+            c_cuit = str(s.get('cuit', '')).replace('-', '').replace(' ', '').strip()
+            c_nom  = _norm_dso_match(str(s.get('cliente') or ''))
+            if c_cuit and len(c_cuit) == 11 and c_cuit.isdigit():
+                e = _acc_cuit.setdefault(c_cuit, {'sp': 0.0, 'ss': 0.0})
+                e['sp'] += saldo * dias;  e['ss'] += saldo
+            if c_nom:
+                e = _acc_nom.setdefault(c_nom, {'sp': 0.0, 'ss': 0.0})
+                e['sp'] += saldo * dias;  e['ss'] += saldo
+
+        dso_por_cuit   = {c: round(v['sp'] / v['ss']) for c, v in _acc_cuit.items() if v['ss'] > 0}
+        dso_por_nombre = {n: round(v['sp'] / v['ss']) for n, v in _acc_nom.items()  if v['ss'] > 0}
+        f_ind = os.path.join(DATA_DIR, 'dso_individual_actual.json')
+        with open(f_ind, 'w', encoding='utf-8') as f:
+            json.dump({"por_cuit": dso_por_cuit, "por_nombre": dso_por_nombre,
+                       "fecha": hoy.strftime('%Y-%m-%d')}, f, ensure_ascii=False)
+
         total = sum(s.get('saldo', 0) for s in nuevos)
-        print(f"[dso-saldos] Wipe & write: {len(nuevos)} saldos ${total:,.0f}", flush=True)
+        print(f"[dso-saldos] Wipe & write: {len(nuevos)} saldos ${total:,.0f} | "
+              f"DSO pre-calculado: {len(dso_por_cuit)} CUITs / {len(dso_por_nombre)} nombres", flush=True)
         return jsonify({"ok": True, "agregados": len(nuevos), "total": len(nuevos)})
     except Exception as e:
         import traceback
@@ -7509,6 +7547,36 @@ def _calc_dso_aging_mensual(cuit_limpio: str, nombre: str = '') -> int | None:
     return round(acc['sp'] / acc['ss'])
 
 
+_dso_individual_cache: dict = {}
+
+def _get_dso_individual(cuit: str, nombre: str = '') -> int | None:
+    """Lookup estático desde dso_individual_actual.json (generado en upload mensual DSO).
+    El valor queda congelado al momento del upload y no varía día a día.
+    Matching: CUIT exacto primero, luego nombre normalizado con _norm_dso_match."""
+    global _dso_individual_cache
+    _path = os.path.join(DATA_DIR, 'dso_individual_actual.json')
+    if not os.path.exists(_path):
+        return None
+    try:
+        mtime = os.path.getmtime(_path)
+        if _dso_individual_cache.get('_mtime') != mtime:
+            data = json.load(open(_path, 'r', encoding='utf-8'))
+            _dso_individual_cache = {**data, '_mtime': mtime}
+    except Exception:
+        return None
+    cuit_n = cuit.replace('-', '').replace(' ', '').strip()
+    if cuit_n:
+        val = _dso_individual_cache.get('por_cuit', {}).get(cuit_n)
+        if val is not None:
+            return int(val)
+    if nombre:
+        nom_key = _norm_dso_match(nombre)
+        val = _dso_individual_cache.get('por_nombre', {}).get(nom_key)
+        if val is not None:
+            return int(val)
+    return None
+
+
 def _calc_dso_aging(facturas: list) -> int | None:
     """DSO por antigüedad: Σ(saldo × días_desde_fechaFactura) / Σ(saldo).
     Acepta fechaFactura en DD/MM/YYYY o YYYY-MM-DD (ISO).  Retorna None si saldo total = 0."""
@@ -7553,7 +7621,7 @@ def get_saldos_cuit(cuit):
         total_saldo = sum(f.get('saldo', 0) for f in result)
         nombre_m = result[0].get('cliente', '')
         enriched, monto_v30, alerta30 = _enrich_con_mora(result)
-        dso_aging = _calc_dso_aging_mensual(cuit_limpio, nombre_m) or _calc_dso_aging(enriched)
+        dso_aging = _get_dso_individual(cuit_limpio, nombre_m) or _calc_dso_aging(enriched)
         print(f"[saldos-cuit] CUIT {cuit_limpio}: {len(enriched)} facturas, vencido30=${monto_v30:,.0f}, dso_aging={dso_aging}", flush=True)
         return jsonify({"facturas": enriched, "total_saldo": total_saldo, "cantidad": len(enriched),
                         "monto_pendiente_vencido": monto_v30, "alerta_mora_30": alerta30,
@@ -7579,7 +7647,7 @@ def get_saldos_cuit(cuit):
                     print(f"[saldos-cuit] Fuzzy '{nombre_en_cartera}' → {len(result)} facturas", flush=True)
         total_saldo = sum(f.get('saldo', 0) for f in result)
         enriched, monto_v30, alerta30 = _enrich_con_mora(result)
-        dso_aging = _calc_dso_aging_mensual(cuit_limpio, nombre_en_cartera) or _calc_dso_aging(enriched)
+        dso_aging = _get_dso_individual(cuit_limpio, nombre_en_cartera) or _calc_dso_aging(enriched)
         print(f"[saldos-cuit] Nombre '{nombre_en_cartera}': {len(enriched)} facturas, vencido30=${monto_v30:,.0f}, dso_aging={dso_aging}", flush=True)
         return jsonify({"facturas": enriched, "total_saldo": total_saldo, "cantidad": len(enriched),
                         "monto_pendiente_vencido": monto_v30, "alerta_mora_30": alerta30,
