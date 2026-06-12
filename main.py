@@ -7177,6 +7177,30 @@ def dso_individual_debug():
         if request.args.get('todos') == '1':
             return jsonify({"por_nombre": por_nombre, "fecha_corte": data.get('fecha_corte')})
 
+        # ?portfolio=1 → muestra los nombres del portfolio y si matchean en el archivo DSO
+        if request.args.get('portfolio') == '1':
+            _saldos_gestion_desde_disco()
+            fuente = _saldos_gestion if _saldos_gestion else _saldos_facturas
+            # Construir mapa nombre→cuit como lo hace api_director_data
+            clientes_raw = {}
+            for f in fuente:
+                nombre = str(f.get('cliente') or '').strip()
+                cuit   = str(f.get('cuit') or '').replace('-','').replace(' ','').strip()
+                key    = cuit or nombre
+                if key and key not in clientes_raw:
+                    clientes_raw[key] = {'nombre': nombre, 'cuit': cuit}
+            resultado = []
+            for key, c in list(clientes_raw.items())[:60]:
+                nom_norm = _norm_dso_match(c['nombre'])
+                dso_val  = por_nombre.get(nom_norm)
+                resultado.append({
+                    'nombre_portfolio': c['nombre'],
+                    'nombre_norm':      nom_norm,
+                    'cuit':             c['cuit'],
+                    'dso_encontrado':   dso_val,
+                })
+            return jsonify({"clientes": resultado, "total_portfolio": len(clientes_raw)})
+
         return jsonify({
             "existe": True,
             "fecha_corte":         data.get('fecha_corte'),
