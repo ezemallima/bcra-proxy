@@ -1481,12 +1481,12 @@ def gemini_request(payload, timeout=250, system_prompt=None):
 
     return None, "No hay APIs de IA disponibles."
 
-BCRA_WORKER   = "https://orange-recipe-3bb1.ezetombacapo.workers.dev"
-BCRA_WORKER_2 = "https://little-feather-5b68.ezequielmallima.workers.dev"
-BCRA_WORKER_3 = "https://square-pine-e6b4.ezequielmallima.workers.dev"
-BCRA_WORKER_4 = "https://fancy-feather-7ead.ezequielmallima.workers.dev"
-BCRA_WORKER_5 = "https://summer-wood-9639.ezequielmallima.workers.dev"
-BCRA_WORKERS  = [BCRA_WORKER, BCRA_WORKER_2, BCRA_WORKER_3, BCRA_WORKER_4, BCRA_WORKER_5]
+BCRA_WORKER   = "https://little-feather-5b68.ezequielmallima.workers.dev"
+BCRA_WORKER_2 = "https://square-pine-e6b4.ezequielmallima.workers.dev"
+BCRA_WORKER_3 = "https://fancy-feather-7ead.ezequielmallima.workers.dev"
+BCRA_WORKER_4 = "https://summer-wood-9639.ezequielmallima.workers.dev"
+# orange-recipe-3bb1.ezetombacapo.workers.dev eliminado — cuenta inactiva
+BCRA_WORKERS  = [BCRA_WORKER, BCRA_WORKER_2, BCRA_WORKER_3, BCRA_WORKER_4]
 
 # ── Circuit breaker para workers — evita saturar threads cuando están caídos ──
 import threading as _threading
@@ -4275,8 +4275,10 @@ def api_director_data():
     for key, c in clientes_map.items():
         sc = scores_map.get(c['cuit']) if c['cuit'] else None
         saldo_total = c['saldo_total']
-        suma_pond = sum(f['saldo'] * f['dias'] for f in c['facturas'])
-        dso = round(suma_pond / saldo_total) if saldo_total > 0 else 0
+        # DSO individual viene EXCLUSIVAMENTE del módulo DSO (dso_individual_actual.json).
+        # El reporte de "Actualizar Saldos Comerciales" no debe afectar este valor.
+        # El enriquecimiento post-loop lo setea; si no hay dato DSO, queda en 0.
+        dso = 0
         _ci = cc_info_map.get(c['cuit'], {})
         clientes_list.append({
             'nombre':          c['nombre'],
