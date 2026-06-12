@@ -633,39 +633,52 @@ def _import_cheques_zip(date_str: str = None) -> bool:
 
     try:
         # 1. Descarga streaming del ZIP (~10-15 MB comprimido, ~58 MB expandido)
-        # Bright Data residencial como primera opción: el BCRA bloquea IPs de datacenter.
-        # Si no hay proxy configurado, intenta directo como fallback.
-        _proxies = None
-        if BRIGHTDATA_USER and _BRD_PASSWORD:
-            _proxy_url = f"http://{BRIGHTDATA_USER}:{_BRD_PASSWORD}@{BRIGHTDATA_HOST}:{BRIGHTDATA_PORT}"
-            _proxies = {"http": _proxy_url, "https": _proxy_url}
-            print(f"[cheques_db] Usando Bright Data para descarga", flush=True)
-
+        # Estrategia: directo primero (más confiable si la IP no está bloqueada),
+        # Bright Data como fallback. Validar magic bytes antes de extraer.
+        _browser_hdrs = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+            'Accept': 'application/zip,application/octet-stream,*/*;q=0.8',
+            'Accept-Language': 'es-AR,es;q=0.9,en;q=0.8',
+        }
         _cheques_db_estado['ultimo_paso'] = f"Descargando {url}"
         print(f"[cheques_db] Descargando {url}", flush=True)
+
+        resp = None
+
+        # Intento 1: directo desde Render
         try:
-            resp = requests.get(url, timeout=180, verify=False, stream=True, proxies=_proxies)
-        except Exception as e_dl:
-            # Si falla con proxy, reintentar directo
-            if _proxies:
-                print(f"[cheques_db] Proxy falló ({e_dl}), reintentando directo", flush=True)
-                try:
-                    resp = requests.get(url, timeout=180, verify=False, stream=True)
-                except Exception as e_dl2:
-                    _cheques_db_estado['ultimo_paso'] = f"ERROR red: {e_dl2}"
-                    print(f"[cheques_db] Error directo: {e_dl2}", flush=True)
-                    return False
-            else:
-                _cheques_db_estado['ultimo_paso'] = f"ERROR red: {e_dl}"
-                print(f"[cheques_db] Error de red: {e_dl}", flush=True)
+            _r = requests.get(url, headers=_browser_hdrs, timeout=90, verify=False, stream=True)
+            if _r.status_code == 200:
+                resp = _r
+                print(f"[cheques_db] Descarga directa OK (HTTP 200)", flush=True)
+            elif _r.status_code == 404:
+                _cheques_db_estado['ultimo_paso'] = f"ERROR 404: archivo {date_str} no disponible en BCRA"
+                print(f"[cheques_db] 404 — {date_str} no existe", flush=True)
                 return False
-        if resp.status_code == 404:
-            _cheques_db_estado['ultimo_paso'] = f"ERROR 404: archivo {date_str} no existe en BCRA aún"
-            print(f"[cheques_db] 404 — archivo {date_str} no disponible", flush=True)
-            return False
-        if resp.status_code != 200:
-            _cheques_db_estado['ultimo_paso'] = f"ERROR HTTP {resp.status_code}"
-            print(f"[cheques_db] Error HTTP {resp.status_code}", flush=True)
+            else:
+                print(f"[cheques_db] Directo: HTTP {_r.status_code} — intentando vía proxy", flush=True)
+        except Exception as e_d:
+            print(f"[cheques_db] Directo falló: {e_d} — intentando vía proxy", flush=True)
+
+        # Intento 2: Bright Data residencial (si directo no dio ZIP válido)
+        if resp is None and BRIGHTDATA_USER and _BRD_PASSWORD:
+            _pu = f"http://{BRIGHTDATA_USER}:{_BRD_PASSWORD}@{BRIGHTDATA_HOST}:{BRIGHTDATA_PORT}"
+            print(f"[cheques_db] Descarga vía Bright Data", flush=True)
+            try:
+                _r2 = requests.get(url, headers=_browser_hdrs, timeout=180, verify=False,
+                                   stream=True, proxies={"http": _pu, "https": _pu})
+                if _r2.status_code == 200:
+                    resp = _r2
+                else:
+                    _cheques_db_estado['ultimo_paso'] = f"ERROR HTTP {_r2.status_code} (proxy)"
+                    return False
+            except Exception as e_p:
+                _cheques_db_estado['ultimo_paso'] = f"ERROR proxy: {e_p}"
+                print(f"[cheques_db] Bright Data falló: {e_p}", flush=True)
+                return False
+
+        if resp is None:
+            _cheques_db_estado['ultimo_paso'] = "ERROR: sin método de descarga disponible"
             return False
 
         with open(zip_path, 'wb') as zf:
@@ -674,7 +687,18 @@ def _import_cheques_zip(date_str: str = None) -> bool:
                     zf.write(chunk)
 
         tam_mb = os.path.getsize(zip_path) / (1024 * 1024)
-        print(f"[cheques_db] ZIP descargado: {tam_mb:.1f} MB", flush=True)
+
+        # Validar magic bytes: ZIP comienza con PK\x03\x04
+        with open(zip_path, 'rb') as _f:
+            _magic = _f.read(4)
+        if _magic[:2] != b'PK':
+            with open(zip_path, 'r', encoding='utf-8', errors='replace') as _f:
+                _snippet = _f.read(200)
+            _cheques_db_estado['ultimo_paso'] = f"ERROR: descarga no es ZIP ({tam_mb:.1f}MB). Contenido: {_snippet[:100]}"
+            print(f"[cheques_db] No es ZIP. Primeros bytes: {repr(_magic)} | {_snippet[:150]}", flush=True)
+            return False
+
+        print(f"[cheques_db] ZIP válido descargado: {tam_mb:.1f} MB", flush=True)
 
         # 2. Extraer solo el archivo 'al*' (snapshot completo)
         _cheques_db_estado['ultimo_paso'] = "Extrayendo ZIP"
