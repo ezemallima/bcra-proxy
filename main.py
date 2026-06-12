@@ -6171,6 +6171,9 @@ def _score_response(score_data: dict, solvency: dict = None, cheq_data: dict = N
     _safe["antiguedad_fiscal"]   = sol.get('antiguedad_fiscal')   or sol.get('antiguedad_anos')
     _safe["estado_empleo"]       = sol.get('estado_empleo')       or None
     _safe["juicios_comerciales"] = sol.get('juicios_comerciales') or None
+    _safe["fecha_inscripcion"]   = sol.get('fecha_inicio')        or None
+    _safe["categoria_monotrib"]  = sol.get('categoria_monotrib')  or None
+    _safe["tipo_persona"]        = sol.get('tipo_persona')        or None
 
     _safe.setdefault("override_admin",       False)
     _safe.setdefault("mora_administrativa",  False)
