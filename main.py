@@ -7151,21 +7151,38 @@ def save_dso_saldos():
 
 @app.route("/dso-individual-debug")
 def dso_individual_debug():
-    """Diagnóstico: muestra el contenido de dso_individual_actual.json."""
+    """Diagnóstico: muestra dso_individual_actual.json.
+    ?nombre=X  → busca ese nombre y muestra la clave normalizada vs lo que está en el archivo.
+    ?todos=1   → devuelve el dict completo por_nombre."""
     _path = os.path.join(DATA_DIR, 'dso_individual_actual.json')
     if not os.path.exists(_path):
-        return jsonify({"existe": False, "mensaje": "Archivo no encontrado — el upload DSO no generó el archivo"})
+        return jsonify({"existe": False, "mensaje": "Archivo no encontrado"})
     try:
         data = json.load(open(_path, 'r', encoding='utf-8'))
         por_cuit   = data.get('por_cuit', {})
         por_nombre = data.get('por_nombre', {})
+
+        nombre_q = request.args.get('nombre', '').strip()
+        if nombre_q:
+            norm = _norm_dso_match(nombre_q)
+            val  = por_nombre.get(norm)
+            return jsonify({
+                "busqueda_original":  nombre_q,
+                "busqueda_norm":      norm,
+                "encontrado":         val is not None,
+                "dso":                val,
+                "claves_similares":   [k for k in por_nombre if norm[:6] in k][:10],
+            })
+
+        if request.args.get('todos') == '1':
+            return jsonify({"por_nombre": por_nombre, "fecha_corte": data.get('fecha_corte')})
+
         return jsonify({
             "existe": True,
-            "fecha_corte": data.get('fecha_corte'),
+            "fecha_corte":         data.get('fecha_corte'),
             "clientes_por_cuit":   len(por_cuit),
             "clientes_por_nombre": len(por_nombre),
-            "muestra_cuit":   dict(list(por_cuit.items())[:10]),
-            "muestra_nombre": dict(list(por_nombre.items())[:10]),
+            "muestra_nombre":      dict(list(por_nombre.items())[:10]),
         })
     except Exception as e:
         return jsonify({"existe": True, "error": str(e)}), 500
