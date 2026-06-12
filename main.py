@@ -50,7 +50,7 @@ _BRD_PASSWORD      = BRIGHTDATA_PASS or BRIGHTDATA_API_KEY
 
 # ── Rate limiter global para API de BCRA — máx 2 llamadas directas simultáneas ─
 # Evita que consultas concurrentes saturen la IP de Render y generen rate-limit.
-_bcra_api_sem = _threading.Semaphore(2)
+_bcra_api_sem = threading.Semaphore(2)
 
 # Log diagnóstico al iniciar — ayuda a detectar credenciales incorrectas o ausentes
 _brd_pass_src = 'BRIGHTDATA_PASS' if BRIGHTDATA_PASS else ('BRIGHTDATA_API_KEY' if BRIGHTDATA_API_KEY else 'NINGUNA')
@@ -425,6 +425,28 @@ def _init_padron_db():
                 valor TEXT
             )
         """)
+        # Tabla de cheques rechazados BCRA (snapshot diario bulk file)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS cheques_bcra (
+                cuit          TEXT NOT NULL,
+                nro_cheque    TEXT NOT NULL,
+                fecha_rechazo TEXT NOT NULL,
+                monto         REAL NOT NULL DEFAULT 0,
+                estado        TEXT,
+                tipo          TEXT,
+                cuit_entidad  TEXT,
+                PRIMARY KEY (cuit, nro_cheque)
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cheques_cuit ON cheques_bcra(cuit)"
+        )
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS _cheques_meta (
+                key   TEXT PRIMARY KEY,
+                valor TEXT
+            )
+        """)
         conn.commit()
 
         # Purga única: eliminar todas las entradas sin entidades reales.
@@ -485,6 +507,268 @@ def consultar_padron_local(cuit_limpio):
     except Exception as e:
         print(f"[padron] Error consultando {cuit_limpio}: {e}", flush=True)
         return None
+
+
+# ── Cheques rechazados — DB local (bulk file diario BCRA) ─────────────────────
+# El BCRA publica cada día en https://www.bcra.gob.ar/archivos/zips/cheques/YYYYMMDD.zip
+# un snapshot completo de TODOS los cheques rechazados del sistema financiero.
+# Formato fijo 81 chars/línea:
+#   cols  0-10  CUIT librador (11 chars)
+#   cols 11-20  NRO_CHEQUE (10 chars, right-justified)
+#   cols 21-28  FECHA_RECHAZO (8 chars, YYYYMMDD)
+#   cols 29-43  MONTO (15 chars, centavos enteros → ÷100 = pesos)
+#   cols 44-52  FECHA_MULTA (9 chars, YYYYMMDD o espacios)
+#   cols 53-54  TIPO (2 chars: 'SF' = sin fondos)
+#   cols 55-65  CUIT_ENTIDAD bancaria (11 chars)
+#   cols 66-75  ESTADO (10 chars: 'IMPAGA    ' o 'DD/MM/YYYY' = fecha de pago)
+#   cols 76-80  padding (5 chars)
+
+_cheques_db_estado = {
+    "corriendo":       False,
+    "progreso":        0,
+    "total":           0,
+    "ultimo_paso":     "",
+    "fecha_importada": "",
+}
+
+
+def get_cheques_local(cuit: str):
+    """Consulta cheques rechazados del CUIT en la DB local (snapshot diario BCRA).
+
+    Retorna dict compatible con la respuesta BCRA o None si la DB no está
+    disponible / aún no fue importada.
+    """
+    if not os.path.exists(PADRON_DB_PATH):
+        return None
+    try:
+        conn = sqlite3.connect(PADRON_DB_PATH, check_same_thread=False)
+        meta_row = conn.execute(
+            "SELECT valor FROM _cheques_meta WHERE key = 'last_import_date'"
+        ).fetchone()
+        if not meta_row:
+            conn.close()
+            return None  # DB vacía: no se ha importado aún
+        rows = conn.execute(
+            "SELECT nro_cheque, fecha_rechazo, monto, estado, tipo, cuit_entidad "
+            "FROM cheques_bcra WHERE cuit = ? ORDER BY fecha_rechazo DESC",
+            (cuit,)
+        ).fetchall()
+        conn.close()
+
+        if not rows:
+            return {
+                "results":    {"causales": []},
+                "sin_deudas": True,
+                "error_bcra": None,
+                "source":     "local_db",
+            }
+
+        detalles = []
+        for nro, fecha_r, monto, estado, tipo, cuit_ent in rows:
+            estado_s = (estado or '').strip()
+            if estado_s == 'IMPAGA':
+                fecha_pago   = None
+                estado_multa = 'IMPAGA'
+            else:
+                # BCRA almacena la fecha de pago como 'DD/MM/YYYY'
+                try:
+                    d, m, y  = estado_s.split('/')
+                    fecha_pago = f"{y}-{m.zfill(2)}-{d.zfill(2)}"
+                except Exception:
+                    fecha_pago = estado_s or None
+                estado_multa = 'LEVANTADA'
+
+            fecha_r_fmt = fecha_r
+            if len(fecha_r) == 8:
+                fecha_r_fmt = f"{fecha_r[:4]}-{fecha_r[4:6]}-{fecha_r[6:8]}"
+
+            detalles.append({
+                "numeroCheque":       (nro       or '').strip(),
+                "fechaRechazo":       fecha_r_fmt,
+                "monto":              monto,
+                "fechaPago":          fecha_pago,
+                "estadoMulta":        estado_multa,
+                "fechaLevantamiento": fecha_pago,
+                "tipo":               (tipo      or '').strip(),
+                "cuitEntidad":        (cuit_ent  or '').strip(),
+            })
+
+        return {
+            "results": {
+                "causales": [{"entidades": [{"detalle": detalles}]}]
+            },
+            "sin_deudas": False,
+            "error_bcra": None,
+            "source":     "local_db",
+        }
+    except Exception as e:
+        print(f"[cheques_local] Error consultando {cuit}: {e}", flush=True)
+        return None
+
+
+def _import_cheques_zip(date_str: str = None) -> bool:
+    """Descarga e importa el snapshot diario de cheques rechazados del BCRA.
+
+    El archivo 'al{YYMMDD}.txt' dentro del ZIP es un reemplazo total del día:
+    contiene TODOS los cheques activos del sistema financiero argentino (~700k).
+    La tabla cheques_bcra se trunca y se reconstruye en cada importación.
+
+    Args:
+        date_str: Fecha en formato 'YYYYMMDD'. None = fecha de hoy.
+    Returns:
+        True si OK, False si falló.
+    """
+    import zipfile as _zipfile
+
+    if not date_str:
+        date_str = time.strftime('%Y%m%d')
+
+    _cheques_db_estado['corriendo']   = True
+    _cheques_db_estado['progreso']    = 0
+    _cheques_db_estado['ultimo_paso'] = f"Iniciando descarga para {date_str}"
+
+    url      = f"https://www.bcra.gob.ar/archivos/zips/cheques/{date_str}.zip"
+    zip_path = os.path.join(DATA_DIR, f"cheques_{date_str}.zip")
+    al_path  = None
+
+    try:
+        # 1. Descarga streaming del ZIP (~10 MB comprimido, ~58 MB expandido)
+        _cheques_db_estado['ultimo_paso'] = f"Descargando {url}"
+        print(f"[cheques_db] Descargando {url}", flush=True)
+        resp = requests.get(url, timeout=180, verify=False, stream=True)
+        if resp.status_code == 404:
+            print(f"[cheques_db] Archivo no disponible para {date_str} (404)", flush=True)
+            return False
+        if resp.status_code != 200:
+            print(f"[cheques_db] Error HTTP {resp.status_code}", flush=True)
+            return False
+
+        with open(zip_path, 'wb') as zf:
+            for chunk in resp.iter_content(chunk_size=65536):
+                if chunk:
+                    zf.write(chunk)
+
+        tam_mb = os.path.getsize(zip_path) / (1024 * 1024)
+        print(f"[cheques_db] ZIP descargado: {tam_mb:.1f} MB", flush=True)
+
+        # 2. Extraer solo el archivo 'al*' (snapshot completo)
+        _cheques_db_estado['ultimo_paso'] = "Extrayendo ZIP"
+        with _zipfile.ZipFile(zip_path, 'r') as zf:
+            names  = zf.namelist()
+            al_name = next((n for n in names if n.lower().startswith('al')), None)
+            if not al_name:
+                print(f"[cheques_db] No se encontró archivo 'al*' en ZIP. Contenido: {names}", flush=True)
+                return False
+            zf.extract(al_name, DATA_DIR)
+            al_path = os.path.join(DATA_DIR, al_name)
+        print(f"[cheques_db] Extraído {al_name}", flush=True)
+
+        # 3. Parsear el archivo de ancho fijo e importar a SQLite en lotes
+        conn = sqlite3.connect(PADRON_DB_PATH, check_same_thread=False)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA cache_size=-32768")  # 32 MB de cache SQLite
+
+        _cheques_db_estado['ultimo_paso'] = "Truncando tabla anterior"
+        conn.execute("DELETE FROM cheques_bcra")
+        conn.commit()
+
+        lote    = []
+        lineas  = 0
+        errores = 0
+        t0      = time.time()
+        _cheques_db_estado['ultimo_paso'] = "Importando registros"
+
+        with open(al_path, 'r', encoding='latin-1', errors='replace') as f:
+            for linea in f:
+                if len(linea) < 29:
+                    continue
+                try:
+                    cuit       = linea[0:11].strip()
+                    nro_cheque = linea[11:21].strip()
+                    fecha_r    = linea[21:29].strip()
+                    monto_str  = linea[29:44].strip()
+                    tipo       = linea[53:55].strip() if len(linea) > 55 else ''
+                    cuit_ent   = linea[55:66].strip() if len(linea) > 66 else ''
+                    estado     = linea[66:76].strip() if len(linea) > 76 else 'IMPAGA'
+
+                    if len(cuit) != 11 or not cuit.isdigit():
+                        continue
+                    if not nro_cheque or not fecha_r:
+                        continue
+
+                    try:
+                        monto = round(int(monto_str or '0') / 100, 2)
+                    except (ValueError, TypeError):
+                        monto = 0.0
+
+                    lote.append((cuit, nro_cheque, fecha_r, monto, estado, tipo, cuit_ent))
+                    lineas += 1
+
+                    if len(lote) >= 5000:
+                        conn.executemany(
+                            "INSERT OR REPLACE INTO cheques_bcra "
+                            "(cuit, nro_cheque, fecha_rechazo, monto, estado, tipo, cuit_entidad) "
+                            "VALUES (?,?,?,?,?,?,?)",
+                            lote
+                        )
+                        conn.commit()
+                        lote.clear()
+                        _cheques_db_estado['progreso'] = lineas
+                        if lineas % 100_000 == 0:
+                            elapsed = time.time() - t0
+                            print(f"[cheques_db]   {lineas:,} líneas — {elapsed:.0f}s", flush=True)
+                except Exception as erow:
+                    errores += 1
+                    if errores <= 5:
+                        print(f"[cheques_db] Error fila: {erow} | {repr(linea[:40])}", flush=True)
+
+        if lote:
+            conn.executemany(
+                "INSERT OR REPLACE INTO cheques_bcra "
+                "(cuit, nro_cheque, fecha_rechazo, monto, estado, tipo, cuit_entidad) "
+                "VALUES (?,?,?,?,?,?,?)",
+                lote
+            )
+            conn.commit()
+
+        # 4. Registrar metadatos de la importación
+        ts_now = time.strftime('%Y-%m-%dT%H:%M:%S')
+        for key, val in [
+            ('last_import_date', date_str),
+            ('last_import_ts',   ts_now),
+            ('total_registros',  str(lineas)),
+        ]:
+            conn.execute(
+                "INSERT OR REPLACE INTO _cheques_meta (key, valor) VALUES (?, ?)",
+                (key, val)
+            )
+        conn.commit()
+        conn.close()
+
+        elapsed = time.time() - t0
+        print(
+            f"[cheques_db] IMPORTACIÓN COMPLETA: {lineas:,} registros en {elapsed:.1f}s "
+            f"(errores: {errores})",
+            flush=True,
+        )
+        _cheques_db_estado['total']           = lineas
+        _cheques_db_estado['fecha_importada'] = date_str
+        _cheques_db_estado['ultimo_paso']     = f"OK — {lineas:,} registros"
+        return True
+
+    except Exception as e:
+        print(f"[cheques_db] Error en importación: {e}", flush=True)
+        _cheques_db_estado['ultimo_paso'] = f"ERROR: {e}"
+        return False
+    finally:
+        _cheques_db_estado['corriendo'] = False
+        for tmp in filter(None, [zip_path, al_path]):
+            try:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+            except Exception:
+                pass
 
 
 def _padron_contar_registros():
@@ -3068,6 +3352,12 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
     # Módulo cheques — aislado con fallback absoluto.
     # Un timeout o error en este módulo NO debe abortar el cálculo del score.
     try:
+        if not cheq_data:
+            # DB local (snapshot diario BCRA) — cero latencia de red
+            cheq_data = get_cheques_local(cuit_limpio)
+            if cheq_data is not None:
+                _cheques_cache_set(cuit_limpio, cheq_data)
+                print(f"[score] cheq {cuit_limpio} desde DB local", flush=True)
         if not cheq_data:
             if not _wcb_is_open():
                 for _wu in [w + "/deudas/" + cuit_limpio + "/cheques" for w in BCRA_WORKERS][:2]:
@@ -6226,11 +6516,18 @@ def _cheques_cache_set(cuit, payload):
 @app.route("/deudas/<cuit>/cheques")
 def get_cheques(cuit):
     cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
-    # Caché primero (24h) — evita consulta innecesaria al BCRA
+    # Caché en disco primero (TTL 24h con cheques, 1h sin cheques)
     cached = _cheques_cache_get(cuit_limpio)
     if cached:
         print(f"[cheques] {cuit_limpio} desde caché", flush=True)
         return jsonify(cached), 200
+    # DB local (snapshot diario BCRA) — fuente autoritativa sin latencia de red
+    local_db = get_cheques_local(cuit_limpio)
+    if local_db is not None:
+        _cheques_cache_set(cuit_limpio, local_db)
+        n_ch = len((local_db.get('results') or {}).get('causales') or [])
+        print(f"[cheques] {cuit_limpio} desde DB local (causales={n_ch})", flush=True)
+        return jsonify(local_db), 200
     # Workers + BCRA en paralelo — el primero que responda gana
     def _fetch_chq(url, tmt, via):
         try:
@@ -6597,13 +6894,60 @@ def warm_padron():
             _warm_estado["corriendo"] = False
             print("[warm-padron] Finalizado", flush=True)
 
-    _threading.Thread(target=_run, daemon=True).start()
+    threading.Thread(target=_run, daemon=True).start()
     return jsonify({"status": "iniciado", "total": _warm_estado["total"]}), 202
 
 
 @app.route("/warm-padron/estado")
 def warm_padron_estado():
     return jsonify(_warm_estado), 200
+
+
+@app.route("/update-cheques-db", methods=["POST", "GET"])
+def update_cheques_db():
+    """Actualiza la DB local de cheques rechazados desde el bulk file diario del BCRA.
+
+    Diseñado para ser llamado desde cron-job.org todos los días a las ~10:00 AM AR
+    (cuando el BCRA publica el archivo del día). El proceso se ejecuta en background;
+    usar /update-cheques-db/estado para monitorear el progreso.
+
+    Parámetro opcional: ?fecha=YYYYMMDD (por defecto: fecha de hoy)
+    """
+    if _cheques_db_estado.get('corriendo'):
+        return jsonify({
+            "status":      "ya_corriendo",
+            "progreso":    _cheques_db_estado['progreso'],
+            "ultimo_paso": _cheques_db_estado['ultimo_paso'],
+        }), 202
+
+    fecha = (request.args.get('fecha') or '').strip() or time.strftime('%Y%m%d')
+
+    def _run():
+        ok = _import_cheques_zip(fecha)
+        print(f"[cheques_db] Actualización {'exitosa' if ok else 'fallida'} para {fecha}", flush=True)
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({
+        "status":  "iniciado",
+        "fecha":   fecha,
+        "message": "Importación en background. Consultar /update-cheques-db/estado.",
+    }), 202
+
+
+@app.route("/update-cheques-db/estado")
+def update_cheques_db_estado():
+    """Estado actual de la importación de cheques + metadatos de la última importación."""
+    meta = {}
+    try:
+        if os.path.exists(PADRON_DB_PATH):
+            conn = sqlite3.connect(PADRON_DB_PATH, check_same_thread=False)
+            rows = conn.execute("SELECT key, valor FROM _cheques_meta").fetchall()
+            conn.close()
+            meta = {k: v for k, v in rows}
+    except Exception:
+        pass
+    return jsonify({**_cheques_db_estado, "db_meta": meta}), 200
+
 
 @app.route("/cache/limpiar/<cuit>", methods=["POST", "GET"])
 def limpiar_cache_cuit(cuit):
