@@ -1941,75 +1941,77 @@ async function procesarDSO() {
       } catch(e) { console.warn('[DSO] Error preparando ventas:', e); }
     }
 
-    // ── GUARDAR SALDOS HISTORICOS (4 meses) ──
+    // ── PREPARAR SALDOS Y CHEQUES (el upload se hace en orden: cheques → saldos) ──
+    // El servidor calcula DSO = (Saldo + Cheques) / Ventas × días al recibir saldos.
+    // Es crítico que cheques ya esté guardado cuando llega saldos.
+
+    var saldosParaGuardar = [];
+    var _fcISO = null;
     if (rowsSaldos && rowsSaldos.length > 0) {
       try {
-        var hS2 = Object.keys(rowsSaldos[0]);
-        var cS2 = mapearColumna(hS2, DSO_ALIASES.saldos.contacto);
-        var mS2 = mapearColumna(hS2, DSO_ALIASES.saldos.monto);
-        var fS2 = mapearColumna(hS2, DSO_ALIASES.saldos.fecha || DSO_ALIASES.saldos.fecha_factura || 'Fecha de factura');
+        var hS2  = Object.keys(rowsSaldos[0]);
+        var cS2  = mapearColumna(hS2, DSO_ALIASES.saldos.contacto);
+        var mS2  = mapearColumna(hS2, DSO_ALIASES.saldos.monto);
+        var fS2  = mapearColumna(hS2, DSO_ALIASES.saldos.fecha || DSO_ALIASES.saldos.fecha_factura || 'Fecha de factura');
         var fpS2 = mapearColumna(hS2, ['Fecha de pago', 'fecha_pago', 'fecha pago']);
-        var vS2 = mapearColumna(hS2, ['vendedor', 'VENDEDOR', 'Vendedor']);  // columna opcional
-        var saldosParaGuardar = [];
+        var vS2  = mapearColumna(hS2, ['vendedor', 'VENDEDOR', 'Vendedor']);
         rowsSaldos.forEach(function(row) {
           var cliente       = (row[cS2]||'').toString().trim();
           var saldo         = parseMonto(row[mS2]);
           var fecha_factura = fS2  ? fechaExcelAISO(row[fS2])  : '';
           var fecha_pago    = fpS2 ? fechaExcelAISO(row[fpS2]) : '';
-          var vendedor      = vS2 ? (row[vS2] || '').toString().trim() : '';
-          // Enviar positivos Y negativos: el servidor suma el neto (AR real)
+          var vendedor      = vS2  ? (row[vS2] || '').toString().trim() : '';
           if (cliente && saldo !== 0) {
-            saldosParaGuardar.push({ cliente: cliente, vendedor: vendedor, fecha_factura: fecha_factura, fecha_pago: fecha_pago, saldo: saldo });
+            saldosParaGuardar.push({ cliente: cliente, vendedor: vendedor,
+                                     fecha_factura: fecha_factura, fecha_pago: fecha_pago, saldo: saldo });
           }
         });
-        if (saldosParaGuardar.length > 0) {
-          // Pasar fecha_corte al servidor para que el DSO se calcule al cierre del reporte,
-          // no con la fecha de hoy (el archivo puede subirse días después del cierre).
-          var _fcISO = null;
-          if (fechaCorteMs) {
-            var _fcd = new Date(fechaCorteMs);
-            _fcISO = _fcd.getFullYear() + '-'
-              + String(_fcd.getMonth()+1).padStart(2,'0') + '-'
-              + String(_fcd.getDate()).padStart(2,'0');
-          }
-          fetch('/dso-saldos', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ saldos: saldosParaGuardar, fecha_corte: _fcISO })
-          }).then(function(r) { return r.json(); })
-            .then(function(d) { console.log('[DSO] Saldos guardados:', d.agregados, 'nuevos, total:', d.total, 'corte:', _fcISO); })
-            .catch(function(e) { console.warn('[DSO] Error guardando saldos:', e); });
+        if (fechaCorteMs) {
+          var _fcd = new Date(fechaCorteMs);
+          _fcISO = _fcd.getFullYear() + '-'
+            + String(_fcd.getMonth()+1).padStart(2,'0') + '-'
+            + String(_fcd.getDate()).padStart(2,'0');
         }
       } catch(e) { console.warn('[DSO] Error preparando saldos:', e); }
     }
 
-    // ── GUARDAR CHEQUES HISTORICOS (4 meses) ──
+    var chequesParaGuardar = [];
     if (rowsCheques && rowsCheques.length > 0) {
       try {
         var hC2 = Object.keys(rowsCheques[0]);
         var cC2 = mapearColumna(hC2, DSO_ALIASES.cheques.contacto);
         var mC2 = mapearColumna(hC2, DSO_ALIASES.cheques.monto);
         var fC2 = mapearColumna(hC2, DSO_ALIASES.cheques.fecha || ['Fecha de Pago', 'fecha_pago', 'fecha pago']);
-        var chequesParaGuardar = [];
         rowsCheques.forEach(function(row) {
           var cliente    = (row[cC2]||'').toString().trim();
           var total      = parseMonto(row[mC2]);
           var fecha_pago = fC2 ? fechaExcelAISO(row[fC2]) : '';
-          // Solo cheques positivos (pendientes de cobro); los negativos son cancelaciones
           if (cliente && total > 0) {
             chequesParaGuardar.push({ cliente: cliente, fecha_pago: fecha_pago, total: total });
           }
         });
-        if (chequesParaGuardar.length > 0) {
-          fetch('/dso-cheques', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ cheques: chequesParaGuardar })
-          }).then(function(r) { return r.json(); })
-            .then(function(d) { console.log('[DSO] Cheques guardados:', d.agregados, 'nuevos, total:', d.total); })
-            .catch(function(e) { console.warn('[DSO] Error guardando cheques:', e); });
-        }
       } catch(e) { console.warn('[DSO] Error preparando cheques:', e); }
+    }
+
+    // Upload en secuencia: cheques primero → luego saldos (que dispara el cálculo DSO)
+    function _uploadSaldosDSO() {
+      if (saldosParaGuardar.length === 0) return;
+      fetch('/dso-saldos', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ saldos: saldosParaGuardar, fecha_corte: _fcISO })
+      }).then(function(r) { return r.json(); })
+        .then(function(d) { console.log('[DSO] Saldos+DSO guardados:', d.total, 'corte:', _fcISO); })
+        .catch(function(e) { console.warn('[DSO] Error guardando saldos:', e); });
+    }
+    if (chequesParaGuardar.length > 0) {
+      fetch('/dso-cheques', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ cheques: chequesParaGuardar })
+      }).then(function(r) { return r.json(); })
+        .then(function(d) { console.log('[DSO] Cheques guardados:', d.total); _uploadSaldosDSO(); })
+        .catch(function(e) { console.warn('[DSO] Error guardando cheques:', e); _uploadSaldosDSO(); });
+    } else {
+      _uploadSaldosDSO();
     }
 
     // KPIs
