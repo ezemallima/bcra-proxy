@@ -1492,8 +1492,8 @@ BCRA_WORKERS  = [BCRA_WORKER, BCRA_WORKER_2, BCRA_WORKER_3, BCRA_WORKER_4, BCRA_
 import threading as _threading
 _wcb = {'failures': 0, 'open_until': 0.0}
 _wcb_lock = _threading.Lock()
-_WCB_OPEN_AFTER = 3    # abre tras N rondas donde todos los workers fallan
-_WCB_OPEN_SECS  = 300  # queda abierto 5 minutos
+_WCB_OPEN_AFTER = 1    # abre tras la primera ronda donde todos los workers fallan
+_WCB_OPEN_SECS  = 7200 # queda abierto 2 horas (evita retries en cada reinicio)
 
 def _wcb_is_open() -> bool:
     return time.time() < _wcb['open_until']
@@ -1657,8 +1657,8 @@ def consultar_bcra(cuit, reintentos=3):
         return None, via
 
     _cb_open = _wcb_is_open()
-    # Workers sanos responden en <1s; 5s es generoso y libera threads antes
-    _w_eps = [] if _cb_open else [(w + "/deudas/" + cuit, 5, f"Worker{i+1}") for i, w in enumerate(BCRA_WORKERS)]
+    # Workers sanos responden en <1s; 2s es suficiente y reduce latencia cuando están caídos
+    _w_eps = [] if _cb_open else [(w + "/deudas/" + cuit, 2, f"Worker{i+1}") for i, w in enumerate(BCRA_WORKERS)]
     endpoints = (
         [(BCRA_WRAPPER_BASE + '/central-deudores/' + cuit, 12, 'bcra_wrapper')]
         + _w_eps
