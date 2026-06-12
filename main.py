@@ -635,11 +635,18 @@ def _import_cheques_zip(date_str: str = None) -> bool:
         # 1. Descarga streaming del ZIP (~10 MB comprimido, ~58 MB expandido)
         _cheques_db_estado['ultimo_paso'] = f"Descargando {url}"
         print(f"[cheques_db] Descargando {url}", flush=True)
-        resp = requests.get(url, timeout=180, verify=False, stream=True)
+        try:
+            resp = requests.get(url, timeout=180, verify=False, stream=True)
+        except Exception as e_dl:
+            _cheques_db_estado['ultimo_paso'] = f"ERROR red: {e_dl}"
+            print(f"[cheques_db] Error de red: {e_dl}", flush=True)
+            return False
         if resp.status_code == 404:
-            print(f"[cheques_db] Archivo no disponible para {date_str} (404)", flush=True)
+            _cheques_db_estado['ultimo_paso'] = f"ERROR 404: archivo {date_str} no existe en BCRA aún"
+            print(f"[cheques_db] 404 — archivo {date_str} no disponible", flush=True)
             return False
         if resp.status_code != 200:
+            _cheques_db_estado['ultimo_paso'] = f"ERROR HTTP {resp.status_code}"
             print(f"[cheques_db] Error HTTP {resp.status_code}", flush=True)
             return False
 
