@@ -7166,12 +7166,26 @@ def dso_individual_debug():
         if nombre_q:
             norm = _norm_dso_match(nombre_q)
             val  = por_nombre.get(norm)
+            # Si piden ?detalle=1 también mostramos las facturas crudas del DSO saldos
+            facturas_raw = []
+            if request.args.get('detalle') == '1':
+                _sp = os.path.join(DATA_DIR, 'dso_saldos_actual.json')
+                if os.path.exists(_sp):
+                    _saldos_raw = json.load(open(_sp, 'r', encoding='utf-8')).get('saldos', [])
+                    for s in _saldos_raw:
+                        if _norm_dso_match(str(s.get('cliente') or '')) == norm:
+                            facturas_raw.append({
+                                'cliente':       s.get('cliente'),
+                                'fecha_factura': s.get('fecha_factura') or s.get('fechaFactura'),
+                                'saldo':         s.get('saldo'),
+                            })
             return jsonify({
                 "busqueda_original":  nombre_q,
                 "busqueda_norm":      norm,
                 "encontrado":         val is not None,
                 "dso":                val,
                 "claves_similares":   [k for k in por_nombre if norm[:6] in k][:10],
+                "facturas_en_archivo": facturas_raw,
             })
 
         if request.args.get('todos') == '1':
