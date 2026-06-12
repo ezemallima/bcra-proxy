@@ -2720,9 +2720,9 @@ function renderConsulta(cuit, dd, cd, hd, serverScore, afipData) {
     const _arcaTipo   = serverScore?.tipo_persona || null;
     const _arcaActiv  = serverScore?.actividad_principal || '';
     const _arcaAnt    = serverScore?.antiguedad_fiscal || null;
-    const _arcaFuente = serverScore?.fuente_ingresos || '';
-    const _fuente_ok  = _arcaFuente && !['bcra_inferido','bcra_fallback','bcra_floor_scorer','sin_datos',''].includes(_arcaFuente);
-    const _hayArca    = _fuente_ok && (_arcaFecha || _arcaCat || _arcaTipo || _arcaActiv);
+    // Mostrar ARCA si tenemos datos de identidad fiscal reales (tipo_persona o fecha).
+    // fuente_ingresos puede ser 'bcra_inferido' para una SRL y aun así tener datos de AFIP.
+    const _hayArca = _arcaTipo || _arcaFecha || _arcaCat;
 
     if (_hayArca) {
       // Régimen fiscal
@@ -2757,9 +2757,11 @@ function renderConsulta(cuit, dd, cd, hd, serverScore, afipData) {
         } catch(e) {}
       }
 
-      // Actividad principal (truncada)
+      // Actividad principal — solo si viene de AFIP (no de inferencia BCRA)
+      const _arcaFuente = serverScore?.fuente_ingresos || '';
+      const _activEsAfip = _arcaFuente && !['bcra_inferido','bcra_fallback','bcra_floor_scorer','sin_datos',''].includes(_arcaFuente);
       let activPill = '';
-      if (_arcaActiv) {
+      if (_arcaActiv && _activEsAfip) {
         const actTrim = _arcaActiv.length > 40 ? _arcaActiv.slice(0,38)+'…' : _arcaActiv;
         activPill = `<span style="display:inline-flex;align-items:center;background:rgba(100,116,139,0.07);border:1px solid rgba(100,116,139,0.18);border-radius:20px;padding:4px 11px;font-size:11px;color:var(--texto2);max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(_arcaActiv)}">${esc(actTrim)}</span>`;
       }
