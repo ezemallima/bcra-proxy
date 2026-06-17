@@ -6832,7 +6832,7 @@ def warm_padron():
 
     def _run():
         _warm_estado["corriendo"] = True
-        _TTL = 20 * 3600  # refrescar si el dato tiene más de 20h
+        _TTL = 25 * 24 * 3600  # 25 días — datos BCRA se actualizan mensualmente
 
         try:
             with open(ALERTAS_FILE, 'r', encoding='utf-8') as f:
