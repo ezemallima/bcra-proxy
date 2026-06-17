@@ -3558,20 +3558,8 @@ def ejecutar_verificacion(cartera_data):
             print(f"[verif] Padrón local purgado: {cur_p.rowcount} entradas eliminadas", flush=True)
     except Exception as _ep:
         print(f"[verif] Advertencia purga padrón: {_ep}", flush=True)
-    try:
-        _bc_path = os.path.join(DATA_DIR, 'bcra_cache.json')
-        if os.path.exists(_bc_path) and _cartera_cuits_v:
-            with open(_bc_path, 'r', encoding='utf-8') as _f:
-                _bc = json.load(_f)
-            _inv = [k for k in list(_bc.keys()) if k in _cartera_cuits_v]
-            for _k in _inv:
-                del _bc[_k]
-            if _inv:
-                with open(_bc_path, 'w', encoding='utf-8') as _f:
-                    json.dump(_bc, _f)
-                print(f"[verif] bcra_cache invalidado: {len(_inv)} CUITs", flush=True)
-    except Exception as _ec:
-        print(f"[verif] Advertencia purga cache: {_ec}", flush=True)
+    # NO se invalida bcra_cache — misma razón que proceso_integral:
+    # la invalidación masiva provoca rate-limiting en BCRA desde el cliente 4.
 
     palabras_riesgo = [
         'rechaz', 'no paga', 'cuidado', 'mora', 'deuda', 'incobrable',
@@ -5651,22 +5639,10 @@ def _ejecutar_proceso_integral(cartera_data: list):
     except Exception as _ep:
         print(f"[proceso-integral] Advertencia purga padrón: {_ep}", flush=True)
 
-    # Limpiar bcra_cache para todos los clientes de la cartera en un solo write —
-    # garantiza que el proceso use datos BCRA frescos, no stale de 24h.
-    try:
-        _bc_path = os.path.join(DATA_DIR, 'bcra_cache.json')
-        if os.path.exists(_bc_path):
-            with open(_bc_path, 'r', encoding='utf-8') as _f:
-                _bc = json.load(_f)
-            _invalidados = [k for k in list(_bc.keys()) if k in _cartera_cuits_pi]
-            for _k in _invalidados:
-                del _bc[_k]
-            if _invalidados:
-                with open(_bc_path, 'w', encoding='utf-8') as _f:
-                    json.dump(_bc, _f)
-                print(f"[proceso-integral] bcra_cache invalidado para {len(_invalidados)} CUITs", flush=True)
-    except Exception as _bce:
-        print(f"[proceso-integral] Error limpiando bcra_cache: {_bce}", flush=True)
+    # NO se invalida bcra_cache: la TTL de 24h es suficiente para datos BCRA mensuales.
+    # Invalidar el caché antes de correr el proceso integral causaba 3900+ requests
+    # en ráfaga contra BCRA y rate-limiting después del cliente 4.
+    # El caché nocturno (warm-padron) garantiza datos frescos sin golpear el rate-limit.
 
     for i, c in enumerate(cartera_data):
         if not isinstance(c, dict):
@@ -5833,7 +5809,7 @@ def _ejecutar_proceso_integral(cartera_data: list):
 
         with _proceso_lock:
             _proceso_integral_estado['procesados'] = i + 1
-        # Sin sleep — ScraperAPI gestiona throttling/rotación de IPs
+        time.sleep(3)  # 3s entre clientes: ~1h para 1300 clientes, evita rate-limit BCRA
 
     # ── Merge atómico de alertas BCRA en db_v17_final.json ───────────────────────
     # Preserva alertas tipo 'bodegas' (WhatsApp) del run anterior; reemplaza las 'bcra'
@@ -6842,17 +6818,23 @@ _warm_estado = {"corriendo": False, "progreso": 0, "total": 0, "ultimo": ""}
 
 @app.route("/warm-padron", methods=["POST", "GET"])
 def warm_padron():
-    """Pre-calienta el padrón local consultando BCRA para todos los CUITs
-    de la cartera que no tienen datos recientes (< 20h). Diseñado para
-    ejecutarse de noche via cron (ej: cron-job.org a las 3am AR)."""
+    """Precalienta el caché nocturno completo: deudas + historial + cheques.
+
+    Diseñado para ejecutarse via cron a las 3:00 AM (AR) — cron-job.org o similar.
+    Con 1300 clientes y 4s entre cada uno, tarda ~1.5h. Al amanecer todos los
+    clientes están en caché y no se toca BCRA durante el día.
+
+    Solo refresca los CUITs cuyo caché tiene más de 20h (evita re-queries innecesarios
+    si el job se ejecuta varias veces o hay reintentos del cron).
+    """
     if _warm_estado["corriendo"]:
         return jsonify({"status": "ya_corriendo", **_warm_estado}), 200
 
     def _run():
         _warm_estado["corriendo"] = True
+        _TTL = 20 * 3600  # refrescar si el dato tiene más de 20h
+
         try:
-            if not os.path.exists(ALERTAS_FILE):
-                return
             with open(ALERTAS_FILE, 'r', encoding='utf-8') as f:
                 cartera = json.load(f)
             cuits = [
@@ -6861,33 +6843,70 @@ def warm_padron():
             ]
             cuits = [c for c in cuits if len(c) >= 10]
             _warm_estado["total"] = len(cuits)
-            print(f"[warm-padron] Iniciando pre-calentamiento: {len(cuits)} CUITs", flush=True)
-
-            ahora = time.time()
-            TTL_HORAS = 20 * 3600  # solo refresca si tiene más de 20 horas
+            print(f"[warm] Iniciando: {len(cuits)} CUITs", flush=True)
 
             for i, cuit in enumerate(cuits):
                 _warm_estado["progreso"] = i + 1
                 _warm_estado["ultimo"] = cuit
+                ahora = time.time()
+
+                # ── 1. Deudas ─────────────────────────────────────────────────
                 try:
-                    # Skip si el padrón local tiene datos recientes
                     local = consultar_padron_local(cuit)
-                    if local and local.get('bcra_disponible'):
-                        continue
-                    # Consultar BCRA con reintentos mínimos
-                    data, err = consultar_bcra(cuit)
-                    if data and not err:
-                        _guardar_en_padron_local(cuit, data)
-                        print(f"[warm-padron] {i+1}/{len(cuits)} {cuit} OK", flush=True)
-                    else:
-                        print(f"[warm-padron] {i+1}/{len(cuits)} {cuit} sin datos", flush=True)
+                    _padron_ok = local and local.get('bcra_disponible')
+                    _cache_ok  = False
+                    _cf = os.path.join(DATA_DIR, 'bcra_cache.json')
+                    if not _padron_ok and os.path.exists(_cf):
+                        try:
+                            _bc = json.load(open(_cf, 'r'))
+                            _ent = _bc.get(cuit, {})
+                            _cache_ok = ahora - (_ent.get('ts') or 0) < _TTL
+                        except Exception:
+                            pass
+                    if not _padron_ok and not _cache_ok:
+                        data, err = consultar_bcra(cuit)
+                        if data and not err:
+                            _guardar_en_padron_local(cuit, data)
+                            print(f"[warm] {i+1}/{len(cuits)} {cuit} deudas OK", flush=True)
                 except Exception as e:
-                    print(f"[warm-padron] {cuit} error: {e}", flush=True)
-                # 2 segundos entre consultas para no triggerear rate-limit de BCRA
-                time.sleep(2)
+                    print(f"[warm] {cuit} deudas error: {e}", flush=True)
+
+                # ── 2. Historial ──────────────────────────────────────────────
+                try:
+                    _hp = os.path.join(DATA_DIR, f'historial_{cuit}.json')
+                    _hist_ok = os.path.exists(_hp) and ahora - os.path.getmtime(_hp) < _TTL
+                    if not _hist_ok:
+                        _hd, _ = _consultar_bcra_directo(cuit, 'historial')
+                        if _hd:
+                            with open(_hp, 'w', encoding='utf-8') as _hf:
+                                json.dump({'payload': _hd, 'ts': ahora}, _hf, ensure_ascii=False)
+                            print(f"[warm] {i+1}/{len(cuits)} {cuit} historial OK", flush=True)
+                except Exception as e:
+                    print(f"[warm] {cuit} historial error: {e}", flush=True)
+
+                # ── 3. Cheques ────────────────────────────────────────────────
+                try:
+                    _cheq_cached = _cheques_cache_get(cuit)
+                    if _cheq_cached is None:
+                        cheq_local = get_cheques_local(cuit)
+                        if cheq_local is not None:
+                            _cheques_cache_set(cuit, cheq_local)
+                        else:
+                            _cd, _ = _consultar_bcra_directo(cuit, 'cheques')
+                            if _cd:
+                                _cheques_cache_set(cuit, _cd)
+                                print(f"[warm] {i+1}/{len(cuits)} {cuit} cheques OK", flush=True)
+                except Exception as e:
+                    print(f"[warm] {cuit} cheques error: {e}", flush=True)
+
+                # 4s entre clientes — ~1.5h para 1300 CUITs, debajo del rate-limit BCRA
+                time.sleep(4)
+
+        except Exception as e:
+            print(f"[warm] Error general: {e}", flush=True)
         finally:
             _warm_estado["corriendo"] = False
-            print("[warm-padron] Finalizado", flush=True)
+            print(f"[warm] Finalizado — {len(cuits) if 'cuits' in dir() else '?'} CUITs procesados", flush=True)
 
     threading.Thread(target=_run, daemon=True).start()
     return jsonify({"status": "iniciado", "total": _warm_estado["total"]}), 202
