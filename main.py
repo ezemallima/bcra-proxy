@@ -6609,15 +6609,17 @@ def get_historial(cuit):
             print(f"[historial] {via} error para {cuit_limpio}: {e}", flush=True)
         return None, via
 
+    # ScraperAPI (fallback de BrightData) necesita hasta 30s para sortear firewalls BCRA.
+    # as_completed timeout = 40s para dar margen cuando ambos endpoints usan ScraperAPI.
     endpoints_hist = [
-        (f"https://api.bcra.gob.ar/CentralDeInformacion/v1.0/Deudas/Historicas/{cuit_limpio}", 10, "bcra_cdi"),
-        (f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/{cuit_limpio}",    10, "bcra_legacy"),
+        (f"https://api.bcra.gob.ar/CentralDeInformacion/v1.0/Deudas/Historicas/{cuit_limpio}", 30, "bcra_cdi"),
+        (f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/{cuit_limpio}",    30, "bcra_legacy"),
     ]
     got_404_hist = False
     with ThreadPoolExecutor(max_workers=len(endpoints_hist)) as ex:
         futs = {ex.submit(_fetch_hist, url, tmt, via): via for url, tmt, via in endpoints_hist}
         try:
-            for fut in as_completed(futs, timeout=20):
+            for fut in as_completed(futs, timeout=40):
                 result, via = fut.result()
                 if result == 'NOT_FOUND':
                     got_404_hist = True   # no retornar aún — otro endpoint puede tener datos

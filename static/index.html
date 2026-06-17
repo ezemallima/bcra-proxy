@@ -2896,10 +2896,18 @@ function renderBcraHeatmap(periodos) {
   if (!container) return;
   if (!periodos || !periodos.length) { container.style.display = 'none'; return; }
 
+  // Padrón local: periodos sin campo periodo (snapshot del mes actual).
+  // Inyectar el mes actual para que pasen el filtro YYYYMM y sean visibles.
+  var _hoy = new Date();
+  var _curPer = String(_hoy.getFullYear()) + String(_hoy.getMonth() + 1).padStart(2, '0');
+  var _periNorm = periodos.map(function(p) {
+    return (p.periodo && /^\d{6}$/.test(String(p.periodo).trim())) ? p
+      : Object.assign({}, p, { periodo: _curPer });
+  });
+
   // Pre-sort: comparación aritmética (parseInt) — locale-independiente.
   // localeCompare sin locale explícito varía por SO/browser; parseInt es determinístico.
-  // filter: solo períodos con formato YYYYMM válido (6 dígitos) — descarta entradas corruptas.
-  var data24 = periodos.slice()
+  var data24 = _periNorm.slice()
     .filter(function(p) { return /^\d{6}$/.test(String(p.periodo || '').trim()); })
     .sort(function(a, b) { return (parseInt(b.periodo, 10) || 0) - (parseInt(a.periodo, 10) || 0); })
     .slice(0, 24)
@@ -3058,7 +3066,14 @@ function renderExposicionSistema() {
     el.innerHTML = '<span style="color:#94a3b8;">Sin datos de exposición disponibles</span>';
     return;
   }
-  var data24 = periSrc.slice()
+  // Padrón local: misma normalización que renderBcraHeatmap — inyectar mes actual si falta periodo.
+  var _hoyE = new Date();
+  var _curPerE = String(_hoyE.getFullYear()) + String(_hoyE.getMonth() + 1).padStart(2, '0');
+  var _periSrcNorm = periSrc.map(function(p) {
+    return (p.periodo && /^\d{6}$/.test(String(p.periodo).trim())) ? p
+      : Object.assign({}, p, { periodo: _curPerE });
+  });
+  var data24 = _periSrcNorm.slice()
     .filter(function(p){ return /^\d{6}$/.test(String(p.periodo||'').trim()); })
     .sort(function(a,b){ return (parseInt(b.periodo,10)||0)-(parseInt(a.periodo,10)||0); })
     .slice(0,24);
