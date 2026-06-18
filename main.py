@@ -2383,12 +2383,12 @@ def _layer_conducta_interna(
             None
         )
         if nombre_cliente:
+            # Match exacto primero; fallback: nombre_cliente como prefijo completo de palabra
+            # (no substring libre — evita que "WINE BAR" matchee "VINOTECAS ROMA WINE BAR SRL")
+            _nc_norm = _norm_nombre(nombre_cliente)
             facturas = [
                 f for f in saldos_data
-                if isinstance(f, dict) and (
-                    str(f.get('cliente', '')).strip().upper() == nombre_cliente
-                    or nombre_cliente in str(f.get('cliente', '')).strip().upper()
-                )
+                if isinstance(f, dict) and _norm_nombre(str(f.get('cliente', ''))) == _nc_norm
             ]
 
     if not facturas:
@@ -7557,10 +7557,13 @@ def get_saldos_cliente(cliente):
             if result:
                 print(f"[match-2p] '{nombre_original}' → prim2='{prim2}' → {len(result)} facturas", flush=True)
 
-    # 3. Match parcial (≥2 palabras en común, longitud >2)
+    # 3. Match parcial (≥2 palabras significativas en común, longitud >3)
+    # Excluye sufijos societarios: "SRL" y "SA" no son palabras distintivas —
+    # sin esta exclusión "WINE BAR SRL" matcheaba "VINOTECAS ROMA WINE SRL" (WINE+SRL=2).
     if not result:
-        palabras = [w for w in cn.split() if len(w) > 2]
-        if palabras:
+        _SUFIJOS_PARCIAL = {'SA', 'SRL', 'SRLH', 'SH', 'SAS', 'SCA', 'SE', 'SC', 'CIA', 'CO', 'AND'}
+        palabras = [w for w in cn.split() if len(w) > 3 and w not in _SUFIJOS_PARCIAL]
+        if len(palabras) >= 2:
             result = [f for f in fuente
                 if sum(1 for p in palabras if p in _norm_nombre(f.get('cliente', '')))
                    >= min(2, len(palabras))]
