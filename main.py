@@ -3360,12 +3360,9 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
     hist_data = _cache_load(f'historial_{cuit_limpio}.json')
     cheq_data = _cheques_cache_get(cuit_limpio)   # usa TTL diferenciado: 1h "sin cheques", 24h con datos
 
-    # Si el caché de historial tiene periodos vacíos y tiene >2h, puede ser un fetch fallido
-    # anterior (ScraperAPI bloqueado). Re-intentar con la IP directa de Render.
+    # Historial vacío = fetch fallido anterior — siempre re-intentar (directo, sin ScraperAPI)
     if hist_data and not (hist_data.get('results') or {}).get('periodos'):
-        _hp_score = os.path.join(DATA_DIR, f'historial_{cuit_limpio}.json')
-        if time.time() - (os.path.getmtime(_hp_score) if os.path.exists(_hp_score) else 0) > 7200:
-            hist_data = None  # forzar re-fetch
+        hist_data = None
 
     if not hist_data:
         _hd, _ = _consultar_bcra_directo(cuit_limpio, 'historial')
@@ -6575,14 +6572,13 @@ def get_cheques(cuit):
 def get_historial(cuit):
     cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
     hist_path = os.path.join(DATA_DIR, f'historial_{cuit_limpio}.json')
-    # Caché disco: 24h con periodos reales, 2h si está vacío (puede ser fetch fallido anterior)
+    # Caché disco: solo se sirve si tiene periodos reales (vacío = fetch fallido → re-fetchear)
     try:
         if os.path.exists(hist_path):
             with open(hist_path, 'r', encoding='utf-8') as f:
                 cached = json.load(f)
             _periodos_ok = bool((cached.get('payload', {}).get('results') or {}).get('periodos'))
-            _ttl_hist = 86400 if _periodos_ok else 7200
-            if time.time() - cached.get('ts', 0) < _ttl_hist:
+            if _periodos_ok and time.time() - cached.get('ts', 0) < 86400:
                 print(f"[historial] {cuit_limpio} desde caché disco", flush=True)
                 return jsonify(cached['payload']), 200
     except: pass
