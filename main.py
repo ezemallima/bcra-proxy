@@ -1122,15 +1122,6 @@ def consultar_bcra_cached(cuit):
         print(f"[bcra] {cuit} desde padrón local (offline)", flush=True)
         return local, None
 
-    # 1.5. Padrón masivo BCRA offline (bcra_nomdeu.db — 0ms, 0 red)
-    # Sirve para todos los CUITs del padrón mensual; las APIs en vivo
-    # se reservan solo para CUITs extremadamente nuevos (ausentes del bulk).
-    offline_resp = _nomdeu_build_deudas_resp(cuit)
-    if offline_resp:
-        sit = (offline_resp.get('results', {}).get('periodos') or [{}])[0].get('entidades', [{}])[0].get('situacion', '?')
-        print(f"[bcra] {cuit} desde nomdeu offline (sit_max={sit})", flush=True)
-        return offline_resp, None
-
     print(f"[bcra] {cuit} consultando BCRA en vivo...", flush=True)
     # 2. Caché de disco (24 h) — evita re-consultas recientes
     cached_data, cached_error = cache_get(cuit)

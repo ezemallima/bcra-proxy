@@ -2804,25 +2804,59 @@ function calcularScore(datos) {
 function renderVendeScore(scoreObj) {
   if (!scoreObj) return '';
   var barWidth = Math.round(scoreObj.score / 999 * 100);
-  return '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;margin-bottom:8px;">' +
-    '<div style="font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:6px;">Score Vende Seguro</div>' +
-    '<div style="display:flex;align-items:flex-end;gap:14px;margin-bottom:10px;">' +
-      '<div style="font-size:52px;font-weight:800;line-height:1;color:' + scoreObj.color + ';font-family:\'Syne\',sans-serif;">' + scoreObj.score + '</div>' +
-      '<div style="padding-bottom:6px;">' +
-        '<div style="font-size:15px;font-weight:700;color:' + scoreObj.color + ';">' + scoreObj.emoji + ' ' + scoreObj.rango + '</div>' +
-        '<div style="font-size:11px;color:#94a3b8;">escala 1–999</div>' +
+
+  // Desglose de indicadores por componente
+  var desglose = '';
+  var items = Array.isArray(scoreObj.detalle)
+    ? scoreObj.detalle.filter(function(d){ return d && d.label && d.max; })
+    : [];
+  if (items.length) {
+    desglose = '<div style="border-top:1px solid #f1f5f9;margin-top:10px;padding-top:10px;">' +
+      '<div style="font-size:10px;font-weight:700;color:#94a3b8;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:8px;">Desglose del Puntaje</div>';
+    items.forEach(function(d) {
+      var pct  = Math.min(100, Math.round((d.puntos / d.max) * 100));
+      var col  = pct >= 75 ? '#16a34a' : pct >= 40 ? '#ca8a04' : '#ef4444';
+      var bg   = pct >= 75 ? '#f0fdf4' : pct >= 40 ? '#fefce8' : '#fef2f2';
+      desglose +=
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">' +
+          '<div style="flex:0 0 128px;">' +
+            '<div style="font-size:11px;font-weight:600;color:#334155;line-height:1.3;">' + d.label + '</div>' +
+            '<div style="font-size:10px;color:#64748b;">' + (d.valor || '') + '</div>' +
+          '</div>' +
+          '<div style="flex:1;background:#f1f5f9;border-radius:4px;height:6px;overflow:hidden;">' +
+            '<div style="background:' + col + ';height:6px;border-radius:4px;width:' + pct + '%;transition:width 0.5s;"></div>' +
+          '</div>' +
+          '<div style="flex:0 0 52px;text-align:right;">' +
+            '<span style="font-size:12px;font-weight:700;color:' + col + ';">' + d.puntos + '</span>' +
+            '<span style="font-size:10px;color:#94a3b8;">/' + d.max + '</span>' +
+          '</div>' +
+        '</div>';
+    });
+    desglose += '</div>';
+  }
+
+  return (
+    '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;margin-bottom:8px;">' +
+      '<div style="font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:6px;">Score Vende Seguro</div>' +
+      '<div style="display:flex;align-items:flex-end;gap:14px;margin-bottom:10px;">' +
+        '<div style="font-size:52px;font-weight:800;line-height:1;color:' + scoreObj.color + ';font-family:\'Syne\',sans-serif;">' + scoreObj.score + '</div>' +
+        '<div style="padding-bottom:6px;">' +
+          '<div style="font-size:15px;font-weight:700;color:' + scoreObj.color + ';">' + scoreObj.emoji + ' ' + scoreObj.rango + '</div>' +
+          '<div style="font-size:11px;color:#94a3b8;">escala 1–999</div>' +
+        '</div>' +
       '</div>' +
+      '<div style="background:#f1f5f9;border-radius:6px;height:8px;">' +
+        '<div style="background:' + scoreObj.color + ';height:8px;border-radius:6px;width:' + barWidth + '%;transition:width 0.6s;"></div>' +
+      '</div>' +
+      desglose +
+      '<div style="font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:0.6px;text-transform:uppercase;margin:14px 0 6px;">Historial BCRA — 24 meses</div>' +
+      '<canvas id="bcra-history-chart" style="width:100%;max-height:110px;display:block;"></canvas>' +
     '</div>' +
-    '<div style="background:#f1f5f9;border-radius:6px;height:8px;margin-bottom:14px;">' +
-      '<div style="background:' + scoreObj.color + ';height:8px;border-radius:6px;width:' + barWidth + '%;transition:width 0.6s;"></div>' +
-    '</div>' +
-    '<div style="font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:0.6px;text-transform:uppercase;margin-bottom:6px;">Historial BCRA — 24 meses</div>' +
-    '<canvas id="bcra-history-chart" style="width:100%;max-height:100px;display:block;"></canvas>' +
-  '</div>' +
-  '<div id="solvencia-card" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;margin-bottom:8px;">' +
-    '<div style="font-size:12px;font-weight:700;color:#334155;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px;">Exposición en Sistema Financiero</div>' +
-    '<div id="solvencia-body" style="font-size:13px;color:#64748b;">Consultando solvencia...</div>' +
-  '</div>';
+    '<div id="solvencia-card" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;margin-bottom:8px;">' +
+      '<div style="font-size:12px;font-weight:700;color:#334155;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px;">Exposición en Sistema Financiero</div>' +
+      '<div id="solvencia-body" style="font-size:13px;color:#64748b;">Consultando solvencia...</div>' +
+    '</div>'
+  );
 }
 
 function renderBcraHistoryChart(periodos) {
@@ -4087,6 +4121,14 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
     var _usandoFallback = false;
     if (scoreServidor && scoreServidor.score) {
       scoreObjFinal = scoreServidor;
+      // Enriquecer con desglose de indicadores: el servidor no expone detalle[],
+      // lo calculamos localmente para mostrarlo en la tarjeta de score.
+      try {
+        var _scoreMoraL = buscarEnMoras ? buscarEnMoras(cuit) : null;
+        var _scoreWspL  = buscarEnWSP ? filtrarWSPReciente(buscarEnWSP(cuit)) : [];
+        var _localDet   = calcularVendeScore(cuit, data, _scoreMoraL, _scoreWspL, historial, window._chequesUltimaConsulta || null);
+        if (_localDet && Array.isArray(_localDet.detalle)) scoreObjFinal.detalle = _localDet.detalle;
+      } catch(_eD) {}
       // Fallback: si el fetch directo de cheques no trajo datos, inyectar desde el score.
       // Si el fetch directo ya renderizó con cheques reales, NO sobreescribir —
       // el doble render destruye el canvas inicializado y deja el área negra.
