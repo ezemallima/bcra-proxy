@@ -6609,6 +6609,19 @@ def get_historial(cuit):
         except Exception:
             pass
     if got_404_hist:
+        # BCRA a veces devuelve 404 como respuesta de rate-limit (falso 404), no como "no hay datos".
+        # Si el cliente tiene historial real pero fue consultado 1s después de deudas, caeremos aquí.
+        # Último intento: esperar 2s y reintentar CDI v1 directamente antes de declarar "sin datos".
+        time.sleep(2)
+        _url_retry = f"https://api.bcra.gob.ar/CentralDeInformacion/v1.0/Deudas/Historicas/{cuit_limpio}"
+        _retry_data, _ = _fetch_hist(_url_retry, 30, 'bcra_cdi_retry')
+        if _retry_data and _retry_data != 'NOT_FOUND':
+            try:
+                with open(hist_path, 'w', encoding='utf-8') as f:
+                    json.dump({'payload': _retry_data, 'ts': time.time()}, f, ensure_ascii=False)
+            except: pass
+            print(f"[historial] {cuit_limpio} OK en retry post-404 (2s delay)", flush=True)
+            return jsonify(_retry_data), 200
         return jsonify({"results": {"periodos": []}, "sin_deudas": True, "error_bcra": None}), 200
     return jsonify({"results": None, "sin_deudas": None, "error_bcra": "sin_respuesta"}), 200
 
