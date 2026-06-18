@@ -4128,6 +4128,12 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
     // válido (no cuit_inexistente), el CUIT existe aunque no haya razón social en AFIP.
     if (_esFantasma && scoreServidor && scoreServidor.score > 0 && scoreServidor.error !== 'cuit_inexistente') {
       _esFantasma = false;
+      // Si nombreMostrar sigue siendo el CUIT formateado (sin nombre real), mostrar aviso legible
+      if (/^\d/.test(nombreMostrar)) {
+        nombreMostrar = 'Sin denominación registrada';
+        var _elNomFbk = document.querySelector('#cliente-header .nombre-cliente');
+        if (_elNomFbk) _elNomFbk.textContent = nombreMostrar;
+      }
       // Limpiar el banner "CUIT SIN REGISTRO" que se insertó antes de que llegara el score
       var _mAlertElFx = document.getElementById('mora-alert-container');
       if (_mAlertElFx) {

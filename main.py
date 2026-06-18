@@ -6433,7 +6433,26 @@ def get_afip(cuit):
             with open(_hp_afip, 'r', encoding='utf-8') as _hf:
                 _hc = json.load(_hf)
             den_h = (_hc.get('payload', {}).get('results') or {}).get('denominacion', '').strip()
+            print(f"[afip] {cuit_limpio} historial_cache den_h={repr(den_h)}", flush=True)
             if den_h: return jsonify({"nombre": den_h, "fuente": "bcra_hist_cache"})
+    except Exception as _e:
+        print(f"[afip] {cuit_limpio} historial_cache error: {_e}", flush=True)
+
+    # 4.5. Padron AFIP via datos.gob.ar (IVA / Ganancias — sin auth requerida)
+    try:
+        _afip_r = requests.get(
+            "https://aws.datos.gob.ar/datastore/api/3/action/datastore_search",
+            params={"resource_id": "a6eb09c0-e44b-4b12-b0aa-9e4e7c65a51e", "q": cuit_limpio},
+            timeout=5, verify=False
+        )
+        if _afip_r.status_code == 200:
+            _afip_j = _afip_r.json()
+            _afip_recs = (_afip_j.get('result') or {}).get('records') or []
+            for _rec in _afip_recs:
+                _rs = str(_rec.get('razon_social') or _rec.get('nombre') or '').strip()
+                if _rs and not _rs.isdigit():
+                    print(f"[afip] {cuit_limpio} padron_datos_gob: {_rs}", flush=True)
+                    return jsonify({"nombre": _rs, "fuente": "afip_padron"})
     except Exception: pass
 
     # 5. API BCRA — historial en vivo (solo si no hay caché)
