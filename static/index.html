@@ -2829,6 +2829,13 @@ function renderBcraHistoryChart(periodos) {
   var canvas = document.getElementById('bcra-history-chart');
   if (!canvas || typeof Chart === 'undefined') return;
   if (!periodos || !periodos.length) { canvas.style.display = 'none'; return; }
+  // Padrón local: inyectar mes actual si falta campo periodo (misma normalización que heatmap)
+  var _hoyC = new Date();
+  var _curPerC = String(_hoyC.getFullYear()) + String(_hoyC.getMonth() + 1).padStart(2, '0');
+  periodos = periodos.map(function(p) {
+    return (p.periodo && /^\d{6}$/.test(String(p.periodo).trim())) ? p
+      : Object.assign({}, p, { periodo: _curPerC });
+  });
   // Pre-sort aritmético: locale-independiente (mismo criterio que heatmap)
   var data24 = periodos.slice()
     .filter(function(p) { return /^\d{6}$/.test(String(p.periodo || '').trim()); })
