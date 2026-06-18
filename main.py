@@ -6432,7 +6432,8 @@ def get_afip(cuit):
         if os.path.exists(_hp_afip):
             with open(_hp_afip, 'r', encoding='utf-8') as _hf:
                 _hc = json.load(_hf)
-            den_h = (_hc.get('payload', {}).get('results') or {}).get('denominacion', '').strip()
+            _den_raw = (_hc.get('payload', {}).get('results') or {}).get('denominacion')
+            den_h = str(_den_raw).strip() if _den_raw else ''
             print(f"[afip] {cuit_limpio} historial_cache den_h={repr(den_h)}", flush=True)
             if den_h: return jsonify({"nombre": den_h, "fuente": "bcra_hist_cache"})
     except Exception as _e:
