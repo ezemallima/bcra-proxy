@@ -1122,6 +1122,15 @@ def consultar_bcra_cached(cuit):
         print(f"[bcra] {cuit} desde padrón local (offline)", flush=True)
         return local, None
 
+    # 1.5. Padrón masivo BCRA offline (bcra_nomdeu.db — 0ms, 0 red)
+    # Sirve para todos los CUITs del padrón mensual; las APIs en vivo
+    # se reservan solo para CUITs extremadamente nuevos (ausentes del bulk).
+    offline_resp = _nomdeu_build_deudas_resp(cuit)
+    if offline_resp:
+        sit = (offline_resp.get('results', {}).get('periodos') or [{}])[0].get('entidades', [{}])[0].get('situacion', '?')
+        print(f"[bcra] {cuit} desde nomdeu offline (sit_max={sit})", flush=True)
+        return offline_resp, None
+
     print(f"[bcra] {cuit} consultando BCRA en vivo...", flush=True)
     # 2. Caché de disco (24 h) — evita re-consultas recientes
     cached_data, cached_error = cache_get(cuit)
@@ -6476,6 +6485,51 @@ def _nomdeu_get_deuda(cuit: str):
         return None
 
 
+def _nomdeu_get_entidad(codigo: str):
+    """Nombre de entidad financiera por código Maeent (5 chars). Retorna str o None."""
+    if _nomdeu_conn is None:
+        return None
+    try:
+        row = _nomdeu_conn.execute(
+            "SELECT nombre FROM entidades WHERE codigo = ?",
+            (str(codigo).strip().zfill(5),)
+        ).fetchone()
+        return row[0] if row else None
+    except Exception:
+        return None
+
+
+def _nomdeu_build_deudas_resp(cuit: str):
+    """Respuesta BCRA sintética desde deudas_resumen offline.
+    Primaria para CUITs en el padrón mensual; las APIs en vivo quedan como
+    auxilio solo para CUITs nuevos (ausentes de este padrón)."""
+    deuda = _nomdeu_get_deuda(cuit)
+    if not deuda:
+        return None
+    nombre = _nomdeu_get_nombre(cuit) or cuit
+    ent_codigos = [c.strip() for c in (deuda['entidades_cod'] or '').split(',') if c.strip()]
+    n_ents = max(1, len(ent_codigos))
+    entidades_list = []
+    for cod in ent_codigos:
+        ent_nombre = _nomdeu_get_entidad(cod) or f"Entidad {cod}"
+        entidades_list.append({
+            'entidad': ent_nombre,
+            'situacion': deuda['sit_max'],
+            'monto': round(deuda['monto_total'] / n_ents, 1),
+        })
+    periodo_str = str(deuda['periodo'])
+    periodo_int = int(periodo_str) if periodo_str.isdigit() else 0
+    return {
+        'results': {
+            'denominacion': nombre,
+            'periodos': [{'periodo': periodo_int, 'entidades': entidades_list}],
+        },
+        'sin_deudas': False,
+        'bcra_disponible': False,
+        'fuente_offline': 'bcra_nomdeu_local',
+    }
+
+
 @app.route("/afip/<cuit>")
 def get_afip(cuit):
     cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
@@ -6787,6 +6841,14 @@ def get_historial(cuit):
             print(f"[historial] {cuit_limpio} OK en retry post-404 (2s delay)", flush=True)
             return jsonify(_retry_data), 200
         return jsonify({"results": {"periodos": []}, "sin_deudas": True, "error_bcra": None}), 200
+
+    # Fallback offline: si la API falló por completo y el CUIT existe en el padrón masivo,
+    # servir al menos el último periodo conocido con nombre de entidad resuelto.
+    _offline_hist = _nomdeu_build_deudas_resp(cuit_limpio)
+    if _offline_hist:
+        print(f"[historial] {cuit_limpio} fallback nomdeu offline", flush=True)
+        return jsonify(_offline_hist), 200
+
     return jsonify({"results": None, "sin_deudas": None, "error_bcra": "sin_respuesta"}), 200
 
 @app.route("/analizar", methods=["POST"])
