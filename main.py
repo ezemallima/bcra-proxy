@@ -6456,7 +6456,7 @@ def get_afip(cuit):
                     return jsonify({"nombre": _rs, "fuente": "afip_padron"})
     except Exception: pass
 
-    # 4.6. TangoFactura — razonSocial del contribuyente (personas físicas y jurídicas)
+    # 4.6. TangoFactura — razonSocial/apellidoNombre del contribuyente
     try:
         _ua_tf = request.headers.get('User-Agent', 'Mozilla/5.0')
         _tf_r = requests.get(
@@ -6464,17 +6464,25 @@ def get_afip(cuit):
             headers={'User-Agent': _ua_tf, 'Accept': 'application/json'},
             timeout=10, verify=False
         )
+        print(f"[afip] {cuit_limpio} tangofactura HTTP={_tf_r.status_code}", flush=True)
         if _tf_r.status_code == 200:
             _contrib_tf = (_tf_r.json().get('Contribuyente') or {})
+            # Persona jurídica → razonSocial | Persona física → apellidoNombre o apellido+nombre
+            _apellido = str(_contrib_tf.get('apellido') or '').strip()
+            _nombre_f = str(_contrib_tf.get('nombre') or '').strip()
+            _nombre_fisico = (_apellido + ' ' + _nombre_f).strip() if _apellido else _nombre_f
             _rs_tf = str(
                 _contrib_tf.get('razonSocial') or
-                _contrib_tf.get('nombre') or
+                _contrib_tf.get('apellidoNombre') or
+                _nombre_fisico or
                 _contrib_tf.get('denominacion') or ''
             ).strip()
+            print(f"[afip] {cuit_limpio} tangofactura campos: razonSocial={repr(_contrib_tf.get('razonSocial'))} apellidoNombre={repr(_contrib_tf.get('apellidoNombre'))} apellido={repr(_apellido)} nombre={repr(_nombre_f)}", flush=True)
             if _rs_tf and not _rs_tf.isdigit():
-                print(f"[afip] {cuit_limpio} tangofactura: {_rs_tf}", flush=True)
+                print(f"[afip] {cuit_limpio} tangofactura OK: {_rs_tf}", flush=True)
                 return jsonify({"nombre": _rs_tf, "fuente": "tangofactura"})
-    except Exception: pass
+    except Exception as _etf:
+        print(f"[afip] {cuit_limpio} tangofactura error: {_etf}", flush=True)
 
     # 5. API BCRA — historial en vivo (solo si no hay caché)
     try:
