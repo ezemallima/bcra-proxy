@@ -2836,12 +2836,18 @@ function renderBcraHistoryChart(periodos) {
     return (p.periodo && /^\d{6}$/.test(String(p.periodo).trim())) ? p
       : Object.assign({}, p, { periodo: _curPerC });
   });
-  // Pre-sort aritmético: locale-independiente (mismo criterio que heatmap)
-  var data24 = periodos.slice()
-    .filter(function(p) { return /^\d{6}$/.test(String(p.periodo || '').trim()); })
-    .sort(function(a, b) { return (parseInt(b.periodo, 10) || 0) - (parseInt(a.periodo, 10) || 0); })
-    .slice(0, 24)
-    .reverse();
+  // Cuadrícula fija de 24 meses: cronológico ascendente, Sit.1 por defecto en meses sin datos
+  var _periMapC = {};
+  periodos.forEach(function(p) {
+    var k = String(p.periodo || '').trim();
+    if (/^\d{6}$/.test(k)) _periMapC[k] = p;
+  });
+  var _nowC = new Date(), data24 = [];
+  for (var _iC = 23; _iC >= 0; _iC--) {
+    var _dC = new Date(_nowC.getFullYear(), _nowC.getMonth() - _iC, 1);
+    var _kC = String(_dC.getFullYear()) + String(_dC.getMonth() + 1).padStart(2, '0');
+    data24.push(_periMapC[_kC] || { periodo: _kC, entidades: [] });
+  }
   var labels = data24.map(function(p) {
     var per = String(p.periodo || '');
     return per.length === 6 ? per.slice(4,6) + '/' + per.slice(2,4) : per;
@@ -2912,13 +2918,18 @@ function renderBcraHeatmap(periodos) {
       : Object.assign({}, p, { periodo: _curPer });
   });
 
-  // Pre-sort: comparación aritmética (parseInt) — locale-independiente.
-  // localeCompare sin locale explícito varía por SO/browser; parseInt es determinístico.
-  var data24 = _periNorm.slice()
-    .filter(function(p) { return /^\d{6}$/.test(String(p.periodo || '').trim()); })
-    .sort(function(a, b) { return (parseInt(b.periodo, 10) || 0) - (parseInt(a.periodo, 10) || 0); })
-    .slice(0, 24)
-    .reverse();
+  // Cuadrícula fija de 24 meses: cronológico ascendente, entidades vacías por defecto
+  var _periMapH = {};
+  _periNorm.forEach(function(p) {
+    var k = String(p.periodo || '').trim();
+    if (/^\d{6}$/.test(k)) _periMapH[k] = p;
+  });
+  var _nowH = new Date(), data24 = [];
+  for (var _iH = 23; _iH >= 0; _iH--) {
+    var _dH = new Date(_nowH.getFullYear(), _nowH.getMonth() - _iH, 1);
+    var _kH = String(_dH.getFullYear()) + String(_dH.getMonth() + 1).padStart(2, '0');
+    data24.push(_periMapH[_kH] || { periodo: _kH, entidades: [] });
+  }
 
   // Construir mapa: entidad → { periodo → {sit, monto, dias} }
   // Solo se incluyen entradas con monto > 0 (exposición real)
@@ -4777,12 +4788,18 @@ async function buildBcraChartImage() {
   else if (window._ultimoBcraData && window._ultimoBcraData.results && window._ultimoBcraData.results.periodos) periodos = window._ultimoBcraData.results.periodos;
   if (!periodos.length) return null;
 
-  // Pre-sort aritmético: locale-independiente (mismo criterio que heatmap y bar chart)
-  var data24 = periodos.slice()
-    .filter(function(p) { return /^\d{6}$/.test(String(p.periodo || '').trim()); })
-    .sort(function(a, b) { return (parseInt(b.periodo, 10) || 0) - (parseInt(a.periodo, 10) || 0); })
-    .slice(0, 24)
-    .reverse();
+  // Cuadrícula fija de 24 meses: cronológico ascendente, Sit.1 por defecto en meses sin datos
+  var _periMapPdf = {};
+  periodos.forEach(function(p) {
+    var k = String(p.periodo || '').trim();
+    if (/^\d{6}$/.test(k)) _periMapPdf[k] = p;
+  });
+  var _nowPdf = new Date(), data24 = [];
+  for (var _iPdf = 23; _iPdf >= 0; _iPdf--) {
+    var _dPdf = new Date(_nowPdf.getFullYear(), _nowPdf.getMonth() - _iPdf, 1);
+    var _kPdf = String(_dPdf.getFullYear()) + String(_dPdf.getMonth() + 1).padStart(2, '0');
+    data24.push(_periMapPdf[_kPdf] || { periodo: _kPdf, entidades: [] });
+  }
   var labels = data24.map(function(p) {
     var per = String(p.periodo || '');
     return per.length === 6 ? per.slice(4,6) + '/' + per.slice(2,4) : per;
@@ -4947,10 +4964,18 @@ async function exportarReporte() {
   if (hmHist && hmHist.results && hmHist.results.periodos) hmPeriSrc = hmHist.results.periodos;
   else if (window._ultimoBcraData && window._ultimoBcraData.results && window._ultimoBcraData.results.periodos) hmPeriSrc = window._ultimoBcraData.results.periodos;
 
-  var hmData24 = hmPeriSrc.slice()
-    .filter(function(p){ return /^\d{6}$/.test(String(p.periodo||'').trim()); })
-    .sort(function(a,b){ return (parseInt(b.periodo,10)||0)-(parseInt(a.periodo,10)||0); })
-    .slice(0,24).reverse();
+  // Cuadrícula fija de 24 meses: cronológico ascendente
+  var _hmPeriMap = {};
+  hmPeriSrc.forEach(function(p) {
+    var k = String(p.periodo||'').trim();
+    if (/^\d{6}$/.test(k)) _hmPeriMap[k] = p;
+  });
+  var _hmNow = new Date(), hmData24 = [];
+  for (var _hmI = 23; _hmI >= 0; _hmI--) {
+    var _hmD = new Date(_hmNow.getFullYear(), _hmNow.getMonth() - _hmI, 1);
+    var _hmK = String(_hmD.getFullYear()) + String(_hmD.getMonth() + 1).padStart(2, '0');
+    hmData24.push(_hmPeriMap[_hmK] || { periodo: _hmK, entidades: [] });
+  }
 
   var hmEntMap = {};
   hmData24.forEach(function(p){

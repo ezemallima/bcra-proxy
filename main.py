@@ -6456,6 +6456,26 @@ def get_afip(cuit):
                     return jsonify({"nombre": _rs, "fuente": "afip_padron"})
     except Exception: pass
 
+    # 4.6. TangoFactura — razonSocial del contribuyente (personas físicas y jurídicas)
+    try:
+        _ua_tf = request.headers.get('User-Agent', 'Mozilla/5.0')
+        _tf_r = requests.get(
+            f"https://afip.tangofactura.com/Rest/GetContribuyenteFull?cuitContribuyente={cuit_limpio}",
+            headers={'User-Agent': _ua_tf, 'Accept': 'application/json'},
+            timeout=10, verify=False
+        )
+        if _tf_r.status_code == 200:
+            _contrib_tf = (_tf_r.json().get('Contribuyente') or {})
+            _rs_tf = str(
+                _contrib_tf.get('razonSocial') or
+                _contrib_tf.get('nombre') or
+                _contrib_tf.get('denominacion') or ''
+            ).strip()
+            if _rs_tf and not _rs_tf.isdigit():
+                print(f"[afip] {cuit_limpio} tangofactura: {_rs_tf}", flush=True)
+                return jsonify({"nombre": _rs_tf, "fuente": "tangofactura"})
+    except Exception: pass
+
     # 5. API BCRA — historial en vivo (solo si no hay caché)
     try:
         r = requests.get("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit_limpio, timeout=12, verify=False)
