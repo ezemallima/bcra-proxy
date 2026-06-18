@@ -2845,9 +2845,6 @@ function renderVendeScore(scoreObj) {
           '<div style="font-size:11px;color:#94a3b8;">escala 1–999</div>' +
         '</div>' +
       '</div>' +
-      '<div style="background:#f1f5f9;border-radius:6px;height:8px;">' +
-        '<div style="background:' + scoreObj.color + ';height:8px;border-radius:6px;width:' + barWidth + '%;transition:width 0.6s;"></div>' +
-      '</div>' +
       desglose +
       '<div style="font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:0.6px;text-transform:uppercase;margin:14px 0 6px;">Historial BCRA — 24 meses</div>' +
       '<canvas id="bcra-history-chart" style="width:100%;max-height:110px;display:block;"></canvas>' +
@@ -2864,42 +2861,69 @@ function renderBcraHistoryChart(periodos) {
   if (!canvas || typeof Chart === 'undefined') return;
   if (!Array.isArray(periodos)) { canvas.style.display = 'none'; return; }
   canvas.style.display = '';
-  // Padrón local: inyectar mes actual si falta campo periodo (misma normalización que heatmap)
-  var _hoyC = new Date();
-  var _curPerC = String(_hoyC.getFullYear()) + String(_hoyC.getMonth() + 1).padStart(2, '0');
+
+  // Cuadrícula fija de 24 meses
+  var _hoy = new Date();
+  var _curPer = String(_hoy.getFullYear()) + String(_hoy.getMonth() + 1).padStart(2, '0');
   periodos = periodos.map(function(p) {
     return (p.periodo && /^\d{6}$/.test(String(p.periodo).trim())) ? p
-      : Object.assign({}, p, { periodo: _curPerC });
+      : Object.assign({}, p, { periodo: _curPer });
   });
-  // Cuadrícula fija de 24 meses: cronológico ascendente, Sit.1 por defecto en meses sin datos
-  var _periMapC = {};
+  var _periMap = {};
   periodos.forEach(function(p) {
     var k = String(p.periodo || '').trim();
-    if (/^\d{6}$/.test(k)) _periMapC[k] = p;
+    if (/^\d{6}$/.test(k)) _periMap[k] = p;
   });
-  var _nowC = new Date(), data24 = [];
-  for (var _iC = 23; _iC >= 0; _iC--) {
-    var _dC = new Date(_nowC.getFullYear(), _nowC.getMonth() - _iC, 1);
-    var _kC = String(_dC.getFullYear()) + String(_dC.getMonth() + 1).padStart(2, '0');
-    data24.push(_periMapC[_kC] || { periodo: _kC, entidades: [] });
+  var data24 = [];
+  for (var _i = 23; _i >= 0; _i--) {
+    var _d = new Date(_hoy.getFullYear(), _hoy.getMonth() - _i, 1);
+    var _k = String(_d.getFullYear()) + String(_d.getMonth() + 1).padStart(2, '0');
+    data24.push(_periMap[_k] || { periodo: _k, entidades: [] });
   }
+
   var labels = data24.map(function(p) {
-    var per = String(p.periodo || '');
-    return per.length === 6 ? per.slice(4,6) + '/' + per.slice(2,4) : per;
+    var s = String(p.periodo || '');
+    return s.length === 6 ? s.slice(4,6) + '/' + s.slice(2,4) : s;
   });
-  var values = data24.map(function(p) {
+
+  // Monto total por mes (miles ARS) y peor situación por mes
+  var montos = data24.map(function(p) {
+    return (p.entidades || []).reduce(function(s, e) { return s + (e.monto || 0); }, 0);
+  });
+  var sits = data24.map(function(p) {
     var ents = p.entidades || [];
-    return ents.length ? maxSitMaterial(ents) : 1; // Regla de Materialidad: ignora montos < $50.000
+    return ents.length ? maxSitMaterial(ents) : 1;
   });
-  var colors = values.map(function(v) {
+
+  var maxMonto = Math.max.apply(null, montos.concat([0]));
+  var sinDeuda = maxMonto === 0;
+
+  // Altura de cada barra:
+  //   • Con deuda: monto real (escala ARS miles)
+  //   • Sin deuda (CUIT limpio): barra fija de 1 unidad para indicar "mes limpio"
+  var barData = sinDeuda
+    ? data24.map(function() { return 1; })
+    : montos.map(function(m) { return m > 0 ? m : maxMonto * 0.025; });
+
+  var colors = sits.map(function(v) {
     return v === 1 ? '#16a34a' : v === 2 ? '#ca8a04' : v === 3 ? '#ea580c' : '#dc2626';
   });
+
+  // Cheques rechazados: overlay de marcadores
   var mesesChq = _extraerMesesCheques();
-  var chqOverlay = labels.map(function(lbl) { return mesesChq[lbl] ? 5.2 : null; });
-  var tieneChq = chqOverlay.some(function(v) { return v !== null; });
-  var datasets = [
-    { type: 'bar', label: 'Situación BCRA', data: values, backgroundColor: colors, borderRadius: 3, borderSkipped: false, order: 2 }
-  ];
+  var chqY     = sinDeuda ? 1.05 : maxMonto * 1.05;
+  var chqOverlay = labels.map(function(lbl) { return mesesChq[lbl] ? chqY : null; });
+  var tieneChq   = chqOverlay.some(function(v) { return v !== null; });
+
+  var datasets = [{
+    type: 'bar',
+    label: 'Deuda BCRA',
+    data: barData,
+    backgroundColor: colors,
+    borderRadius: 3,
+    borderSkipped: false,
+    order: 2
+  }];
   if (tieneChq) {
     datasets.push({
       type: 'line', label: 'Cheque rechazado',
@@ -2910,8 +2934,10 @@ function renderBcraHistoryChart(periodos) {
       spanGaps: false, showLine: false, order: 1
     });
   }
+
   var existing = Chart.getChart(canvas);
   if (existing) existing.destroy();
+
   new Chart(canvas, {
     type: 'bar',
     data: { labels: labels, datasets: datasets },
@@ -2920,13 +2946,28 @@ function renderBcraHistoryChart(periodos) {
         legend: { display: tieneChq, labels: { font: { size: 9 }, usePointStyle: true } },
         tooltip: { callbacks: { label: function(ctx) {
           if (ctx.dataset.type === 'line') return 'Cheque rechazado';
-          return 'Sit. ' + ctx.raw + ' — ' + sitNombre(ctx.raw);
+          var sit  = sits[ctx.dataIndex];
+          var monto = montos[ctx.dataIndex];
+          var sitTxt = 'Sit. ' + sit + ' — ' + sitNombre(sit);
+          if (!monto) return sitTxt + ' (sin deuda registrada)';
+          var montoFmt = monto >= 1000
+            ? '$' + (monto / 1000).toFixed(1) + 'M ARS'
+            : '$' + Math.round(monto).toLocaleString('es-AR') + ' miles ARS';
+          return sitTxt + ' · ' + montoFmt;
         }}}
       },
       scales: {
-        y: { min: 0, max: 6, ticks: { stepSize: 1,
-          callback: function(v) { return v > 0 && v <= 5 ? 'Sit.'+v : ''; },
-          font: { size: 9 } }, grid: { color: '#f1f5f9' } },
+        y: {
+          display: !sinDeuda,
+          ticks: {
+            font: { size: 9 },
+            callback: function(v) {
+              if (v === 0) return '';
+              return v >= 1000 ? '$' + (v/1000).toFixed(0) + 'M' : '$' + Math.round(v) + 'k';
+            }
+          },
+          grid: { color: '#f1f5f9' }
+        },
         x: { ticks: { font: { size: 8 }, maxRotation: 45 }, grid: { display: false } }
       }
     }
