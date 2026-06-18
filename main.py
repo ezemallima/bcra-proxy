@@ -3884,6 +3884,54 @@ def ejecutar_verificacion(cartera_data):
                     })
                 nuevas_alertas.append(alerta)
 
+            # Detectar cheques rechazados activos — lectura desde Lambda o disco
+            try:
+                _cheq_v = lambda_result[2] if lambda_result else None
+                if not _cheq_v:
+                    _cheq_path_v = os.path.join(DATA_DIR, f'cheques_{cuit}.json')
+                    if os.path.exists(_cheq_path_v):
+                        with open(_cheq_path_v, 'r', encoding='utf-8') as _cvf:
+                            _cheq_v = json.load(_cvf).get('payload')
+                if (_cheq_v and not _cheq_v.get('sin_deudas') and
+                        isinstance(_cheq_v.get('results'), dict)):
+                    _caus_v = _cheq_v['results'].get('causales') or []
+                    _det_v  = []
+                    for _cau_v in _caus_v:
+                        if isinstance(_cau_v, dict):
+                            for _ent_v in (_cau_v.get('entidades') or []):
+                                if isinstance(_ent_v, dict):
+                                    _det_v.extend(
+                                        x for x in (_ent_v.get('detalle') or [])
+                                        if isinstance(x, dict)
+                                    )
+                    _activos_v = sum(
+                        1 for d in _det_v
+                        if not d.get('fechaPago') or d.get('estadoMulta') == 'IMPAGA'
+                    )
+                    if _activos_v > 0 and not any(
+                        a.get('cuit') == cuit and a.get('tipo') == 'cheque'
+                        for a in nuevas_alertas
+                    ):
+                        alerta_ch = {
+                            'nombre':       nombre,
+                            'cuit':         cuit,
+                            'tipo':         'cheque',
+                            'nroCheques':   _activos_v,
+                            'totalCheques': len(_det_v),
+                            'fecha':        time.strftime('%d/%m/%Y'),
+                        }
+                        if score_data:
+                            alerta_ch.update({
+                                'scoreCompleto': score_data.get('score'),
+                                'scoreRango':    score_data.get('rango'),
+                                'scoreColor':    score_data.get('color'),
+                                'scoreEmoji':    score_data.get('emoji'),
+                            })
+                        nuevas_alertas.append(alerta_ch)
+                        print(f"{tag} ALERTA CHEQUES: {_activos_v}/{len(_det_v)} cheque(s) activo(s)", flush=True)
+            except Exception as _cheq_v_e:
+                print(f"{tag} Cheques alert parse fallo: {_cheq_v_e}", flush=True)
+
             # Bodegas: resultado pre-fetched en Fase 2 (sin llamada IA individual por cliente)
             _es_neg, _motivo = bodegas_prefetch.get(cuit, (False, ""))
             if _es_neg and not any(a['cuit'] == cuit and a['tipo'] == 'bodegas' for a in nuevas_alertas):
@@ -3904,11 +3952,19 @@ def ejecutar_verificacion(cartera_data):
 
         # ── Guardado final ────────────────────────────────────────────────────
         _guardar_alertas(nuevas_alertas, cartera_actualizada, parcial=False)
-        ok_count  = sum(1 for c in cartera_actualizada if c.get('scoreCompleto'))
-        err_count = sum(1 for c in cartera_actualizada if c.get('verificacion_fallida'))
-        print(f"[verif] FIN: {ok_count}/{total} con score, {err_count} fallidos, {len(nuevas_alertas)} alerta(s)", flush=True)
+        ok_count    = sum(1 for c in cartera_actualizada if c.get('scoreCompleto'))
+        err_count   = sum(1 for c in cartera_actualizada if c.get('verificacion_fallida'))
+        _n_bcra_v   = sum(1 for a in nuevas_alertas if a.get('tipo') == 'bcra')
+        _n_cheq_v   = sum(1 for a in nuevas_alertas if a.get('tipo') == 'cheque')
+        _n_bodeg_v  = sum(1 for a in nuevas_alertas if a.get('tipo') == 'bodegas')
+        print(
+            f"[verif] FIN: {ok_count}/{total} con score, {err_count} fallidos"
+            f" | {_n_bcra_v} BCRA · {_n_cheq_v} cheques · {_n_bodeg_v} bodegas",
+            flush=True,
+        )
         verificacion_estado["mensaje"] = (
-            f"Completado: {ok_count}/{total} verificados, {err_count} fallidos, {len(nuevas_alertas)} alerta(s)."
+            f"Completado: {ok_count}/{total} verificados, {err_count} fallidos"
+            f" | {_n_bcra_v} alerta(s) BCRA · {_n_cheq_v} cheques · {_n_bodeg_v} bodegas."
         )
         verificacion_estado["progreso"] = total
 
@@ -5701,17 +5757,65 @@ def _ejecutar_proceso_integral(cartera_data: list):
                     bcra_data = {}
 
             # ── Paso 1.5: CDI Cheques — pre-caching para _layer_liquidez ─────────────
+            _cheq_cdi_pi = None
             try:
-                _cheq_cdi, _ = _consultar_bcra_directo(cuit, 'cheques')
-                if _cheq_cdi and isinstance(_cheq_cdi, dict):
+                _cheq_cdi_pi, _ = _consultar_bcra_directo(cuit, 'cheques')
+                if _cheq_cdi_pi and isinstance(_cheq_cdi_pi, dict):
                     _cheq_path = os.path.join(DATA_DIR, f'cheques_{cuit}.json')
                     _tmp_cheq  = _cheq_path + '.tmp'
                     with open(_tmp_cheq, 'w', encoding='utf-8') as _cf:
-                        json.dump({'payload': _cheq_cdi, 'ts': time.time()}, _cf, ensure_ascii=False)
+                        json.dump({'payload': _cheq_cdi_pi, 'ts': time.time()}, _cf, ensure_ascii=False)
                         _cf.flush(); os.fsync(_cf.fileno())
                     os.replace(_tmp_cheq, _cheq_path)
             except Exception as _cheq_e:
                 print(f'[proceso-integral] Cheques CDI fallo {cuit}: {_cheq_e}', flush=True)
+
+            # ── Paso 1.5b: Detectar cheques rechazados activos para alertas ──────────
+            _cheq_activos_pi = 0
+            try:
+                _cheq_raw_pi = _cheq_cdi_pi or {}
+                # Fallback a disco si el fetch falló pero existía caché previa
+                if not _cheq_raw_pi:
+                    _cheq_path_pi = os.path.join(DATA_DIR, f'cheques_{cuit}.json')
+                    if os.path.exists(_cheq_path_pi):
+                        with open(_cheq_path_pi, 'r', encoding='utf-8') as _cpf:
+                            _cheq_raw_pi = json.load(_cpf).get('payload') or {}
+                if (not _cheq_raw_pi.get('sin_deudas') and
+                        isinstance(_cheq_raw_pi.get('results'), dict)):
+                    _caus_pi = _cheq_raw_pi['results'].get('causales') or []
+                    _det_pi  = []
+                    for _cau_pi in _caus_pi:
+                        if isinstance(_cau_pi, dict):
+                            for _ent_pi in (_cau_pi.get('entidades') or []):
+                                if isinstance(_ent_pi, dict):
+                                    _det_pi.extend(
+                                        x for x in (_ent_pi.get('detalle') or [])
+                                        if isinstance(x, dict)
+                                    )
+                    _cheq_activos_pi = sum(
+                        1 for d in _det_pi
+                        if not d.get('fechaPago') or d.get('estadoMulta') == 'IMPAGA'
+                    )
+                    if _cheq_activos_pi > 0:
+                        _pi_alertas.append({
+                            'nombre':        nombre,
+                            'cuit':          cuit,
+                            'tipo':          'cheque',
+                            'nroCheques':    _cheq_activos_pi,
+                            'totalCheques':  len(_det_pi),
+                            'fecha':         time.strftime('%d/%m/%Y'),
+                            'scoreCompleto': None,
+                            'scoreRango':    None,
+                            'scoreColor':    None,
+                            'scoreEmoji':    None,
+                        })
+                        print(
+                            f'[proceso-integral] ALERTA CHEQUES: {nombre} ({cuit})'
+                            f' — {_cheq_activos_pi}/{len(_det_pi)} cheque(s) activo(s)',
+                            flush=True,
+                        )
+            except Exception as _cal_e:
+                print(f'[proceso-integral] Cheques alert parse fallo {cuit}: {_cal_e}', flush=True)
 
             # ── Paso 2: Score (try propio — no mata el ciclo completo si falla) ───────
             try:
@@ -5790,6 +5894,17 @@ def _ejecutar_proceso_integral(cartera_data: list):
                     flush=True,
                 )
 
+            # Enriquecer alertas de cheques de este cliente con el score ya calculado
+            if _cheq_activos_pi and score_data.get('score'):
+                for _alerta_ch in _pi_alertas:
+                    if (_alerta_ch.get('tipo') == 'cheque' and
+                            _alerta_ch.get('cuit') == cuit and
+                            not _alerta_ch.get('scoreCompleto')):
+                        _alerta_ch['scoreCompleto'] = score_data.get('score')
+                        _alerta_ch['scoreRango']    = score_data.get('rango')
+                        _alerta_ch['scoreColor']    = score_data.get('color')
+                        _alerta_ch['scoreEmoji']    = score_data.get('emoji')
+
             # ── Paso 4: Persistencia atómica ──────────────────────────────────────────
             with _alertas_file_lock:
                 _actualizar_score_en_cartera(cuit, score_data, solvency)
@@ -5834,19 +5949,22 @@ def _ejecutar_proceso_integral(cartera_data: list):
                     _af_data = json.load(_af)
             except Exception:
                 _af_data = {}
-            _alertas_prev_bodegas = [
+            # Preservar solo alertas de tipo 'bodegas' (WhatsApp) — regenerar bcra y cheque
+            _alertas_prev_otros = [
                 a for a in _af_data.get('alertas', [])
-                if a.get('tipo') != 'bcra'
+                if a.get('tipo') not in ('bcra', 'cheque')
             ]
-            _af_data['alertas'] = _alertas_prev_bodegas + _pi_alertas
+            _af_data['alertas'] = _alertas_prev_otros + _pi_alertas
             _tmp_pa = ALERTAS_FILE + '.tmp'
             with open(_tmp_pa, 'w', encoding='utf-8') as _af:
                 json.dump(_af_data, _af, ensure_ascii=False, default=str)
                 _af.flush(); os.fsync(_af.fileno())
             os.replace(_tmp_pa, ALERTAS_FILE)
+        _n_bcra_a = sum(1 for a in _pi_alertas if a.get('tipo') == 'bcra')
+        _n_cheq_a = sum(1 for a in _pi_alertas if a.get('tipo') == 'cheque')
         print(
-            f'[proceso-integral] {len(_pi_alertas)} alerta(s) BCRA guardadas '
-            f'({len(_alertas_prev_bodegas)} bodegas preservadas)',
+            f'[proceso-integral] Alertas guardadas: {_n_bcra_a} BCRA, {_n_cheq_a} cheques '
+            f'({len(_alertas_prev_otros)} bodegas preservadas)',
             flush=True,
         )
     except Exception as _ae:
@@ -5860,11 +5978,13 @@ def _ejecutar_proceso_integral(cartera_data: list):
         print(f'[proceso-integral] Error guardando cartera: {_e}', flush=True)
 
     with _proceso_lock:
-        n_ok = _proceso_integral_estado['procesados'] - _proceso_integral_estado['errores']
+        n_ok       = _proceso_integral_estado['procesados'] - _proceso_integral_estado['errores']
+        _n_bcra_f  = sum(1 for a in _pi_alertas if a.get('tipo') == 'bcra')
+        _n_cheq_f  = sum(1 for a in _pi_alertas if a.get('tipo') == 'cheque')
         _proceso_integral_estado['corriendo'] = False
         _proceso_integral_estado['mensaje'] = (
             f'Completado — {n_ok} OK, {_proceso_integral_estado["errores"]} errores'
-            f' | {total} clientes · {len(_pi_alertas)} alerta(s) BCRA'
+            f' | {total} clientes · {_n_bcra_f} alerta(s) BCRA · {_n_cheq_f} alerta(s) cheques'
         )
     print(f'[proceso-integral] {_proceso_integral_estado["mensaje"]}', flush=True)
 

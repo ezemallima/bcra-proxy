@@ -325,8 +325,10 @@
   .notif-card { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: #fff; border-radius: 12px; border: 1px solid #fca5a5; border-left: 4px solid #ef4444; box-shadow: 0 2px 8px rgba(239,68,68,0.07); margin-bottom: 8px; cursor: pointer; transition: all 0.15s; }
   .notif-card:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(239,68,68,0.12); }
   .notif-card.bodegas { border-color: #fde047; border-left-color: #f59e0b; box-shadow: 0 2px 8px rgba(245,158,11,0.07); }
+  .notif-card.cheque  { border-color: #fca5a5; border-left-color: #b91c1c; box-shadow: 0 2px 8px rgba(185,28,28,0.10); }
   .notif-avatar { width: 36px; height: 36px; border-radius: 9px; color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: linear-gradient(135deg, #dc2626, #7f1d1d); }
   .notif-avatar.bodegas { background: linear-gradient(135deg, #f59e0b, #d97706); }
+  .notif-avatar.cheque  { background: linear-gradient(135deg, #b91c1c, #450a0a); }
   .notif-body { flex: 1; min-width: 0; }
   .notif-nombre { font-size: 13px; font-weight: 700; color: var(--texto); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .notif-meta { font-size: 11px; color: #94a3b8; margin-top: 1px; }
@@ -339,30 +341,36 @@
   .alr-counter.critico.filter-on { box-shadow: 0 0 0 3px #dc2626; }
   .alr-counter.advertencia.filter-on { box-shadow: 0 0 0 3px #d97706; }
   .alr-counter.exceso.filter-on { box-shadow: 0 0 0 3px #ea580c; }
+  .alr-counter.cheque.filter-on { box-shadow: 0 0 0 3px #b91c1c; }
 
   /* ── ALERTAS PANEL v29 ── */
-  .alr-counters { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px; }
-  .alr-counter { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 14px; border: 1px solid; }
+  .alr-counters { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .alr-counter { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 14px; border: 1px solid; }
   .alr-counter.critico { background: #fff5f5; border-color: #fca5a5; }
   .alr-counter.advertencia { background: #fefce8; border-color: #fde047; }
   .alr-counter.exceso { background: #fff7ed; border-color: #fdba74; }
+  .alr-counter.cheque { background: #fef2f2; border-color: #fca5a5; }
   .alr-ico-wrap { width: 36px; height: 36px; border-radius: 9px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
   .alr-ico-wrap.critico { background: #fee2e2; }
   .alr-ico-wrap.advertencia { background: #fef3c7; }
   .alr-ico-wrap.exceso { background: #ffedd5; }
+  .alr-ico-wrap.cheque { background: #fee2e2; }
   .alr-ico-wrap svg { width: 16px; height: 16px; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; fill: none; }
   .alr-ico-wrap.critico svg { stroke: #dc2626; }
   .alr-ico-wrap.advertencia svg { stroke: #d97706; }
   .alr-ico-wrap.exceso svg { stroke: #ea580c; }
+  .alr-ico-wrap.cheque svg { stroke: #b91c1c; }
   .alr-counter-info { flex: 1; min-width: 0; }
-  .alr-counter-num { font-family: 'Syne', sans-serif; font-size: 28px; font-weight: 800; line-height: 1; }
+  .alr-counter-num { font-family: 'Syne', sans-serif; font-size: 26px; font-weight: 800; line-height: 1; }
   .alr-counter.critico .alr-counter-num { color: #991b1b; }
   .alr-counter.advertencia .alr-counter-num { color: #92400e; }
   .alr-counter.exceso .alr-counter-num { color: #9a3412; }
+  .alr-counter.cheque .alr-counter-num { color: #b91c1c; }
   .alr-counter-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; margin-top: 2px; }
   .alr-counter.critico .alr-counter-label { color: #dc2626; }
   .alr-counter.advertencia .alr-counter-label { color: #d97706; }
   .alr-counter.exceso .alr-counter-label { color: #ea580c; }
+  .alr-counter.cheque .alr-counter-label { color: #b91c1c; }
   .alr-card { background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; border-left: 4px solid #e2e8f0; padding: 11px 14px; display: flex; align-items: center; gap: 12px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.04); margin-bottom: 7px; transition: all 0.18s; }
   .alr-card:hover { box-shadow: 0 6px 16px rgba(0,0,0,0.08); transform: translateY(-1px); }
   .alr-card.critico { border-left-color: #ef4444; background: #fffafa; }
@@ -1216,6 +1224,13 @@
         <div class="alr-counter-info">
           <div class="alr-counter-num" id="cnt-excesos">—</div>
           <div class="alr-counter-label">Clientes Morosos</div>
+        </div>
+      </div>
+      <div class="alr-counter cheque" onclick="toggleAlertaFilter('cheque')" id="filter-cheque">
+        <div class="alr-ico-wrap cheque"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></div>
+        <div class="alr-counter-info">
+          <div class="alr-counter-num" id="cnt-cheques">—</div>
+          <div class="alr-counter-label">Cheques Rech.</div>
         </div>
       </div>
     </div>
@@ -3589,7 +3604,7 @@ function toggleAlertaFilter(tipo) {
     if (_bcraEl) _bcraEl.style.display = 'none';
   }
 
-  ['critico','advertencia','exceso'].forEach(function(t){
+  ['critico','advertencia','exceso','cheque'].forEach(function(t){
     var el = document.getElementById('filter-' + t);
     if (el) el.classList.toggle('filter-on', _alertasFilter === t);
   });
@@ -5479,7 +5494,9 @@ function generarResumenEjecutivo() {
       doc.setTextColor(100, 116, 139);
       var motivo = a.tipo === 'bcra'
         ? 'BCRA: Situacion ' + a.sitActual + ' — ' + (a.sitActual >= 3 ? 'Alto riesgo' : 'Seguimiento')
-        : 'Grupo bodegas: ' + (a.mensajes && a.mensajes[0] ? a.mensajes[0].substring(0, 60) + '...' : 'comentarios negativos');
+        : a.tipo === 'cheque'
+          ? 'Cheques rechazados: ' + (a.nroCheques || 1) + ' activo(s)' + (a.totalCheques ? ' / ' + a.totalCheques + ' total' : '')
+          : 'Grupo bodegas: ' + (a.mensajes && a.mensajes[0] ? a.mensajes[0].substring(0, 60) + '...' : 'comentarios negativos');
       doc.text('CUIT: ' + a.cuit + ' · ' + motivo, 28, y);
       y += 8;
     });
@@ -6544,12 +6561,15 @@ function renderAlertas() {
     alertasNuevasDiv.style.display = 'block';
     alertasEl.innerHTML = alertas.map(function(a) {
       var isBodegas = a.tipo === 'bodegas';
+      var isCheque  = a.tipo === 'cheque';
       var initials = (a.nombre||'?').trim().split(/\s+/).slice(0,2).map(function(w){ return w[0]; }).join('').toUpperCase();
       var sitArrow = a.tipo === 'bcra' && a.sitAnterior != null && a.sitActual != null
         ? 'Sit. ' + a.sitAnterior + ' → Sit. ' + a.sitActual + (a.sitActual >= 3 ? ' 🚩' : a.sitActual === 2 ? ' ⚠️' : ' ✅')
-        : isBodegas ? '⚠️ Comentarios negativos en bodegas' : '';
-      var html = '<div class="notif-card' + (isBodegas?' bodegas':'') + '" onclick="verCliente(\'' + a.cuit + '\')">';
-      html += '<div class="notif-avatar' + (isBodegas?' bodegas':'') + '">' + initials + '</div>';
+        : isBodegas ? '⚠️ Comentarios negativos en bodegas'
+        : isCheque  ? '🔴 Cheques rechazados: ' + (a.nroCheques || 1) + ' activo' + (a.nroCheques > 1 ? 's' : '') + (a.totalCheques && a.totalCheques !== a.nroCheques ? ' / ' + a.totalCheques + ' total' : '')
+        : '';
+      var html = '<div class="notif-card' + (isBodegas?' bodegas':isCheque?' cheque':'') + '" onclick="verCliente(\'' + a.cuit + '\')">';
+      html += '<div class="notif-avatar' + (isBodegas?' bodegas':isCheque?' cheque':'') + '">' + initials + '</div>';
       html += '<div class="notif-body">';
       html += '<div class="notif-nombre">' + a.nombre + '</div>';
       html += '<div class="notif-meta">CUIT: ' + a.cuit + (a.fecha ? ' · ' + a.fecha : '') + '</div>';
@@ -6575,9 +6595,16 @@ function renderAlertas() {
   var nAdv = _vmVals.length > 0
     ? _vmVals.filter(function(v){ return v.ultimaSit === 2; }).length
     : cartera.filter(function(c){ return c.ultimaSit === 2; }).length;
-  var cntC = document.getElementById('cnt-criticos'); if(cntC) cntC.textContent = nCrit;
+  var nCheq = alertas.filter(function(a){ return a.tipo === 'cheque'; }).length;
+  var cntC = document.getElementById('cnt-criticos');    if(cntC) cntC.textContent = nCrit;
   var cntA = document.getElementById('cnt-advertencias'); if(cntA) cntA.textContent = nAdv;
+  var cntCh = document.getElementById('cnt-cheques');    if(cntCh) cntCh.textContent = nCheq;
   // cnt-excesos se actualiza en cargarAlertasMora() desde /api/alertas-mora
+  // Sincronizar estado visual del filtro cheques
+  ['critico','advertencia','exceso','cheque'].forEach(function(t) {
+    var el = document.getElementById('filter-' + t);
+    if (el) el.classList.toggle('filter-on', _alertasFilter === t);
+  });
   _renderAlertasList();
 }
 
@@ -6595,13 +6622,41 @@ function _renderAlertasList() {
   bcraEl.innerHTML = '';
 
   if (_alertasFilter === null) {
-    bcraEl.innerHTML = '<div class="alertas-prompt"><div class="alertas-prompt-icon">🔎</div><div class="alertas-prompt-text">Seleccioná un filtro para ver los clientes</div><div class="alertas-prompt-sub">Hacé clic en Críticos, Advertencias o Clientes Morosos</div></div>';
+    bcraEl.innerHTML = '<div class="alertas-prompt"><div class="alertas-prompt-icon">🔎</div><div class="alertas-prompt-text">Seleccioná un filtro para ver los clientes</div><div class="alertas-prompt-sub">Hacé clic en Críticos, Advertencias, Morosos o Cheques Rechazados</div></div>';
     return;
   }
 
   // Clientes Morosos — tabla desde /api/alertas-mora en contenedor exclusivo
   if (_alertasFilter === 'exceso') {
     if (morososEl) { morososEl.style.display = 'block'; _renderMorasTable(morososEl); }
+    return;
+  }
+
+  // Cheques rechazados — lista desde alertas del servidor
+  if (_alertasFilter === 'cheque') {
+    var cheqAlertas = alertas.filter(function(a){ return a.tipo === 'cheque'; });
+    if (!cheqAlertas.length) {
+      bcraEl.innerHTML = '<div class="empty-state" style="padding:2rem;">Sin alertas de cheques rechazados.</div>';
+      return;
+    }
+    bcraEl.innerHTML = cheqAlertas.map(function(a) {
+      var initials = (a.nombre||'?').trim().split(/\s+/).slice(0,2).map(function(w){ return w[0]; }).join('').toUpperCase();
+      var html = '<div class="alr-card critico" style="border-left-color:#b91c1c;background:#fef2f2;" onclick="verCliente(\'' + a.cuit + '\')">';
+      html += '<div class="alr-card-avatar critico" style="background:linear-gradient(135deg,#b91c1c,#450a0a);">' + initials + '</div>';
+      html += '<div class="alr-card-body">';
+      html += '<div class="alr-card-status critico">🔴 ' + (a.nroCheques || 1) + ' cheque' + ((a.nroCheques || 1) > 1 ? 's' : '') + ' rechazado' + ((a.nroCheques || 1) > 1 ? 's' : '') + ' activo' + ((a.nroCheques || 1) > 1 ? 's' : '') + (a.totalCheques && a.totalCheques !== a.nroCheques ? ' / ' + a.totalCheques + ' total' : '') + '</div>';
+      html += '<div class="alr-card-nombre">' + (a.nombre || 'Sin nombre') + '</div>';
+      html += '<div class="alr-card-meta">CUIT: ' + a.cuit + (a.fecha ? ' · ' + a.fecha : '') + '</div>';
+      html += '</div>';
+      html += '<div class="alr-card-right">';
+      if (a.scoreCompleto) {
+        html += '<div style="font-size:14px;font-weight:800;color:' + (a.scoreColor||'#dc2626') + ';letter-spacing:-0.5px;">' + a.scoreCompleto + '</div>';
+        html += '<div style="font-size:10px;color:' + (a.scoreColor||'#dc2626') + ';">' + (a.scoreEmoji||'') + ' ' + (a.scoreRango||'') + '</div>';
+      }
+      html += '<button onclick="event.stopPropagation();verCliente(\'' + a.cuit + '\')" style="font-size:11px;font-weight:600;padding:4px 10px;background:#b91c1c;color:#fff;border:none;border-radius:6px;cursor:pointer;margin-top:6px;">🔍 Ver</button>';
+      html += '</div></div>';
+      return html;
+    }).join('');
     return;
   }
 
