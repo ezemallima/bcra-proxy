@@ -1361,9 +1361,9 @@ def _consultar_bcra_directo(cuit: str, tipo: str = 'deudas'):
         'cheques':   f'https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/{cuit}',
     }
 
-    via         = 'scraperapi' if SCRAPERAPI_KEY else 'directo'
+    via          = 'directo'   # _bcra_get omite ScraperAPI para bcra.gob.ar
     ultimo_error = 'sin_respuesta'
-    _sleep      = 0.5 if SCRAPERAPI_KEY else 1.5  # ScraperAPI gestiona throttling
+    _sleep       = 1.5
 
     for url, api_ver in [
         (_urls_cdi.get(tipo,    _urls_cdi['deudas']),    'cdi_v1'),
@@ -1373,6 +1373,11 @@ def _consultar_bcra_directo(cuit: str, tipo: str = 'deudas'):
             try:
                 r = _bcra_get(url, timeout=20)
                 if r.status_code == 404:
+                    if tipo == 'historial':
+                        # Para historial 404 puede ser rate-limit — probar endpoint legacy antes de rendirse
+                        ultimo_error = 'http_404'
+                        print(f"[bcra_directo] {cuit}/{tipo} {api_ver} 404 — probando siguiente endpoint", flush=True)
+                        break
                     return {'results': {'denominacion': '', 'periodos': []}, 'sin_deudas': True}, None
                 if r.status_code == 200 and len(r.text.strip()) > 10:
                     raw   = r.json()
@@ -3364,12 +3369,14 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
 
     if not hist_data:
         _hd, _ = _consultar_bcra_directo(cuit_limpio, 'historial')
-        if _hd and ((_hd.get('results') or {}).get('periodos') or _hd.get('sin_deudas')):
+        if _hd:
             hist_data = _hd
-            try:
-                with open(os.path.join(DATA_DIR, f'historial_{cuit_limpio}.json'), 'w') as f:
-                    json.dump({'payload': hist_data, 'ts': time.time()}, f)
-            except: pass
+            # Solo escribir a disco si hay periodos reales — evita cachear resultados vacíos
+            if (_hd.get('results') or {}).get('periodos'):
+                try:
+                    with open(os.path.join(DATA_DIR, f'historial_{cuit_limpio}.json'), 'w') as f:
+                        json.dump({'payload': hist_data, 'ts': time.time()}, f)
+                except: pass
 
     # Módulo cheques — aislado con fallback absoluto.
     # Un timeout o error en este módulo NO debe abortar el cálculo del score.
