@@ -2831,13 +2831,9 @@ function renderVendeScore(scoreObj) {
     items.forEach(function(d) {
       var pct  = Math.min(100, Math.round((d.puntos / d.max) * 100));
       var col  = pct >= 75 ? '#16a34a' : pct >= 40 ? '#ca8a04' : '#ef4444';
-      var bg   = pct >= 75 ? '#f0fdf4' : pct >= 40 ? '#fefce8' : '#fef2f2';
       desglose +=
         '<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">' +
-          '<div style="flex:0 0 128px;">' +
-            '<div style="font-size:11px;font-weight:600;color:#334155;line-height:1.3;">' + d.label + '</div>' +
-            '<div style="font-size:10px;color:#64748b;">' + (d.valor || '') + '</div>' +
-          '</div>' +
+          '<div style="flex:0 0 140px;font-size:11px;font-weight:600;color:#334155;line-height:1.3;">' + d.label + '</div>' +
           '<div style="flex:1;background:#f1f5f9;border-radius:4px;height:6px;overflow:hidden;">' +
             '<div style="background:' + col + ';height:6px;border-radius:4px;width:' + pct + '%;transition:width 0.5s;"></div>' +
           '</div>' +
@@ -2998,7 +2994,18 @@ window._bcraHmTip = {};
 function renderBcraHeatmap(periodos) {
   var container = document.getElementById('bcra-timeline-container');
   if (!container) return;
-  if (!periodos || !periodos.length) { container.style.display = 'none'; return; }
+  if (!periodos || !periodos.length) {
+    container.style.display = 'block';
+    container.innerHTML =
+      '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;display:flex;align-items:center;gap:12px;margin-bottom:8px;">' +
+        '<div style="font-size:24px;line-height:1;">✅</div>' +
+        '<div>' +
+          '<div style="font-size:13px;font-weight:700;color:#166534;">Sin exposición crediticia registrada</div>' +
+          '<div style="font-size:12px;color:#4ade80;margin-top:2px;">No se registran deudas bancarias en los últimos 24 meses</div>' +
+        '</div>' +
+      '</div>';
+    return;
+  }
 
   // Padrón local: periodos sin campo periodo (snapshot del mes actual).
   // Inyectar el mes actual para que pasen el filtro YYYYMM y sean visibles.
@@ -4273,8 +4280,10 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
       renderExposicionSistema();
       // Renderizar gráfico BCRA histórico
       var _periHist = [];
-      if (historial && historial.results && historial.results.periodos) _periHist = historial.results.periodos;
-      else if (window._ultimoBcraData && window._ultimoBcraData.results && window._ultimoBcraData.results.periodos) _periHist = window._ultimoBcraData.results.periodos;
+      if (historial && historial.results && Array.isArray(historial.results.periodos) && historial.results.periodos.length)
+        _periHist = historial.results.periodos;
+      else if (window._ultimoBcraData && window._ultimoBcraData.results && Array.isArray(window._ultimoBcraData.results.periodos) && window._ultimoBcraData.results.periodos.length)
+        _periHist = window._ultimoBcraData.results.periodos;
       renderBcraHistoryChart(_periHist);
       renderBcraHeatmap(_periHist);
       // Si cheques llegaron con el score, re-renderizar el gráfico para mostrar
