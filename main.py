@@ -1264,7 +1264,9 @@ def _bcra_get(url: str, timeout: int = 0) -> requests.Response:
             print(f"[proxy] Bright Data falló ({_e}) — cayendo a ScraperAPI/directo", flush=True)
 
     # ── 2. ScraperAPI (fallback) ─────────────────────────────────────────────
-    if SCRAPERAPI_KEY:
+    # BCRA bloquea las IPs de ScraperAPI con 403, igual que BrightData.
+    # Solo usar ScraperAPI para dominios no-BCRA (AFIP, Infocred, etc.)
+    if SCRAPERAPI_KEY and not _is_bcra_api:
         return requests.get(
             'http://api.scraperapi.com',
             params={'api_key': SCRAPERAPI_KEY, 'url': url, 'country_code': 'ar'},
@@ -6191,10 +6193,14 @@ def _calcular_score_handler(cuit: str):
                 with open(_bc_path, 'r', encoding='utf-8') as _f:
                     _bc = json.load(_f)
                 if cuit_limpio in _bc:
-                    del _bc[cuit_limpio]
-                    with open(_bc_path, 'w', encoding='utf-8') as _f:
-                        json.dump(_bc, _f)
-                    print(f"[fetch-score] {cuit_limpio} bcra_cache invalidado", flush=True)
+                    _entry_ts = _bc[cuit_limpio].get('ts', 0) if isinstance(_bc[cuit_limpio], dict) else 0
+                    if time.time() - _entry_ts > 300:  # guard: no invalidar si fue cargado hace <5 min
+                        del _bc[cuit_limpio]
+                        with open(_bc_path, 'w', encoding='utf-8') as _f:
+                            json.dump(_bc, _f)
+                        print(f"[fetch-score] {cuit_limpio} bcra_cache invalidado", flush=True)
+                    else:
+                        print(f"[fetch-score] {cuit_limpio} bcra_cache reciente — reutilizando (double-call guard)", flush=True)
         except Exception:
             pass
     else:

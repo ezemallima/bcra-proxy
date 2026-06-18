@@ -4112,7 +4112,18 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
       var _elNomHeader = document.querySelector('#cliente-header .nombre-cliente');
       if (_elNomHeader) _elNomHeader.textContent = nombreMostrar;
     }
-    // Bloquear score para CUITs sin Razón Social identificada por ninguna fuente
+    // Personas físicas: AFIP no expone nombres (privacidad). Si el servidor devolvió score
+    // válido (no cuit_inexistente), el CUIT existe aunque no haya razón social en AFIP.
+    if (_esFantasma && scoreServidor && scoreServidor.score > 0 && scoreServidor.error !== 'cuit_inexistente') {
+      _esFantasma = false;
+      // Limpiar el banner "CUIT SIN REGISTRO" que se insertó antes de que llegara el score
+      var _mAlertElFx = document.getElementById('mora-alert-container');
+      if (_mAlertElFx) {
+        var _fbDiv = _mAlertElFx.querySelector('div[style*="#fff7ed"][style*="#fb923c"]');
+        if (_fbDiv) _fbDiv.remove();
+      }
+    }
+    // Bloquear score solo cuando ninguna fuente (AFIP, BCRA, score server) pudo identificar el CUIT
     if (_esFantasma) {
       if (scoreElF) scoreElF.innerHTML =
         '<div style="padding:20px 12px;background:#fff7ed;border:1.5px solid #fb923c;border-radius:12px;text-align:center;">' +
