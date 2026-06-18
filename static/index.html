@@ -4105,6 +4105,18 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
     }
     var scoreElF = document.getElementById('vende-score-container');
     // Si AFIP/BCRA estaban offline al cargar, el nombre puede ser el CUIT formateado.
+    // Intentar rescatar denominacion desde historial BCRA (legacy endpoint siempre la trae)
+    if (_esFantasma && historial) {
+      var _histDen = ((historial.results || {}).denominacion || '').trim();
+      if (_histDen && !/^\d/.test(_histDen)) {
+        nombreMostrar = _histDen;
+        _esFantasma = false;
+        var _elNomHist = document.querySelector('#cliente-header .nombre-cliente');
+        if (_elNomHist) _elNomHist.textContent = nombreMostrar;
+        var _mAlertElH = document.getElementById('mora-alert-container');
+        if (_mAlertElH) { var _fbH = _mAlertElH.querySelector('div[style*="#fff7ed"][style*="#fb923c"]'); if (_fbH) _fbH.remove(); }
+      }
+    }
     // Si el score trajo razón social (de solvencia ARCA/ANSES), rescatar y actualizar UI.
     if (_esFantasma && scoreServidor && scoreServidor.razon_social) {
       nombreMostrar = scoreServidor.razon_social;

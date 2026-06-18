@@ -6426,7 +6426,17 @@ def get_afip(cuit):
                 return jsonify({"nombre": den, "fuente": "bcra_cache"})
     except Exception: pass
 
-    # 4. API BCRA — historial (solo si los datos internos no alcanzaron)
+    # 4. Historial cacheado en disco (escrito por get_historial — tiene denominacion del legacy)
+    try:
+        _hp_afip = os.path.join(DATA_DIR, f'historial_{cuit_limpio}.json')
+        if os.path.exists(_hp_afip):
+            with open(_hp_afip, 'r', encoding='utf-8') as _hf:
+                _hc = json.load(_hf)
+            den_h = (_hc.get('payload', {}).get('results') or {}).get('denominacion', '').strip()
+            if den_h: return jsonify({"nombre": den_h, "fuente": "bcra_hist_cache"})
+    except Exception: pass
+
+    # 5. API BCRA — historial en vivo (solo si no hay caché)
     try:
         r = requests.get("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/" + cuit_limpio, timeout=12, verify=False)
         if r.status_code == 200:
@@ -6434,7 +6444,7 @@ def get_afip(cuit):
             if den2: return jsonify({"nombre": den2, "fuente": "bcra_hist"})
     except Exception: pass
 
-    # 5. API BCRA — deudas vigentes
+    # 6. API BCRA — deudas vigentes
     try:
         r = requests.get("https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/" + cuit_limpio, timeout=12, verify=False)
         if r.status_code == 200:
