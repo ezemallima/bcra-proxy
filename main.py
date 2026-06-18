@@ -3355,9 +3355,16 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
     hist_data = _cache_load(f'historial_{cuit_limpio}.json')
     cheq_data = _cheques_cache_get(cuit_limpio)   # usa TTL diferenciado: 1h "sin cheques", 24h con datos
 
+    # Si el caché de historial tiene periodos vacíos y tiene >2h, puede ser un fetch fallido
+    # anterior (ScraperAPI bloqueado). Re-intentar con la IP directa de Render.
+    if hist_data and not (hist_data.get('results') or {}).get('periodos'):
+        _hp_score = os.path.join(DATA_DIR, f'historial_{cuit_limpio}.json')
+        if time.time() - (os.path.getmtime(_hp_score) if os.path.exists(_hp_score) else 0) > 7200:
+            hist_data = None  # forzar re-fetch
+
     if not hist_data:
         _hd, _ = _consultar_bcra_directo(cuit_limpio, 'historial')
-        if _hd:
+        if _hd and ((_hd.get('results') or {}).get('periodos') or _hd.get('sin_deudas')):
             hist_data = _hd
             try:
                 with open(os.path.join(DATA_DIR, f'historial_{cuit_limpio}.json'), 'w') as f:
@@ -6561,12 +6568,14 @@ def get_cheques(cuit):
 def get_historial(cuit):
     cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
     hist_path = os.path.join(DATA_DIR, f'historial_{cuit_limpio}.json')
-    # Caché disco primero (24h)
+    # Caché disco: 24h con periodos reales, 2h si está vacío (puede ser fetch fallido anterior)
     try:
         if os.path.exists(hist_path):
             with open(hist_path, 'r', encoding='utf-8') as f:
                 cached = json.load(f)
-            if time.time() - cached.get('ts', 0) < 86400:
+            _periodos_ok = bool((cached.get('payload', {}).get('results') or {}).get('periodos'))
+            _ttl_hist = 86400 if _periodos_ok else 7200
+            if time.time() - cached.get('ts', 0) < _ttl_hist:
                 print(f"[historial] {cuit_limpio} desde caché disco", flush=True)
                 return jsonify(cached['payload']), 200
     except: pass
@@ -6896,7 +6905,8 @@ def warm_padron():
                     _hist_ok = os.path.exists(_hp) and ahora - os.path.getmtime(_hp) < _TTL
                     if not _hist_ok:
                         _hd, _ = _consultar_bcra_directo(cuit, 'historial')
-                        if _hd:
+                        _hd_periodos = (_hd.get('results') or {}).get('periodos') if _hd else None
+                        if _hd and _hd_periodos:  # solo cachear si hay datos reales
                             with open(_hp, 'w', encoding='utf-8') as _hf:
                                 json.dump({'payload': _hd, 'ts': ahora}, _hf, ensure_ascii=False)
                             print(f"[warm] {i+1}/{len(cuits)} {cuit} historial OK", flush=True)
