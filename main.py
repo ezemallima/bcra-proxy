@@ -283,7 +283,8 @@ CREDIT_ANALYSIS_SYSTEM_PROMPT = (
 )
 
 DATA_DIR      = '/data' if os.path.exists('/data') else os.getcwd()
-PADRON_DB_PATH = os.path.join(DATA_DIR, 'bcra_padron.db')
+PADRON_DB_PATH  = os.path.join(DATA_DIR, 'bcra_padron.db')
+NOMDEU_DB_PATH  = os.path.join(DATA_DIR, 'bcra_nomdeu.db')
 ALERTAS_FILE      = os.path.join(DATA_DIR, 'db_v17_final.json')
 ALERTAS_BCRA_FILE = os.path.join(DATA_DIR, 'alertas_bcra.json')
 DATOS_FILE        = os.path.join(DATA_DIR, 'datos_bodega.json')
@@ -6393,6 +6394,88 @@ def analizar_bodegas():
     except Exception as e:
         return jsonify({"es_negativo": False, "motivo": str(e)})
 
+# ── PADRÓN OFICIAL BCRA LOCAL (bcra_nomdeu.db desde Cloudflare R2) ───────────
+# Descargado una vez al mes por el usuario desde el ZIP mensual del BCRA,
+# procesado con bcra_import_local.py y subido a R2.
+# Tablas: denominaciones (cuit→nombre), entidades (codigo→nombre), deudas_resumen.
+
+_nomdeu_conn: sqlite3.Connection = None  # type: ignore[assignment]
+
+
+def _init_nomdeu_db() -> None:
+    """Descarga bcra_nomdeu.db desde R2 si BCRA_NOMDEU_URL está configurada."""
+    global _nomdeu_conn
+    url = os.environ.get('BCRA_NOMDEU_URL', '').strip()
+    if not url:
+        print("[nomdeu] BCRA_NOMDEU_URL no configurada — padrón offline desactivado", flush=True)
+        return
+
+    descarga = True
+    if os.path.exists(NOMDEU_DB_PATH):
+        edad_dias = (time.time() - os.path.getmtime(NOMDEU_DB_PATH)) / 86400
+        if edad_dias < 32:          # reusar hasta 32 días (ciclo mensual BCRA)
+            descarga = False
+            print(f"[nomdeu] bcra_nomdeu.db existente ({edad_dias:.0f}d) — reutilizando", flush=True)
+
+    if descarga:
+        print(f"[nomdeu] Descargando bcra_nomdeu.db desde R2...", flush=True)
+        try:
+            r = requests.get(url, stream=True, timeout=300, verify=False)
+            r.raise_for_status()
+            with open(NOMDEU_DB_PATH, 'wb') as fh:
+                for chunk in r.iter_content(chunk_size=8 * 1024 * 1024):
+                    if chunk:
+                        fh.write(chunk)
+            size_mb = os.path.getsize(NOMDEU_DB_PATH) / 1_048_576
+            print(f"[nomdeu] Descarga completa: {size_mb:.1f} MB", flush=True)
+        except Exception as e:
+            print(f"[nomdeu] Error descargando: {e}", flush=True)
+            return
+
+    try:
+        conn = sqlite3.connect(NOMDEU_DB_PATH, check_same_thread=False)
+        conn.execute("PRAGMA query_only = 1")
+        conn.execute("PRAGMA cache_size  = -32768")   # 32 MB en caché lectura
+        n_den = conn.execute("SELECT COUNT(*) FROM denominaciones").fetchone()[0]
+        n_deu = conn.execute("SELECT COUNT(*) FROM deudas_resumen").fetchone()[0]
+        _nomdeu_conn = conn
+        print(f"[nomdeu] Listo — {n_den:,} denominaciones | {n_deu:,} CUITs en deudas_resumen", flush=True)
+    except Exception as e:
+        print(f"[nomdeu] Error abriendo SQLite: {e}", flush=True)
+
+
+def _nomdeu_get_nombre(cuit: str):
+    """Nombre oficial del BCRA (Nomdeu.txt). Retorna str o None."""
+    if _nomdeu_conn is None:
+        return None
+    try:
+        row = _nomdeu_conn.execute(
+            "SELECT nombre FROM denominaciones WHERE cuit = ?", (cuit,)
+        ).fetchone()
+        return row[0] if row else None
+    except Exception:
+        return None
+
+
+def _nomdeu_get_deuda(cuit: str):
+    """Resumen de deuda del padrón offline. Retorna dict o None."""
+    if _nomdeu_conn is None:
+        return None
+    try:
+        row = _nomdeu_conn.execute(
+            "SELECT sit_max, monto_total, entidades_cod, periodo "
+            "FROM deudas_resumen WHERE cuit = ?", (cuit,)
+        ).fetchone()
+        if not row:
+            return None
+        return {
+            'sit_max': row[0], 'monto_total': row[1],
+            'entidades_cod': row[2], 'periodo': row[3],
+        }
+    except Exception:
+        return None
+
+
 @app.route("/afip/<cuit>")
 def get_afip(cuit):
     cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
@@ -6416,6 +6499,11 @@ def get_afip(cuit):
     )
     if nombre_sf:
         return jsonify({"nombre": nombre_sf, "fuente": "saldos"})
+
+    # 2.5. Padrón oficial BCRA local (Nomdeu.txt mensual — 0ms, 0 red)
+    nombre_nomdeu = _nomdeu_get_nombre(cuit_limpio)
+    if nombre_nomdeu:
+        return jsonify({"nombre": nombre_nomdeu, "fuente": "bcra_nomdeu_local"})
 
     # 3. Caché BCRA local (solo lectura de disco — sin trigger de consulta BCRA)
     try:
@@ -8982,6 +9070,7 @@ def _startup_v168():
 
 _startup_v168()
 _init_padron_db()
+_init_nomdeu_db()   # padrón oficial BCRA (Nomdeu.txt mensual desde R2)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
