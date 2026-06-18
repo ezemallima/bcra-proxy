@@ -2828,7 +2828,8 @@ function renderVendeScore(scoreObj) {
 function renderBcraHistoryChart(periodos) {
   var canvas = document.getElementById('bcra-history-chart');
   if (!canvas || typeof Chart === 'undefined') return;
-  if (!periodos || !periodos.length) { canvas.style.display = 'none'; return; }
+  if (!Array.isArray(periodos)) { canvas.style.display = 'none'; return; }
+  canvas.style.display = '';
   // Padrón local: inyectar mes actual si falta campo periodo (misma normalización que heatmap)
   var _hoyC = new Date();
   var _curPerC = String(_hoyC.getFullYear()) + String(_hoyC.getMonth() + 1).padStart(2, '0');
@@ -4786,8 +4787,6 @@ async function buildBcraChartImage() {
   var hist = window._ultimoHistorial;
   if (hist && hist.results && hist.results.periodos) periodos = hist.results.periodos;
   else if (window._ultimoBcraData && window._ultimoBcraData.results && window._ultimoBcraData.results.periodos) periodos = window._ultimoBcraData.results.periodos;
-  if (!periodos.length) return null;
-
   // Cuadrícula fija de 24 meses: cronológico ascendente, Sit.1 por defecto en meses sin datos
   var _periMapPdf = {};
   periodos.forEach(function(p) {
