@@ -5937,12 +5937,19 @@ async function confirmarAgregarCliente() {
   if (!plazo || parseInt(plazo) <= 0) { errEl.textContent = 'Ingresá el plazo de pago en días.'; errEl.style.display = 'block'; return; }
   btn.disabled = true; btn.textContent = 'Guardando...';
   errEl.style.display = 'none';
+  var _scNuevo = window._ultimoScoreVende || {};
   var nuevo = {
     cuit: _modalAgregarCuit, nombre: _modalAgregarNombre,
     vendedor: vendedor, ciudad: ciudad,
     fechaAlta: new Date().toLocaleDateString('es-AR'),
     limiteCredito: parseFloat(limite), limiteCreditoARS: parseFloat(limite),
-    plazoDias: parseInt(plazo), ultimaSit: null, ultimaVerif: null
+    plazoDias: parseInt(plazo), ultimaSit: null,
+    ultimaVerif: new Date().toLocaleDateString('es-AR'),
+    scoreCompleto: _scNuevo.score  || null,
+    scoreRango:    _scNuevo.rango  || null,
+    scoreColor:    _scNuevo.color  || null,
+    scoreEmoji:    _scNuevo.emoji  || null,
+    semaforo:      _scNuevo.semaforo || null,
   };
   try {
     var _gr = await fetch('/cliente/guardar', {
