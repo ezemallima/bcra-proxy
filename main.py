@@ -3600,8 +3600,9 @@ def ejecutar_verificacion(cartera_data):
     verificacion_estado["total"] = len(cartera_data)
     verificacion_estado["mensaje"] = "Iniciando verificacion..."
 
-    # Invalidar padrón local y disk cache para todos los clientes — garantiza datos BCRA frescos.
-    # Sin esto, el padrón (sin TTL) devuelve snapshots históricos (ej: Sit 1 de meses atrás).
+    # Purgar solo entradas del padrón > 72h — purgar TODAS provocaba rate-limit en cascada
+    # durante Phase 1 (500 clientes × 12 workers todos fresheando simultáneamente).
+    # Datos de las últimas 72h son suficientemente frescos para detectar deterioro.
     _cartera_cuits_v = {
         str(c.get('cuit', '') or '').replace('-', '').replace(' ', '').strip()
         for c in cartera_data if isinstance(c, dict)
@@ -3611,11 +3612,13 @@ def ejecutar_verificacion(cartera_data):
             conn_p = sqlite3.connect(PADRON_DB_PATH, check_same_thread=False)
             placeholders = ','.join('?' * len(_cartera_cuits_v))
             cur_p = conn_p.execute(
-                f"DELETE FROM bcra_padron_local WHERE cuit IN ({placeholders})",
+                f"""DELETE FROM bcra_padron_local
+                    WHERE cuit IN ({placeholders})
+                    AND importado_en < datetime('now', '-72 hours')""",
                 list(_cartera_cuits_v)
             )
             conn_p.commit(); conn_p.close()
-            print(f"[verif] Padrón local purgado: {cur_p.rowcount} entradas eliminadas", flush=True)
+            print(f"[verif] Padrón local purgado: {cur_p.rowcount} entradas > 72h eliminadas", flush=True)
     except Exception as _ep:
         print(f"[verif] Advertencia purga padrón: {_ep}", flush=True)
     # NO se invalida bcra_cache — misma razón que proceso_integral:
@@ -3846,15 +3849,26 @@ def ejecutar_verificacion(cartera_data):
             _pf           = bcra_prefetch.get(cuit, (None, None))
             lambda_result = _pf[0] if _pf else None
             bcra_data     = _pf[1] if _pf else None
-            bcra_ok       = bcra_data is not None
+            # bcra_ok = hay datos BCRA reales (results != None y sin error de saturación).
+            # Un error_dict {"results": None, "error_bcra": "bcra_saturado"} es truthy
+            # pero no tiene datos reales — tratarlo como falla evita sobrescribir ultimaSit
+            # con valores calculados de "no data" (max_sit=1) que ocultan el riesgo real.
+            bcra_ok = bool(
+                bcra_data
+                and bcra_data.get('results') is not None
+                and not bcra_data.get('error_bcra')
+            )
 
-            # Persistir caché historial/cheques si los datos vienen de Lambda (Fase 1)
+            # Persistir caché historial/cheques si los datos vienen de Lambda (Fase 1).
+            # NO escribir payload null — "envenena" el disco y bloquea el fallback a BCRA live.
             if lambda_result:
                 try:
-                    with open(os.path.join(DATA_DIR, f'historial_{cuit}.json'), 'w') as _f:
-                        json.dump({'payload': lambda_result[1], 'ts': time.time()}, _f)
-                    with open(os.path.join(DATA_DIR, f'cheques_{cuit}.json'), 'w') as _f:
-                        json.dump({'payload': lambda_result[2], 'ts': time.time()}, _f)
+                    if lambda_result[1]:
+                        with open(os.path.join(DATA_DIR, f'historial_{cuit}.json'), 'w') as _f:
+                            json.dump({'payload': lambda_result[1], 'ts': time.time()}, _f)
+                    if lambda_result[2]:  # solo si Lambda realmente trajo datos de cheques
+                        with open(os.path.join(DATA_DIR, f'cheques_{cuit}.json'), 'w') as _f:
+                            json.dump({'payload': lambda_result[2], 'ts': time.time()}, _f)
                 except Exception as _e:
                     print(f"{tag} Advertencia caché Lambda: {_e}", flush=True)
 
@@ -3896,13 +3910,15 @@ def ejecutar_verificacion(cartera_data):
             # 2. Lectura directa de periodos[0] del raw bcra_data (fallback).
             # 3. Sin datos: conservar sit_anterior (marcar como fallida si no hubo fetch).
             max_sit = sit_anterior  # default conservador
-            if score_data and score_data.get('max_sit') is not None:
-                # Fuente primaria: max_sit del motor de scoring (procesado correctamente)
+            if score_data and score_data.get('max_sit') is not None and bcra_ok:
+                # Fuente primaria: max_sit del motor de scoring — solo si BCRA real disponible.
+                # Si bcra_ok=False (saturado/error) no sobreescribir ultimaSit con max_sit=1
+                # de un score calculado sin datos, que ocultaría el riesgo real del cliente.
                 max_sit = score_data['max_sit']
                 cliente_actualizado['ultimaSit']   = max_sit
                 cliente_actualizado['ultimaVerif'] = time.strftime('%d/%m/%Y')
                 print(f"{tag} ultimaSit={max_sit} (desde score_data)", flush=True)
-            elif bcra_data and bcra_data.get('results') is not None:
+            elif bcra_ok and bcra_data and bcra_data.get('results') is not None:
                 # Fuente secundaria: leer periodos directamente del bcra_data
                 periodos  = (bcra_data.get('results') or {}).get('periodos') or []
                 entidades = periodos[0].get('entidades', []) if periodos else []
@@ -3930,14 +3946,40 @@ def ejecutar_verificacion(cartera_data):
                     })
                 nuevas_alertas.append(alerta)
 
-            # Detectar cheques rechazados activos — lectura desde Lambda o disco
+            # Detectar cheques rechazados activos — 4 niveles de fallback:
+            # 1) Lambda, 2) disco fresco, 3) SQLite local (bulk BCRA), 4) BCRA live
             try:
                 _cheq_v = lambda_result[2] if lambda_result else None
                 if not _cheq_v:
                     _cheq_path_v = os.path.join(DATA_DIR, f'cheques_{cuit}.json')
                     if os.path.exists(_cheq_path_v):
-                        with open(_cheq_path_v, 'r', encoding='utf-8') as _cvf:
-                            _cheq_v = json.load(_cvf).get('payload')
+                        try:
+                            with open(_cheq_path_v, 'r', encoding='utf-8') as _cvf:
+                                _loaded_cheq = json.load(_cvf).get('payload')
+                                if _loaded_cheq:  # no usar null de caché envenenado
+                                    _cheq_v = _loaded_cheq
+                        except Exception:
+                            pass
+                # Fallback 3: SQLite local (snapshot diario BCRA, cero latencia de red)
+                if not _cheq_v:
+                    _cheq_v = get_cheques_local(cuit)
+                # Fallback 4: BCRA live — solo si tenemos conectividad BCRA real (bcra_ok)
+                # y ninguna fuente local pudo proveer datos de cheques
+                if not _cheq_v and bcra_ok:
+                    try:
+                        _cd_live, _ = _consultar_bcra_directo(
+                            cuit, 'cheques', timeout_per_req=12, max_intentos=1
+                        )
+                        if _cd_live:
+                            _cheq_v = _cd_live
+                            try:
+                                with open(os.path.join(DATA_DIR, f'cheques_{cuit}.json'), 'w') as _f:
+                                    json.dump({'payload': _cheq_v, 'ts': time.time()}, _f)
+                            except Exception:
+                                pass
+                            print(f"{tag} cheques obtenidos via BCRA live", flush=True)
+                    except Exception:
+                        pass
                 if (_cheq_v and not _cheq_v.get('sin_deudas') and
                         isinstance(_cheq_v.get('results'), dict)):
                     _caus_v = _cheq_v['results'].get('causales') or []
