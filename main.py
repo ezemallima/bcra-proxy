@@ -25,15 +25,33 @@ except ImportError:
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 app = Flask(__name__, static_folder='static')
-CORS(app)
+
+# CORS: en producción restringir al dominio propio via ALLOWED_ORIGINS en Render.
+# Ejemplo: ALLOWED_ORIGINS=https://vendeseguro.onrender.com,https://tudominio.com
+_ALLOWED_ORIGINS = os.environ.get('ALLOWED_ORIGINS', '')
+if _ALLOWED_ORIGINS:
+    CORS(app, origins=[o.strip() for o in _ALLOWED_ORIGINS.split(',') if o.strip()])
+else:
+    CORS(app)  # desarrollo local: permite todos los orígenes
+
 app.config['MAX_CONTENT_LENGTH'] = 512 * 1024 * 1024  # 512 MB — permite subir padrón mensual BCRA
-app.secret_key = os.environ.get('SECRET_KEY', 'vs-artel-2026-key')
+
+_SECRET_KEY_DEFAULT = 'vs-artel-2026-key'
+app.secret_key = os.environ.get('SECRET_KEY', _SECRET_KEY_DEFAULT)
+if app.secret_key == _SECRET_KEY_DEFAULT:
+    print('[SECURITY] SECRET_KEY usa valor default inseguro — configurar variable de entorno SECRET_KEY en Render', flush=True)
 
 GEMINI_KEY      = os.environ.get('GEMINI_API_KEY', '')
 OPENAI_KEY      = os.environ.get('OPENAI_API_KEY', '')
 CUIT_API_KEY    = os.environ.get('API_KEY_CUIT', '')
 CUIT_API_URL    = os.environ.get('API_SOLVENCY_URL', '')
 SCRAPERAPI_KEY  = os.environ.get('SCRAPERAPI_KEY', '')
+
+# ── Parámetros del motor de scoring ajustables sin redeploy ─────────────────
+# MORA_TECNICA_UMBRAL_K: umbral en miles de ARS para clasificar mora como técnica (no comercial).
+# Ajustar periódicamente según inflación. Default 200k ARS ≈ ~200 USD jun-2026.
+# Ejemplo: en dic-2026 evaluar si subir a 300 o 400 según inflación acumulada.
+MORA_TECNICA_UMBRAL_K = float(os.environ.get('MORA_TECNICA_UMBRAL_K', '200.0'))
 
 # ── Bright Data Residential Proxies — motor de consultas en vivo ─────────────
 # Zona 'vendeseguro' configurada como Residential Proxies (AR).
@@ -51,6 +69,29 @@ _BRD_PASSWORD      = BRIGHTDATA_PASS or BRIGHTDATA_API_KEY
 # ── Rate limiter global para API de BCRA — máx 2 llamadas directas simultáneas ─
 # Evita que consultas concurrentes saturen la IP de Render y generen rate-limit.
 _bcra_api_sem = threading.Semaphore(2)
+
+# ── Rate limiter de login — protección contra fuerza bruta ───────────────────
+# Máximo 5 intentos fallidos por IP en una ventana de 15 minutos.
+_login_attempts: dict = {}   # ip → [timestamp, ...]
+_login_attempts_lock = threading.Lock()
+_LOGIN_MAX_ATTEMPTS = 5
+_LOGIN_WINDOW_SECS  = 900    # 15 minutos
+
+def _login_rate_check(ip: str) -> bool:
+    """True = permitido. False = bloqueado por exceso de intentos."""
+    now = time.time()
+    with _login_attempts_lock:
+        hist = [t for t in _login_attempts.get(ip, []) if now - t < _LOGIN_WINDOW_SECS]
+        if len(hist) >= _LOGIN_MAX_ATTEMPTS:
+            return False
+        hist.append(now)
+        _login_attempts[ip] = hist
+    return True
+
+def _login_rate_reset(ip: str):
+    """Limpia los intentos de una IP al loguearse con éxito."""
+    with _login_attempts_lock:
+        _login_attempts.pop(ip, None)
 
 # Log diagnóstico al iniciar — ayuda a detectar credenciales incorrectas o ausentes
 _brd_pass_src = 'BRIGHTDATA_PASS' if BRIGHTDATA_PASS else ('BRIGHTDATA_API_KEY' if BRIGHTDATA_API_KEY else 'NINGUNA')
@@ -2818,12 +2859,11 @@ def calcular_rating_predictivo(
     id_cliente  = ''.join(c for c in cuit_limpio if c.isdigit())
     print(f">>> ENTRANDO AL MOTOR - CUIT: {cuit_limpio} | id_cliente: {id_cliente}", flush=True)
 
-    # DEBUG: loguear formato raw antes de normalizar (visible en Render logs)
+    # Log mínimo de entrada al motor — sin datos financieros para proteger privacidad en logs
     print(
-        f"[DEBUG BCRA] cuit={cuit_limpio} "
+        f"[score] entrada cuit={cuit_limpio} "
         f"bcra_type={type(bcra_data).__name__} "
-        f"results_type={type((bcra_data or {}).get('results') if isinstance(bcra_data, dict) else None).__name__} "
-        f"preview={str(bcra_data)[:300]}",
+        f"has_results={isinstance((bcra_data or {}).get('results'), dict)}",
         flush=True
     )
 
@@ -2915,9 +2955,9 @@ def calcular_rating_predictivo(
         flush=True
     )
 
-    # Mora Técnica v11.0: solo max_sit == 2 Y monto en mora < $200.000 ARS (200 miles)
-    # Si max_sit >= 3 O monto >= $200k → Mora Comercial Activa (riesgo de insolvencia)
-    es_mora_tecnica = (max_sit == 2 and monto_mora_k < 200.0)
+    # Mora Técnica v11.0: solo max_sit == 2 Y monto en mora < umbral configurable (MORA_TECNICA_UMBRAL_K).
+    # Umbral en miles ARS, ajustable via env var según inflación anual.
+    es_mora_tecnica = (max_sit == 2 and monto_mora_k < MORA_TECNICA_UMBRAL_K)
     es_mora_comercial_activa = (max_sit > 1 and not es_mora_tecnica)
     if es_mora_tecnica:
         print(
@@ -3438,13 +3478,14 @@ def _actualizar_score_en_cartera(cuit_limpio: str, score_data: dict, solvency: d
         )
         hist_prev = list(entrada_prev.get('scoreHistory') or [])
 
-        # Agregar punto actual y recortar a 12 entradas (ventana 12 meses)
+        # Agregar punto actual y recortar a 24 entradas (ventana 24 meses = 2 ciclos anuales)
+        # 24 meses cubre ciclos económicos completos en Argentina y mejora detección Anti-Videla.
         hist_prev.append({
             'score':    score_data.get('score'),
             'fecha':    datetime.now().strftime('%Y-%m-%d'),
             'sit_bcra': score_data.get('max_sit', 1),
         })
-        score_history = hist_prev[-12:]
+        score_history = hist_prev[-24:]
 
         # Detección de degradación Anti-Videla
         deg_tipo, deg_delta, deg_msg = _detectar_degradacion(score_history)
@@ -4020,6 +4061,56 @@ def index():
 def ping():
     return jsonify({"ok": True, "ts": time.time()})
 
+
+# ── Configuración de usuario — persiste en memoria del proceso ───────────────
+# Incluye: umbrales DSO, nombre de bodega, preferencias UI.
+# Los valores sobreviven reinicios de tab (no de deploy). Para persistencia
+# total entre deploys, sincronizar con Cloudflare R2 en una iteración futura.
+_user_config: dict = {
+    'dso_umbral_bajo':   45,
+    'dso_umbral_alto':   65,
+    'nombre_bodega':     '',
+}
+_user_config_lock = threading.Lock()
+_USER_CONFIG_FILE = os.path.join(os.environ.get('DATA_DIR', os.getcwd()), 'user_config.json')
+
+def _load_user_config():
+    global _user_config
+    try:
+        if os.path.exists(_USER_CONFIG_FILE):
+            with open(_USER_CONFIG_FILE, 'r', encoding='utf-8') as _f:
+                stored = json.load(_f)
+            with _user_config_lock:
+                _user_config.update({k: v for k, v in stored.items() if k in _user_config})
+    except Exception as _e:
+        print(f'[config] Error cargando user_config: {_e}', flush=True)
+
+_load_user_config()
+
+@app.route('/api/config', methods=['GET', 'POST'])
+@require_login
+def api_user_config():
+    """GET: devuelve configuración actual. POST: actualiza y persiste campos permitidos."""
+    global _user_config
+    _ALLOWED_KEYS = {'dso_umbral_bajo', 'dso_umbral_alto', 'nombre_bodega'}
+    if request.method == 'GET':
+        with _user_config_lock:
+            return jsonify(dict(_user_config))
+    data = request.get_json(silent=True) or {}
+    updates = {k: v for k, v in data.items() if k in _ALLOWED_KEYS}
+    if not updates:
+        return jsonify({'error': 'Sin campos válidos para actualizar'}), 400
+    with _user_config_lock:
+        _user_config.update(updates)
+        snapshot = dict(_user_config)
+    try:
+        with open(_USER_CONFIG_FILE, 'w', encoding='utf-8') as _f:
+            json.dump(snapshot, _f, ensure_ascii=False, indent=2)
+    except Exception as _e:
+        print(f'[config] Error guardando user_config: {_e}', flush=True)
+    return jsonify({'ok': True, 'config': snapshot})
+
+
 @app.route("/api/macro-context")
 @require_login
 def api_macro_context():
@@ -4041,13 +4132,20 @@ def comercial():
 @app.route("/director-login", methods=["GET", "POST"])
 def director_login_page():
     if request.method == "POST":
+        ip = request.headers.get('X-Forwarded-For', request.remote_addr or 'unknown').split(',')[0].strip()
+        _rate_key = f'dir:{ip}'
+        if not _login_rate_check(_rate_key):
+            print(f'[SECURITY] Director-login bloqueado por rate limit — IP: {ip}', flush=True)
+            return jsonify({"ok": False, "error": "Demasiados intentos. Esperá 15 minutos."}), 429
         data = request.get_json(silent=True) or {}
         usuario = str(data.get('usuario', '')).strip().upper()
         clave   = str(data.get('clave', '')).strip()
         if usuario == DIRECTOR_USER and clave == DIRECTOR_PASS:
+            _login_rate_reset(_rate_key)
             session['director_logged_in'] = True
             session.permanent = True
             return jsonify({"ok": True})
+        print(f'[SECURITY] Director-login fallido — IP: {ip}', flush=True)
         return jsonify({"ok": False, "error": "Usuario o clave incorrectos"}), 401
     # GET → mostrar pantalla de login
     return send_from_directory('static', 'director_login.html')
@@ -4375,12 +4473,18 @@ def api_director_data():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
+        ip = request.headers.get('X-Forwarded-For', request.remote_addr or 'unknown').split(',')[0].strip()
+        if not _login_rate_check(ip):
+            print(f'[SECURITY] Login bloqueado por rate limit — IP: {ip}', flush=True)
+            return jsonify({"error": "Demasiados intentos fallidos. Esperá 15 minutos."}), 429
         data = request.get_json(silent=True) or {}
         cuit = str(data.get('cuit', '')).replace('-', '').replace(' ', '').strip()
         pwd  = str(data.get('password', '')).strip()
         if cuit == ADMIN_CUIT and pwd == ADMIN_PASS:
+            _login_rate_reset(ip)
             session['logged_in'] = True
             return jsonify({"ok": True})
+        print(f'[SECURITY] Login fallido — IP: {ip}', flush=True)
         return jsonify({"error": "Credenciales incorrectas"}), 401
     return send_from_directory('static', 'login.html')
 

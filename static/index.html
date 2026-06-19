@@ -511,14 +511,46 @@
   }
 
   @media (max-width: 480px) {
-    /* ── Ocultar sidebar completamente en pantallas muy pequeñas ─────────── */
-    #sidebar { display: none !important; }
+    /* ── Sidebar como drawer deslizable en pantallas muy pequeñas ─────────── */
+    #sidebar {
+      position: fixed !important; left: -240px !important; top: 0; bottom: 0;
+      width: 240px !important; min-width: 240px !important;
+      z-index: 200 !important; transition: left 0.25s ease;
+      /* labels visibles en drawer */
+    }
+    #sidebar.mobile-open {
+      left: 0 !important;
+      /* restaurar labels */
+    }
+    #sidebar.mobile-open .sb-name,
+    #sidebar.mobile-open .sb-ver,
+    #sidebar.mobile-open .sb-label,
+    #sidebar.mobile-open .sb-section-label { display: block !important; }
+    #sidebar.mobile-open .sb-brand-text { display: block !important; }
+    #sidebar.mobile-open .sb-brand { padding: 18px 16px 16px; justify-content: flex-start; }
+    #sidebar.mobile-open .sb-nav .tab { padding: 9px 12px; justify-content: flex-start; }
+    #sidebar.mobile-open .sb-footer { padding: 10px 14px 14px; align-items: flex-start; }
+    #sidebar.mobile-open .proxy-status { display: flex !important; }
+    #sidebar.mobile-open .sb-logout-label { display: inline !important; }
+    #sidebar.mobile-open .sb-logout-btn { padding: 7px 8px; justify-content: flex-start; }
+
+    #mobile-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.45); z-index: 199;
+    }
+    #mobile-overlay.active { display: block; }
+    #mobile-hamburger { display: flex !important; }
+
     #main-canvas { width: 100vw !important; }
     .canvas-body { padding: 10px 8px !important; }
     .cli-data-grid { grid-template-columns: 1fr !important; }
     .ficha-grid { grid-template-columns: 1fr !important; }
     .card { padding: 1rem !important; }
   }
+
+  /* Hamburger oculto en desktop */
+  #mobile-hamburger { display: none; }
+  #mobile-overlay { display: none; }
 
   /* ── LAYOUT 2-PANEL (desktop ≥769px): hero fijo + #resultado con scroll interno ── */
   /* Reemplaza la estrategia sticky que causaba solapamiento. En mobile el flujo normal
@@ -746,6 +778,9 @@
 }
 </style>
 
+<!-- Overlay oscuro para cerrar sidebar en mobile -->
+<div id="mobile-overlay" onclick="toggleMobileSidebar(false)"></div>
+
 <div id="app-shell">
   <aside id="sidebar">
     <div class="sb-brand">
@@ -816,7 +851,11 @@
 
   <main id="main-canvas">
     <div class="page-header">
-      <div>
+      <!-- Hamburger: solo visible en mobile (≤480px) -->
+      <button id="mobile-hamburger" onclick="toggleMobileSidebar()" aria-label="Menú" style="padding:7px 9px;border:none;background:none;cursor:pointer;border-radius:8px;color:#475569;flex-shrink:0;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='none'">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <div style="flex:1;min-width:0;">
         <div id="page-title-el" class="page-title-text">Consultar CUIT</div>
         <div class="page-subtitle">Motor de Scoring · Análisis de Riesgo Crediticio</div>
       </div>
@@ -840,6 +879,8 @@
         <button class="primary" onclick="consultarCliente()" style="padding:13px 22px;font-size:14px;border-radius:12px;white-space:nowrap;">Consultar →</button>
         <button id="btn-nueva-consulta" onclick="nuevaConsulta()" title="Nueva consulta" style="display:none;padding:12px 14px;font-size:15px;border-radius:12px;background:#fff;border:1.5px solid #e2e8f0;color:#64748b;cursor:pointer;line-height:1;flex-shrink:0;white-space:nowrap;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='#fff'">&#x2715; Nuevo</button>
       </div>
+      <!-- Recientes: últimos CUITs consultados -->
+      <div id="recientes-container" style="margin-top:1.25rem;width:100%;max-width:540px;display:none;"></div>
     </div>
 
     <div id="loading-state" class="loading-msg" style="display:none;">Consultando...</div>
@@ -1247,7 +1288,7 @@
   <div id="buscador" class="section">
     <div class="buscador-wrap">
       <svg class="buscador-ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input type="text" id="buscar-buscador" class="buscador-input" placeholder="Buscar cliente por nombre o CUIT..." oninput="renderBuscador(this.value)" translate="no" autocomplete="off" spellcheck="false" />
+      <input type="text" id="buscar-buscador" class="buscador-input" placeholder="Buscar cliente por nombre o CUIT..." oninput="debouncedRenderBuscador(this.value)" translate="no" autocomplete="off" spellcheck="false" />
     </div>
     <div id="buscador-count" class="buscador-count"></div>
     <div id="buscador-lista"></div>
@@ -1304,23 +1345,25 @@
       <p style="font-size:12px;color:#94a3b8;margin-top:8px;">Los puntos rojos son clientes con alertas compartidas entre bodegas</p>
     </div>
 
-    <!-- Contador -->
-    <div class="card" style="text-align:center;padding:1.5rem;">
-      <div style="font-size:12px;color:var(--azul-claro);font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">Bodegas en la red</div>
-      <div id="red-contador" style="font-family:'Syne',sans-serif;font-size:64px;font-weight:800;color:var(--azul-oscuro);line-height:1;">1</div>
-      <div style="font-size:13px;color:#64748b;margin-top:4px;">y creciendo</div>
+    <!-- Estado real del producto: sin contador falso -->
+    <div class="card" style="text-align:center;padding:1.5rem;border:1.5px dashed #cbd5e1;">
+      <div style="font-size:28px;margin-bottom:8px;">🚧</div>
+      <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:700;color:var(--azul-oscuro);margin-bottom:6px;">Próximamente</div>
+      <div style="font-size:13px;color:#64748b;max-width:400px;margin:0 auto;line-height:1.6;">
+        La Red de Bodegas está en desarrollo. Cuando esté lista, vas a poder ver en tiempo real qué clientes tienen alertas compartidas entre bodegas del sector — sin necesidad de WhatsApp.
+      </div>
     </div>
 
-    <!-- CTA -->
+    <!-- Interés anticipado: honesto y sin fake counter -->
     <div class="card" style="text-align:center;padding:1.5rem;">
+      <p style="font-size:14px;color:#334155;margin-bottom:16px;">¿Querés ser de las primeras bodegas en acceder cuando esté disponible?</p>
       <div id="red-cta-form">
-        <p style="font-size:14px;color:#334155;margin-bottom:16px;">¿Querés que tu bodega sea parte de la red y acceder a la inteligencia compartida del sector?</p>
-        <button class="primary" onclick="sumarsePedido()" style="font-size:15px;padding:12px 32px;">Quiero sumarme a la red →</button>
+        <button class="primary" onclick="sumarsePedido()" style="font-size:14px;padding:11px 28px;">Quiero ser early adopter →</button>
       </div>
       <div id="red-confirmacion" style="display:none;">
-        <div style="font-size:32px;margin-bottom:8px;">🎉</div>
-        <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:700;color:var(--azul-oscuro);margin-bottom:6px;">¡Genial, te anotamos!</div>
-        <div style="font-size:14px;color:#64748b;">Nos ponemos en contacto cuando lancemos la red completa.<br>Mientras tanto, seguí usando Vende Seguro para proteger tus ventas.</div>
+        <div style="font-size:28px;margin-bottom:8px;">✅</div>
+        <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:700;color:var(--azul-oscuro);margin-bottom:6px;">Anotado. Te avisamos al lanzar.</div>
+        <div style="font-size:13px;color:#64748b;">Mientras tanto, seguí usando el módulo de Alertas BCRA para proteger tus ventas.</div>
       </div>
     </div>
   </div>
@@ -3350,6 +3393,18 @@ function mismoCliente(a, b) {
   return hits >= Math.min(2, pa.length, pb.length);
 }
 
+// ── Mobile sidebar toggle ─────────────────────────────────────────────────────
+function toggleMobileSidebar(forceOpen) {
+  var sb = document.getElementById('sidebar');
+  var ov = document.getElementById('mobile-overlay');
+  if (!sb || !ov) return;
+  var shouldOpen = (forceOpen === undefined) ? !sb.classList.contains('mobile-open') : forceOpen;
+  sb.classList.toggle('mobile-open', shouldOpen);
+  ov.classList.toggle('active', shouldOpen);
+}
+// Cerrar sidebar al cambiar de tab en mobile
+var _origSwitchTab = null;
+
 async function init() {
   checkProxy();
   fetch('/version').then(function(r){return r.json();}).then(function(v){
@@ -3387,16 +3442,25 @@ async function init() {
     if (tabBtn) switchTab(lastTab, tabBtn);
   }
 
-  // Cargar nombre de bodega en campo config
+  // Cargar configuración desde servidor (sincroniza entre dispositivos)
+  try {
+    var _cfgResp = await fetch('/api/config');
+    if (_cfgResp.ok) {
+      var _cfg = await _cfgResp.json();
+      // Aplicar config del servidor (tiene prioridad sobre localStorage)
+      if (_cfg.nombre_bodega) localStorage.setItem('piat_nombre_bodega', _cfg.nombre_bodega);
+      if (_cfg.dso_umbral_bajo) localStorage.setItem('piat_dso_umbral', String(_cfg.dso_umbral_bajo));
+      if (_cfg.dso_umbral_alto) localStorage.setItem('piat_dso_umbral_alto', String(_cfg.dso_umbral_alto));
+    }
+  } catch(e) {}
   var nbEl = document.getElementById('input-nombre-bodega');
   if (nbEl) nbEl.value = localStorage.getItem('piat_nombre_bodega') || '';
   var dBajo = document.getElementById('input-dso-bajo');
   var dAlto = document.getElementById('input-dso-alto');
   if (dBajo) dBajo.value = localStorage.getItem('piat_dso_umbral') || '45';
   if (dAlto) dAlto.value = localStorage.getItem('piat_dso_umbral_alto') || '65';
-  // Contador red
-  var contEl = document.getElementById('red-contador');
-  if (contEl) contEl.textContent = localStorage.getItem('piat_red_contador') || '1';
+  // Mostrar recientes al iniciar
+  renderRecientes();
 }
 
 var _kpiCache = { total: '—', criticos: '0', mora: '0', dso: '—' };
@@ -3602,6 +3666,8 @@ function switchTab(tab, el) {
   localStorage.setItem('piat_tab', tab);
   var _ptEl = document.getElementById('page-title-el');
   if (_ptEl) _ptEl.textContent = _pageTitles[tab] || tab;
+  // En mobile, cerrar sidebar al navegar
+  if (window.innerWidth <= 480) toggleMobileSidebar(false);
   if (tab === 'cheques') { document.getElementById('cheque-resultado').style.display='none'; }
   if (tab === 'historial') renderHistorial();
   if (tab === 'cartera') renderCartera();
@@ -4258,9 +4324,30 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
       return;
     }
     if (scoreElF) {
-      scoreElF.innerHTML = renderVendeScore(scoreObjFinal) +
-        (_usandoFallback ? '<div style="font-size:10px;color:#64748b;margin-top:6px;padding:3px 8px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0;">ℹ Score calculado localmente — servidor demoró en responder</div>' : '');
+      // Calcular tendencia del score vs. última verificación en cartera
+      var _tendenciaHtml = '';
+      var _clienteEnCartera = cartera.find(function(c) {
+        return (c.cuit || '').replace(/[^0-9]/g, '') === cuit;
+      });
+      if (_clienteEnCartera && Array.isArray(_clienteEnCartera.scoreHistory) && _clienteEnCartera.scoreHistory.length >= 2) {
+        var _sh = _clienteEnCartera.scoreHistory;
+        var _scorePrev = _sh[_sh.length - 2];
+        var _delta = scoreObjFinal.score - (_scorePrev.score || 0);
+        if (Math.abs(_delta) >= 5) {
+          var _tendDir = _delta > 0 ? '▲' : '▼';
+          var _tendCol = _delta > 0 ? '#16a34a' : '#dc2626';
+          var _tendBg  = _delta > 0 ? '#f0fdf4' : '#fef2f2';
+          _tendenciaHtml = '<div style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;'
+            + 'color:' + _tendCol + ';background:' + _tendBg + ';border-radius:6px;padding:2px 8px;margin-top:4px;">'
+            + _tendDir + ' ' + (_delta > 0 ? '+' : '') + _delta + ' pts vs. última verificación</div>';
+        }
+      }
+      scoreElF.innerHTML = renderVendeScore(scoreObjFinal)
+        + (_tendenciaHtml ? '<div style="margin-top:4px;">' + _tendenciaHtml + '</div>' : '')
+        + (_usandoFallback ? '<div style="font-size:10px;color:#64748b;margin-top:6px;padding:3px 8px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0;">ℹ Score calculado localmente — servidor demoró en responder</div>' : '');
       window._ultimoScoreVende = scoreObjFinal;
+      // Guardar en historial de recientes (nombre resuelto puede actualizarse luego con historial)
+      guardarReciente(cuit, nombreMostrar);
       // Restaurar botón de análisis IA (se ocultó al iniciar la búsqueda)
       var _btnAn = document.getElementById('btn-analizar');
       if (_btnAn) _btnAn.style.display = '';
@@ -5530,6 +5617,12 @@ function guardarUmbralesDSO() {
   var alto = parseInt(document.getElementById('input-dso-alto').value) || 65;
   localStorage.setItem('piat_dso_umbral', bajo);
   localStorage.setItem('piat_dso_umbral_alto', alto);
+  // Persistir en servidor (sincroniza entre dispositivos)
+  fetch('/api/config', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ dso_umbral_bajo: bajo, dso_umbral_alto: alto })
+  }).catch(function(){});
   sincronizarServidor();
   var st = document.getElementById('dso-umbral-status');
   st.style.display = 'block';
@@ -5540,6 +5633,12 @@ function guardarNombreBodega() {
   var nombre = document.getElementById('input-nombre-bodega').value.trim();
   if (!nombre) { alert('Ingresá el nombre de tu bodega'); return; }
   localStorage.setItem('piat_nombre_bodega', nombre);
+  // Persistir en servidor (sincroniza entre dispositivos)
+  fetch('/api/config', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ nombre_bodega: nombre })
+  }).catch(function(){});
   sincronizarServidor();
   var status = document.getElementById('nombre-bodega-status');
   status.style.display = 'block';
@@ -6201,6 +6300,55 @@ function nuevaConsulta() {
   var _tlEl = document.getElementById('bcra-timeline-container');
   if (_tlEl) { _tlEl.innerHTML = ''; _tlEl.style.display = 'none'; }
   hideBcraHmTip();
+  // Mostrar recientes al volver a la pantalla de búsqueda
+  renderRecientes();
+}
+
+// ── Historial de consultas recientes ─────────────────────────────────────────
+var _VS_RECIENTES_KEY = 'vs_recientes_v2';
+
+function guardarReciente(cuit, nombre) {
+  try {
+    var recientes = JSON.parse(localStorage.getItem(_VS_RECIENTES_KEY) || '[]');
+    // Quitar si ya existe para moverlo al inicio
+    recientes = recientes.filter(function(r) { return r.cuit !== cuit; });
+    recientes.unshift({ cuit: cuit, nombre: nombre || cuit, ts: Date.now() });
+    recientes = recientes.slice(0, 10);
+    localStorage.setItem(_VS_RECIENTES_KEY, JSON.stringify(recientes));
+  } catch(e) {}
+}
+
+function renderRecientes() {
+  var container = document.getElementById('recientes-container');
+  if (!container) return;
+  var recientes = [];
+  try { recientes = JSON.parse(localStorage.getItem(_VS_RECIENTES_KEY) || '[]'); } catch(e) {}
+  if (!recientes.length) { container.style.display = 'none'; return; }
+  container.style.display = '';
+  var html = '<div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Consultados recientemente</div>';
+  html += '<div style="display:flex;flex-wrap:wrap;gap:6px;">';
+  recientes.forEach(function(r) {
+    var etiqueta = r.nombre && r.nombre !== r.cuit
+      ? r.nombre.split(' ').slice(0,2).join(' ')
+      : r.cuit;
+    var cuitFmt = r.cuit.length === 11
+      ? r.cuit.slice(0,2) + '-' + r.cuit.slice(2,10) + '-' + r.cuit.slice(10)
+      : r.cuit;
+    html += '<button onclick="verClienteReciente(\'' + r.cuit + '\')" title="' + cuitFmt + '" '
+      + 'style="padding:5px 11px;border:1px solid #e2e8f0;border-radius:20px;font-size:11px;background:#fff;'
+      + 'color:#334155;cursor:pointer;transition:all 0.12s;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" '
+      + 'onmouseover="this.style.background=\'#f1f5f9\';this.style.borderColor=\'#cbd5e1\'" '
+      + 'onmouseout="this.style.background=\'#fff\';this.style.borderColor=\'#e2e8f0\'">'
+      + etiqueta + '</button>';
+  });
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function verClienteReciente(cuit) {
+  var inp = document.getElementById('cuit-input');
+  if (inp) inp.value = cuit;
+  consultarCliente();
 }
 
 async function verificarTodos(forzar) {
@@ -6808,6 +6956,12 @@ async function toggleAlrAccordion(cuitRow) {
   } catch(e) {
     acc.innerHTML = '<div class="alr-acc-msg" style="color:#dc2626">Error al cargar comprobantes.</div>';
   }
+}
+
+var _buscadorTimer = null;
+function debouncedRenderBuscador(val) {
+  clearTimeout(_buscadorTimer);
+  _buscadorTimer = setTimeout(function() { renderBuscador(val); }, 250);
 }
 
 function renderBuscador(filtro) {
