@@ -6728,8 +6728,17 @@ def _init_nomdeu_db() -> None:
         conn.execute("PRAGMA cache_size  = -32768")   # 32 MB en caché lectura
         n_den = conn.execute("SELECT COUNT(*) FROM denominaciones").fetchone()[0]
         n_deu = conn.execute("SELECT COUNT(*) FROM deudas_resumen").fetchone()[0]
+        # historial_bulk puede no existir en DB generadas con la versión anterior del script
+        try:
+            n_hist = conn.execute("SELECT COUNT(DISTINCT cuit) FROM historial_bulk").fetchone()[0]
+        except Exception:
+            n_hist = 0
         _nomdeu_conn = conn
-        print(f"[nomdeu] Listo — {n_den:,} denominaciones | {n_deu:,} CUITs en deudas_resumen", flush=True)
+        print(
+            f"[nomdeu] Listo — {n_den:,} denominaciones | {n_deu:,} en deudas_resumen"
+            f" | {n_hist:,} en historial_bulk",
+            flush=True,
+        )
     except Exception as e:
         print(f"[nomdeu] Error abriendo SQLite: {e}", flush=True)
 
@@ -6748,19 +6757,51 @@ def _nomdeu_get_nombre(cuit: str):
 
 
 def _nomdeu_get_deuda(cuit: str):
-    """Resumen de deuda del padrón offline. Retorna dict o None."""
+    """
+    Resumen de deuda del padrón offline.
+
+    Fuente primaria : deudas_resumen (snapshot PADRON más reciente — mayo 2026)
+    Fuente secundaria: historial_bulk (24DSF — peor sit. en últimos 24 meses)
+
+    Retorna el peor sit_max entre ambas fuentes para no subestimar el riesgo.
+    Retorna None si el CUIT no existe en ninguna tabla (cliente sin antecedentes).
+    """
     if _nomdeu_conn is None:
         return None
     try:
-        row = _nomdeu_conn.execute(
+        # 1. Snapshot actual (PADRON)
+        row_p = _nomdeu_conn.execute(
             "SELECT sit_max, monto_total, entidades_cod, periodo "
             "FROM deudas_resumen WHERE cuit = ?", (cuit,)
         ).fetchone()
-        if not row:
-            return None
+
+        # 2. Peor situación en 24 meses (historial_bulk) — tabla puede no existir
+        sit_hist = None
+        periodo_hist = None
+        try:
+            row_h = _nomdeu_conn.execute(
+                "SELECT MAX(sit_max), MAX(periodo) FROM historial_bulk WHERE cuit = ?",
+                (cuit,)
+            ).fetchone()
+            if row_h and row_h[0] is not None:
+                sit_hist    = row_h[0]
+                periodo_hist = row_h[1]
+        except Exception:
+            pass  # historial_bulk no existe en DB vieja — ignorar
+
+        if row_p is None and sit_hist is None:
+            return None  # CUIT sin antecedentes en ninguna fuente
+
+        # Tomar la peor situación entre ambas fuentes
+        sit_p   = row_p[0] if row_p else 1
+        sit_max = max(sit_p, sit_hist or 1)
         return {
-            'sit_max': row[0], 'monto_total': row[1],
-            'entidades_cod': row[2], 'periodo': row[3],
+            'sit_max':       sit_max,
+            'monto_total':   row_p[1] if row_p else 0,
+            'entidades_cod': row_p[2] if row_p else '',
+            'periodo':       row_p[3] if row_p else (periodo_hist or ''),
+            'sit_padron':    sit_p,
+            'sit_hist_24m':  sit_hist,
         }
     except Exception:
         return None
