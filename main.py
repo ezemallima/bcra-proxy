@@ -1338,18 +1338,20 @@ def _map_detalle_bcra(raw: dict) -> dict:
     }
 
 
-def _consultar_bcra_directo(cuit: str, tipo: str = 'deudas'):
+def _consultar_bcra_directo(cuit: str, tipo: str = 'deudas', timeout_per_req: int = 20, max_intentos: int = 2):
     """Consulta api.bcra.gob.ar con hasta 4 intentos distribuidos entre dos endpoints.
 
     Estrategia de waterfall:
-      1. CentralDeInformacion v1.0 (nuevo oficial) — 2 intentos via _bcra_get
-      2. centraldedeudores v1.0 (legacy)           — 2 intentos via _bcra_get (fallback)
+      1. CentralDeInformacion v1.0 (nuevo oficial) — max_intentos via _bcra_get
+      2. centraldedeudores v1.0 (legacy)           — max_intentos via _bcra_get (fallback)
 
     Detección automática de formato:
       - Respuesta con 'detalle' en results → _map_detalle_bcra (CDI v1.0)
       - Respuesta con 'periodos' en results → _norm_bcra_resp (legacy)
 
     tipo: 'deudas' | 'historial' | 'cheques'
+    timeout_per_req: segundos por intento (default 20; usar 8 desde calcular_score_servidor)
+    max_intentos: intentos por endpoint (default 2; usar 1 desde calcular_score_servidor)
     """
     _urls_cdi = {
         'deudas':    f'https://api.bcra.gob.ar/CentralDeInformacion/v1.0/Deudas/{cuit}',
@@ -1370,9 +1372,9 @@ def _consultar_bcra_directo(cuit: str, tipo: str = 'deudas'):
         (_urls_cdi.get(tipo,    _urls_cdi['deudas']),    'cdi_v1'),
         (_urls_legacy.get(tipo, _urls_legacy['deudas']), 'legacy'),
     ]:
-        for intento in range(2):
+        for intento in range(max_intentos):
             try:
-                r = _bcra_get(url, timeout=20)
+                r = _bcra_get(url, timeout=timeout_per_req)
                 if r.status_code == 404:
                     if tipo == 'historial':
                         # Para historial 404 puede ser rate-limit — probar endpoint legacy antes de rendirse
@@ -3366,7 +3368,9 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
         hist_data = None
 
     if not hist_data:
-        _hd, _ = _consultar_bcra_directo(cuit_limpio, 'historial')
+        # Timeout corto (8s × 1 intento por endpoint = 16s máx) para que el endpoint
+        # /fetch-score responda siempre dentro del timeout de 40s del frontend.
+        _hd, _ = _consultar_bcra_directo(cuit_limpio, 'historial', timeout_per_req=8, max_intentos=1)
         if _hd:
             hist_data = _hd
             # Solo escribir a disco si hay periodos reales — evita cachear resultados vacíos
@@ -3386,7 +3390,8 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
                 _cheques_cache_set(cuit_limpio, cheq_data)
                 print(f"[score] cheq {cuit_limpio} desde DB local", flush=True)
         if not cheq_data:
-            _cd, _ = _consultar_bcra_directo(cuit_limpio, 'cheques')
+            # Timeout corto para no bloquear el endpoint
+            _cd, _ = _consultar_bcra_directo(cuit_limpio, 'cheques', timeout_per_req=8, max_intentos=1)
             if _cd:
                 cheq_data = _cd
                 try:

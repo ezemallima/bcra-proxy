@@ -4138,9 +4138,21 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
   // Capturar el controller activo para que el callback detecte si fue cancelado
   var _mosCtrl = _consultaController;
   // Historial 24m (para gráfico) + score servidor en paralelo
+  // Score con retry automático: si falla por timeout, reintenta una vez
+  // (el backend ahora responde en < 33s; el retry cubre picos de carga en Render)
+  var _fetchScoreConRetry = function() {
+    return fetch('/fetch-score/' + cuit + '?fresh=1', {signal: _mosCtrl ? _mosCtrl.signal : AbortSignal.timeout(40000)})
+      .then(function(r){ return r.json(); })
+      .catch(function() {
+        if (_mosCtrl && _mosCtrl.signal.aborted) return null;
+        return fetch('/fetch-score/' + cuit + '?fresh=1', {signal: AbortSignal.timeout(35000)})
+          .then(function(r){ return r.json(); })
+          .catch(function(){ return null; });
+      });
+  };
   Promise.all([
     fetch('/deudas/' + cuit + '/historial', {signal: _mosCtrl ? _mosCtrl.signal : AbortSignal.timeout(30000)}).then(function(r){ return r.json(); }).catch(function(){ return null; }),
-    fetch('/fetch-score/' + cuit + '?fresh=1', {signal: _mosCtrl ? _mosCtrl.signal : AbortSignal.timeout(40000)}).then(function(r){ return r.json(); }).catch(function(){ return null; })
+    _fetchScoreConRetry()
   ]).then(function(resultados) {
     // Si una nueva búsqueda arrancó mientras estas peticiones estaban en vuelo → ignorar
     if (_mosCtrl && _mosCtrl.signal.aborted) return;
@@ -4247,7 +4259,7 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
     }
     if (scoreElF) {
       scoreElF.innerHTML = renderVendeScore(scoreObjFinal) +
-        (_usandoFallback ? '<div style="font-size:10px;color:#ca8a04;margin-top:6px;padding:4px 8px;background:#fefce8;border-radius:6px;border:1px solid #fde047;">⚠ Usando datos locales — servidor BCRA no disponible</div>' : '');
+        (_usandoFallback ? '<div style="font-size:10px;color:#64748b;margin-top:6px;padding:3px 8px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0;">ℹ Score calculado localmente — servidor demoró en responder</div>' : '');
       window._ultimoScoreVende = scoreObjFinal;
       // Restaurar botón de análisis IA (se ocultó al iniciar la búsqueda)
       var _btnAn = document.getElementById('btn-analizar');
