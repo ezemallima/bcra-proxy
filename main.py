@@ -3929,15 +3929,34 @@ def ejecutar_verificacion(cartera_data):
             else:
                 cliente_actualizado['ultimaVerif'] = time.strftime('%d/%m/%Y')
                 if not bcra_ok:
-                    cliente_actualizado['verificacion_fallida'] = True
-                    print(f"{tag} Sin datos BCRA — conserva sit_anterior={sit_anterior}", flush=True)
+                    # Fallback: padrón bulk offline (bcra_nomdeu.db, último ZIP mensual BCRA).
+                    # Si el live falla por rate-limit, al menos detectamos la última situación
+                    # conocida del cliente. Sit 3+ en el bulk es señal de riesgo real.
+                    _nomdeu_deu = _nomdeu_get_deuda(cuit)
+                    if _nomdeu_deu:
+                        _bulk_sit  = _nomdeu_deu.get('sit_max') or 1
+                        _bulk_per  = _nomdeu_deu.get('periodo', '')
+                        # Solo actualizamos si el bulk muestra igual o peor situación
+                        # (no bajamos el riesgo con datos que pueden estar desactualizados)
+                        if _bulk_sit >= (sit_anterior or 1):
+                            max_sit = _bulk_sit
+                            cliente_actualizado['ultimaSit'] = max_sit
+                        cliente_actualizado['fuente_sit'] = f'padron_bulk_{_bulk_per}'
+                        print(
+                            f"{tag} BCRA live no disponible — padrón bulk: sit={_bulk_sit} (período {_bulk_per})",
+                            flush=True,
+                        )
+                    else:
+                        cliente_actualizado['verificacion_fallida'] = True
+                        print(f"{tag} Sin datos BCRA — conserva sit_anterior={sit_anterior}", flush=True)
 
             # Generar alerta si la situación empeoró o es grave
             if max_sit > sit_anterior or max_sit >= 3:
                 alerta = {
                     "nombre": nombre, "cuit": cuit,
                     "sitAnterior": sit_anterior, "sitActual": max_sit,
-                    "fecha": time.strftime('%d/%m/%Y'), "tipo": "bcra"
+                    "fecha": time.strftime('%d/%m/%Y'), "tipo": "bcra",
+                    "fuente": cliente_actualizado.get('fuente_sit', 'bcra_live'),
                 }
                 if score_data:
                     alerta.update({
