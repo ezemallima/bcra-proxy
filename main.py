@@ -6775,33 +6775,31 @@ def _nomdeu_get_deuda(cuit: str):
             "FROM deudas_resumen WHERE cuit = ?", (cuit,)
         ).fetchone()
 
-        # 2. Peor situación en 24 meses (historial_bulk) — tabla puede no existir
-        sit_hist = None
-        periodo_hist = None
+        # 2. Resumen 24 meses (historial_bulk, 1 fila por CUIT) — tabla puede no existir
+        row_h = None
         try:
             row_h = _nomdeu_conn.execute(
-                "SELECT MAX(sit_max), MAX(periodo) FROM historial_bulk WHERE cuit = ?",
-                (cuit,)
+                "SELECT sit_max_24m, meses_en_mora, meses_critico, periodo_fin "
+                "FROM historial_bulk WHERE cuit = ?", (cuit,)
             ).fetchone()
-            if row_h and row_h[0] is not None:
-                sit_hist    = row_h[0]
-                periodo_hist = row_h[1]
         except Exception:
-            pass  # historial_bulk no existe en DB vieja — ignorar
+            pass  # historial_bulk no existe en DB generada con versión anterior — ignorar
 
-        if row_p is None and sit_hist is None:
+        if row_p is None and row_h is None:
             return None  # CUIT sin antecedentes en ninguna fuente
 
-        # Tomar la peor situación entre ambas fuentes
-        sit_p   = row_p[0] if row_p else 1
-        sit_max = max(sit_p, sit_hist or 1)
+        sit_p      = row_p[0] if row_p else 1
+        sit_h      = row_h[0] if row_h else 1
+        sit_max    = max(sit_p, sit_h)  # peor entre padrón actual y 24 meses
         return {
             'sit_max':       sit_max,
             'monto_total':   row_p[1] if row_p else 0,
             'entidades_cod': row_p[2] if row_p else '',
-            'periodo':       row_p[3] if row_p else (periodo_hist or ''),
+            'periodo':       row_p[3] if row_p else (row_h[3] if row_h else ''),
             'sit_padron':    sit_p,
-            'sit_hist_24m':  sit_hist,
+            'sit_hist_24m':  sit_h,
+            'meses_en_mora': row_h[1] if row_h else 0,
+            'meses_critico': row_h[2] if row_h else 0,
         }
     except Exception:
         return None

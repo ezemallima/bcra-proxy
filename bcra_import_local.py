@@ -142,18 +142,20 @@ def _init_db(conn: sqlite3.Connection) -> None:
             entidades_cod TEXT    NOT NULL,
             periodo       TEXT    NOT NULL
         );
-        -- Historial mes a mes del 24DSF: detecta tendencia y situaciones pasadas.
+        -- Resumen 24 meses del 24DSF: 1 fila por CUIT (no 24 filas).
+        -- ~3M filas total — misma escala que deudas_resumen, descargable en Render.
         CREATE TABLE IF NOT EXISTS historial_bulk (
-            cuit    TEXT    NOT NULL,
-            periodo TEXT    NOT NULL,
-            sit_max INTEGER NOT NULL,
-            monto   REAL    NOT NULL,
-            PRIMARY KEY (cuit, periodo)
+            cuit          TEXT    PRIMARY KEY,
+            sit_max_24m   INTEGER NOT NULL,   -- peor sit en 24 meses
+            meses_en_mora INTEGER NOT NULL,   -- meses con sit >= 3
+            meses_critico INTEGER NOT NULL,   -- meses con sit >= 5 (irrecuperable)
+            periodo_inicio TEXT    NOT NULL,  -- primer período con datos
+            periodo_fin    TEXT    NOT NULL,  -- último período con datos
+            monto_max      REAL    NOT NULL   -- monto máximo registrado
         );
         CREATE INDEX IF NOT EXISTS idx_den_cuit  ON denominaciones(cuit);
         CREATE INDEX IF NOT EXISTS idx_deu_cuit  ON deudas_resumen(cuit);
         CREATE INDEX IF NOT EXISTS idx_hist_cuit ON historial_bulk(cuit);
-        CREATE INDEX IF NOT EXISTS idx_hist_per  ON historial_bulk(cuit, periodo);
     """)
     conn.commit()
 
@@ -287,26 +289,22 @@ def _proc_padron(conn: sqlite3.Connection, path: str) -> None:
 
 def _proc_24dsf(conn: sqlite3.Connection, path: str) -> None:
     """
-    Importa 24DSF → historial_bulk (un registro por CUIT+periodo).
-    Usa tabla temporal en SQLite para la agregación — evita OOM en Colab
-    con 72M+ filas (24 meses × 3M CUITs × N entidades).
-    También actualiza deudas_resumen si el CUIT no existe aún (fallback).
+    Importa 24DSF → historial_bulk (1 fila por CUIT, resumen de 24 meses).
+
+    Agrega en RAM: sit_max, meses_en_mora, meses_critico, periodo_inicio/fin, monto_max.
+    ~3M entradas en el dict ≈ 600 MB RAM — manejable en Colab (12 GB disponibles).
+    La DB resultante tiene la misma escala que deudas_resumen: ~150-250 MB en SQLite.
+
+    NO almacena 24 filas por CUIT (hubiera sido 72M filas / ~4 GB en Render).
     """
-    _log("Preparando historial_bulk (24 meses)...")
+    _log("Preparando historial_bulk (resumen 24 meses, 1 fila por CUIT)...")
     conn.execute("DELETE FROM historial_bulk")
-    conn.execute("""
-        CREATE TEMP TABLE IF NOT EXISTS _tmp_dsf (
-            cuit    TEXT,
-            periodo TEXT,
-            sit     INTEGER,
-            monto   REAL
-        )
-    """)
-    conn.execute("CREATE INDEX IF NOT EXISTS _idx_tmp ON _tmp_dsf(cuit, periodo)")
     conn.commit()
 
+    # {cuit: [sit_max, meses_mora, meses_critico, periodo_min, periodo_max, monto_max, periodos_set]}
+    # periodos_set: para contar meses únicos con mora (evitar doble-contar por entidad)
+    por_cuit: dict = {}
     count = skip = 0
-    batch: list = []
     t0 = time.time()
 
     with open(path, "r", encoding="latin-1") as f:
@@ -316,48 +314,76 @@ def _proc_24dsf(conn: sqlite3.Connection, path: str) -> None:
                 skip += 1
                 continue
             _, periodo, cuit, sit, monto = parsed
-            batch.append((cuit, periodo, sit, monto))
+
+            entry = por_cuit.get(cuit)
+            if entry is None:
+                por_cuit[cuit] = [
+                    sit,                        # sit_max
+                    set(),                      # periodos_mora (sit >= 3)
+                    set(),                      # periodos_critico (sit >= 5)
+                    periodo,                    # periodo_min
+                    periodo,                    # periodo_max
+                    monto,                      # monto_max
+                ]
+            else:
+                if sit > entry[0]:
+                    entry[0] = sit
+                if sit >= 3:
+                    entry[1].add(periodo)
+                if sit >= 5:
+                    entry[2].add(periodo)
+                if periodo < entry[3]:
+                    entry[3] = periodo
+                if periodo > entry[4]:
+                    entry[4] = periodo
+                if monto > entry[5]:
+                    entry[5] = monto
+
+            # Registrar período mora/crítico en la entrada inicial también
+            if entry is None:
+                entry = por_cuit[cuit]
+                if sit >= 3:
+                    entry[1].add(periodo)
+                if sit >= 5:
+                    entry[2].add(periodo)
+
             count += 1
-            if len(batch) >= 200_000:
-                conn.executemany("INSERT INTO _tmp_dsf VALUES (?,?,?,?)", batch)
-                conn.commit()
-                batch = []
             if count % 5_000_000 == 0:
                 elapsed = time.time() - t0
-                _log(f"  {count / 1e6:.0f}M líneas | {elapsed:.0f}s")
-
-    if batch:
-        conn.executemany("INSERT INTO _tmp_dsf VALUES (?,?,?,?)", batch)
-        conn.commit()
+                _log(f"  {count / 1e6:.0f}M líneas | {len(por_cuit):,} CUITs | {elapsed:.0f}s")
 
     elapsed = time.time() - t0
     _log(f"Streaming: {count:,} válidos | {skip:,} saltados | {elapsed:.0f}s")
+    _log(f"Volcando {len(por_cuit):,} CUITs → historial_bulk...")
 
-    _log("Agregando por CUIT+periodo → historial_bulk...")
-    conn.execute("""
-        INSERT OR REPLACE INTO historial_bulk (cuit, periodo, sit_max, monto)
-        SELECT cuit, periodo, MAX(sit), SUM(monto)
-        FROM _tmp_dsf
-        GROUP BY cuit, periodo
-    """)
-    conn.commit()
+    batch = []
+    for cuit, (sit_max, periodos_mora, periodos_crit, p_ini, p_fin, monto_max) in por_cuit.items():
+        batch.append((
+            cuit,
+            sit_max,
+            len(periodos_mora),   # meses_en_mora
+            len(periodos_crit),   # meses_critico
+            p_ini,
+            p_fin,
+            round(monto_max, 1),
+        ))
+        if len(batch) >= 50_000:
+            _upsert_batch(conn, "historial_bulk", batch, 7)
+            batch = []
+    if batch:
+        _upsert_batch(conn, "historial_bulk", batch, 7)
+    del por_cuit
 
     n_hist = conn.execute("SELECT COUNT(*) FROM historial_bulk").fetchone()[0]
-    n_cuits = conn.execute("SELECT COUNT(DISTINCT cuit) FROM historial_bulk").fetchone()[0]
-    _log(f"historial_bulk: {n_hist:,} registros | {n_cuits:,} CUITs únicos")
+    _log(f"historial_bulk: {n_hist:,} CUITs")
 
-    # Enriquecer deudas_resumen con CUITs del 24DSF que no estén en el padrón
-    # (solo INSERT, no UPDATE — el padrón actual tiene prioridad)
+    # Completar deudas_resumen con CUITs que solo aparecen en 24DSF (no en padrón actual)
     _log("Completando deudas_resumen con CUITs del 24DSF no presentes en padrón...")
     conn.execute("""
         INSERT OR IGNORE INTO deudas_resumen (cuit, sit_max, monto_total, entidades_cod, periodo)
-        SELECT cuit, MAX(sit_max), SUM(monto), '24DSF', MAX(periodo)
+        SELECT cuit, sit_max_24m, monto_max, '24DSF', periodo_fin
         FROM historial_bulk
-        GROUP BY cuit
     """)
-    conn.commit()
-
-    conn.execute("DROP TABLE IF EXISTS _tmp_dsf")
     conn.commit()
     _log("historial_bulk + deudas_resumen: completo")
 
