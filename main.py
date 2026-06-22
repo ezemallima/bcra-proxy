@@ -3753,30 +3753,44 @@ def ejecutar_verificacion(cartera_data):
             try:
                 lr = consultar_bcra_lambda(cuit_f)
                 if lr:
-                    return cuit_f, (lr, lr[0])
+                    # Lambda devuelve (deudas, historial, cheques) en una sola llamada
+                    return cuit_f, (lr, lr[0], lr[2])
                 bd, _ = consultar_bcra_cached(cuit_f)
-                return cuit_f, (None, bd)
+                # Si tenemos BCRA real, buscar cheques AQUÍ en el worker paralelo
+                # (evita 500 llamadas seriales de 12s cada una en Fase 3)
+                cheques_d = None
+                if bd and bd.get('results') is not None and not bd.get('error_bcra'):
+                    try:
+                        cheques_d, _ = _consultar_bcra_directo(
+                            cuit_f, 'cheques', timeout_per_req=8, max_intentos=1
+                        )
+                    except Exception:
+                        pass
+                return cuit_f, (None, bd, cheques_d)
             except Exception as _ef:
                 print(f"[verif-p1] {cuit_f} error: {type(_ef).__name__}", flush=True)
-                return cuit_f, (None, None)
+                return cuit_f, (None, None, None)
 
-        verificacion_estado["mensaje"] = f"Fase 1/3: Consultando BCRA ({total} clientes, 12 workers)..."
-        print(f"[verif] FASE 1: Fetch BCRA paralelo — {total} clientes, 12 workers", flush=True)
-        with ThreadPoolExecutor(max_workers=12) as _pool:
+        _N_WORKERS = 8  # 12→8: menos rate-limiting BCRA; cada worker hace 2 llamadas (deudas+cheques)
+        verificacion_estado["mensaje"] = f"Fase 1/3: Consultando BCRA ({total} clientes, {_N_WORKERS} workers)..."
+        print(f"[verif] FASE 1: Fetch BCRA paralelo — {total} clientes, {_N_WORKERS} workers", flush=True)
+        with ThreadPoolExecutor(max_workers=_N_WORKERS) as _pool:
             _futures = {_pool.submit(_fetch_cliente_bcra, c): c for c in cartera_data}
             _done = 0
-            for _fut in as_completed(_futures, timeout=900):
+            for _fut in as_completed(_futures, timeout=1500):
                 try:
-                    _cuit_r, _data_r = _fut.result(timeout=35)
+                    _cuit_r, _data_r = _fut.result(timeout=40)
                     bcra_prefetch[_cuit_r] = _data_r
                 except Exception:
                     _c = _futures[_fut]
-                    bcra_prefetch[str(_c.get('cuit', '')).strip()] = (None, None)
+                    bcra_prefetch[str(_c.get('cuit', '')).strip()] = (None, None, None)
                 _done += 1
                 verificacion_estado["progreso"] = _done
-                if _done % 30 == 0:
+                if _done % 20 == 0:
                     print(f"[verif-p1] {_done}/{total} BCRA fetched", flush=True)
-        print(f"[verif] FASE 1 OK — {len(bcra_prefetch)}/{total} con datos BCRA", flush=True)
+        _con_datos = sum(1 for v in bcra_prefetch.values() if v and v[1])
+        _con_cheques = sum(1 for v in bcra_prefetch.values() if v and v[2])
+        print(f"[verif] FASE 1 OK — {_con_datos}/{total} con BCRA · {_con_cheques}/{total} con cheques", flush=True)
 
         # ═══════════════════════════════════════════════════════════════════
         # FASE 2 — Análisis bodegas en LOTES (8 clientes por llamada Gemini)
@@ -3845,10 +3859,11 @@ def ejecutar_verificacion(cartera_data):
 
             cliente_actualizado = dict(cliente)
 
-            # Recuperar datos BCRA pre-fetched en Fase 1
-            _pf           = bcra_prefetch.get(cuit, (None, None))
-            lambda_result = _pf[0] if _pf else None
-            bcra_data     = _pf[1] if _pf else None
+            # Recuperar datos BCRA pre-fetched en Fase 1 (3-tupla: lambda, bcra, cheques)
+            _pf            = bcra_prefetch.get(cuit, (None, None, None))
+            lambda_result  = _pf[0] if _pf else None
+            bcra_data      = _pf[1] if _pf else None
+            _cheq_prefetch = _pf[2] if (_pf and len(_pf) > 2) else None
             # bcra_ok = hay datos BCRA reales (results != None y sin error de saturación).
             # Un error_dict {"results": None, "error_bcra": "bcra_saturado"} es truthy
             # pero no tiene datos reales — tratarlo como falla evita sobrescribir ultimaSit
@@ -3859,18 +3874,21 @@ def ejecutar_verificacion(cartera_data):
                 and not bcra_data.get('error_bcra')
             )
 
-            # Persistir caché historial/cheques si los datos vienen de Lambda (Fase 1).
-            # NO escribir payload null — "envenena" el disco y bloquea el fallback a BCRA live.
+            # Persistir caché historial/cheques si vienen de Fase 1 (Lambda o BCRA directo).
+            # NO escribir payload null — "envenena" el disco y bloquea el fallback local.
             if lambda_result:
                 try:
                     if lambda_result[1]:
                         with open(os.path.join(DATA_DIR, f'historial_{cuit}.json'), 'w') as _f:
                             json.dump({'payload': lambda_result[1], 'ts': time.time()}, _f)
-                    if lambda_result[2]:  # solo si Lambda realmente trajo datos de cheques
-                        with open(os.path.join(DATA_DIR, f'cheques_{cuit}.json'), 'w') as _f:
-                            json.dump({'payload': lambda_result[2], 'ts': time.time()}, _f)
                 except Exception as _e:
-                    print(f"{tag} Advertencia caché Lambda: {_e}", flush=True)
+                    print(f"{tag} Advertencia caché historial: {_e}", flush=True)
+            if _cheq_prefetch:  # persiste cheques sin importar la fuente (Lambda o BCRA directo)
+                try:
+                    with open(os.path.join(DATA_DIR, f'cheques_{cuit}.json'), 'w') as _f:
+                        json.dump({'payload': _cheq_prefetch, 'ts': time.time()}, _f)
+                except Exception as _e:
+                    print(f"{tag} Advertencia caché cheques: {_e}", flush=True)
 
             # Score — puro Python, usa datos ya en memoria desde Fase 1
             score_data = None
@@ -3879,7 +3897,7 @@ def ejecutar_verificacion(cartera_data):
                 if lambda_result:
                     score_data = calcular_rating_predictivo(
                         cuit=cuit, bcra_data=bcra_data or {},
-                        hist_data=lambda_result[1], cheq_data=lambda_result[2],
+                        hist_data=lambda_result[1], cheq_data=_cheq_prefetch,
                         en_mora=None, ciudad=_ciudad,
                     )
                 elif bcra_data:
@@ -3965,10 +3983,15 @@ def ejecutar_verificacion(cartera_data):
                     })
                 nuevas_alertas.append(alerta)
 
-            # Detectar cheques rechazados activos — 4 niveles de fallback:
-            # 1) Lambda, 2) disco fresco, 3) SQLite local (bulk BCRA), 4) BCRA live
+            # Detectar cheques rechazados activos — 3 niveles de fallback:
+            # 1) Fase 1 prefetch (Lambda o BCRA directo — paralelo, ya resuelto)
+            # 2) Disco caché fresco (< 24h)
+            # 3) SQLite local (snapshot diario BCRA, cero latencia de red)
+            # Fallback 4 (BCRA live en Fase 3) eliminado: causaba 500 llamadas seriales
+            # de 12s cada una = 6000s adicionales que mataban la verificación.
+            # Los cheques se traen en Fase 1 para todos los clientes con BCRA accesible.
             try:
-                _cheq_v = lambda_result[2] if lambda_result else None
+                _cheq_v = _cheq_prefetch  # Fase 1: Lambda[2] o BCRA directo (paralelo)
                 if not _cheq_v:
                     _cheq_path_v = os.path.join(DATA_DIR, f'cheques_{cuit}.json')
                     if os.path.exists(_cheq_path_v):
@@ -3982,23 +4005,6 @@ def ejecutar_verificacion(cartera_data):
                 # Fallback 3: SQLite local (snapshot diario BCRA, cero latencia de red)
                 if not _cheq_v:
                     _cheq_v = get_cheques_local(cuit)
-                # Fallback 4: BCRA live — solo si tenemos conectividad BCRA real (bcra_ok)
-                # y ninguna fuente local pudo proveer datos de cheques
-                if not _cheq_v and bcra_ok:
-                    try:
-                        _cd_live, _ = _consultar_bcra_directo(
-                            cuit, 'cheques', timeout_per_req=12, max_intentos=1
-                        )
-                        if _cd_live:
-                            _cheq_v = _cd_live
-                            try:
-                                with open(os.path.join(DATA_DIR, f'cheques_{cuit}.json'), 'w') as _f:
-                                    json.dump({'payload': _cheq_v, 'ts': time.time()}, _f)
-                            except Exception:
-                                pass
-                            print(f"{tag} cheques obtenidos via BCRA live", flush=True)
-                    except Exception:
-                        pass
                 if (_cheq_v and not _cheq_v.get('sin_deudas') and
                         isinstance(_cheq_v.get('results'), dict)):
                     _caus_v = _cheq_v['results'].get('causales') or []
