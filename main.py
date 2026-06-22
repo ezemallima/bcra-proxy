@@ -6717,7 +6717,13 @@ def _descargar_nomdeu(url: str, dest: str) -> bool:
             import gdown
             gdrive_url = f"https://drive.google.com/uc?id={file_id}"
             print(f"[nomdeu] Descargando desde Google Drive (file_id={file_id})...", flush=True)
-            # quiet=False para ver progreso en logs de Render; fuzzy=True acepta URLs completas
+            # Redirigir TMPDIR al disco persistente — gdown escribe un .part temporal
+            # que en Render llena /tmp (1 GB) antes de mover al destino final.
+            dest_dir = os.path.dirname(os.path.abspath(dest))
+            os.environ['TMPDIR'] = dest_dir
+            import tempfile
+            tempfile.tempdir = dest_dir
+            # quiet=False para ver progreso en logs de Render
             gdown.download(gdrive_url, dest, quiet=False, fuzzy=False)
             if not os.path.exists(dest) or os.path.getsize(dest) < 1_000_000:
                 print("[nomdeu] gdown falló o archivo demasiado pequeño", flush=True)
