@@ -6684,16 +6684,87 @@ def analizar_bodegas():
     except Exception as e:
         return jsonify({"es_negativo": False, "motivo": str(e)})
 
-# ── PADRÓN OFICIAL BCRA LOCAL (bcra_nomdeu.db desde Cloudflare R2) ───────────
-# Descargado una vez al mes por el usuario desde el ZIP mensual del BCRA,
-# procesado con bcra_import_local.py y subido a R2.
-# Tablas: denominaciones (cuit→nombre), entidades (codigo→nombre), deudas_resumen.
+# ── PADRÓN OFICIAL BCRA LOCAL (bcra_nomdeu.db) ───────────────────────────────
+# Descargado al arrancar desde BCRA_NOMDEU_URL (R2 o Google Drive).
+# Soporta archivos >100 MB en Google Drive via gdown (maneja el token de confirmación).
+# Tablas: denominaciones, entidades, deudas_resumen, historial_bulk.
 
 _nomdeu_conn: sqlite3.Connection = None  # type: ignore[assignment]
 
+_GDRIVE_PREFIXES = ('https://drive.google.com', 'https://docs.google.com')
+
+
+def _extraer_gdrive_id(url: str) -> str | None:
+    """Extrae el file ID de cualquier formato de URL de Google Drive."""
+    import re
+    m = re.search(r'/(?:file/d|d)/([a-zA-Z0-9_-]{25,})', url)
+    return m.group(1) if m else None
+
+
+def _descargar_nomdeu(url: str, dest: str) -> bool:
+    """
+    Descarga bcra_nomdeu.db desde R2 o Google Drive.
+    - Google Drive: usa gdown que maneja el token de confirmación para archivos grandes.
+    - Otros: requests con streaming.
+    Retorna True si la descarga fue exitosa.
+    """
+    if any(url.startswith(p) for p in _GDRIVE_PREFIXES):
+        file_id = _extraer_gdrive_id(url)
+        if not file_id:
+            print(f"[nomdeu] No se pudo extraer file ID de la URL de Drive: {url}", flush=True)
+            return False
+        try:
+            import gdown
+            gdrive_url = f"https://drive.google.com/uc?id={file_id}"
+            print(f"[nomdeu] Descargando desde Google Drive (file_id={file_id})...", flush=True)
+            # quiet=False para ver progreso en logs de Render; fuzzy=True acepta URLs completas
+            gdown.download(gdrive_url, dest, quiet=False, fuzzy=False)
+            if not os.path.exists(dest) or os.path.getsize(dest) < 1_000_000:
+                print("[nomdeu] gdown falló o archivo demasiado pequeño", flush=True)
+                return False
+            size_mb = os.path.getsize(dest) / 1_048_576
+            print(f"[nomdeu] Descarga Drive completa: {size_mb:.0f} MB", flush=True)
+            return True
+        except Exception as e:
+            print(f"[nomdeu] Error gdown: {e}", flush=True)
+            return False
+    else:
+        # R2 u otro endpoint HTTP directo
+        print(f"[nomdeu] Descargando desde URL directa...", flush=True)
+        try:
+            r = requests.get(url, stream=True, timeout=600, verify=False)
+            r.raise_for_status()
+            descargado = 0
+            with open(dest, 'wb') as fh:
+                for chunk in r.iter_content(chunk_size=8 * 1024 * 1024):
+                    if chunk:
+                        fh.write(chunk)
+                        descargado += len(chunk)
+                        if descargado % (100 * 1024 * 1024) < 8 * 1024 * 1024:
+                            print(f"[nomdeu]   {descargado / 1_048_576:.0f} MB descargados...", flush=True)
+            size_mb = os.path.getsize(dest) / 1_048_576
+            print(f"[nomdeu] Descarga directa completa: {size_mb:.0f} MB", flush=True)
+            return True
+        except Exception as e:
+            print(f"[nomdeu] Error descarga directa: {e}", flush=True)
+            return False
+
+
+def _nomdeu_db_valida() -> bool:
+    """Verifica que la DB local tenga historial_bulk con datos."""
+    if not os.path.exists(NOMDEU_DB_PATH):
+        return False
+    try:
+        c = sqlite3.connect(NOMDEU_DB_PATH)
+        n = c.execute("SELECT COUNT(*) FROM historial_bulk").fetchone()[0]
+        c.close()
+        return n > 0
+    except Exception:
+        return False
+
 
 def _init_nomdeu_db() -> None:
-    """Descarga bcra_nomdeu.db desde R2 si BCRA_NOMDEU_URL está configurada."""
+    """Descarga bcra_nomdeu.db si BCRA_NOMDEU_URL está configurada."""
     global _nomdeu_conn
     url = os.environ.get('BCRA_NOMDEU_URL', '').strip()
     if not url:
@@ -6703,34 +6774,34 @@ def _init_nomdeu_db() -> None:
     descarga = True
     if os.path.exists(NOMDEU_DB_PATH):
         edad_dias = (time.time() - os.path.getmtime(NOMDEU_DB_PATH)) / 86400
-        if edad_dias < 32:          # reusar hasta 32 días (ciclo mensual BCRA)
+        if edad_dias < 32 and _nomdeu_db_valida():
             descarga = False
-            print(f"[nomdeu] bcra_nomdeu.db existente ({edad_dias:.0f}d) — reutilizando", flush=True)
+            print(f"[nomdeu] DB existente ({edad_dias:.0f}d) con historial_bulk — reutilizando", flush=True)
+        else:
+            print(f"[nomdeu] DB stale o sin historial_bulk — re-descargando", flush=True)
 
     if descarga:
-        print(f"[nomdeu] Descargando bcra_nomdeu.db desde R2...", flush=True)
-        try:
-            r = requests.get(url, stream=True, timeout=300, verify=False)
-            r.raise_for_status()
-            with open(NOMDEU_DB_PATH, 'wb') as fh:
-                for chunk in r.iter_content(chunk_size=8 * 1024 * 1024):
-                    if chunk:
-                        fh.write(chunk)
-            size_mb = os.path.getsize(NOMDEU_DB_PATH) / 1_048_576
-            print(f"[nomdeu] Descarga completa: {size_mb:.1f} MB", flush=True)
-        except Exception as e:
-            print(f"[nomdeu] Error descargando: {e}", flush=True)
+        ok = _descargar_nomdeu(url, NOMDEU_DB_PATH)
+        if not ok:
+            print("[nomdeu] Descarga fallida — padrón offline no disponible", flush=True)
             return
 
     try:
         conn = sqlite3.connect(NOMDEU_DB_PATH, check_same_thread=False)
         conn.execute("PRAGMA query_only = 1")
-        conn.execute("PRAGMA cache_size  = -32768")   # 32 MB en caché lectura
-        n_den = conn.execute("SELECT COUNT(*) FROM denominaciones").fetchone()[0]
-        n_deu = conn.execute("SELECT COUNT(*) FROM deudas_resumen").fetchone()[0]
+        conn.execute("PRAGMA cache_size  = -65536")   # 64 MB caché lectura
+        # denominaciones puede no existir si la DB solo tiene historial_bulk
+        try:
+            n_den = conn.execute("SELECT COUNT(*) FROM denominaciones").fetchone()[0]
+        except Exception:
+            n_den = 0
+        try:
+            n_deu = conn.execute("SELECT COUNT(*) FROM deudas_resumen").fetchone()[0]
+        except Exception:
+            n_deu = 0
         # historial_bulk puede no existir en DB generadas con la versión anterior del script
         try:
-            n_hist = conn.execute("SELECT COUNT(DISTINCT cuit) FROM historial_bulk").fetchone()[0]
+            n_hist = conn.execute("SELECT COUNT(*) FROM historial_bulk").fetchone()[0]
         except Exception:
             n_hist = 0
         _nomdeu_conn = conn
@@ -6760,46 +6831,50 @@ def _nomdeu_get_deuda(cuit: str):
     """
     Resumen de deuda del padrón offline.
 
-    Fuente primaria : deudas_resumen (snapshot PADRON más reciente — mayo 2026)
-    Fuente secundaria: historial_bulk (24DSF — peor sit. en últimos 24 meses)
+    Fuente primaria : deudas_resumen (snapshot PADRON actual, si existe)
+    Fuente secundaria: historial_bulk (24DSF — peor sit. en 24 meses)
+                       Schema real: cuit, sit_max_24m, meses_en_mora, monto_max
 
     Retorna el peor sit_max entre ambas fuentes para no subestimar el riesgo.
-    Retorna None si el CUIT no existe en ninguna tabla (cliente sin antecedentes).
+    Retorna None si el CUIT no existe en ninguna tabla (sin antecedentes).
     """
     if _nomdeu_conn is None:
         return None
     try:
-        # 1. Snapshot actual (PADRON)
-        row_p = _nomdeu_conn.execute(
-            "SELECT sit_max, monto_total, entidades_cod, periodo "
-            "FROM deudas_resumen WHERE cuit = ?", (cuit,)
-        ).fetchone()
+        # 1. Snapshot actual (PADRON — puede no existir si la DB es solo historial)
+        row_p = None
+        try:
+            row_p = _nomdeu_conn.execute(
+                "SELECT sit_max, monto_total, entidades_cod, periodo "
+                "FROM deudas_resumen WHERE cuit = ?", (cuit,)
+            ).fetchone()
+        except Exception:
+            pass
 
-        # 2. Resumen 24 meses (historial_bulk, 1 fila por CUIT) — tabla puede no existir
+        # 2. Historial 24 meses — schema real: sit_max_24m, meses_en_mora, monto_max
         row_h = None
         try:
             row_h = _nomdeu_conn.execute(
-                "SELECT sit_max_24m, meses_en_mora, meses_critico, periodo_fin "
+                "SELECT sit_max_24m, meses_en_mora, monto_max "
                 "FROM historial_bulk WHERE cuit = ?", (cuit,)
             ).fetchone()
         except Exception:
-            pass  # historial_bulk no existe en DB generada con versión anterior — ignorar
+            pass
 
         if row_p is None and row_h is None:
             return None  # CUIT sin antecedentes en ninguna fuente
 
-        sit_p      = row_p[0] if row_p else 1
-        sit_h      = row_h[0] if row_h else 1
-        sit_max    = max(sit_p, sit_h)  # peor entre padrón actual y 24 meses
+        sit_p   = int(row_p[0]) if row_p else 1
+        sit_h   = int(row_h[0]) if row_h else 1
+        sit_max = max(sit_p, sit_h)
         return {
             'sit_max':       sit_max,
-            'monto_total':   row_p[1] if row_p else 0,
+            'monto_total':   float(row_p[1]) if row_p else float(row_h[2] if row_h else 0),
             'entidades_cod': row_p[2] if row_p else '',
-            'periodo':       row_p[3] if row_p else (row_h[3] if row_h else ''),
+            'periodo':       row_p[3] if row_p else '',
             'sit_padron':    sit_p,
             'sit_hist_24m':  sit_h,
-            'meses_en_mora': row_h[1] if row_h else 0,
-            'meses_critico': row_h[2] if row_h else 0,
+            'meses_en_mora': int(row_h[1]) if row_h else 0,
         }
     except Exception:
         return None
