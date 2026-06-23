@@ -3592,6 +3592,202 @@ def _analizar_bodegas_batch(clientes_batch):
         return fallback
 
 
+# ─── HELPERS DE VERIFICACIÓN BULK ────────────────────────────────────────────
+# Estas funciones permiten que la verificación masiva consulte primero las bases
+# locales (bcra_nomdeu.db + cheques_bcra) antes de ir a BCRA live.
+# Resultado: 500 clientes → consulta bulk < 2s, live BCRA solo para ~100-150.
+
+_PERIODO_BASE_BULK = 202604  # Abril 2026 — último período del archivo histórico
+
+
+def _mes_anterior(yyyymm: int, n: int) -> int:
+    """Retrocede N meses desde un período YYYYMM."""
+    año, mes = yyyymm // 100, yyyymm % 100
+    mes -= n
+    while mes <= 0:
+        mes += 12
+        año -= 1
+    return año * 100 + mes
+
+
+def _nomdeu_batch(cuits: list) -> dict:
+    """
+    Consulta masiva de bcra_nomdeu.db para N CUITs en dos SELECT ... IN (...).
+    Mucho más eficiente que N llamadas individuales a _nomdeu_get_deuda().
+    Retorna {cuit: {'sit_max': N, 'meses_en_mora': N, 'monto_max': N, ...}}.
+    """
+    if _nomdeu_conn is None or not cuits:
+        return {}
+    result = {}
+    placeholders = ','.join('?' * len(cuits))
+    # 1. Snapshot último mes (deudas_resumen — del archivo PADRON)
+    try:
+        rows = _nomdeu_conn.execute(
+            f"SELECT cuit, sit_max, monto_total, entidades_cod, periodo "
+            f"FROM deudas_resumen WHERE cuit IN ({placeholders})", cuits
+        ).fetchall()
+        for row in rows:
+            c = str(row[0])
+            result[c] = {
+                'sit_padron': int(row[1] or 1), 'monto_total': float(row[2] or 0),
+                'entidades_cod': row[3] or '', 'periodo': str(row[4] or ''),
+            }
+    except Exception as _e:
+        print(f"[bulk_batch] deudas_resumen: {_e}", flush=True)
+    # 2. Historial 24 meses (historial_bulk — del archivo 24DSF)
+    try:
+        rows = _nomdeu_conn.execute(
+            f"SELECT cuit, sit_max_24m, meses_en_mora, monto_max "
+            f"FROM historial_bulk WHERE cuit IN ({placeholders})", cuits
+        ).fetchall()
+        for row in rows:
+            c = str(row[0])
+            if c not in result:
+                result[c] = {'sit_padron': 1, 'monto_total': 0, 'entidades_cod': '', 'periodo': ''}
+            result[c].update({
+                'sit_hist_24m': int(row[1] or 1),
+                'meses_en_mora': int(row[2] or 0),
+                'monto_max': float(row[3] or 0),
+            })
+    except Exception as _e:
+        print(f"[bulk_batch] historial_bulk: {_e}", flush=True)
+    # Normalizar: sit_max = peor entre padrón actual e historial 24m
+    for d in result.values():
+        d['sit_max'] = max(d.get('sit_padron', 1), d.get('sit_hist_24m', 1))
+    return result
+
+
+def _cheques_local_batch(cuits: list) -> dict:
+    """
+    Consulta masiva de cheques rechazados para N CUITs en una sola SELECT.
+    Retorna {cuit: cheq_dict} en formato compatible con calcular_rating_predictivo.
+    """
+    if not os.path.exists(PADRON_DB_PATH) or not cuits:
+        return {}
+    try:
+        conn = sqlite3.connect(PADRON_DB_PATH, check_same_thread=False)
+        try:
+            meta = conn.execute(
+                "SELECT valor FROM _cheques_meta WHERE key = 'last_import_date'"
+            ).fetchone()
+        except Exception:
+            conn.close(); return {}
+        if not meta:
+            conn.close(); return {}
+        placeholders = ','.join('?' * len(cuits))
+        rows = conn.execute(
+            f"SELECT cuit, nro_cheque, fecha_rechazo, monto, estado, tipo, cuit_entidad "
+            f"FROM cheques_bcra WHERE cuit IN ({placeholders}) "
+            f"ORDER BY cuit, fecha_rechazo DESC", cuits
+        ).fetchall()
+        conn.close()
+        by_cuit: dict = {}
+        for row in rows:
+            c = row[0]
+            if c not in by_cuit:
+                by_cuit[c] = []
+            estado_s = (row[4] or '').strip()
+            if estado_s == 'IMPAGA':
+                fecha_pago, estado_multa = None, 'IMPAGA'
+            else:
+                try:
+                    d, m, y = estado_s.split('/')
+                    fecha_pago = f"{y}-{m.zfill(2)}-{d.zfill(2)}"
+                except Exception:
+                    fecha_pago = estado_s or None
+                estado_multa = 'LEVANTADA'
+            fecha_r = row[2]
+            if fecha_r and len(fecha_r) == 8:
+                fecha_r = f"{fecha_r[:4]}-{fecha_r[4:6]}-{fecha_r[6:8]}"
+            by_cuit[c].append({
+                'numeroCheque': (row[1] or '').strip(), 'fechaRechazo': fecha_r,
+                'monto': row[3], 'fechaPago': fecha_pago, 'estadoMulta': estado_multa,
+                'fechaLevantamiento': fecha_pago,
+                'tipo': (row[5] or '').strip(), 'cuitEntidad': (row[6] or '').strip(),
+            })
+        result = {}
+        for c, detalles in by_cuit.items():
+            result[c] = {
+                'results': {'causales': [{'entidades': [{'detalle': detalles}]}]},
+                'sin_deudas': False, 'error_bcra': None, 'source': 'local_db_batch',
+            }
+        for c in cuits:
+            if c not in result:
+                result[c] = {
+                    'results': {'causales': []},
+                    'sin_deudas': True, 'error_bcra': None, 'source': 'local_db_batch',
+                }
+        return result
+    except Exception as e:
+        print(f"[cheques_batch] Error: {e}", flush=True)
+        return {}
+
+
+def _bulk_to_bcra_data(nombre: str, deuda: dict) -> dict:
+    """Respuesta BCRA sintética desde datos del padrón offline."""
+    sit    = deuda.get('sit_max', 1)
+    monto  = deuda.get('monto_total') or deuda.get('monto_max') or 0
+    ent_cods = [c.strip() for c in (deuda.get('entidades_cod') or '').split(',') if c.strip()]
+    n_ents = max(1, len(ent_cods)) if ent_cods else 1
+    ents = []
+    for cod in ent_cods:
+        ents.append({'entidad': _nomdeu_get_entidad(cod) or f"Entidad {cod}",
+                     'situacion': sit, 'monto': round(monto / n_ents, 1)})
+    if not ents:
+        ents = [{'entidad': 'Padron_BCRA', 'situacion': sit, 'monto': float(monto)}]
+    periodo_str = str(deuda.get('periodo') or _PERIODO_BASE_BULK)
+    periodo_int = int(periodo_str) if periodo_str.isdigit() else _PERIODO_BASE_BULK
+    return {
+        'results': {'denominacion': nombre or '', 'periodos': [{'periodo': periodo_int, 'entidades': ents}]},
+        'sin_deudas': sit <= 1, 'bcra_disponible': False, 'fuente_offline': 'bcra_nomdeu_local',
+    }
+
+
+def _bulk_to_hist_data(deuda: dict) -> dict:
+    """
+    Historial sintético de 24 meses desde historial_bulk.
+    Distribuye meses_en_mora como los períodos MÁS RECIENTES (conservador:
+    peor escenario → alertas más tempranas, nunca minimiza el riesgo).
+    """
+    sit      = deuda.get('sit_max', 1)
+    sit_24m  = deuda.get('sit_hist_24m') or sit
+    meses_m  = min(int(deuda.get('meses_en_mora') or 0), 24)
+    monto    = float(deuda.get('monto_max') or deuda.get('monto_total') or 0)
+    periodos = []
+    for i in range(24):
+        sit_i    = sit_24m if i < meses_m else 1
+        monto_i  = monto if sit_i > 1 else 0
+        periodos.append({
+            'periodo': _mes_anterior(_PERIODO_BASE_BULK, i),
+            'entidades': [{'entidad': 'Padron_BCRA_Bulk', 'situacion': sit_i, 'monto': monto_i}],
+        })
+    return {
+        'results': {'denominacion': '', 'periodos': periodos},
+        'sin_deudas': sit <= 1 and meses_m == 0, 'fuente_offline': 'historial_bulk',
+    }
+
+
+def _clasificar_bulk(deuda) -> str:
+    """
+    Clasifica un cliente según datos bulk para decidir si necesita BCRA live.
+    'alto_riesgo' — riesgo confirmado por bulk (sit≥4 o sit=3 ≥2 meses) → no ir live
+    'zona_gris'   — mora ambigua (sit=2-3, pocos meses) → confirmar live
+    'limpio_bulk' — figura en padrón pero sit=1 actual → no ir live
+    'nuevo'       — ausente del bulk completamente → ir live (puede ser limpio o nuevo deudor)
+    """
+    if deuda is None:
+        return 'nuevo'
+    sit   = deuda.get('sit_max', 1)
+    meses = int(deuda.get('meses_en_mora') or 0)
+    if sit >= 4:
+        return 'alto_riesgo'          # Concurso/quiebra — irrecuperable
+    if sit == 3 and meses >= 2:
+        return 'alto_riesgo'          # Mora grave sostenida
+    if sit >= 2:
+        return 'zona_gris'            # Mora técnica o leve — confirmar
+    return 'limpio_bulk'              # Presente en padrón, sit=1
+
+
 def ejecutar_verificacion(cartera_data):
     global verificacion_estado
     _score_session_cache.clear()   # reset session cache para esta verificación
@@ -3743,54 +3939,105 @@ def ejecutar_verificacion(cartera_data):
     total = len(cartera_data)
     try:
         # ═══════════════════════════════════════════════════════════════════
-        # FASE 1 — Fetch BCRA en PARALELO (ThreadPoolExecutor, 12 workers)
-        # Tiempo estimado: ~14 min vs ~170 min secuencial para 514 clientes
+        # FASE 0 — Consulta bulk local instantánea (< 2s para 500+ clientes)
+        # Fuentes: bcra_nomdeu.db (historial 24m + padrón) + cheques_bcra SQLite
+        # Clasifica cada cliente: alto_riesgo | zona_gris | limpio_bulk | nuevo
         # ═══════════════════════════════════════════════════════════════════
-        bcra_prefetch = {}  # {cuit: (lambda_result_or_None, bcra_data_or_None)}
+        verificacion_estado["mensaje"] = "Fase 0: Consultando bases locales (bulk offline)..."
+        print(f"[verif] FASE 0: Bulk batch — {total} CUITs...", flush=True)
+        _cuits_lista = [str(c.get('cuit', '') or '').strip() for c in cartera_data if c.get('cuit')]
+        _t0_bulk = time.time()
+        _bulk_deudas  = _nomdeu_batch(_cuits_lista)
+        _bulk_cheques = _cheques_local_batch(_cuits_lista)
+        # Pre-calcular datos sintéticos por cliente
+        bulk_prefetch = {}  # {cuit: {deuda, cheques, categoria, bcra_bulk, hist_bulk}}
+        _cat_count = {'alto_riesgo': 0, 'zona_gris': 0, 'limpio_bulk': 0, 'nuevo': 0}
+        for _c0 in cartera_data:
+            _cuit0 = str(_c0.get('cuit', '') or '').strip()
+            if not _cuit0:
+                continue
+            _deuda0  = _bulk_deudas.get(_cuit0)
+            _cheq0   = _bulk_cheques.get(_cuit0)
+            _cat0    = _clasificar_bulk(_deuda0)
+            _cat_count[_cat0] = _cat_count.get(_cat0, 0) + 1
+            _nom0    = str(_c0.get('nombre', '') or '') or (_nomdeu_get_nombre(_cuit0) or _cuit0)
+            bulk_prefetch[_cuit0] = {
+                'deuda':    _deuda0,
+                'cheques':  _cheq0,
+                'categoria': _cat0,
+                'bcra_bulk': _bulk_to_bcra_data(_nom0, _deuda0) if _deuda0 else None,
+                'hist_bulk': _bulk_to_hist_data(_deuda0) if _deuda0 else None,
+            }
+        print(
+            f"[verif] FASE 0 OK ({time.time()-_t0_bulk:.1f}s) — "
+            f"alto_riesgo={_cat_count['alto_riesgo']} | zona_gris={_cat_count['zona_gris']} | "
+            f"limpio_bulk={_cat_count['limpio_bulk']} | nuevo={_cat_count['nuevo']}",
+            flush=True,
+        )
 
-        def _fetch_cliente_bcra(cliente_f):
-            cuit_f = str(cliente_f.get('cuit', '') or '').strip()
-            try:
-                lr = consultar_bcra_lambda(cuit_f)
-                if lr:
-                    # Lambda devuelve (deudas, historial, cheques) en una sola llamada
-                    return cuit_f, (lr, lr[0], lr[2])
-                bd, _ = consultar_bcra_cached(cuit_f)
-                # Si tenemos BCRA real, buscar cheques AQUÍ en el worker paralelo
-                # (evita 500 llamadas seriales de 12s cada una en Fase 3)
-                cheques_d = None
-                if bd and bd.get('results') is not None and not bd.get('error_bcra'):
-                    try:
-                        cheques_d, _ = _consultar_bcra_directo(
-                            cuit_f, 'cheques', timeout_per_req=8, max_intentos=1
-                        )
-                    except Exception:
-                        pass
-                return cuit_f, (None, bd, cheques_d)
-            except Exception as _ef:
-                print(f"[verif-p1] {cuit_f} error: {type(_ef).__name__}", flush=True)
-                return cuit_f, (None, None, None)
+        # ═══════════════════════════════════════════════════════════════════
+        # FASE 1 — Live BCRA SOLO para clientes que necesitan datos frescos
+        # zona_gris : mora ambigua (sit=2-3, ≤1 mes) — confirmar si sigue activa
+        # nuevo     : sin antecedentes bulk — puede haber caído en mora este mes
+        # Cap: LIVE_BCRA_MAX (default 150) — controla rate-limiting BCRA
+        # alto_riesgo / limpio_bulk: resueltos por bulk, no van a BCRA live
+        # ═══════════════════════════════════════════════════════════════════
+        _LIVE_BCRA_MAX = int(os.environ.get('LIVE_BCRA_MAX', '150'))
+        _zona_gris_v = [c for c in cartera_data
+                        if bulk_prefetch.get(str(c.get('cuit','')).strip(), {}).get('categoria') == 'zona_gris']
+        _nuevos_v    = [c for c in cartera_data
+                        if bulk_prefetch.get(str(c.get('cuit','')).strip(), {}).get('categoria') == 'nuevo']
+        _para_live   = _zona_gris_v + _nuevos_v
+        if len(_para_live) > _LIVE_BCRA_MAX:
+            _para_live = _para_live[:_LIVE_BCRA_MAX]
+            print(f"[verif] FASE 1: limitado a {_LIVE_BCRA_MAX} clientes (LIVE_BCRA_MAX)", flush=True)
 
-        _N_WORKERS = 8  # 12→8: menos rate-limiting BCRA; cada worker hace 2 llamadas (deudas+cheques)
-        verificacion_estado["mensaje"] = f"Fase 1/3: Consultando BCRA ({total} clientes, {_N_WORKERS} workers)..."
-        print(f"[verif] FASE 1: Fetch BCRA paralelo — {total} clientes, {_N_WORKERS} workers", flush=True)
-        with ThreadPoolExecutor(max_workers=_N_WORKERS) as _pool:
-            _futures = {_pool.submit(_fetch_cliente_bcra, c): c for c in cartera_data}
-            _done = 0
-            for _fut in as_completed(_futures, timeout=1500):
+        bcra_prefetch = {}  # {cuit: (lambda_result, bcra_data, cheques_data)}
+
+        if _para_live:
+            def _fetch_cliente_bcra(cliente_f):
+                cuit_f = str(cliente_f.get('cuit', '') or '').strip()
                 try:
-                    _cuit_r, _data_r = _fut.result(timeout=40)
-                    bcra_prefetch[_cuit_r] = _data_r
-                except Exception:
-                    _c = _futures[_fut]
-                    bcra_prefetch[str(_c.get('cuit', '')).strip()] = (None, None, None)
-                _done += 1
-                verificacion_estado["progreso"] = _done
-                if _done % 20 == 0:
-                    print(f"[verif-p1] {_done}/{total} BCRA fetched", flush=True)
-        _con_datos = sum(1 for v in bcra_prefetch.values() if v and v[1])
-        _con_cheques = sum(1 for v in bcra_prefetch.values() if v and v[2])
-        print(f"[verif] FASE 1 OK — {_con_datos}/{total} con BCRA · {_con_cheques}/{total} con cheques", flush=True)
+                    lr = consultar_bcra_lambda(cuit_f)
+                    if lr:
+                        return cuit_f, (lr, lr[0], lr[2])
+                    bd, _ = consultar_bcra_cached(cuit_f)
+                    cheques_d = None
+                    if bd and bd.get('results') is not None and not bd.get('error_bcra'):
+                        try:
+                            cheques_d, _ = _consultar_bcra_directo(
+                                cuit_f, 'cheques', timeout_per_req=8, max_intentos=1
+                            )
+                        except Exception:
+                            pass
+                    return cuit_f, (None, bd, cheques_d)
+                except Exception as _ef:
+                    print(f"[verif-p1] {cuit_f} error: {type(_ef).__name__}", flush=True)
+                    return cuit_f, (None, None, None)
+
+            _N_WORKERS = 8
+            _n_live = len(_para_live)
+            verificacion_estado["mensaje"] = f"Fase 1/3: BCRA live para {_n_live} clientes ({_N_WORKERS} workers)..."
+            print(f"[verif] FASE 1: Live BCRA — {_n_live}/{total} clientes (zona_gris + nuevo)", flush=True)
+            with ThreadPoolExecutor(max_workers=_N_WORKERS) as _pool:
+                _futures = {_pool.submit(_fetch_cliente_bcra, c): c for c in _para_live}
+                _done = 0
+                for _fut in as_completed(_futures, timeout=1500):
+                    try:
+                        _cuit_r, _data_r = _fut.result(timeout=40)
+                        bcra_prefetch[_cuit_r] = _data_r
+                    except Exception:
+                        _c = _futures[_fut]
+                        bcra_prefetch[str(_c.get('cuit', '')).strip()] = (None, None, None)
+                    _done += 1
+                    verificacion_estado["progreso"] = _done
+                    if _done % 20 == 0:
+                        print(f"[verif-p1] {_done}/{_n_live} live fetched", flush=True)
+            _con_live   = sum(1 for v in bcra_prefetch.values() if v and v[1] and v[1].get('results') is not None and not v[1].get('error_bcra'))
+            _con_cheq_l = sum(1 for v in bcra_prefetch.values() if v and v[2])
+            print(f"[verif] FASE 1 OK — {_con_live}/{_n_live} con BCRA live · {_con_cheq_l} con cheques live", flush=True)
+        else:
+            print("[verif] FASE 1: Sin clientes para live BCRA — todo resuelto por bulk", flush=True)
 
         # ═══════════════════════════════════════════════════════════════════
         # FASE 2 — Análisis bodegas en LOTES (8 clientes por llamada Gemini)
@@ -3859,15 +4106,30 @@ def ejecutar_verificacion(cartera_data):
 
             cliente_actualizado = dict(cliente)
 
-            # Recuperar datos BCRA pre-fetched en Fase 1 (3-tupla: lambda, bcra, cheques)
+            # Recuperar datos: live BCRA (Fase 1) con fallback a bulk offline (Fase 0)
             _pf            = bcra_prefetch.get(cuit, (None, None, None))
             lambda_result  = _pf[0] if _pf else None
             bcra_data      = _pf[1] if _pf else None
             _cheq_prefetch = _pf[2] if (_pf and len(_pf) > 2) else None
-            # bcra_ok = hay datos BCRA reales (results != None y sin error de saturación).
-            # Un error_dict {"results": None, "error_bcra": "bcra_saturado"} es truthy
-            # pero no tiene datos reales — tratarlo como falla evita sobrescribir ultimaSit
-            # con valores calculados de "no data" (max_sit=1) que ocultan el riesgo real.
+            _bp            = bulk_prefetch.get(cuit, {})
+            _cat_c         = _bp.get('categoria', 'nuevo')
+            _hist_para_score = None   # hist_data que se pasa al motor de scoring
+            _uso_bulk      = False
+
+            # Si no hay datos live válidos, usar datos bulk sintéticos de Fase 0
+            _live_ok = bool(bcra_data and bcra_data.get('results') is not None and not bcra_data.get('error_bcra'))
+            if not _live_ok:
+                _bcra_bulk_data = _bp.get('bcra_bulk')
+                if _bcra_bulk_data:
+                    bcra_data       = _bcra_bulk_data
+                    _hist_para_score = _bp.get('hist_bulk')
+                    _uso_bulk       = True
+                    print(f"{tag} usando datos bulk [{_cat_c}]", flush=True)
+
+            # Cheques: live (Fase 1) → bulk local batch (Fase 0) → disco → sqlite individual
+            if not _cheq_prefetch:
+                _cheq_prefetch = _bp.get('cheques')  # del batch de Fase 0
+
             bcra_ok = bool(
                 bcra_data
                 and bcra_data.get('results') is not None
@@ -3890,20 +4152,31 @@ def ejecutar_verificacion(cartera_data):
                 except Exception as _e:
                     print(f"{tag} Advertencia caché cheques: {_e}", flush=True)
 
-            # Score — puro Python, usa datos ya en memoria desde Fase 1
+            # Score — datos ya en memoria (live de Fase 1 o bulk sintético de Fase 0)
             score_data = None
             _ciudad = str(cliente.get('ciudad', '') or '')
             try:
-                if lambda_result:
+                if lambda_result and not _uso_bulk:
+                    # Lambda: trae bcra+hist+cheques en una sola llamada — máxima calidad
                     score_data = calcular_rating_predictivo(
                         cuit=cuit, bcra_data=bcra_data or {},
                         hist_data=lambda_result[1], cheq_data=_cheq_prefetch,
                         en_mora=None, ciudad=_ciudad,
                     )
-                elif bcra_data:
+                elif bcra_data and not _uso_bulk:
+                    # BCRA live directo (sin Lambda): calcular_score_servidor carga hist del disco
                     score_data = calcular_score_servidor(
                         cuit, bcra_data, en_mora=None, ciudad=_ciudad
                     )
+                elif _uso_bulk:
+                    # Bulk offline: bcra_data sintético + hist 24m sintético (ningún call de red)
+                    score_data = calcular_rating_predictivo(
+                        cuit=cuit, bcra_data=bcra_data or {},
+                        hist_data=_hist_para_score, cheq_data=_cheq_prefetch,
+                        en_mora=None, ciudad=_ciudad,
+                    )
+                    if score_data:
+                        score_data['fuente_score'] = f'bulk_{_cat_c}'
                 if score_data:
                     cliente_actualizado['scoreCompleto']        = score_data['score']
                     cliente_actualizado['scoreRango']           = score_data['rango']
@@ -3947,26 +4220,20 @@ def ejecutar_verificacion(cartera_data):
             else:
                 cliente_actualizado['ultimaVerif'] = time.strftime('%d/%m/%Y')
                 if not bcra_ok:
-                    # Fallback: padrón bulk offline (bcra_nomdeu.db, último ZIP mensual BCRA).
-                    # Si el live falla por rate-limit, al menos detectamos la última situación
-                    # conocida del cliente. Sit 3+ en el bulk es señal de riesgo real.
-                    _nomdeu_deu = _nomdeu_get_deuda(cuit)
-                    if _nomdeu_deu:
-                        _bulk_sit  = _nomdeu_deu.get('sit_max') or 1
-                        _bulk_per  = _nomdeu_deu.get('periodo', '')
-                        # Solo actualizamos si el bulk muestra igual o peor situación
-                        # (no bajamos el riesgo con datos que pueden estar desactualizados)
+                    # Ni live ni bulk disponibles — cliente completamente fuera de cualquier fuente
+                    # (muy raro: solo ocurre si _nomdeu_conn es None y BCRA live falló)
+                    _deuda_fallback = _bp.get('deuda')
+                    if _deuda_fallback:
+                        _bulk_sit = _deuda_fallback.get('sit_max') or 1
+                        _bulk_per = _deuda_fallback.get('periodo', '')
                         if _bulk_sit >= (sit_anterior or 1):
                             max_sit = _bulk_sit
                             cliente_actualizado['ultimaSit'] = max_sit
                         cliente_actualizado['fuente_sit'] = f'padron_bulk_{_bulk_per}'
-                        print(
-                            f"{tag} BCRA live no disponible — padrón bulk: sit={_bulk_sit} (período {_bulk_per})",
-                            flush=True,
-                        )
+                        print(f"{tag} fallback dict bulk: sit={_bulk_sit}", flush=True)
                     else:
                         cliente_actualizado['verificacion_fallida'] = True
-                        print(f"{tag} Sin datos BCRA — conserva sit_anterior={sit_anterior}", flush=True)
+                        print(f"{tag} Sin datos BCRA ni bulk — conserva sit_anterior={sit_anterior}", flush=True)
 
             # Generar alerta si la situación empeoró o es grave
             if max_sit > sit_anterior or max_sit >= 3:
