@@ -7018,7 +7018,7 @@ def _check_cheques_cartera_bg():
 # ── Endpoints de alertas automáticas ─────────────────────────────────────────
 
 @app.route("/api/alertas", methods=["GET"])
-def get_alertas():
+def get_alertas_auto():
     """Lista de alertas automáticas. Query params: ?leidas=true para incluir leídas."""
     solo_no_leidas = request.args.get('leidas', 'false').lower() != 'true'
     try:
