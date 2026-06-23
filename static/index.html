@@ -105,8 +105,15 @@
     box-shadow: 0 2px 8px rgba(0,0,0,0.04);
     align-items: flex-start !important;
   }
-  #consulta-search-hero.sticky-mode > div:nth-child(-n+3) { display: none !important; }
-  #consulta-search-hero.sticky-mode > div:last-child { max-width: 100%; width: 100%; }
+  /* En sticky: ocultar solo el panel hero, dejar visible el search row y recientes */
+  #consulta-search-hero.sticky-mode > .hero-panel { display: none !important; }
+  #consulta-search-hero.sticky-mode > .hero-search-row { max-width: 100%; width: 100%; }
+
+  @keyframes hero-pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.4; }
+  }
+  .hero-live-dot { animation: hero-pulse 2s ease-in-out infinite; }
 
   /* ── CARDS ── */
   .card { background: var(--blanco); border-radius: 16px; padding: 1.5rem; margin-bottom: 1rem; box-shadow: var(--card-shadow); border: 1px solid rgba(226,232,240,0.6); transition: box-shadow 0.2s; }
@@ -868,19 +875,70 @@
 
 
   <div id="consulta" class="section active">
-    <div id="consulta-search-hero" style="display:flex;flex-direction:column;align-items:center;padding:3rem 1rem 2rem;text-align:center;">
-      <div style="width:56px;height:56px;background:linear-gradient(135deg,#2563eb,#1d4ed8);border-radius:18px;display:flex;align-items:center;justify-content:center;margin-bottom:1.25rem;box-shadow:0 4px 16px rgba(37,99,235,0.25);">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <div id="consulta-search-hero" style="display:flex;flex-direction:column;align-items:center;padding:2rem 1rem 1.5rem;">
+
+      <!-- ── Panel hero oscuro ─────────────────────────────────────────────── -->
+      <div class="hero-panel" style="width:100%;max-width:640px;background:linear-gradient(140deg,#0b1628 0%,#0f2040 55%,#1a3464 100%);border-radius:20px;padding:2rem 2rem 1.625rem;margin-bottom:1rem;box-shadow:0 20px 60px rgba(11,22,40,0.28),0 4px 16px rgba(11,22,40,0.18);">
+
+        <!-- Brand + estado live -->
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:1.625rem;">
+          <div style="width:36px;height:36px;background:linear-gradient(135deg,#3b82f6,#2563eb);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 4px 12px rgba(37,99,235,0.35);">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <div>
+            <div style="color:#e2e8f0;font-size:12px;font-weight:700;letter-spacing:0.06em;line-height:1.2;">VENDE SEGURO</div>
+            <div style="color:#334155;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;margin-top:1px;">Motor de Riesgo Crediticio</div>
+          </div>
+          <div style="margin-left:auto;display:flex;align-items:center;gap:6px;background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.22);border-radius:20px;padding:5px 11px;">
+            <div class="hero-live-dot" style="width:6px;height:6px;background:#34d399;border-radius:50%;flex-shrink:0;"></div>
+            <span style="color:#34d399;font-size:10px;font-weight:600;letter-spacing:0.07em;">BCRA EN VIVO</span>
+          </div>
+        </div>
+
+        <!-- Título + descripción -->
+        <div style="font-family:'Syne',sans-serif;font-size:27px;font-weight:800;color:#f1f5f9;letter-spacing:-0.5px;line-height:1.18;margin-bottom:8px;">
+          Análisis de riesgo<br>crediticio en tiempo real
+        </div>
+        <div style="color:#475569;font-size:12.5px;line-height:1.65;margin-bottom:1.625rem;max-width:460px;">
+          Deudas BCRA · Cheques rechazados · Historial 24 meses · Situación AFIP · Inteligencia de bodegas
+        </div>
+
+        <!-- Stats del portfolio -->
+        <div style="display:flex;gap:0;padding-top:1.25rem;border-top:1px solid rgba(255,255,255,0.06);">
+          <div style="flex:1;padding-right:1.25rem;border-right:1px solid rgba(255,255,255,0.06);">
+            <div id="hero-stat-clientes" style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#60a5fa;line-height:1;">—</div>
+            <div style="color:#334155;font-size:9.5px;text-transform:uppercase;letter-spacing:0.9px;margin-top:3px;">Clientes</div>
+          </div>
+          <div style="flex:1;padding-left:1.25rem;padding-right:1.25rem;border-right:1px solid rgba(255,255,255,0.06);">
+            <div id="hero-stat-alertas" style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#f87171;line-height:1;">—</div>
+            <div style="color:#334155;font-size:9.5px;text-transform:uppercase;letter-spacing:0.9px;margin-top:3px;">Alertas críticas</div>
+          </div>
+          <div style="flex:1;padding-left:1.25rem;">
+            <div id="hero-stat-cheques-fecha" style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#34d399;line-height:1;">—</div>
+            <div style="color:#334155;font-size:9.5px;text-transform:uppercase;letter-spacing:0.9px;margin-top:3px;">Base cheques</div>
+          </div>
+        </div>
       </div>
-      <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--azul-oscuro);margin-bottom:6px;letter-spacing:-0.3px;">Consultar cliente</div>
-      <div style="font-size:13px;color:var(--texto-suave);margin-bottom:1.75rem;max-width:340px;line-height:1.5;">BCRA en tiempo real · AFIP · Historial bodegas · Moras</div>
-      <div style="display:flex;gap:8px;width:100%;max-width:540px;align-items:center;">
-        <input type="text" id="cuit-input" placeholder="CUIT — Ej: 20-21310600-8" maxlength="13" onkeydown="if(event.key==='Enter') consultarCliente()" style="flex:1;font-size:15px;padding:13px 18px;border-radius:12px;border:2px solid #e2e8f0;background:#fff;box-shadow:0 2px 8px rgba(37,99,235,0.06);transition:border-color 0.15s,box-shadow 0.15s;" onfocus="this.style.borderColor='#2563eb';this.style.boxShadow='0 0 0 3px rgba(37,99,235,0.12)'" onblur="this.style.borderColor='#e2e8f0';this.style.boxShadow='0 2px 8px rgba(37,99,235,0.06)'" />
-        <button class="primary" onclick="consultarCliente()" style="padding:13px 22px;font-size:14px;border-radius:12px;white-space:nowrap;">Consultar →</button>
-        <button id="btn-nueva-consulta" onclick="nuevaConsulta()" title="Nueva consulta" style="display:none;padding:12px 14px;font-size:15px;border-radius:12px;background:#fff;border:1.5px solid #e2e8f0;color:#64748b;cursor:pointer;line-height:1;flex-shrink:0;white-space:nowrap;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='#fff'">&#x2715; Nuevo</button>
+
+      <!-- ── Search row — siempre visible, incluso en sticky mode ─────────── -->
+      <div class="hero-search-row" style="width:100%;max-width:640px;">
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="text" id="cuit-input"
+            placeholder="Ingresá un CUIT  —  Ej: 20-21310600-8"
+            maxlength="13"
+            onkeydown="if(event.key==='Enter') consultarCliente()"
+            style="flex:1;font-size:15px;padding:13px 18px;border-radius:12px;border:2px solid #e2e8f0;background:#fff;box-shadow:0 2px 8px rgba(37,99,235,0.06);transition:border-color 0.15s,box-shadow 0.15s;outline:none;"
+            onfocus="this.style.borderColor='#2563eb';this.style.boxShadow='0 0 0 3px rgba(37,99,235,0.12)'"
+            onblur="this.style.borderColor='#e2e8f0';this.style.boxShadow='0 2px 8px rgba(37,99,235,0.06)'" />
+          <button class="primary" onclick="consultarCliente()" style="padding:13px 22px;font-size:14px;border-radius:12px;white-space:nowrap;">Analizar →</button>
+          <button id="btn-nueva-consulta" onclick="nuevaConsulta()" title="Nueva consulta"
+            style="display:none;padding:12px 14px;font-size:14px;border-radius:12px;background:#fff;border:1.5px solid #e2e8f0;color:#64748b;cursor:pointer;white-space:nowrap;"
+            onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='#fff'">✕ Nuevo</button>
+        </div>
       </div>
-      <!-- Recientes: últimos CUITs consultados -->
-      <div id="recientes-container" style="margin-top:1.25rem;width:100%;max-width:540px;display:none;"></div>
+
+      <!-- ── Recientes ──────────────────────────────────────────────────────── -->
+      <div id="recientes-container" style="margin-top:0.875rem;width:100%;max-width:640px;display:none;"></div>
     </div>
 
     <div id="loading-state" class="loading-msg" style="display:none;">Consultando...</div>
@@ -7927,9 +7985,40 @@ async function verificarChequesCartera(btn) {
   }
 }
 
+// ── Stats del hero panel ─────────────────────────────────────────────────────
+function cargarHeroStats() {
+  // Clientes desde cartera local
+  var nClientes = (typeof cartera !== 'undefined' && Array.isArray(cartera)) ? cartera.length : 0;
+  var elC = document.getElementById('hero-stat-clientes');
+  if (elC) elC.textContent = nClientes > 0 ? nClientes.toLocaleString('es-AR') : '—';
+
+  // Alertas críticas desde contadores ya cargados
+  var elA = document.getElementById('hero-stat-alertas');
+  if (elA) {
+    var cntEl = document.getElementById('cnt-criticos');
+    var n = cntEl ? (parseInt(cntEl.textContent) || 0) : 0;
+    elA.textContent = n > 0 ? n : '—';
+  }
+
+  // Fecha base cheques desde /update-cheques-db/estado
+  var elCh = document.getElementById('hero-stat-cheques-fecha');
+  if (elCh) {
+    fetch('/update-cheques-db/estado').then(function(r){ return r.json(); }).then(function(d) {
+      var fecha = (d.db_meta || {}).last_import_date || '';
+      if (fecha && fecha.length === 8) {
+        elCh.textContent = fecha.slice(6,8) + '/' + fecha.slice(4,6);
+        elCh.title = 'Última actualización: ' + fecha.slice(6,8) + '/' + fecha.slice(4,6) + '/' + fecha.slice(0,4);
+      } else {
+        elCh.textContent = '—';
+      }
+    }).catch(function(){ if(elCh) elCh.textContent = '—'; });
+  }
+}
+
 // Cargar badge al iniciar sesión (para mostrar alertas pendientes desde el primer momento)
 document.addEventListener('DOMContentLoaded', function() {
   setTimeout(cargarAlertasAuto, 3000);
+  setTimeout(cargarHeroStats, 1500);
 });
 </script>
 <!-- Modal agregar cliente — fuera de cualquier sección para que funcione desde cualquier pestaña -->
