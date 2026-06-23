@@ -669,54 +669,65 @@ def _import_cheques_zip(date_str: str = None) -> bool:
     _cheques_db_estado['progreso']    = 0
     _cheques_db_estado['ultimo_paso'] = f"Iniciando descarga para {date_str}"
 
-    url      = f"https://www.bcra.gob.ar/archivos/zips/cheques/{date_str}.zip"
+    # BCRA publica cheques rechazados en dos URLs conocidas (la segunda es el fallback
+    # por si BCRA cambia la ubicación del archivo, como ocurrió al mover a /actualiza/).
+    _URL_CANDIDATAS = [
+        f"https://www.bcra.gob.ar/archivos/zips/cheques/{date_str}.zip",
+        f"https://www.bcra.gob.ar/actualiza/{date_str}.zip",
+    ]
+    url      = _URL_CANDIDATAS[0]
     zip_path = os.path.join(DATA_DIR, f"cheques_{date_str}.zip")
     al_path  = None
 
     try:
         # 1. Descarga streaming del ZIP (~10-15 MB comprimido, ~58 MB expandido)
-        # Estrategia: directo primero (más confiable si la IP no está bloqueada),
-        # Bright Data como fallback. Validar magic bytes antes de extraer.
+        # Estrategia: probar URLs candidatas en orden, Bright Data como último recurso.
         _browser_hdrs = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
             'Accept': 'application/zip,application/octet-stream,*/*;q=0.8',
             'Accept-Language': 'es-AR,es;q=0.9,en;q=0.8',
         }
-        _cheques_db_estado['ultimo_paso'] = f"Descargando {url}"
-        print(f"[cheques_db] Descargando {url}", flush=True)
 
         resp = None
 
-        # Intento 1: directo desde Render
-        try:
-            _r = requests.get(url, headers=_browser_hdrs, timeout=90, verify=False, stream=True)
-            if _r.status_code == 200:
-                resp = _r
-                print(f"[cheques_db] Descarga directa OK (HTTP 200)", flush=True)
-            elif _r.status_code == 404:
-                _cheques_db_estado['ultimo_paso'] = f"ERROR 404: archivo {date_str} no disponible en BCRA"
-                print(f"[cheques_db] 404 — {date_str} no existe", flush=True)
-                return False
-            else:
-                print(f"[cheques_db] Directo: HTTP {_r.status_code} — intentando vía proxy", flush=True)
-        except Exception as e_d:
-            print(f"[cheques_db] Directo falló: {e_d} — intentando vía proxy", flush=True)
+        # Intento 1 y 1b: URLs candidatas directas (sin proxy)
+        for _url_c in _URL_CANDIDATAS:
+            _cheques_db_estado['ultimo_paso'] = f"Descargando {_url_c}"
+            print(f"[cheques_db] Intentando {_url_c}", flush=True)
+            try:
+                _r = requests.get(_url_c, headers=_browser_hdrs, timeout=90, verify=False, stream=True)
+                if _r.status_code == 200:
+                    resp = _r
+                    url  = _url_c
+                    print(f"[cheques_db] OK en {_url_c}", flush=True)
+                    break
+                else:
+                    print(f"[cheques_db] HTTP {_r.status_code} en {_url_c}", flush=True)
+            except Exception as e_d:
+                print(f"[cheques_db] Error en {_url_c}: {e_d}", flush=True)
 
-        # Intento 2: Bright Data residencial (si directo no dio ZIP válido)
+        if resp is None:
+            print(f"[cheques_db] Todas las URLs directas fallaron — intentando vía proxy", flush=True)
+
+        # Intento 2: Bright Data residencial — prueba todas las URLs candidatas
         if resp is None and BRIGHTDATA_USER and _BRD_PASSWORD:
             _pu = f"http://{BRIGHTDATA_USER}:{_BRD_PASSWORD}@{BRIGHTDATA_HOST}:{BRIGHTDATA_PORT}"
             print(f"[cheques_db] Descarga vía Bright Data", flush=True)
-            try:
-                _r2 = requests.get(url, headers=_browser_hdrs, timeout=180, verify=False,
-                                   stream=True, proxies={"http": _pu, "https": _pu})
-                if _r2.status_code == 200:
-                    resp = _r2
-                else:
-                    _cheques_db_estado['ultimo_paso'] = f"ERROR HTTP {_r2.status_code} (proxy)"
-                    return False
-            except Exception as e_p:
-                _cheques_db_estado['ultimo_paso'] = f"ERROR proxy: {e_p}"
-                print(f"[cheques_db] Bright Data falló: {e_p}", flush=True)
+            for _url_c2 in _URL_CANDIDATAS:
+                try:
+                    _r2 = requests.get(_url_c2, headers=_browser_hdrs, timeout=180, verify=False,
+                                       stream=True, proxies={"http": _pu, "https": _pu})
+                    if _r2.status_code == 200:
+                        resp = _r2
+                        url  = _url_c2
+                        print(f"[cheques_db] Bright Data OK en {_url_c2}", flush=True)
+                        break
+                    else:
+                        print(f"[cheques_db] Bright Data HTTP {_r2.status_code} en {_url_c2}", flush=True)
+                except Exception as e_p:
+                    print(f"[cheques_db] Bright Data error en {_url_c2}: {e_p}", flush=True)
+            if resp is None:
+                _cheques_db_estado['ultimo_paso'] = "ERROR: todas las URLs fallaron (directo + proxy)"
                 return False
 
         if resp is None:
