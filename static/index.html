@@ -7063,9 +7063,19 @@ async function toggleAlrAccordion(cuitRow) {
 }
 
 var _buscadorTimer = null;
+var _buscadorPage = 0;
+var _buscadorPER = 25;
+
 function debouncedRenderBuscador(val) {
   clearTimeout(_buscadorTimer);
-  _buscadorTimer = setTimeout(function() { renderBuscador(val); }, 250);
+  _buscadorTimer = setTimeout(function() { _buscadorPage = 0; renderBuscador(val); }, 250);
+}
+
+function buscadorGoPage(n) {
+  _buscadorPage = n;
+  renderBuscador();
+  var listaEl = document.getElementById('buscador-lista');
+  if (listaEl) listaEl.scrollIntoView({behavior:'smooth', block:'start'});
 }
 
 function renderBuscador(filtro) {
@@ -7073,15 +7083,21 @@ function renderBuscador(filtro) {
   var lista = q ? cartera.filter(function(c){
     return (c.nombre||'').toLowerCase().includes(q) || (c.cuit||'').replace(/-/g,'').includes(q.replace(/-/g,''));
   }) : cartera;
-  var shown = lista.slice(0, 10);
+  var _totalPags = Math.max(1, Math.ceil(lista.length / _buscadorPER));
+  if (_buscadorPage >= _totalPags) _buscadorPage = _totalPags - 1;
+  var _pStart = _buscadorPage * _buscadorPER;
+  var shown = lista.slice(_pStart, _pStart + _buscadorPER);
   var countEl = document.getElementById('buscador-count');
-  if (countEl) countEl.textContent = q ? ('Mostrando ' + shown.length + ' de ' + lista.length + ' resultados para "' + filtro + '"') : (cartera.length ? cartera.length + ' clientes en cartera · mostrando primeros 10' : '');
+  if (countEl) {
+    var _from = _pStart + 1, _to = Math.min(_pStart + _buscadorPER, lista.length);
+    countEl.textContent = lista.length + ' cliente' + (lista.length !== 1 ? 's' : '') + (q ? ' para "' + q + '"' : ' en cartera') + ' · mostrando ' + _from + '–' + _to;
+  }
   var el = document.getElementById('buscador-lista');
   if (!el) return;
   if (!cartera.length) { el.innerHTML = '<div class="empty-state">No hay clientes en la cartera.<br>Agregá clientes en la pestaña Cartera.</div>'; return; }
   if (!shown.length) { el.innerHTML = '<div class="empty-state">Sin resultados para "' + filtro + '"</div>'; return; }
 
-  el.innerHTML = shown.map(function(c, idx) {
+  var _cardsHtml = shown.map(function(c, idx) {
     var mora = buscarEnMoras(c.cuit);
     var esCritico = c.ultimaSit && c.ultimaSit >= 3;
     var esAtencion = c.ultimaSit === 2;
@@ -7160,6 +7176,22 @@ function renderBuscador(filtro) {
     html += '</div></div></div>';
     return html;
   }).join('');
+
+  // ── Paginación ──
+  var _pagHtml = '';
+  if (_totalPags > 1) {
+    _pagHtml = '<div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:20px;padding-bottom:4px;flex-wrap:wrap;">';
+    _pagHtml += '<button onclick="buscadorGoPage(' + Math.max(0, _buscadorPage - 1) + ')"' + (_buscadorPage === 0 ? ' disabled' : '') + ' style="padding:7px 14px;border:1.5px solid #e2e8f0;border-radius:8px;background:#fff;cursor:pointer;font-size:13px;color:#475569;font-weight:500;">&lsaquo; Ant.</button>';
+    var _pS = Math.max(0, _buscadorPage - 2), _pE = Math.min(_totalPags - 1, _pS + 4);
+    for (var _p = _pS; _p <= _pE; _p++) {
+      var _isAct = _p === _buscadorPage;
+      _pagHtml += '<button onclick="buscadorGoPage(' + _p + ')" style="padding:7px 12px;border:1.5px solid ' + (_isAct ? '#2563eb' : '#e2e8f0') + ';border-radius:8px;background:' + (_isAct ? '#2563eb' : '#fff') + ';color:' + (_isAct ? '#fff' : '#475569') + ';cursor:pointer;font-size:13px;font-weight:' + (_isAct ? 700 : 400) + ';">' + (_p + 1) + '</button>';
+    }
+    _pagHtml += '<button onclick="buscadorGoPage(' + Math.min(_totalPags - 1, _buscadorPage + 1) + ')"' + (_buscadorPage >= _totalPags - 1 ? ' disabled' : '') + ' style="padding:7px 14px;border:1.5px solid #e2e8f0;border-radius:8px;background:#fff;cursor:pointer;font-size:13px;color:#475569;font-weight:500;">Sig. &rsaquo;</button>';
+    _pagHtml += '<span style="font-size:12px;color:#94a3b8;margin-left:4px;">Pág. ' + (_buscadorPage + 1) + ' de ' + _totalPags + '</span>';
+    _pagHtml += '</div>';
+  }
+  el.innerHTML = _cardsHtml + _pagHtml;
 }
 
 function toggleFicha(id) {
