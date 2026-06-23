@@ -277,7 +277,7 @@
   .cli-btn-detalle { margin-left: auto; font-size: 12px !important; padding: 7px 16px !important; }
 
   /* ── DECISION GRID v31 ── */
-  #decision-grid { display: grid; grid-template-columns: 3fr 2fr; gap: 12px; margin-bottom: 8px; align-items: start; }
+  #decision-grid { display: block; margin-bottom: 8px; }
 
   /* ── COMPACT VERDICT ── */
   .verdict-compact { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-radius: 10px; border: 1px solid; margin-bottom: 0; }
@@ -502,7 +502,7 @@
     .info-grid, .afip-grid { grid-template-columns: 1fr !important; }
     .cli-data-grid { grid-template-columns: 1fr 1fr !important; }
     .ficha-grid { grid-template-columns: 1fr 1fr !important; }
-    #decision-grid { grid-template-columns: 1fr !important; }
+    /* #decision-grid already single-column */
     .buscador-input { font-size: 14px; padding: 12px 14px 12px 42px; }
 
     /* ── Inputs y botones táctiles ──────────────────────────────────────── */
@@ -947,17 +947,18 @@
       <div id="cliente-header" class="card" style="margin-bottom:8px;"></div>
       <div id="mora-alert-container"></div>
 
-      <!-- Decision Grid: Score (left 3/5) | Verdict + BCRA (right 2/5) -->
+      <!-- Verdict banner — full width, antes del score -->
+      <div id="verdict-container" style="margin-bottom:8px;"></div>
+
       <div id="saldos-interno-card" class="card" style="margin-bottom:8px;display:none;border-left:4px solid #2563eb;"></div>
 
       <div id="decision-grid">
         <div id="vende-score-container"></div>
-        <div>
-          <div id="verdict-container" style="margin-bottom:8px;"></div>
-          <div class="card" style="margin:0;">
-            <div id="bcra-data"><div class="empty-state" style="color:#64748b;">Consultando BCRA...</div></div>
-          </div>
-        </div>
+      </div>
+
+      <!-- BCRA summary — full width, debajo del score -->
+      <div class="card" id="bcra-summary-card" style="margin-bottom:8px;">
+        <div id="bcra-data"><div class="empty-state" style="color:#64748b;">Consultando BCRA...</div></div>
       </div>
 
       <!-- Heatmap BCRA 24m por entidad — renderizado por renderBcraHeatmap() -->
@@ -3863,8 +3864,15 @@ async function consultarCliente() {
   document.getElementById('loading-state').style.display = 'block';
   var _hero = document.getElementById('consulta-search-hero');
   if (_hero) { _hero.classList.add('sticky-mode'); _hero.style.display = 'flex'; }
+  var _recEl2 = document.getElementById('recientes-container');
+  if (_recEl2) _recEl2.style.display = 'none';
   var _cbody = document.querySelector('.canvas-body');
   if (_cbody) _cbody.classList.add('consulta-results-mode');
+  // Re-mostrar paneles que pueden haber quedado ocultos por un error anterior
+  ['decision-grid','bcra-summary-card','recursos-card'].forEach(function(_pid) {
+    var _pel = document.getElementById(_pid);
+    if (_pel) _pel.style.display = '';
+  });
   var _btnNC = document.getElementById('btn-nueva-consulta');
   if (_btnNC) _btnNC.style.display = '';
   document.getElementById('analisis-resultado').style.display = 'none';
@@ -6336,7 +6344,7 @@ function mostrarErrorCuitInexistente(raw) {
 
   // Limpiar y ocultar todo lo demás — estado de error total
   document.getElementById('mora-alert-container').innerHTML = '';
-  ['saldos-interno-card','decision-grid','cheques-rechazados-card',
+  ['saldos-interno-card','decision-grid','bcra-summary-card','cheques-rechazados-card',
    'recursos-card','analisis-resultado'].forEach(function(id) {
     var el = document.getElementById(id);
     if (el) el.style.display = 'none';
@@ -6421,8 +6429,7 @@ function renderRecientes() {
   try { recientes = JSON.parse(localStorage.getItem(_VS_RECIENTES_KEY) || '[]'); } catch(e) {}
   if (!recientes.length) { container.style.display = 'none'; return; }
   container.style.display = '';
-  var html = '<div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Consultados recientemente</div>';
-  html += '<div style="display:flex;flex-wrap:wrap;gap:6px;">';
+  var html = '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">';
   recientes.forEach(function(r) {
     var etiqueta = r.nombre && r.nombre !== r.cuit
       ? r.nombre.split(' ').slice(0,2).join(' ')
