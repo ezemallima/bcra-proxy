@@ -3285,9 +3285,13 @@ def calcular_rating_predictivo(
     else:              rango, color, emoji = 'Rechazar',    '#7f1d1d', '⛔'
 
     # ── Cap: sin actividad bancaria (fantasma crediticio) → max 350 ──────────
-    # Un cliente sin ningún banco reportante y sin historial BCRA es un riesgo
-    # de identidad desconocido — nunca puede aparecer como "Bueno".
-    _sin_actividad_bancaria = (not _ents_curr) and n_periodos_h == 0 and monto_real == 0
+    # Solo aplica cuando NO tenemos ninguna confirmación BCRA del cliente.
+    # Si BCRA respondió con results válidos (aunque sea sin_deudas=True o datos bulk),
+    # el cliente existe y está registrado — no es un fantasma crediticio.
+    # Fallar en el endpoint de historial NO es evidencia de fantasma; es un problema
+    # de conectividad BCRA que no debe penalizar al cliente.
+    _bcra_confirmo = bool(bcra_data and bcra_data.get('results') is not None and not bcra_data.get('error_bcra'))
+    _sin_actividad_bancaria = (not _ents_curr) and n_periodos_h == 0 and monto_real == 0 and not _bcra_confirmo
     if _sin_actividad_bancaria:
         score = min(score, 350)
         rango, color, emoji = 'Alto riesgo', '#dc2626', '🔴'
