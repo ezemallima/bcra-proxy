@@ -105,8 +105,9 @@
     box-shadow: 0 2px 8px rgba(0,0,0,0.04);
     align-items: flex-start !important;
   }
-  /* En sticky: ocultar solo el panel hero, dejar visible el search row y recientes */
+  /* En sticky: ocultar panel hero y recientes; solo deja visible el search row */
   #consulta-search-hero.sticky-mode > .hero-panel { display: none !important; }
+  #consulta-search-hero.sticky-mode > #recientes-container { display: none !important; }
   #consulta-search-hero.sticky-mode > .hero-search-row { max-width: 100%; width: 100%; }
 
   @keyframes hero-pulse {
