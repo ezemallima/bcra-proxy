@@ -1571,7 +1571,8 @@ let morasIndex = null;
 let verazData = null;
 let ultimoAnalisis = null;
 let _consultaController = null;   // AbortController activo — se cancela en cada nueva búsqueda
-let historialConsultas = JSON.parse(localStorage.getItem('piat_historial') || '[]');
+let historialConsultas = JSON.parse(localStorage.getItem('piat_historial') || '[]')
+  .filter(h => h.nombre && !h.nombre.startsWith('Sin denominaci'));
 
 function getNombreBodega() {
   return localStorage.getItem('piat_nombre_bodega') || 'Bodega Piattelli';
