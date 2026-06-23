@@ -823,9 +823,9 @@
         <span class="sb-ico"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
         <span class="sb-label">DSO</span>
       </button>
-      <button class="tab" onclick="switchTab('alertas',this)" title="Alertas BCRA">
+      <button class="tab" onclick="switchTab('alertas',this)" title="Alertas BCRA" id="btn-tab-alertas">
         <span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
-        <span class="sb-label">Alertas</span>
+        <span class="sb-label">Alertas <span id="alertas-badge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;font-size:9px;font-weight:700;padding:1px 5px;margin-left:2px;vertical-align:middle;"></span></span>
       </button>
       <div class="sb-section-label">Comunidad</div>
       <button class="tab" onclick="switchTab('red',this)" title="Red de Bodegas">
@@ -1273,6 +1273,29 @@
           <div class="alr-counter-num" id="cnt-cheques">—</div>
           <div class="alr-counter-label">Cheques Rech.</div>
         </div>
+      </div>
+    </div>
+
+    <!-- ── Panel de alertas automáticas post-upload ── -->
+    <div id="alertas-auto-panel" style="margin-top:14px;margin-bottom:14px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;">
+          Detección automática
+        </div>
+        <div style="display:flex;gap:6px;">
+          <button onclick="verificarChequesCartera(this)"
+            style="font-size:11px;padding:5px 11px;border-radius:7px;border:1px solid #e2e8f0;background:#fff;cursor:pointer;color:#475569;font-weight:600;">
+            Verificar cheques hoy
+          </button>
+          <button onclick="marcarTodasAlertasLeidas()"
+            style="font-size:11px;padding:5px 11px;border-radius:7px;border:1px solid #e2e8f0;background:#fff;cursor:pointer;color:#475569;font-weight:600;">
+            Marcar todas leídas
+          </button>
+        </div>
+      </div>
+      <div id="alertas-auto-lista"></div>
+      <div id="alertas-auto-empty" style="display:none;text-align:center;padding:28px;color:#94a3b8;font-size:13px;background:#f8fafc;border-radius:10px;border:1px dashed #e2e8f0;">
+        Sin alertas automáticas pendientes
       </div>
     </div>
 
@@ -3693,7 +3716,8 @@ function switchTab(tab, el) {
     var _bL = document.getElementById('cartera-bcra-lista');
     if (_mL) { _mL.style.display = 'none';  _mL.innerHTML = ''; }
     if (_bL) { _bL.style.display = 'block'; _bL.innerHTML = ''; }
-    cargarCarteraServidor(); autoCargarScoresServidor(); cargarAlertasMora(); // cargarCarteraServidor incluye renderAlertas()
+    cargarCarteraServidor(); autoCargarScoresServidor(); cargarAlertasMora();
+    cargarAlertasAuto();
   }
   var _canvasBody = document.querySelector('.canvas-body');
   if (tab === 'consulta') {
@@ -7824,6 +7848,89 @@ init()
     }
   };
 }());
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ALERTAS AUTOMÁTICAS — detección post-upload y cheques diarios
+// ══════════════════════════════════════════════════════════════════════════════
+
+var _ALERTA_COLORES = {
+  score_drop:    { bg: '#fef2f2', border: '#dc2626', txt: '#991b1b', ico: '↓' },
+  dso_deteriora: { bg: '#fffbeb', border: '#d97706', txt: '#92400e', ico: '⏱' },
+  cheque_nuevo:  { bg: '#f5f3ff', border: '#7c3aed', txt: '#5b21b6', ico: '✕' },
+};
+
+async function cargarAlertasAuto() {
+  try {
+    var r = await fetch('/api/alertas');
+    var data = await r.json();
+    var alertas = data.alertas || [];
+
+    // Badge en sidebar
+    var badge = document.getElementById('alertas-badge');
+    if (badge) {
+      if (alertas.length) { badge.textContent = alertas.length; badge.style.display = ''; }
+      else badge.style.display = 'none';
+    }
+
+    var lista  = document.getElementById('alertas-auto-lista');
+    var empty  = document.getElementById('alertas-auto-empty');
+    if (!lista) return;
+
+    if (!alertas.length) {
+      lista.innerHTML = '';
+      if (empty) empty.style.display = '';
+      return;
+    }
+    if (empty) empty.style.display = 'none';
+
+    lista.innerHTML = alertas.map(function(a) {
+      var c = _ALERTA_COLORES[a.tipo] || { bg:'#f8fafc', border:'#94a3b8', txt:'#64748b', ico:'!' };
+      return '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 13px;background:' + c.bg + ';border-radius:9px;border-left:3px solid ' + c.border + ';margin-bottom:6px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">' +
+        '<div style="width:22px;height:22px;background:' + c.border + ';border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:900;flex-shrink:0;">' + c.ico + '</div>' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:1px;">' + (a.nombre || a.cuit) + '</div>' +
+          '<div style="font-size:12px;color:#475569;line-height:1.4;">' + a.detalle + '</div>' +
+          '<div style="font-size:10px;color:#94a3b8;margin-top:3px;">' + a.fecha + '</div>' +
+        '</div>' +
+        (a.rango ? '<div style="font-size:11px;font-weight:600;color:' + c.txt + ';background:' + c.border + '22;padding:2px 8px;border-radius:12px;white-space:nowrap;flex-shrink:0;">' + a.rango + '</div>' : '') +
+      '</div>';
+    }).join('');
+
+  } catch(e) {
+    console.error('[alertas-auto]', e);
+  }
+}
+
+async function marcarTodasAlertasLeidas() {
+  try {
+    await fetch('/api/alertas/marcar-leida', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({todas: true})
+    });
+    await cargarAlertasAuto();
+  } catch(e) { console.error('[marcar-leidas]', e); }
+}
+
+async function verificarChequesCartera(btn) {
+  if (btn) { btn.disabled = true; btn.textContent = 'Verificando...'; }
+  try {
+    await fetch('/api/alertas/verificar-cheques', {method:'POST'});
+    // Esperar que el background procese y recargar alertas
+    setTimeout(cargarAlertasAuto, 6000);
+    if (btn) {
+      btn.textContent = 'Iniciado';
+      setTimeout(function() { btn.disabled = false; btn.textContent = 'Verificar cheques hoy'; }, 3000);
+    }
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Verificar cheques hoy'; }
+  }
+}
+
+// Cargar badge al iniciar sesión (para mostrar alertas pendientes desde el primer momento)
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(cargarAlertasAuto, 3000);
+});
 </script>
 <!-- Modal agregar cliente — fuera de cualquier sección para que funcione desde cualquier pestaña -->
 <div id="modal-agregar-cliente" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;align-items:center;justify-content:center;">

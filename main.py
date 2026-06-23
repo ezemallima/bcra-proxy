@@ -6733,6 +6733,333 @@ def _score_cache_write(data: dict):
             pass
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# ALERTAS AUTOMÁTICAS — detección post-upload y cheques diarios
+# ═══════════════════════════════════════════════════════════════════════════
+
+_ALERTAS_AUTO_FILE = os.path.join(DATA_DIR, 'alertas_automaticas.json')
+_alertas_auto_lock = threading.Lock()
+_MAX_ALERTAS        = 300   # máximo histórico en disco
+
+
+def _alertas_auto_read() -> list:
+    try:
+        if os.path.exists(_ALERTAS_AUTO_FILE):
+            with open(_ALERTAS_AUTO_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return []
+
+
+def _alertas_auto_write(alertas: list) -> None:
+    tmp = _ALERTAS_AUTO_FILE + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(alertas[:_MAX_ALERTAS], f, ensure_ascii=False, indent=2)
+        f.flush(); os.fsync(f.fileno())
+    os.replace(tmp, _ALERTAS_AUTO_FILE)
+
+
+def _agregar_alertas_auto(nuevas: list) -> None:
+    """Prepend nuevas alertas y persiste, manteniendo máximo _MAX_ALERTAS."""
+    if not nuevas:
+        return
+    with _alertas_auto_lock:
+        existentes = _alertas_auto_read()
+        # Deduplicar: no agregar si mismo cuit + tipo + fecha ya está
+        ids_exist = {(a.get('cuit'), a.get('tipo'), a.get('fecha', '')[:10]) for a in existentes}
+        filtradas = [a for a in nuevas if (a.get('cuit'), a.get('tipo'), a.get('fecha', '')[:10]) not in ids_exist]
+        if filtradas:
+            _alertas_auto_write(filtradas + existentes)
+
+
+def _recalcular_scores_post_upload():
+    """
+    Background: recalcula score de toda la cartera usando saldos recién subidos
+    y BCRA data cacheada en disco — sin llamadas a la API de BCRA.
+    Genera alertas si score baja >50 pts o DSO deteriora >15%.
+    """
+    import time as _t
+    _t.sleep(2)   # dejar que el response HTTP salga primero
+    try:
+        cartera = list(_cartera_comercial)
+        if not cartera:
+            return
+
+        facturas_mem = list(_saldos_facturas or [])
+        if not facturas_mem:
+            print("[recalculo] Sin saldos en memoria — abortando", flush=True)
+            return
+
+        _nc = lambda x: str(x or '').replace('-', '').replace(' ', '').strip()
+
+        # Cargar bcra_cache.json una sola vez
+        bcra_cache_data: dict = {}
+        try:
+            bc_path = os.path.join(DATA_DIR, 'bcra_cache.json')
+            if os.path.exists(bc_path):
+                with open(bc_path, 'r', encoding='utf-8') as f:
+                    bcra_cache_data = json.load(f)
+        except Exception as e:
+            print(f"[recalculo] bcra_cache.json: {e}", flush=True)
+
+        # Leer moras internas
+        moras_norm: set = set()
+        try:
+            mp = os.path.join(DATA_DIR, 'moras_piattelli.json')
+            if os.path.exists(mp):
+                with open(mp, 'r', encoding='utf-8') as f:
+                    raw = json.load(f)
+                moras_norm = {_nc(str(x)) for x in (raw if isinstance(raw, list) else [])}
+        except Exception:
+            pass
+
+        # Batch cheques locales para toda la cartera
+        cuits_all = [_nc(c.get('cuit', '')) for c in cartera if c.get('cuit')]
+        cheques_batch = _cheques_local_batch(cuits_all)
+
+        # Score cache anterior para comparar deltas
+        with _score_cache_lock:
+            sc_anterior = _score_cache_read()
+
+        # Índice nombre normalizado → cuit (para verificar qué clientes tienen saldos)
+        _nn = lambda x: str(x or '').upper().strip()
+        nombres_con_saldo: set = {_nn(f.get('cliente', '')) for f in facturas_mem}
+
+        alertas_nuevas  = []
+        scores_nuevos   = {}
+        procesados      = 0
+
+        for cliente in cartera:
+            cuit = _nc(cliente.get('cuit', ''))
+            if not cuit or len(cuit) < 10:
+                continue
+
+            nombre = str(cliente.get('nombre') or cliente.get('cliente') or '')
+            # Solo recalcular si este cliente tiene filas en el upload
+            if _nn(nombre) not in nombres_con_saldo:
+                continue
+
+            bcra_data = bcra_cache_data.get(cuit)
+            if not bcra_data:
+                continue   # sin BCRA en caché → score incompleto, skip
+
+            hist_data = None
+            try:
+                h_path = os.path.join(DATA_DIR, f'historial_{cuit}.json')
+                if os.path.exists(h_path):
+                    with open(h_path, 'r', encoding='utf-8') as _hf:
+                        hist_data = json.load(_hf)
+            except Exception:
+                pass
+
+            cheq_data  = cheques_batch.get(cuit)
+            ciudad     = str(cliente.get('ciudad') or '').strip()
+            en_mora    = cuit in moras_norm
+
+            # Limpiar session cache para forzar recálculo real
+            _score_session_cache.pop(cuit, None)
+            try:
+                score_nuevo = calcular_rating_predictivo(
+                    cuit=cuit, bcra_data=bcra_data,
+                    hist_data=hist_data, cheq_data=cheq_data,
+                    en_mora=en_mora, ciudad=ciudad,
+                )
+            except Exception as e:
+                print(f"[recalculo] {cuit}: {e}", flush=True)
+                continue
+            finally:
+                _score_session_cache.pop(cuit, None)   # no contaminar otros requests
+
+            if not score_nuevo or not score_nuevo.get('score'):
+                continue
+
+            procesados += 1
+            score_nuevo_val = int(score_nuevo.get('score', 0))
+
+            _sc_ant      = sc_anterior.get(cuit) or {}
+            score_ant_val = _sc_ant.get('scoreCompleto') or _sc_ant.get('score')
+            fecha_ahora  = datetime.now().strftime('%Y-%m-%d %H:%M')
+
+            alerta_base = {
+                'cuit':       cuit,
+                'nombre':     nombre,
+                'fecha':      fecha_ahora,
+                'rango':      score_nuevo.get('rango', ''),
+                'score_nuevo': score_nuevo_val,
+                'leida':      False,
+            }
+
+            if score_ant_val:
+                delta = score_nuevo_val - int(score_ant_val)
+                if delta <= -50:
+                    alertas_nuevas.append({
+                        **alerta_base,
+                        'tipo':           'score_drop',
+                        'detalle':        f"Score bajó de {score_ant_val} a {score_nuevo_val} ({delta:+d} pts)",
+                        'score_anterior': int(score_ant_val),
+                        'delta':          delta,
+                    })
+
+            if score_nuevo.get('dso_deteriorando'):
+                alertas_nuevas.append({
+                    **alerta_base,
+                    'tipo':           'dso_deteriora',
+                    'detalle':        f"DSO deterioró >15% en 60 días · score actual {score_nuevo_val}",
+                    'score_anterior': int(score_ant_val) if score_ant_val else None,
+                })
+
+            resp = _score_response(score_nuevo, None)
+            scores_nuevos[cuit] = resp
+
+        # Persistir scores actualizados
+        if scores_nuevos:
+            with _score_cache_lock:
+                sc = _score_cache_read()
+                sc.update(scores_nuevos)
+                _score_cache_write(sc)
+
+        # Persistir alertas nuevas
+        _agregar_alertas_auto(alertas_nuevas)
+
+        print(
+            f"[recalculo] OK — {procesados} clientes · {len(alertas_nuevas)} alertas nuevas",
+            flush=True
+        )
+
+    except Exception:
+        import traceback
+        print(f"[recalculo] Error inesperado:\n{traceback.format_exc()}", flush=True)
+
+
+def _check_cheques_cartera_bg():
+    """
+    Background: verifica cheques rechazados para toda la cartera contra la tabla
+    cheques_bcra (bulk local). Compara contra cheques_estado.json (estado anterior).
+    Genera alertas para CUITs con cheques nuevos detectados.
+    """
+    import time as _t
+    _t.sleep(3)
+    try:
+        cartera = list(_cartera_comercial)
+        if not cartera:
+            return
+
+        _nc = lambda x: str(x or '').replace('-', '').replace(' ', '').strip()
+        cuits_all = [_nc(c.get('cuit', '')) for c in cartera if c.get('cuit')]
+        if not cuits_all:
+            return
+
+        # Leer cheques actuales del bulk local (una sola query batch)
+        cheques_actuales = _cheques_local_batch(cuits_all)
+
+        # Estado anterior
+        estado_path = os.path.join(DATA_DIR, 'cheques_estado.json')
+        estado_anterior: dict = {}
+        try:
+            if os.path.exists(estado_path):
+                with open(estado_path, 'r', encoding='utf-8') as f:
+                    estado_anterior = json.load(f)
+        except Exception:
+            pass
+
+        cartera_idx = {_nc(c.get('cuit', '')): c for c in cartera if c.get('cuit')}
+        alertas_nuevas = []
+        fecha_ahora = datetime.now().strftime('%Y-%m-%d %H:%M')
+
+        for cuit, cheq in cheques_actuales.items():
+            resultados = (cheq.get('results') or {})
+            # Contar cheques rechazados actuales
+            n_rechazados = (
+                len(resultados.get('chequesRechazadosCamaraCompensadora', [])) +
+                len(resultados.get('chequesRechazadosDenunciados', []))
+            )
+            n_anterior = estado_anterior.get(cuit, {}).get('n_rechazados', 0)
+
+            if n_rechazados > n_anterior:
+                cliente = cartera_idx.get(cuit, {})
+                nombre  = str(cliente.get('nombre') or cliente.get('cliente') or cuit)
+                diff    = n_rechazados - n_anterior
+                alertas_nuevas.append({
+                    'cuit':        cuit,
+                    'nombre':      nombre,
+                    'fecha':       fecha_ahora,
+                    'tipo':        'cheque_nuevo',
+                    'detalle':     f"{diff} cheque(s) rechazado(s) nuevo(s) detectado(s) · total {n_rechazados}",
+                    'rango':       '',
+                    'score_nuevo': None,
+                    'leida':       False,
+                })
+
+            # Actualizar estado
+            estado_anterior[cuit] = {
+                'n_rechazados': n_rechazados,
+                'ultima_check': fecha_ahora,
+            }
+
+        # Persistir estado actualizado
+        try:
+            with open(estado_path, 'w', encoding='utf-8') as f:
+                json.dump(estado_anterior, f, ensure_ascii=False)
+        except Exception as e:
+            print(f"[cheques_check] Error guardando estado: {e}", flush=True)
+
+        _agregar_alertas_auto(alertas_nuevas)
+        print(
+            f"[cheques_check] OK — {len(cuits_all)} CUITs · {len(alertas_nuevas)} alertas nuevas",
+            flush=True
+        )
+
+    except Exception:
+        import traceback
+        print(f"[cheques_check] Error:\n{traceback.format_exc()}", flush=True)
+
+
+# ── Endpoints de alertas automáticas ─────────────────────────────────────────
+
+@app.route("/api/alertas", methods=["GET"])
+def get_alertas():
+    """Lista de alertas automáticas. Query params: ?leidas=true para incluir leídas."""
+    solo_no_leidas = request.args.get('leidas', 'false').lower() != 'true'
+    try:
+        alertas = _alertas_auto_read()
+        if solo_no_leidas:
+            alertas = [a for a in alertas if not a.get('leida')]
+        return jsonify({'alertas': alertas, 'total': len(alertas)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route("/api/alertas/marcar-leida", methods=["POST"])
+def marcar_alerta_leida():
+    """Marca como leída una o todas las alertas. Body: {cuit, tipo, fecha} o {todas: true}."""
+    try:
+        body = request.get_json(force=True) or {}
+        with _alertas_auto_lock:
+            alertas = _alertas_auto_read()
+            if body.get('todas'):
+                for a in alertas:
+                    a['leida'] = True
+            else:
+                for a in alertas:
+                    if (a.get('cuit') == body.get('cuit') and
+                            a.get('tipo') == body.get('tipo') and
+                            a.get('fecha', '')[:10] == (body.get('fecha') or '')[:10]):
+                        a['leida'] = True
+            _alertas_auto_write(alertas)
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route("/api/alertas/verificar-cheques", methods=["POST"])
+def verificar_cheques_cartera():
+    """Dispara verificación de cheques rechazados para toda la cartera en background."""
+    t = threading.Thread(target=_check_cheques_cartera_bg, daemon=True)
+    t.start()
+    return jsonify({'ok': True, 'mensaje': 'Verificación de cheques iniciada en background'})
+
+
 @app.route("/save-score-cache", methods=["POST"])
 def save_score_cache():
     """Persiste score(s) en score_cache.json. Payload: {cuit: score_data, ...}"""
@@ -8974,6 +9301,8 @@ def upload_saldos_gestion():
             print(f"[gestion] sync-cartera error (no crítico): {_se}", flush=True)
             _cambios = []
         print(f"[gestion] {len(saldos)} facturas importadas | sync-cartera: {len(_cambios)} cambios", flush=True)
+        # Recalcular scores en background usando BCRA cacheado (sin API calls)
+        threading.Thread(target=_recalcular_scores_post_upload, daemon=True).start()
         return jsonify({"ok": True, "total": len(saldos), "reasignaciones": len(_cambios), "cambios": _cambios})
     except Exception as e:
         import traceback
@@ -9786,6 +10115,8 @@ def upload_saldos_facturas():
             pass
         _SG_LAST_CHECK = time.time()
         print(f"[saldos] {len(saldos)} facturas importadas (Odoo positional) — gestión sincronizada", flush=True)
+        # Recalcular scores en background usando BCRA cacheado (sin API calls)
+        threading.Thread(target=_recalcular_scores_post_upload, daemon=True).start()
         return jsonify({"ok": True, "total": len(saldos)})
     except Exception as e:
         import traceback
