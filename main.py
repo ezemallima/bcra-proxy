@@ -3988,17 +3988,63 @@ def ejecutar_verificacion(cartera_data):
 
         # ═══════════════════════════════════════════════════════════════════
         # FASE 1 — Live BCRA SOLO para clientes que necesitan datos frescos
-        # zona_gris : mora ambigua (sit=2-3, ≤1 mes) — confirmar si sigue activa
-        # nuevo     : sin antecedentes bulk — puede haber caído en mora este mes
+        # Prioridad 1: zona_gris  — mora ambigua en bulk → confirmar
+        # Prioridad 2: nuevo      — sin antecedentes bulk → puede estar en mora
+        # Prioridad 3: limpio_bulk con deuda interna >90d — señal Odoo indica
+        #              riesgo aunque el bulk (puede tener 2 meses de antigüedad)
+        #              los marque como limpios. Triage basado en datos propios.
         # Cap: LIVE_BCRA_MAX (default 150) — controla rate-limiting BCRA
-        # alto_riesgo / limpio_bulk: resueltos por bulk, no van a BCRA live
+        # alto_riesgo: confirmado por bulk, no requiere BCRA live
         # ═══════════════════════════════════════════════════════════════════
         _LIVE_BCRA_MAX = int(os.environ.get('LIVE_BCRA_MAX', '150'))
         _zona_gris_v = [c for c in cartera_data
                         if bulk_prefetch.get(str(c.get('cuit','')).strip(), {}).get('categoria') == 'zona_gris']
         _nuevos_v    = [c for c in cartera_data
                         if bulk_prefetch.get(str(c.get('cuit','')).strip(), {}).get('categoria') == 'nuevo']
-        _para_live   = _zona_gris_v + _nuevos_v
+
+        # ── Triage limpio_bulk: detectar los que tienen señales internas de riesgo ──
+        # Un cliente con deuda interna vencida >90 días ya está dando señales antes
+        # que BCRA lo registre. Esos van al check en vivo aunque el bulk los marque sit=1.
+        _saldos_idx_nb: dict = {}   # nombre_normalizado → [facturas]
+        for _sf_t in (_saldos_facturas or []):
+            _nb_t = str(_sf_t.get('cliente') or '').upper().strip()
+            if _nb_t:
+                _saldos_idx_nb.setdefault(_nb_t, []).append(_sf_t)
+
+        _FMTS_T = ('%d/%m/%Y', '%Y-%m-%d', '%d-%m-%Y')
+        def _parse_f(s):
+            if not s: return None
+            for _fmt in _FMTS_T:
+                try: return datetime.strptime(str(s)[:10], _fmt)
+                except Exception: pass
+            return None
+
+        _hoy_t = datetime.now()
+        _limpio_sospechosos = []
+        for _c_t in cartera_data:
+            _cuit_t = str(_c_t.get('cuit', '') or '').strip()
+            if not _cuit_t: continue
+            if bulk_prefetch.get(_cuit_t, {}).get('categoria') != 'limpio_bulk': continue
+            _nb_t2 = str(_c_t.get('nombre') or _c_t.get('cliente') or '').upper().strip()
+            _facts_t = _saldos_idx_nb.get(_nb_t2, [])
+            _tiene_90d = any(
+                _parse_f(_f_t.get('fechaPago')) and
+                float(_f_t.get('saldo') or 0) > 0 and
+                (_hoy_t - _parse_f(_f_t.get('fechaPago'))).days > 90
+                for _f_t in _facts_t
+                if _parse_f(_f_t.get('fechaPago'))
+            )
+            if _tiene_90d:
+                _limpio_sospechosos.append(_c_t)
+
+        if _limpio_sospechosos:
+            print(
+                f"[verif] Triage DSO: {len(_limpio_sospechosos)} limpio_bulk con deuda >90d → agregar a live",
+                flush=True
+            )
+
+        # Orden de prioridad: zona_gris → nuevo → limpio sospechoso por señal interna
+        _para_live = _zona_gris_v + _nuevos_v + _limpio_sospechosos
         if len(_para_live) > _LIVE_BCRA_MAX:
             _para_live = _para_live[:_LIVE_BCRA_MAX]
             print(f"[verif] FASE 1: limitado a {_LIVE_BCRA_MAX} clientes (LIVE_BCRA_MAX)", flush=True)
