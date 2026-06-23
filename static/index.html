@@ -6426,6 +6426,8 @@ function guardarReciente(cuit, nombre) {
 function renderRecientes() {
   var container = document.getElementById('recientes-container');
   if (!container) return;
+  container.style.display = 'none';
+  return;
   var recientes = [];
   try { recientes = JSON.parse(localStorage.getItem(_VS_RECIENTES_KEY) || '[]'); } catch(e) {}
   if (!recientes.length) { container.style.display = 'none'; return; }
