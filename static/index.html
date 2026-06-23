@@ -2878,6 +2878,7 @@ function renderVendeScore(scoreObj) {
       desglose +
       '<div style="font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:0.6px;text-transform:uppercase;margin:14px 0 6px;">Historial BCRA — 24 meses</div>' +
       '<canvas id="bcra-history-chart" style="width:100%;max-height:110px;display:block;"></canvas>' +
+      '<div id="bcra-history-nodata" style="display:none;text-align:center;padding:14px 0 6px;font-size:12px;color:#94a3b8;border:1px dashed #e2e8f0;border-radius:8px;">Sin períodos BCRA disponibles — historial no reportado</div>' +
     '</div>' +
     '<div id="solvencia-card" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;margin-bottom:8px;">' +
       '<div style="font-size:12px;font-weight:700;color:#334155;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px;">Exposición en Sistema Financiero</div>' +
@@ -2887,10 +2888,19 @@ function renderVendeScore(scoreObj) {
 }
 
 function renderBcraHistoryChart(periodos) {
-  var canvas = document.getElementById('bcra-history-chart');
+  var canvas  = document.getElementById('bcra-history-chart');
+  var nodata  = document.getElementById('bcra-history-nodata');
   if (!canvas || typeof Chart === 'undefined') return;
-  if (!Array.isArray(periodos)) { canvas.style.display = 'none'; return; }
+
+  // Sin períodos reales → no renderizar barras falsas, mostrar mensaje
+  if (!Array.isArray(periodos) || periodos.length === 0) {
+    canvas.style.display = 'none';
+    if (nodata) nodata.style.display = '';
+    return;
+  }
+  // Con datos: mostrar chart, ocultar mensaje
   canvas.style.display = '';
+  if (nodata) nodata.style.display = 'none';
 
   // Cuadrícula fija de 24 meses
   var _hoy = new Date();
@@ -2935,8 +2945,11 @@ function renderBcraHistoryChart(periodos) {
     ? data24.map(function() { return 1; })
     : montos.map(function(m) { return m > 0 ? m : maxMonto * 0.025; });
 
+  // Sin deuda: barras verdes al 30% de opacidad para dejar claro que son "meses limpios"
+  // Con deuda: color pleno según situación (verde/amarillo/naranja/rojo)
   var colors = sits.map(function(v) {
-    return v === 1 ? '#16a34a' : v === 2 ? '#ca8a04' : v === 3 ? '#ea580c' : '#dc2626';
+    var base = v === 1 ? '#16a34a' : v === 2 ? '#ca8a04' : v === 3 ? '#ea580c' : '#dc2626';
+    return sinDeuda ? base + '4d' : base;  // 4d = 30% opacidad hex
   });
 
   // Cheques rechazados: overlay de marcadores
@@ -2947,7 +2960,7 @@ function renderBcraHistoryChart(periodos) {
 
   var datasets = [{
     type: 'bar',
-    label: 'Deuda BCRA',
+    label: sinDeuda ? 'Sin deuda registrada' : 'Deuda BCRA',
     data: barData,
     backgroundColor: colors,
     borderRadius: 3,
@@ -2973,11 +2986,12 @@ function renderBcraHistoryChart(periodos) {
     data: { labels: labels, datasets: datasets },
     options: {
       plugins: {
-        legend: { display: tieneChq, labels: { font: { size: 9 }, usePointStyle: true } },
+        legend: { display: tieneChq || sinDeuda, labels: { font: { size: 9 }, usePointStyle: true, color: '#94a3b8' } },
         tooltip: { callbacks: { label: function(ctx) {
           if (ctx.dataset.type === 'line') return 'Cheque rechazado';
           var sit  = sits[ctx.dataIndex];
           var monto = montos[ctx.dataIndex];
+          if (sinDeuda) return 'Sit. 1 — Normal · Sin deuda reportada';
           var sitTxt = 'Sit. ' + sit + ' — ' + sitNombre(sit);
           if (!monto) return sitTxt + ' (sin deuda registrada)';
           var montoFmt = monto >= 1000
