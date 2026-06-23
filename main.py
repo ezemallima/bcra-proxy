@@ -3130,15 +3130,22 @@ def calcular_rating_predictivo(
     # ── Suma bruta (A + B + C + Liquidez) ────────────────────────────────
     puntos = pts_c1 + pts_cb + pts_cc + pts_liq
 
-    # ── Piso v25.0: Sit.1 + deuda BCRA $0 = sin historial, no insolvencia ──
-    # No penalizar al cliente que nunca tomó crédito bancario: Score Base 650.
+    # ── Piso v25.1: Sit.1 + deuda BCRA $0 + historial bancario real ──────────
+    # Solo aplica si el cliente tiene períodos BCRA reportados (fue cliente de algún banco).
+    # Si no hay historial en absoluto (CUIT sin actividad bancaria nunca), el score raw
+    # es más honesto: 495 ≠ 650 porque no sabemos nada positivo de él, solo que no es moroso.
+    # Diferencia: "limpio con track record" (650+) vs "desconocido sin historial" (raw~495).
+    _tiene_historial_bancario = len(periodos_hist) > 0
     _cliente_sin_deuda = (
         max_sit == 1 and monto_real == 0
         and not en_mora and not hard_block_mora
+        and _tiene_historial_bancario
     )
     if _cliente_sin_deuda:
         puntos = max(puntos, 650)
         print(f"[score v{_SCORE_VERSION}] {cuit_limpio} sin_deuda_sit1 → piso 650", flush=True)
+    elif max_sit == 1 and monto_real == 0 and not en_mora and not _tiene_historial_bancario:
+        print(f"[score v{_SCORE_VERSION}] {cuit_limpio} sin_historial_bancario → score raw {round(puntos)}", flush=True)
 
     # ── Ajuste: concentración de deuda ────────────────────────────────────
     if   nro_entidades == 0 or sin_deudas_real:     puntos += 25
