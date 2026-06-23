@@ -814,12 +814,8 @@
         <span class="sb-ico"><svg viewBox="0 0 24 24"><polyline points="12 8 12 12 14 14"/><path d="M3.05 11a9 9 0 1 0 .5-4.5"/><polyline points="3 3 3 7 7 7"/></svg></span>
         <span class="sb-label">Historial</span>
       </button>
-      <button class="tab" onclick="switchTab('buscador',this)" title="Buscador Premium">
-        <span class="sb-ico"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg></span>
-        <span class="sb-label">Buscador</span>
-      </button>
       <div class="sb-section-label">Gestión</div>
-      <button class="tab" onclick="switchTab('cartera',this)" title="Cartera de clientes">
+      <button class="tab" onclick="switchTab('buscador',this)" title="Cartera de clientes">
         <span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
         <span class="sb-label">Cartera</span>
       </button>
@@ -3713,7 +3709,7 @@ function filtrarWSPReciente(threads) {
 }
 function buscarEnMoras(cuit) { return morasIndex ? morasIndex[cuit.replace(/-/g,'')] || null : null; }
 
-var _pageTitles = {consulta:'Consultar CUIT', cheques:'Análisis de Cheques', historial:'Historial de Consultas', buscador:'Buscador Premium', cartera:'Gestión de Cartera', portfolio:'Portfolio de Saldos', dso:'Módulo DSO', alertas:'Alertas BCRA', red:'Red de Bodegas', configuracion:'Configuración'};
+var _pageTitles = {consulta:'Consultar CUIT', cheques:'Análisis de Cheques', historial:'Historial de Consultas', buscador:'Cartera', cartera:'Cartera', portfolio:'Portfolio de Saldos', dso:'Módulo DSO', alertas:'Alertas BCRA', red:'Red de Bodegas', configuracion:'Configuración'};
 
 var _alertasFilter  = null; // 'critico' | 'advertencia' | 'exceso' | null
 var _alertasMoraData = null; // cache de /api/alertas-mora
@@ -3768,7 +3764,7 @@ function switchTab(tab, el) {
   if (window.innerWidth <= 480) toggleMobileSidebar(false);
   if (tab === 'cheques') { document.getElementById('cheque-resultado').style.display='none'; }
   if (tab === 'historial') renderHistorial();
-  if (tab === 'cartera') renderCartera();
+  if (tab === 'cartera') { switchTab('buscador', null); return; }
   if (tab === 'portfolio') cargarPortfolio();
   if (tab === 'buscador') renderBuscador('');
   if (tab === 'alertas') {
