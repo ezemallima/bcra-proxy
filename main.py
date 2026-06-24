@@ -6296,12 +6296,17 @@ def _ejecutar_proceso_integral(cartera_data: list):
             _cheq_activos_pi = 0
             try:
                 _cheq_raw_pi = _cheq_cdi_pi or {}
-                # Fallback a disco si el fetch falló pero existía caché previa
+                # Fallback 1: caché en disco del CUIT
                 if not _cheq_raw_pi:
                     _cheq_path_pi = os.path.join(DATA_DIR, f'cheques_{cuit}.json')
                     if os.path.exists(_cheq_path_pi):
                         with open(_cheq_path_pi, 'r', encoding='utf-8') as _cpf:
                             _cheq_raw_pi = json.load(_cpf).get('payload') or {}
+                # Fallback 2: snapshot bulk local (bcra_padron.db — importado por /update-cheques-db)
+                if not _cheq_raw_pi:
+                    _cheq_local_pi = get_cheques_local(cuit)
+                    if _cheq_local_pi:
+                        _cheq_raw_pi = _cheq_local_pi
                 if (not _cheq_raw_pi.get('sin_deudas') and
                         isinstance(_cheq_raw_pi.get('results'), dict)):
                     _caus_pi = _cheq_raw_pi['results'].get('causales') or []
