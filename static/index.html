@@ -6848,6 +6848,8 @@ function renderAlertas() {
   var cntC = document.getElementById('cnt-criticos');    if(cntC) cntC.textContent = nCrit;
   var cntA = document.getElementById('cnt-advertencias'); if(cntA) cntA.textContent = nAdv;
   var cntCh = document.getElementById('cnt-cheques');    if(cntCh) cntCh.textContent = nCheq;
+  // Sincronizar hero stats con los contadores recién actualizados
+  if (typeof cargarHeroStats === 'function') cargarHeroStats();
   // cnt-excesos se actualiza en cargarAlertasMora() desde /api/alertas-mora
   // Sincronizar estado visual del filtro cheques
   ['critico','advertencia','exceso','cheque'].forEach(function(t) {
@@ -8057,8 +8059,8 @@ function cargarHeroStats() {
 
 // Cargar badge al iniciar sesión (para mostrar alertas pendientes desde el primer momento)
 document.addEventListener('DOMContentLoaded', function() {
-  setTimeout(cargarAlertasAuto, 3000);
-  setTimeout(cargarHeroStats, 1500);
+  setTimeout(cargarAlertasAuto, 3000);  // cargarHeroStats se llama al final de cargarAlertasAuto
+  setTimeout(cargarHeroStats, 1500);    // carga inicial rápida (clientes + cheques fecha)
 });
 </script>
 <!-- Modal agregar cliente — fuera de cualquier sección para que funcione desde cualquier pestaña -->
