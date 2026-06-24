@@ -1184,6 +1184,11 @@ def consultar_bcra_cached(cuit):
     # 3. Consulta en vivo vía Bright Data → Workers → BCRA oficial
     data, error = consultar_bcra(cuit)
     if error or not data:
+        # 3.5. Fallback: padrón offline nomdeu (historial_bulk 24m) — sin red, sin TTL
+        _nomdeu_fb = _nomdeu_build_deudas_resp(cuit)
+        if _nomdeu_fb:
+            print(f"[bcra] {cuit} fallback nomdeu offline (BCRA saturado — historial_bulk)", flush=True)
+            return _nomdeu_fb, None
         data_cache = {
             "results": None, "sin_deudas": None,
             "error_bcra": "bcra_saturado",
@@ -6265,7 +6270,13 @@ def _ejecutar_proceso_integral(cartera_data: list):
                     bcra_data = _rb
                     print(f'[proceso-integral] Respaldo OK para {cuit}', flush=True)
                 else:
-                    bcra_data = {}
+                    # Fallback final: padrón offline nomdeu (historial_bulk 24m)
+                    _nomdeu_pi = _nomdeu_build_deudas_resp(cuit)
+                    if _nomdeu_pi:
+                        bcra_data = _nomdeu_pi
+                        print(f'[proceso-integral] Nomdeu offline OK para {cuit}', flush=True)
+                    else:
+                        bcra_data = {}
 
             # ── Paso 1.5: CDI Cheques — pre-caching para _layer_liquidez ─────────────
             _cheq_cdi_pi = None
@@ -7492,9 +7503,10 @@ def _nomdeu_get_nombre(cuit: str):
     """Nombre oficial del BCRA (Nomdeu.txt). Retorna str o None."""
     if _nomdeu_conn is None:
         return None
+    cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
     try:
         row = _nomdeu_conn.execute(
-            "SELECT nombre FROM denominaciones WHERE cuit = ?", (cuit,)
+            "SELECT nombre FROM denominaciones WHERE cuit = ?", (cuit_limpio,)
         ).fetchone()
         return row[0] if row else None
     except Exception:
@@ -7514,13 +7526,14 @@ def _nomdeu_get_deuda(cuit: str):
     """
     if _nomdeu_conn is None:
         return None
+    cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
     try:
         # 1. Snapshot actual (PADRON — puede no existir si la DB es solo historial)
         row_p = None
         try:
             row_p = _nomdeu_conn.execute(
                 "SELECT sit_max, monto_total, entidades_cod, periodo "
-                "FROM deudas_resumen WHERE cuit = ?", (cuit,)
+                "FROM deudas_resumen WHERE cuit = ?", (cuit_limpio,)
             ).fetchone()
         except Exception:
             pass
@@ -7530,7 +7543,7 @@ def _nomdeu_get_deuda(cuit: str):
         try:
             row_h = _nomdeu_conn.execute(
                 "SELECT sit_max_24m, meses_en_mora, monto_max "
-                "FROM historial_bulk WHERE cuit = ?", (cuit,)
+                "FROM historial_bulk WHERE cuit = ?", (cuit_limpio,)
             ).fetchone()
         except Exception:
             pass
@@ -7577,15 +7590,23 @@ def _nomdeu_build_deudas_resp(cuit: str):
         return None
     nombre = _nomdeu_get_nombre(cuit) or cuit
     ent_codigos = [c.strip() for c in (deuda['entidades_cod'] or '').split(',') if c.strip()]
-    n_ents = max(1, len(ent_codigos))
-    entidades_list = []
-    for cod in ent_codigos:
-        ent_nombre = _nomdeu_get_entidad(cod) or f"Entidad {cod}"
-        entidades_list.append({
-            'entidad': ent_nombre,
+    if ent_codigos:
+        n_ents = len(ent_codigos)
+        entidades_list = []
+        for cod in ent_codigos:
+            ent_nombre = _nomdeu_get_entidad(cod) or f"Entidad {cod}"
+            entidades_list.append({
+                'entidad': ent_nombre,
+                'situacion': deuda['sit_max'],
+                'monto': round(deuda['monto_total'] / n_ents, 1),
+            })
+    else:
+        # Solo historial_bulk (sin deudas_resumen): entidad sintética con sit_max del historial
+        entidades_list = [{
+            'entidad': 'Sistema Financiero',
             'situacion': deuda['sit_max'],
-            'monto': round(deuda['monto_total'] / n_ents, 1),
-        })
+            'monto': round(deuda['monto_total'], 1),
+        }]
     periodo_str = str(deuda['periodo'])
     periodo_int = int(periodo_str) if periodo_str.isdigit() else 0
     return {
