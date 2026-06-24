@@ -3645,6 +3645,11 @@ def _nomdeu_batch(cuits: list) -> dict:
     """
     if _nomdeu_conn is None or not cuits:
         return {}
+    # Normalizar a 11 dígitos sin guiones — formato exacto de historial_bulk (Colab)
+    cuits = [str(c).replace('-', '').replace(' ', '').strip() for c in cuits]
+    cuits = [c for c in cuits if c]
+    if not cuits:
+        return {}
     result = {}
     placeholders = ','.join('?' * len(cuits))
     # 1. Snapshot último mes (deudas_resumen — del archivo PADRON)
@@ -3690,6 +3695,11 @@ def _cheques_local_batch(cuits: list) -> dict:
     Retorna {cuit: cheq_dict} en formato compatible con calcular_rating_predictivo.
     """
     if not os.path.exists(PADRON_DB_PATH) or not cuits:
+        return {}
+    # Normalizar a 11 dígitos sin guiones — formato exacto de cheques_bcra
+    cuits = [str(c).replace('-', '').replace(' ', '').strip() for c in cuits]
+    cuits = [c for c in cuits if c]
+    if not cuits:
         return {}
     try:
         conn = sqlite3.connect(PADRON_DB_PATH, check_same_thread=False)
@@ -3972,7 +3982,9 @@ def ejecutar_verificacion(cartera_data):
         # ═══════════════════════════════════════════════════════════════════
         verificacion_estado["mensaje"] = "Fase 0: Consultando bases locales (bulk offline)..."
         print(f"[verif] FASE 0: Bulk batch — {total} CUITs...", flush=True)
-        _cuits_lista = [str(c.get('cuit', '') or '').strip() for c in cartera_data if c.get('cuit')]
+        _nc_v2 = lambda x: str(x or '').replace('-', '').replace(' ', '').strip()
+        _cuits_lista = [_nc_v2(c.get('cuit')) for c in cartera_data if c.get('cuit')]
+        _cuits_lista = [c for c in _cuits_lista if c]
         _t0_bulk = time.time()
         _bulk_deudas  = _nomdeu_batch(_cuits_lista)
         _bulk_cheques = _cheques_local_batch(_cuits_lista)
@@ -3980,7 +3992,7 @@ def ejecutar_verificacion(cartera_data):
         bulk_prefetch = {}  # {cuit: {deuda, cheques, categoria, bcra_bulk, hist_bulk}}
         _cat_count = {'alto_riesgo': 0, 'zona_gris': 0, 'limpio_bulk': 0, 'nuevo': 0}
         for _c0 in cartera_data:
-            _cuit0 = str(_c0.get('cuit', '') or '').strip()
+            _cuit0 = _nc_v2(_c0.get('cuit', ''))
             if not _cuit0:
                 continue
             _deuda0  = _bulk_deudas.get(_cuit0)
@@ -4069,7 +4081,7 @@ def ejecutar_verificacion(cartera_data):
 
         if _para_live:
             def _fetch_cliente_bcra(cliente_f):
-                cuit_f = str(cliente_f.get('cuit', '') or '').strip()
+                cuit_f = str(cliente_f.get('cuit', '') or '').replace('-', '').replace(' ', '').strip()
                 try:
                     lr = consultar_bcra_lambda(cuit_f)
                     if lr:
@@ -4168,7 +4180,7 @@ def ejecutar_verificacion(cartera_data):
         print(f"[verif] FASE 3: Scoring con datos pre-fetched...", flush=True)
 
         for i, cliente in enumerate(cartera_data):
-            cuit         = str(cliente.get('cuit', '') or '').strip()
+            cuit         = str(cliente.get('cuit', '') or '').replace('-', '').replace(' ', '').strip()
             nombre       = str(cliente.get('nombre', '') or '').strip()
             sit_anterior = cliente.get('ultimaSit', 1) or 1
             tag          = f"[verif {i+1}/{total} {cuit}]"
