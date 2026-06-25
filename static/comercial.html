@@ -2025,7 +2025,7 @@ function renderFacturas(data, nombre) {
         <div style="display:flex;align-items:center;gap:8px;min-width:0">
           <!-- ✓ Checkbox cobrado: tildable/destildable siempre -->
           <input type="checkbox" id="${cobId}" class="chk-cobrado" data-saldo="${f.saldo}" data-idx="${idx}" data-nro="${nroData}"
-            ${cobradaConfirmada ? `checked title="Destildar para revertir el cobro" onchange="desmarcarCobrado('${nroData}')"` : `onchange="toggleCobrado(this,${parseFloat(f.saldo)||0})"`}>
+            ${cobradaConfirmada ? `checked data-ya-cobrada="1" title="Destildar para revertir el cobro" onchange="desmarcarCobrado('${nroData}')"` : `onchange="toggleCobrado(this,${parseFloat(f.saldo)||0})"`}>
           <!-- Checkbox selección WA (para "Enviar Estado de Cuenta") -->
           <input type="checkbox" id="${chkId}" class="fac-chk" data-saldo="${f.saldo}" ${cobradaConfirmada?'':'checked'}
             style="width:15px;height:15px;cursor:pointer;accent-color:#25d366;flex-shrink:0"
@@ -2117,7 +2117,7 @@ function toggleCobrado(chk, saldo) {
 }
 
 function actualizarBarraRendicion() {
-  const chks    = [...document.querySelectorAll('#mtab-facturas .chk-cobrado:not(:disabled)')];
+  const chks    = [...document.querySelectorAll('#mtab-facturas .chk-cobrado:not([data-ya-cobrada])')];
   const marcadas = chks.filter(c => c.checked);
   const barra    = document.getElementById('barra-rendicion');
   const info     = document.getElementById('barra-rendicion-info');
@@ -2134,7 +2134,7 @@ function actualizarBarraRendicion() {
 async function confirmarRendicion() {
   const cuit = window._modalCuit;
   if (!cuit) return;
-  const chks    = [...document.querySelectorAll('#mtab-facturas .chk-cobrado:not(:disabled):checked')];
+  const chks    = [...document.querySelectorAll('#mtab-facturas .chk-cobrado:not([data-ya-cobrada]):checked')];
   if (!chks.length) return;
 
   const btn = document.getElementById('btn-confirmar-rendicion');
