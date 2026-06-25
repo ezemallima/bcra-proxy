@@ -2023,10 +2023,9 @@ function renderFacturas(data, nombre) {
     html += `<div class="factura-item ${clase}${cobradaConfirmada?' fac-cobrada':''}" id="frow-${idx}">
       <div class="factura-row1">
         <div style="display:flex;align-items:center;gap:8px;min-width:0">
-          <!-- ✓ Checkbox cobrado: tildable/destildable — se confirma con el botón Rendición -->
+          <!-- ✓ Checkbox cobrado: tildable/destildable siempre -->
           <input type="checkbox" id="${cobId}" class="chk-cobrado" data-saldo="${f.saldo}" data-idx="${idx}" data-nro="${nroData}"
-            ${cobradaConfirmada ? 'checked disabled title="Cobro ya confirmado"' : ''}
-            onchange="toggleCobrado(this,${parseFloat(f.saldo)||0})">
+            ${cobradaConfirmada ? `checked title="Destildar para revertir el cobro" onchange="desmarcarCobrado('${nroData}')"` : `onchange="toggleCobrado(this,${parseFloat(f.saldo)||0})"`}>
           <!-- Checkbox selección WA (para "Enviar Estado de Cuenta") -->
           <input type="checkbox" id="${chkId}" class="fac-chk" data-saldo="${f.saldo}" ${cobradaConfirmada?'':'checked'}
             style="width:15px;height:15px;cursor:pointer;accent-color:#25d366;flex-shrink:0"
@@ -2046,7 +2045,6 @@ function renderFacturas(data, nombre) {
         <span class="factura-fecha"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Vence: ${f.fechaPago}</span>
       </div>
       ${diferencia ? `<div style="font-size:11px;color:var(--text3);margin-top:4px">Total fac: $${fmtFull(f.totalFactura)}</div>` : ''}
-      ${cobradaConfirmada ? `<div style="text-align:right;margin-top:5px;"><button onclick="desmarcarCobrado('${nroData}')" style="font-size:11px;color:#64748b;background:none;border:1px solid #d1d5db;border-radius:6px;padding:3px 9px;cursor:pointer;font-family:inherit;">↩ Deshacer cobro</button></div>` : ''}
     </div>`;
   });
 
