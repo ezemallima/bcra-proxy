@@ -326,6 +326,26 @@ CREDIT_ANALYSIS_SYSTEM_PROMPT = (
 DATA_DIR      = '/data' if os.path.exists('/data') else os.getcwd()
 PADRON_DB_PATH  = os.path.join(DATA_DIR, 'bcra_padron.db')
 NOMDEU_DB_PATH  = os.path.join(DATA_DIR, 'bcra_nomdeu.db')
+MIPYME_DB_PATH  = os.path.join(DATA_DIR, 'mipyme_padron.db')
+MIPYME_CSV_URL  = (
+    'https://datos.produccion.gob.ar/dataset/registro-mipyme/'
+    'archivo/bd407e64-0f11-44a2-b1d6-9a7a05700d73'
+)
+# Topes de facturación anual MiPyME — Resolución SEyPyME 1/2026 (en ARS)
+TOPES_FACTURACION_ANUAL: dict = {
+    'Comercio':            {'Micro': 1_738_060_000, 'Pequeña': 12_380_800_000, 'Mediana_T1': 57_922_750_000, 'Mediana_T2': 84_070_280_000},
+    'Servicios':           {'Micro':   374_060_000, 'Pequeña':  2_666_040_000, 'Mediana_T1': 12_470_690_000, 'Mediana_T2': 18_097_990_000},
+    'Industria y Minería': {'Micro': 1_097_270_000, 'Pequeña':  7_820_750_000, 'Mediana_T1': 36_594_360_000, 'Mediana_T2': 53_083_920_000},
+    'Construcción':        {'Micro':   583_520_000, 'Pequeña':  4_158_750_000, 'Mediana_T1': 19_459_900_000, 'Mediana_T2': 28_238_310_000},
+    'Agropecuario':        {'Micro':   831_000_000, 'Pequeña':  5_924_300_000, 'Mediana_T1': 27_726_150_000, 'Mediana_T2': 40_237_220_000},
+}
+# Rango de empleados estimado por categoría MiPyME (fuente: SEPYME estándar)
+_EMPLEADOS_RANGO: dict = {
+    'Micro':      '1-10',
+    'Pequeña':   '11-50',
+    'Mediana_T1': '51-200',
+    'Mediana_T2': '51-200',
+}
 ALERTAS_FILE      = os.path.join(DATA_DIR, 'db_v17_final.json')
 ALERTAS_BCRA_FILE = os.path.join(DATA_DIR, 'alertas_bcra.json')
 DATOS_FILE        = os.path.join(DATA_DIR, 'datos_bodega.json')
@@ -2073,6 +2093,26 @@ def get_solvency_data(cuit):
                 f"ant={data.get('antiguedad_anos')}a ing≈{data.get('ingresos_anuales')}",
                 flush=True)
 
+    # ── Fuente 2.5: Padrón MiPyME — categoría, sector, empleados, tope ──────
+    if data is not None and _mipyme_conn is not None:
+        _mp = _mipyme_get(cuit_limpio)
+        if _mp:
+            cat_mp = _mp.get('categoria')
+            sec_mp = _mp.get('sector')
+            data['categoria_mipyme'] = cat_mp
+            data['sector_mipyme']    = sec_mp
+            data['empleados_rango']  = _mp.get('empleados_rango')
+            _tope = _mipyme_tope(sec_mp or '', cat_mp or '')
+            data['tope_mipyme'] = _tope if _tope else None
+            # Cap conservador: el tope regulatorio es el máximo posible de facturación
+            if _tope and data.get('ingresos_anuales') and data['ingresos_anuales'] > _tope:
+                data['ingresos_anuales']  = _tope
+                data['ingresos_capeados'] = True
+            print(
+                f"[solvency] {cuit_limpio} MiPyME cat={cat_mp} sec={sec_mp} "
+                f"empl={data.get('empleados_rango')} tope={_tope}",
+                flush=True)
+
     # ── Fuente 3: AFIP HTML scraper ────────────────────────────────────────
     if data is None:
         data = _scrape_afip_html(cuit_limpio, ua)
@@ -3689,6 +3729,88 @@ def _nomdeu_batch(cuits: list) -> dict:
     return result
 
 
+# ── Módulo MiPyME — padrón de empresas PyME inscriptas (Min. Producción) ─────
+
+def _mipyme_get(cuit: str):
+    """Ficha MiPyME para un CUIT. Retorna dict con categoria/sector/empleados o None."""
+    if _mipyme_conn is None:
+        return None
+    cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
+    try:
+        row = _mipyme_conn.execute(
+            "SELECT razon_social, categoria, sector, provincia "
+            "FROM mipyme_padron WHERE cuit = ?", (cuit_limpio,)
+        ).fetchone()
+        if not row:
+            return None
+        cat = row[1] or ''
+        return {
+            'razon_social':   row[0],
+            'categoria':      cat,
+            'sector':         row[2],
+            'provincia':      row[3],
+            'empleados_rango': _EMPLEADOS_RANGO.get(cat),
+        }
+    except Exception:
+        return None
+
+
+def _mipyme_batch(cuits: list) -> dict:
+    """Consulta masiva del padrón MiPyME para N CUITs. Retorna {cuit: ficha_dict}."""
+    if _mipyme_conn is None or not cuits:
+        return {}
+    cuits = [str(c).replace('-', '').replace(' ', '').strip() for c in cuits]
+    cuits = [c for c in cuits if c]
+    if not cuits:
+        return {}
+    try:
+        placeholders = ','.join('?' * len(cuits))
+        rows = _mipyme_conn.execute(
+            f"SELECT cuit, razon_social, categoria, sector, provincia "
+            f"FROM mipyme_padron WHERE cuit IN ({placeholders})", cuits
+        ).fetchall()
+        result = {}
+        for row in rows:
+            cat = row[2] or ''
+            result[str(row[0])] = {
+                'razon_social':   row[1],
+                'categoria':      cat,
+                'sector':         row[3],
+                'provincia':      row[4],
+                'empleados_rango': _EMPLEADOS_RANGO.get(cat),
+            }
+        return result
+    except Exception as e:
+        print(f"[mipyme_batch] {e}", flush=True)
+        return {}
+
+
+def _mipyme_tope(sector: str, categoria: str) -> int:
+    """Tope de facturación anual (ARS) según sector y categoría. 0 si no se encuentra."""
+    if not sector or not categoria:
+        return 0
+    # Normalización defensiva: acentos y variantes tipográficas del CSV oficial
+    _SEC_ALIAS = {
+        'industria y mineria':  'Industria y Minería',
+        'industria y minería':  'Industria y Minería',
+        'construccion':         'Construcción',
+        'construcción':         'Construcción',
+        'comercio':             'Comercio',
+        'servicios':            'Servicios',
+        'agropecuario':         'Agropecuario',
+    }
+    sec_norm = _SEC_ALIAS.get(sector.lower().strip(), sector.strip())
+    cat_norm = categoria.strip()
+    return (TOPES_FACTURACION_ANUAL.get(sec_norm) or {}).get(cat_norm, 0)
+
+
+def _mipyme_empleados_rango(categoria: str):
+    """Rango de empleados estimado según categoría MiPyME. Retorna str o None."""
+    if not categoria:
+        return None
+    return _EMPLEADOS_RANGO.get(str(categoria).strip())
+
+
 def _cheques_local_batch(cuits: list) -> dict:
     """
     Consulta masiva de cheques rechazados para N CUITs en una sola SELECT.
@@ -3988,8 +4110,9 @@ def ejecutar_verificacion(cartera_data):
         _t0_bulk = time.time()
         _bulk_deudas  = _nomdeu_batch(_cuits_lista)
         _bulk_cheques = _cheques_local_batch(_cuits_lista)
+        _bulk_mipyme  = _mipyme_batch(_cuits_lista)   # padrón PyME: categoría + sector
         # Pre-calcular datos sintéticos por cliente
-        bulk_prefetch = {}  # {cuit: {deuda, cheques, categoria, bcra_bulk, hist_bulk}}
+        bulk_prefetch = {}  # {cuit: {deuda, cheques, categoria, bcra_bulk, hist_bulk, mipyme}}
         _cat_count = {'alto_riesgo': 0, 'zona_gris': 0, 'limpio_bulk': 0, 'nuevo': 0}
         for _c0 in cartera_data:
             _cuit0 = _nc_v2(_c0.get('cuit', ''))
@@ -3997,12 +4120,14 @@ def ejecutar_verificacion(cartera_data):
                 continue
             _deuda0  = _bulk_deudas.get(_cuit0)
             _cheq0   = _bulk_cheques.get(_cuit0)
+            _mipyme0 = _bulk_mipyme.get(_cuit0)
             _cat0    = _clasificar_bulk(_deuda0)
             _cat_count[_cat0] = _cat_count.get(_cat0, 0) + 1
             _nom0    = str(_c0.get('nombre', '') or '') or (_nomdeu_get_nombre(_cuit0) or _cuit0)
             bulk_prefetch[_cuit0] = {
                 'deuda':    _deuda0,
                 'cheques':  _cheq0,
+                'mipyme':   _mipyme0,
                 'categoria': _cat0,
                 'bcra_bulk': _bulk_to_bcra_data(_nom0, _deuda0) if _deuda0 else None,
                 'hist_bulk': _bulk_to_hist_data(_deuda0) if _deuda0 else None,
@@ -7386,6 +7511,7 @@ def analizar_bodegas():
 # Tablas: denominaciones, entidades, deudas_resumen, historial_bulk.
 
 _nomdeu_conn: sqlite3.Connection = None  # type: ignore[assignment]
+_mipyme_conn: sqlite3.Connection = None  # type: ignore[assignment]
 
 _GDRIVE_PREFIXES = ('https://drive.google.com', 'https://docs.google.com')
 
@@ -7514,6 +7640,249 @@ def _init_nomdeu_db() -> None:
         )
     except Exception as e:
         print(f"[nomdeu] Error abriendo SQLite: {e}", flush=True)
+
+
+# ── MiPyME: estado de importación ─────────────────────────────────────────────
+_mipyme_import_estado: dict = {
+    'corriendo':    False,
+    'progreso':     0,
+    'total':        0,
+    'ultimo_paso':  'idle',
+    'error':        None,
+    'registros_ok': 0,
+    'ultima_actualizacion': None,
+}
+
+
+def _import_mipyme_csv(url: str = None) -> bool:
+    """
+    Descarga el padrón MiPyME oficial (CSV, Min. Producción) e importa a SQLite.
+
+    Estrategia:
+      1. Descarga streaming a archivo temporal para no saturar RAM.
+      2. Parsing robusto: detecta columnas por nombre (case-insensitive), maneja
+         UTF-8 y latin-1, y normaliza CUIT a 11 dígitos sin guiones.
+      3. Import por batches de 5000 con INSERT OR REPLACE (idempotente).
+      4. Crea índice único por CUIT (PRIMARY KEY) para queries O(log n).
+
+    Mapping de categorías del CSV → clave interna:
+      'Micro empresa'            → 'Micro'
+      'Pequeña empresa'          → 'Pequeña'
+      'Mediana empresa -Tramo 1' → 'Mediana_T1'
+      'Mediana empresa -Tramo 2' → 'Mediana_T2'
+    """
+    global _mipyme_conn, _mipyme_import_estado
+
+    _mipyme_import_estado.update({
+        'corriendo': True, 'progreso': 0, 'total': 0,
+        'ultimo_paso': 'iniciando', 'error': None, 'registros_ok': 0,
+    })
+
+    _url = (url or MIPYME_CSV_URL).strip()
+    tmp_path = MIPYME_DB_PATH + '.csv.tmp'
+
+    # ── Paso 1: Descarga streaming ─────────────────────────────────────────────
+    try:
+        _mipyme_import_estado['ultimo_paso'] = 'descargando_csv'
+        print(f"[mipyme] Descargando padrón desde: {_url}", flush=True)
+        import requests as _req_mp
+        resp = _req_mp.get(_url, stream=True, timeout=120,
+                           headers={'User-Agent': 'VendeSeguro/1.0'})
+        resp.raise_for_status()
+        descargado = 0
+        with open(tmp_path, 'wb') as fh:
+            for chunk in resp.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    fh.write(chunk)
+                    descargado += len(chunk)
+        size_kb = descargado / 1024
+        print(f"[mipyme] CSV descargado: {size_kb:.0f} KB", flush=True)
+    except Exception as e:
+        _mipyme_import_estado.update({'corriendo': False, 'error': str(e), 'ultimo_paso': 'error_descarga'})
+        print(f"[mipyme] Error en descarga: {e}", flush=True)
+        return False
+
+    # ── Paso 2: Crear/limpiar DB destino ──────────────────────────────────────
+    try:
+        _mipyme_import_estado['ultimo_paso'] = 'preparando_db'
+        conn_w = sqlite3.connect(MIPYME_DB_PATH, check_same_thread=False)
+        conn_w.execute("PRAGMA journal_mode = WAL")
+        conn_w.execute("PRAGMA synchronous  = NORMAL")
+        conn_w.execute("""
+            CREATE TABLE IF NOT EXISTS mipyme_padron (
+                cuit        TEXT PRIMARY KEY,
+                razon_social TEXT,
+                categoria   TEXT,
+                sector      TEXT,
+                provincia   TEXT,
+                fecha_alta  TEXT
+            )
+        """)
+        conn_w.execute("DELETE FROM mipyme_padron")
+        conn_w.execute("""
+            CREATE TABLE IF NOT EXISTS _mipyme_meta (
+                key   TEXT PRIMARY KEY,
+                valor TEXT
+            )
+        """)
+        conn_w.commit()
+    except Exception as e:
+        _mipyme_import_estado.update({'corriendo': False, 'error': str(e), 'ultimo_paso': 'error_db'})
+        print(f"[mipyme] Error preparando DB: {e}", flush=True)
+        return False
+
+    # Mapping normalizado de categorías CSV → clave interna
+    _CAT_MAP = {
+        'micro empresa':             'Micro',
+        'micro':                     'Micro',
+        'pequeña empresa':           'Pequeña',
+        'pequeña':                   'Pequeña',
+        'pequeña empresa':           'Pequeña',
+        'pequena empresa':           'Pequeña',
+        'mediana empresa -tramo 1':  'Mediana_T1',
+        'mediana empresa - tramo 1': 'Mediana_T1',
+        'mediana tramo 1':           'Mediana_T1',
+        'mediana_t1':                'Mediana_T1',
+        'mediana empresa -tramo 2':  'Mediana_T2',
+        'mediana empresa - tramo 2': 'Mediana_T2',
+        'mediana tramo 2':           'Mediana_T2',
+        'mediana_t2':                'Mediana_T2',
+    }
+
+    # ── Paso 3: Parse CSV e INSERT por batches ─────────────────────────────────
+    try:
+        _mipyme_import_estado['ultimo_paso'] = 'parseando_csv'
+        import csv as _csv_mod
+
+        # Intenta UTF-8 primero, fallback a latin-1 (común en datos.gob.ar)
+        for _enc in ('utf-8-sig', 'utf-8', 'latin-1'):
+            try:
+                with open(tmp_path, 'r', encoding=_enc, errors='replace') as fh:
+                    reader = _csv_mod.DictReader(fh)
+                    # Normalizar nombres de columna a minúsculas sin espacios extra
+                    _raw_fields = reader.fieldnames or []
+                    _fields_lower = [f.lower().strip() for f in _raw_fields]
+
+                    # Detectar columnas por variantes posibles
+                    def _col(*candidates):
+                        for cand in candidates:
+                            for i, fn in enumerate(_fields_lower):
+                                if fn == cand or fn.startswith(cand):
+                                    return _raw_fields[i]
+                        return None
+
+                    col_cuit   = _col('cuit')
+                    col_rs     = _col('razon_social', 'denominacion', 'nombre', 'empresa')
+                    col_cat    = _col('categoria', 'tramo', 'categoría')
+                    col_sec    = _col('sector', 'actividad_principal', 'rubro')
+                    col_prov   = _col('provincia')
+                    col_alta   = _col('fecha_alta', 'fecha_inscripcion', 'fecha')
+
+                    if not col_cuit or not col_cat:
+                        print(f"[mipyme] Encoding {_enc}: columnas no encontradas ({_fields_lower[:8]})", flush=True)
+                        continue
+
+                    batch, total_ok = [], 0
+                    for row in reader:
+                        cuit_raw = str(row.get(col_cuit) or '').replace('-', '').replace(' ', '').strip()
+                        if len(cuit_raw) != 11 or not cuit_raw.isdigit():
+                            continue
+                        cat_raw = (row.get(col_cat) or '').strip().lower()
+                        cat_norm = _CAT_MAP.get(cat_raw, '')
+                        if not cat_norm:
+                            continue  # fila sin categoría reconocible
+                        rs    = str(row.get(col_rs) or '').strip()[:200] if col_rs else ''
+                        sec   = str(row.get(col_sec) or '').strip()[:80] if col_sec else ''
+                        prov  = str(row.get(col_prov) or '').strip()[:60] if col_prov else ''
+                        alta  = str(row.get(col_alta) or '').strip()[:20] if col_alta else ''
+                        batch.append((cuit_raw, rs, cat_norm, sec, prov, alta))
+                        if len(batch) >= 5000:
+                            conn_w.executemany(
+                                "INSERT OR REPLACE INTO mipyme_padron "
+                                "(cuit, razon_social, categoria, sector, provincia, fecha_alta) "
+                                "VALUES (?,?,?,?,?,?)", batch
+                            )
+                            conn_w.commit()
+                            total_ok += len(batch)
+                            _mipyme_import_estado['registros_ok'] = total_ok
+                            batch = []
+
+                    # Flush último batch
+                    if batch:
+                        conn_w.executemany(
+                            "INSERT OR REPLACE INTO mipyme_padron "
+                            "(cuit, razon_social, categoria, sector, provincia, fecha_alta) "
+                            "VALUES (?,?,?,?,?,?)", batch
+                        )
+                        conn_w.commit()
+                        total_ok += len(batch)
+
+                    _mipyme_import_estado['registros_ok'] = total_ok
+                    print(f"[mipyme] Import OK: {total_ok:,} empresas (encoding={_enc})", flush=True)
+                    break  # salir del loop de encodings
+
+            except UnicodeDecodeError:
+                print(f"[mipyme] Encoding {_enc} falló, probando siguiente...", flush=True)
+                continue
+
+        else:
+            raise ValueError("No se pudo parsear el CSV con ningún encoding conocido")
+
+    except Exception as e:
+        _mipyme_import_estado.update({'corriendo': False, 'error': str(e), 'ultimo_paso': 'error_parse'})
+        print(f"[mipyme] Error parseando CSV: {e}", flush=True)
+        conn_w.close()
+        return False
+
+    # ── Paso 4: Metadata + conectar globalmente ────────────────────────────────
+    try:
+        conn_w.execute(
+            "INSERT OR REPLACE INTO _mipyme_meta (key, valor) VALUES (?,?)",
+            ('ultima_actualizacion', time.strftime('%Y-%m-%d %H:%M:%S'))
+        )
+        conn_w.execute(
+            "INSERT OR REPLACE INTO _mipyme_meta (key, valor) VALUES (?,?)",
+            ('total_registros', str(_mipyme_import_estado['registros_ok']))
+        )
+        conn_w.commit()
+        conn_w.execute("PRAGMA query_only = 1")
+        conn_w.execute("PRAGMA cache_size = -32768")   # 32 MB caché lectura
+        _mipyme_conn = conn_w
+        _mipyme_import_estado.update({
+            'corriendo': False,
+            'progreso':  100,
+            'ultimo_paso': 'completado',
+            'ultima_actualizacion': time.strftime('%Y-%m-%d %H:%M:%S'),
+        })
+        print(f"[mipyme] DB lista — {_mipyme_import_estado['registros_ok']:,} PyMEs indexadas", flush=True)
+    except Exception as e:
+        _mipyme_import_estado.update({'corriendo': False, 'error': str(e), 'ultimo_paso': 'error_final'})
+        print(f"[mipyme] Error cerrando import: {e}", flush=True)
+        return False
+    finally:
+        try:
+            os.remove(tmp_path)
+        except Exception:
+            pass
+
+    return True
+
+
+def _init_mipyme_db() -> None:
+    """Abre conexión de solo lectura a mipyme_padron.db si el archivo existe en disco."""
+    global _mipyme_conn
+    if not os.path.exists(MIPYME_DB_PATH):
+        print("[mipyme] mipyme_padron.db no encontrada — ejecutar POST /update-mipyme-db para importar", flush=True)
+        return
+    try:
+        conn = sqlite3.connect(MIPYME_DB_PATH, check_same_thread=False)
+        conn.execute("PRAGMA query_only = 1")
+        conn.execute("PRAGMA cache_size = -32768")
+        n = conn.execute("SELECT COUNT(*) FROM mipyme_padron").fetchone()[0]
+        _mipyme_conn = conn
+        print(f"[mipyme] Listo — {n:,} PyMEs en padrón local", flush=True)
+    except Exception as e:
+        print(f"[mipyme] Error abriendo SQLite: {e}", flush=True)
 
 
 def _nomdeu_get_nombre(cuit: str):
@@ -8308,6 +8677,59 @@ def update_cheques_db_estado():
     except Exception:
         pass
     return jsonify({**_cheques_db_estado, "db_meta": meta}), 200
+
+
+@app.route("/update-mipyme-db", methods=["POST", "GET"])
+def update_mipyme_db():
+    """Descarga el padrón MiPyME oficial (datos.gob.ar) e importa a SQLite local.
+
+    El proceso se ejecuta en background (puede tardar 1-3 minutos según red).
+    Consultar /update-mipyme-db/estado para monitorear progreso.
+
+    Parámetro opcional: ?url=... para sobreescribir la URL de descarga.
+    """
+    if _mipyme_import_estado.get('corriendo'):
+        return jsonify({
+            "status":      "ya_corriendo",
+            "progreso":    _mipyme_import_estado['progreso'],
+            "ultimo_paso": _mipyme_import_estado['ultimo_paso'],
+        }), 202
+
+    url_custom = (request.args.get('url') or '').strip() or None
+
+    def _run():
+        ok = _import_mipyme_csv(url_custom)
+        print(f"[mipyme] Actualización {'exitosa' if ok else 'fallida'}", flush=True)
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({
+        "status":  "iniciado",
+        "url":     url_custom or MIPYME_CSV_URL,
+        "message": "Importación en background. Consultar /update-mipyme-db/estado.",
+    }), 202
+
+
+@app.route("/update-mipyme-db/estado")
+def update_mipyme_db_estado():
+    """Estado actual de la importación MiPyME + metadatos de la última importación."""
+    meta = {}
+    try:
+        if os.path.exists(MIPYME_DB_PATH):
+            _mc = sqlite3.connect(MIPYME_DB_PATH, check_same_thread=False)
+            try:
+                rows = _mc.execute("SELECT key, valor FROM _mipyme_meta").fetchall()
+                meta = {k: v for k, v in rows}
+            except Exception:
+                pass
+            finally:
+                _mc.close()
+    except Exception:
+        pass
+    return jsonify({
+        **_mipyme_import_estado,
+        "db_cargada": _mipyme_conn is not None,
+        "db_meta":    meta,
+    }), 200
 
 
 @app.route("/cache/limpiar/<cuit>", methods=["POST", "GET"])
@@ -10244,6 +10666,7 @@ def _startup_v168():
 _startup_v168()
 _init_padron_db()
 _init_nomdeu_db()   # padrón oficial BCRA (Nomdeu.txt mensual desde R2)
+_init_mipyme_db()   # padrón PyME (Min. Producción — importado via /update-mipyme-db)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
