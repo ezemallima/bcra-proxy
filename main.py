@@ -6891,12 +6891,10 @@ def _score_response(score_data: dict, solvency: dict = None, cheq_data: dict = N
     _safe["fecha_inscripcion"]   = sol.get('fecha_inicio')        or None
     _safe["categoria_monotrib"]  = sol.get('categoria_monotrib')  or None
     _safe["tipo_persona"]        = sol.get('tipo_persona')        or None
-    # ── Módulo MiPyME — padrón Min. Producción ────────────────────────────────
+    # ── Módulo MiPyME — padrón Min. Producción (datos oficiales SEPYME) ─────────
     _safe["categoria_mipyme"]    = sol.get('categoria_mipyme')    or None
     _safe["sector_mipyme"]       = sol.get('sector_mipyme')       or None
     _safe["empleados_rango"]     = sol.get('empleados_rango')     or None
-    _safe["tope_mipyme"]         = sol.get('tope_mipyme')         or None
-    _safe["ingresos_capeados"]   = sol.get('ingresos_capeados')   or False
 
     _safe.setdefault("override_admin",       False)
     _safe.setdefault("mora_administrativa",  False)
