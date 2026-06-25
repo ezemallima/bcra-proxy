@@ -3186,6 +3186,25 @@ def calcular_rating_predictivo(
     # ── Suma bruta (A + B + C + Liquidez) ────────────────────────────────
     puntos = pts_c1 + pts_cb + pts_cc + pts_liq
 
+    # ── Bonus estructura MiPyME — proxy empleados (padrón Min. Producción) ───
+    # Fuente: categoria_mipyme enriquecida por get_solvency_data → mipyme_padron.db.
+    # Refleja sustancia operativa declarada ante SEPYME/AFIP: nómina real implícita.
+    # Gran empresa (jurídica sin registro MiPyME): escala corporativa, bonus fijo.
+    _bonus_estructura = 0
+    if solvency_data:
+        _cat_mp   = (solvency_data.get('categoria_mipyme') or '').strip()
+        _tipo_p2  = (solvency_data.get('tipo_persona') or '').upper()
+        _es_empl2 = bool(solvency_data.get('es_empleador')) or 'JURIDICA' in _tipo_p2
+        _BONUS_MP = {'Micro': 10, 'Pequeña': 25, 'Mediana_T1': 45, 'Mediana_T2': 45}
+        if _cat_mp in _BONUS_MP:
+            _bonus_estructura = _BONUS_MP[_cat_mp]
+        elif _es_empl2:
+            _bonus_estructura = 60  # corporativa sin registro MiPyME — escala implícita
+        if _bonus_estructura:
+            puntos += _bonus_estructura
+            _cat_log = _cat_mp if _cat_mp else 'gran_empresa'
+            print(f"[score] {cuit_limpio} bonus_estructura cat={_cat_log} → +{_bonus_estructura}", flush=True)
+
     # ── Piso v25.1: Sit.1 + deuda BCRA $0 + historial bancario real ──────────
     # Solo aplica si el cliente tiene períodos BCRA reportados (fue cliente de algún banco).
     # Si no hay historial en absoluto (CUIT sin actividad bancaria nunca), el score raw
@@ -3311,6 +3330,28 @@ def calcular_rating_predictivo(
             f"pit_adj={_pit_adj:.3f} box=[{_lo},{_hi}] → {puntos}",
             flush=True
         )
+
+    # ── Piso estructura empresarial (solo max_sit==1, BCRA limpia) ───────────
+    # Un empleador/PyME con BCRA Sit.1 tiene sustancia crediticia mínima verificada.
+    # El padrón MiPyME actúa como proxy de nómina declarada ante AFIP/SEPYME.
+    # Los caps posteriores (mora Odoo, comunidad negativa) siguen teniendo prioridad:
+    # la estructura reduce riesgo base pero no protege de incumplimiento real.
+    if max_sit == 1 and not hard_block_bcra and solvency_data:
+        _cat_mp_p  = (solvency_data.get('categoria_mipyme') or '').strip()
+        _tipo_p3   = (solvency_data.get('tipo_persona') or '').upper()
+        _es_empl3  = bool(solvency_data.get('es_empleador')) or 'JURIDICA' in _tipo_p3
+        _PISO_MP   = {'Pequeña': 450, 'Mediana_T1': 550, 'Mediana_T2': 600}
+        _piso_empl = _PISO_MP.get(_cat_mp_p, 0)
+        if not _cat_mp_p and _es_empl3:
+            _piso_empl = 650   # gran empresa / corporativa sin registro MiPyME
+        if _piso_empl and puntos < _piso_empl:
+            _cat_log2 = _cat_mp_p if _cat_mp_p else 'gran_empresa'
+            print(
+                f"[score] {cuit_limpio} piso_estructura cat={_cat_log2} "
+                f"→ {round(puntos)}→{_piso_empl}",
+                flush=True
+            )
+            puntos = _piso_empl
 
     # ── Hard Block: mora interna Odoo → score ≤ 400 ──────────────────────
     if hard_block_mora:
