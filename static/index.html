@@ -947,6 +947,9 @@
       <!-- Verdict banner — full width, antes del score -->
       <div id="verdict-container" style="margin-bottom:8px;"></div>
 
+      <!-- Bloque Información Corporativa (Estilo Nosis) — se pinta al llegar el score -->
+      <div id="info-corporativa-card" style="display:none;margin-bottom:8px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;"></div>
+
       <div id="saldos-interno-card" class="card" style="margin-bottom:8px;display:none;border-left:4px solid #2563eb;"></div>
 
       <div id="decision-grid">
@@ -3881,6 +3884,8 @@ async function consultarCliente() {
     'cheques-rechazados-data','afip-container','wsp-data',
     'veraz-datos','mora-alert-container','saldos-interno-card'
   ];
+  var _icReset = document.getElementById('info-corporativa-card');
+  if (_icReset) { _icReset.innerHTML = ''; _icReset.style.display = 'none'; }
   var saldosCard = document.getElementById('saldos-interno-card');
   if (saldosCard) saldosCard.style.display = 'none';
   resetIds.forEach(function(id) {
@@ -4422,6 +4427,145 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
       if (_emp) chips += '<span title="Rango de empleados estimado" style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:11px;background:#f8fafc;border:1px solid #e2e8f0;color:#475569;">👥 ' + _emp + ' empleados</span>';
       if (chips) { _mpRow.innerHTML = chips; _mpRow.style.display = 'flex'; }
     })();
+
+    // ── Bloque Información Corporativa (Estilo Nosis) ─────────────────────────
+    (function() {
+      var _icCard = document.getElementById('info-corporativa-card');
+      if (!_icCard) return;
+
+      // ── 1. Determinar categoría corporativa ───────────────────────────────
+      var _sv       = scoreServidor || {};
+      var _cat      = _sv.categoria_mipyme || '';           // 'Micro'|'Pequeña'|'Mediana_T1'|'Mediana_T2'|''
+      var _sec      = _sv.sector_mipyme    || '';
+      var _empRango = _sv.empleados_rango  || '';
+      var _tope     = _sv.tope_mipyme      || 0;
+      var _ingBase  = _sv.inferencia_ingresos || 0;
+      var _esPyme   = !!_cat;
+
+      // Gran empresa: Jurídica sin registro MiPyME con actividad financiera relevante
+      var _esGranEmpresa = !_esPyme && (
+        (_sv.tipo_persona || '').toUpperCase().includes('JURIDICA') ||
+        _sv.es_empleador === true ||
+        _ingBase > 84070280000   // supera el tope máximo de Mediana T2 Comercio
+      );
+
+      // ── 2. Calcular facturación estimada ──────────────────────────────────
+      var _facturacion = 0;
+      var _facturacionFuente = '';
+
+      if (_esPyme && _tope > 0) {
+        // PyME inscripta: 70% del tope regulatorio (conservador, no toda PyME opera al tope)
+        _facturacion = _tope * 0.70;
+        _facturacionFuente = 'Estimado al 70% del tope MiPyME (Res. SEyPyME 1/2026)';
+      } else if (_ingBase > 0) {
+        // Ingresos inferidos por backend (AFIP/TangoFactura/BCRA)
+        _facturacion = _ingBase;
+        _facturacionFuente = 'Estimado por actividad declarada (AFIP)';
+      } else {
+        // Fallback: apalancamiento sobre crédito BCRA Sit.1 (monto en miles ARS × 3.5)
+        var _bcraWin = window._ultimoBcraData;
+        var _montoSit1k = 0;
+        try {
+          var _periodos = (_bcraWin && _bcraWin.results && _bcraWin.results.periodos) || [];
+          if (_periodos.length) {
+            (_periodos[0].entidades || []).forEach(function(e) {
+              if ((e.situacion || e.sit || 1) <= 1) _montoSit1k += (e.monto || 0);
+            });
+          }
+        } catch(_eB) {}
+        if (_montoSit1k > 0) {
+          _facturacion = _montoSit1k * 1000 * 3.5;
+          _facturacionFuente = 'Estimado por apalancamiento sobre líneas BCRA Sit.1 (×3.5)';
+        }
+      }
+
+      // Si no hay ninguna fuente de ingresos y no hay señales → no mostrar el bloque
+      if (!_esPyme && !_esGranEmpresa && _facturacion <= 0) {
+        _icCard.style.display = 'none';
+        return;
+      }
+
+      // ── 3. Formatear montos ARS ───────────────────────────────────────────
+      function _fmtARS(n) {
+        if (!n || n <= 0) return '—';
+        if (n >= 1e12)  return '$' + (n / 1e12).toFixed(2)  + ' billones';
+        if (n >= 1e9)   return '$' + (n / 1e9).toFixed(1)   + ' mil millones';
+        if (n >= 1e6)   return '$' + Math.round(n / 1e6).toLocaleString('es-AR') + ' millones';
+        return '$' + Math.round(n).toLocaleString('es-AR');
+      }
+
+      // ── 4. Chips corporativos ─────────────────────────────────────────────
+      var _CAT_STYLE = {
+        'Micro':      'background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8;',
+        'Pequeña':    'background:#f0fdf4;border-color:#bbf7d0;color:#15803d;',
+        'Mediana_T1': 'background:#fefce8;border-color:#fde68a;color:#92400e;',
+        'Mediana_T2': 'background:#fefce8;border-color:#fde68a;color:#92400e;',
+      };
+      var _CAT_LABEL = {
+        'Micro':'Micro empresa', 'Pequeña':'Pequeña empresa',
+        'Mediana_T1':'Mediana T1', 'Mediana_T2':'Mediana T2',
+      };
+      var _chipBase = 'display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid;';
+      var _chipsHtml = '';
+      if (_esPyme) {
+        var _cs = _CAT_STYLE[_cat] || 'background:#f1f5f9;border-color:#cbd5e1;color:#334155;';
+        _chipsHtml += '<span style="' + _chipBase + _cs + '">🏢 ' + (_CAT_LABEL[_cat] || _cat) + '</span>';
+        if (_sec) _chipsHtml += '<span style="' + _chipBase + 'background:#f8fafc;border-color:#e2e8f0;color:#475569;">📊 ' + _sec + '</span>';
+      } else if (_esGranEmpresa) {
+        _chipsHtml += '<span style="' + _chipBase + 'background:#fdf4ff;border-color:#e9d5ff;color:#7e22ce;">🏛 Gran Empresa / Corporativa</span>';
+      }
+
+      // ── 5. Empleados ──────────────────────────────────────────────────────
+      var _EMPL_MAP = { 'Micro':'1-10', 'Pequeña':'11-50', 'Mediana_T1':'51-200', 'Mediana_T2':'51-200' };
+      var _empLabel = _empRango || _EMPL_MAP[_cat] || (_esGranEmpresa ? '+200' : '');
+
+      // ── 6. Construir HTML del bloque ──────────────────────────────────────
+      var _html = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">'
+        + '<div style="font-size:13px;font-weight:700;color:#1e293b;">Información Corporativa</div>'
+        + '<div style="flex:1;height:1px;background:#f1f5f9;"></div>'
+        + '<div style="font-size:10px;color:#94a3b8;font-style:italic;">Estimación — no auditada</div>'
+        + '</div>';
+
+      // Chips
+      if (_chipsHtml) {
+        _html += '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;">' + _chipsHtml + '</div>';
+      }
+
+      // Grid de métricas
+      _html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">';
+
+      // Facturación anual
+      _html += '<div style="background:#f8fafc;border-radius:8px;padding:10px 12px;">'
+        + '<div style="font-size:10px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:3px;">Facturación Anual Est.</div>'
+        + '<div style="font-size:17px;font-weight:800;color:#0f172a;line-height:1.1;">' + _fmtARS(_facturacion) + '</div>'
+        + '<div style="font-size:9px;color:#94a3b8;margin-top:3px;">' + _facturacionFuente + '</div>'
+        + '</div>';
+
+      // Personal estimado
+      _html += '<div style="background:#f8fafc;border-radius:8px;padding:10px 12px;">'
+        + '<div style="font-size:10px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:3px;">Personal Estimado</div>'
+        + '<div style="font-size:17px;font-weight:800;color:#0f172a;line-height:1.1;">' + (_empLabel ? _empLabel + ' emp.' : '—') + '</div>'
+        + '<div style="font-size:9px;color:#94a3b8;margin-top:3px;">' + (_esPyme ? 'Rango SEPYME según categoría' : (_esGranEmpresa ? 'Corporación / Empleador registrado' : '')) + '</div>'
+        + '</div>';
+
+      _html += '</div>';  // cierre grid
+
+      // Barra de posición en el mercado (solo si hay facturación)
+      if (_facturacion > 0 && _tope > 0) {
+        var _pct = Math.min(100, Math.round((_facturacion / _tope) * 100));
+        var _barColor = _pct > 80 ? '#ef4444' : _pct > 50 ? '#f59e0b' : '#10b981';
+        _html += '<div style="margin-top:10px;">'
+          + '<div style="display:flex;justify-content:space-between;font-size:10px;color:#64748b;margin-bottom:3px;">'
+          + '<span>Posición vs. tope MiPyME</span><span>' + _pct + '% del tope</span></div>'
+          + '<div style="height:5px;background:#e2e8f0;border-radius:3px;overflow:hidden;">'
+          + '<div style="height:100%;width:' + _pct + '%;background:' + _barColor + ';border-radius:3px;transition:width 0.6s;"></div>'
+          + '</div></div>';
+      }
+
+      _icCard.innerHTML = _html;
+      _icCard.style.display = 'block';
+    })();
+
     // Personas físicas: AFIP no expone nombres (privacidad). Si el servidor devolvió score
     // válido (no cuit_inexistente), el CUIT existe aunque no haya razón social en AFIP.
     if (_esFantasma && scoreServidor && scoreServidor.score > 0 && scoreServidor.error !== 'cuit_inexistente') {
