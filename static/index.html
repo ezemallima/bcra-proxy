@@ -4264,7 +4264,9 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
     headerHtml += '<span style="font-size:11px;font-weight:600;color:' + _colorAfip + ';">AFIP: ' + estadoAfip + '</span>';
   }
   if (domicilioAfip) headerHtml += '<span style="font-size:11px;color:#94a3b8;">📍 ' + domicilioAfip + '</span>';
-  headerHtml += '</div></div>';
+  headerHtml += '</div>';
+  headerHtml += '<div id="cli-mipyme-row" style="display:none;margin-top:5px;flex-wrap:wrap;gap:5px;align-items:center;"></div>';
+  headerHtml += '</div>';
   headerHtml += '<div class="decision-actions" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">';
   headerHtml += yaEstaCartera
     ? '<span class="badge-cartera">En cartera ✓</span>'
@@ -4397,6 +4399,29 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
       var _elNomHeader = document.querySelector('#cliente-header .nombre-cliente');
       if (_elNomHeader) _elNomHeader.textContent = nombreMostrar;
     }
+    // ── Chips MiPyME — se pintan cuando el score trae datos del padrón Producción ──
+    (function() {
+      if (!scoreServidor) return;
+      var _mpRow = document.getElementById('cli-mipyme-row');
+      if (!_mpRow) return;
+      var _cat = scoreServidor.categoria_mipyme;
+      var _sec = scoreServidor.sector_mipyme;
+      var _emp = scoreServidor.empleados_rango;
+      if (!_cat && !_sec) return;
+      var _CAT_COLOR = {
+        'Micro':      { bg: '#eff6ff', border: '#bfdbfe', text: '#1d4ed8' },
+        'Pequeña':    { bg: '#f0fdf4', border: '#bbf7d0', text: '#15803d' },
+        'Mediana_T1': { bg: '#fefce8', border: '#fde68a', text: '#92400e' },
+        'Mediana_T2': { bg: '#fefce8', border: '#fde68a', text: '#92400e' },
+      };
+      var _catLabel = { 'Micro':'Micro empresa', 'Pequeña':'Pequeña empresa', 'Mediana_T1':'Mediana T1', 'Mediana_T2':'Mediana T2' };
+      var _c = _CAT_COLOR[_cat] || { bg:'#f1f5f9', border:'#cbd5e1', text:'#334155' };
+      var chips = '';
+      if (_cat) chips += '<span title="Categoría MiPyME — Res. SEyPyME 1/2026" style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;background:' + _c.bg + ';border:1px solid ' + _c.border + ';color:' + _c.text + ';">🏢 ' + (_catLabel[_cat] || _cat) + '</span>';
+      if (_sec) chips += '<span title="Sector de actividad" style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:11px;background:#f8fafc;border:1px solid #e2e8f0;color:#475569;">📊 ' + _sec + '</span>';
+      if (_emp) chips += '<span title="Rango de empleados estimado" style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:11px;background:#f8fafc;border:1px solid #e2e8f0;color:#475569;">👥 ' + _emp + ' empleados</span>';
+      if (chips) { _mpRow.innerHTML = chips; _mpRow.style.display = 'flex'; }
+    })();
     // Personas físicas: AFIP no expone nombres (privacidad). Si el servidor devolvió score
     // válido (no cuit_inexistente), el CUIT existe aunque no haya razón social en AFIP.
     if (_esFantasma && scoreServidor && scoreServidor.score > 0 && scoreServidor.error !== 'cuit_inexistente') {
