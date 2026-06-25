@@ -1969,6 +1969,97 @@ def _check_anses_aportes(cuit, ua):
     return None
 
 
+_BORA_CACHE: dict = {}   # {cuit_11d: razon_social | None}  — in-process, reset en restart
+
+
+def _scrape_bora_razon_social(cuit: str) -> str:
+    """
+    Recupera Razón Social desde Boletín Oficial de la República Argentina (BORA),
+    Sección II — Sociedades Civiles y Comerciales.
+
+    Única finalidad: rescatar el nombre cuando AFIP/TangoFactura devuelven None.
+    No extrae capital social (dato históricamente obsoleto por inflación).
+
+    Solo aplica a personas jurídicas (prefijo CUIT 30/33/34).
+    Retorna str con la razón social normalizada, o None si no encuentra publicación.
+    """
+    cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
+    if len(cuit_limpio) != 11 or cuit_limpio[:2] not in ('30', '33', '34'):
+        return None   # solo jurídicas — personas físicas no publican en Sección II
+    if cuit_limpio in _BORA_CACHE:
+        return _BORA_CACHE[cuit_limpio]
+
+    # BORA indexa con guiones (formato estándar de los edictos)
+    cuit_fmt = f"{cuit_limpio[:2]}-{cuit_limpio[2:10]}-{cuit_limpio[10]}"
+    result = None
+    try:
+        _hdrs = {
+            'User-Agent': 'Mozilla/5.0 (compatible; VendeSeguro/1.0; +https://vendeseguro.ar)',
+            'Accept': 'application/json, text/html, */*',
+            'Referer': 'https://www.boletinoficial.gob.ar/',
+        }
+        # Intentamos el endpoint de búsqueda rápida (GET) de la Sección II
+        _url_get = (
+            'https://www.boletinoficial.gob.ar/norma/busquedaRapida'
+            f'?textoBusqueda={cuit_fmt}&tipoBusqueda=0&seccion=2'
+        )
+        r = requests.get(_url_get, headers=_hdrs, timeout=12, verify=True)
+        if r.status_code == 200:
+            _body = r.text
+            # Los edictos de Sección II usan patrones consistentes para la razón social
+            _PATS = [
+                r'[Rr]az[oó]n\s+[Ss]ocial[:\s]+([A-ZÁÉÍÓÚÜÑ][^\n<]{4,80}?)[\.<\n]',
+                r'[Dd]enominaci[oó]n\s+[Ss]ocial[:\s]+([A-ZÁÉÍÓÚÜÑ][^\n<]{4,80}?)[\.<\n]',
+                r'[Dd]enominaci[oó]n[:\s]+([A-ZÁÉÍÓÚÜÑ][^\n<]{4,80}?)[\.<\n]',
+                r'"denominacion"\s*:\s*"([^"]{4,120})"',
+                r'"razonSocial"\s*:\s*"([^"]{4,120})"',
+                r'"nombre"\s*:\s*"([^"]{4,120})"',
+            ]
+            for pat in _PATS:
+                m = re.search(pat, _body)
+                if m:
+                    candidate = m.group(1).strip().rstrip('.,;')
+                    # Filtrar resultados que son solo números o muy cortos
+                    if len(candidate) >= 4 and not candidate[:4].isdigit():
+                        result = candidate
+                        break
+
+        # Si el GET no devolvió resultado, intentar POST (formato API avanzada)
+        if result is None:
+            _url_post = 'https://www.boletinoficial.gob.ar/norma/busquedaAvanzadaResultado'
+            _payload  = {
+                'textoBusqueda': cuit_fmt,
+                'tipoBusqueda': 0,
+                'seccion': 2,
+                'pagina': 1,
+            }
+            r2 = requests.post(_url_post, json=_payload, headers=_hdrs, timeout=12, verify=True)
+            if r2.status_code == 200:
+                try:
+                    _json = r2.json()
+                    # Iterar resultados buscando el campo de denominación
+                    for _item in (_json.get('normas') or _json.get('results') or []):
+                        for _fld in ('denominacion', 'razonSocial', 'titulo', 'nombre'):
+                            val = (_item.get(_fld) or '').strip()
+                            if val and len(val) >= 4 and not val[:4].isdigit():
+                                result = val
+                                break
+                        if result:
+                            break
+                except Exception:
+                    pass
+
+    except Exception as e:
+        print(f"[bora] {cuit_limpio} error: {e}", flush=True)
+
+    _BORA_CACHE[cuit_limpio] = result
+    if result:
+        print(f"[bora] {cuit_limpio} → '{result}'", flush=True)
+    else:
+        print(f"[bora] {cuit_limpio} sin coincidencia en Sección II", flush=True)
+    return result
+
+
 def _inferir_desde_bcra(cuit):
     """Fallback definitivo: infiere ingresos desde crédito bancario activo en BCRA.
     Fundamento: el banco validó capacidad de pago antes de otorgar el crédito.
@@ -2174,6 +2265,15 @@ def get_solvency_data(cuit):
 
         # juicios_comerciales: desde API de respaldo si viene, default 0
         data.setdefault('juicios_comerciales', data.get('juicios') or 0)
+
+        # ── Fuente 6: BORA Sección II — Razón Social como último recurso ─────
+        # Solo corre si ninguna fuente anterior pudo aportar el nombre.
+        # Aplica únicamente a personas jurídicas (CUIT 30/33/34).
+        if not (data.get('razon_social') or data.get('nombre') or '').strip():
+            _bora_rs = _scrape_bora_razon_social(cuit_limpio)
+            if _bora_rs:
+                data['razon_social'] = _bora_rs
+                data['fuente_nombre'] = 'bora_seccion2'
 
     try:
         with open(cache_path, 'w') as f:
@@ -3193,13 +3293,13 @@ def calcular_rating_predictivo(
     _bonus_estructura = 0
     if solvency_data:
         _cat_mp   = (solvency_data.get('categoria_mipyme') or '').strip()
-        _tipo_p2  = (solvency_data.get('tipo_persona') or '').upper()
-        _es_empl2 = bool(solvency_data.get('es_empleador')) or 'JURIDICA' in _tipo_p2
+        # Requiere confirmación explícita de AFIP/TangoFactura — no asumimos por tipo_persona
+        _es_empl2 = solvency_data.get('es_empleador') is True
         _BONUS_MP = {'Micro': 10, 'Pequeña': 25, 'Mediana_T1': 45, 'Mediana_T2': 45}
         if _cat_mp in _BONUS_MP:
             _bonus_estructura = _BONUS_MP[_cat_mp]
         elif _es_empl2:
-            _bonus_estructura = 60  # corporativa sin registro MiPyME — escala implícita
+            _bonus_estructura = 60  # empleador confirmado por AFIP sin registro MiPyME
         if _bonus_estructura:
             puntos += _bonus_estructura
             _cat_log = _cat_mp if _cat_mp else 'gran_empresa'
@@ -3338,12 +3438,12 @@ def calcular_rating_predictivo(
     # la estructura reduce riesgo base pero no protege de incumplimiento real.
     if max_sit == 1 and not hard_block_bcra and solvency_data:
         _cat_mp_p  = (solvency_data.get('categoria_mipyme') or '').strip()
-        _tipo_p3   = (solvency_data.get('tipo_persona') or '').upper()
-        _es_empl3  = bool(solvency_data.get('es_empleador')) or 'JURIDICA' in _tipo_p3
+        # Requiere confirmación explícita de AFIP/TangoFactura — no asumimos por tipo_persona
+        _es_empl3  = solvency_data.get('es_empleador') is True
         _PISO_MP   = {'Pequeña': 450, 'Mediana_T1': 550, 'Mediana_T2': 600}
         _piso_empl = _PISO_MP.get(_cat_mp_p, 0)
         if not _cat_mp_p and _es_empl3:
-            _piso_empl = 650   # gran empresa / corporativa sin registro MiPyME
+            _piso_empl = 650   # empleador confirmado por AFIP sin registro MiPyME
         if _piso_empl and puntos < _piso_empl:
             _cat_log2 = _cat_mp_p if _cat_mp_p else 'gran_empresa'
             print(
@@ -8162,6 +8262,11 @@ def get_afip(cuit):
             den3 = _norm_bcra_resp(r.json()).get('results', {}).get('denominacion', '').strip()
             if den3: return jsonify({"nombre": den3, "fuente": "bcra_live"})
     except Exception: pass
+
+    # 7. BORA Sección II — Sociedades (último recurso para jurídicas recién inscriptas)
+    _bora_nom = _scrape_bora_razon_social(cuit_limpio)
+    if _bora_nom:
+        return jsonify({"nombre": _bora_nom, "fuente": "bora_seccion2"})
 
     # Ninguna fuente devolvió denominación — puede ser padrón temporalmente offline.
     # El frontend trata fuente=fallback como "sin nombre real" y deja que el score decida.
