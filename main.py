@@ -9771,6 +9771,30 @@ def desmarcar_factura_cobrada(cuit):
     return jsonify({'ok': True})
 
 
+@app.route("/api/admin/desmarcar-por-nro", methods=['POST'])
+def admin_desmarcar_por_nro():
+    """Admin: revierte el cobro de una factura buscando solo por nroFactura (sin CUIT)."""
+    data = request.get_json(force=True, silent=True) or {}
+    nro = str(data.get('nroFactura', '')).strip()
+    if not nro:
+        return jsonify({'ok': False, 'error': 'nroFactura requerido'}), 400
+    with _facturas_estado_lock:
+        estado = _fac_estado_load()
+        borradas = []
+        for key in list(estado.keys()):
+            entry = estado[key]
+            if str(entry.get('nroFactura', '')) == nro and entry.get('estado') == 'pendiente_validacion':
+                if entry.get('enviado_whatsapp'):
+                    estado[key] = {k: v for k, v in entry.items() if k != 'estado'}
+                    estado[key]['estado'] = ''
+                else:
+                    del estado[key]
+                borradas.append(key)
+        _fac_estado_save(estado)
+    print(f"[admin_desmarcar] nro={nro} → {len(borradas)} entrada(s) revertidas: {borradas}", flush=True)
+    return jsonify({'ok': True, 'revertidas': borradas})
+
+
 @app.route("/api/facturas/<cuit>/marcar-whatsapp", methods=['POST'])
 def marcar_factura_whatsapp(cuit):
     """Vendedor marca una factura como enviada por WhatsApp."""

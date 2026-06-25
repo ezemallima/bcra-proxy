@@ -2148,32 +2148,29 @@ async function confirmarRendicion() {
     })
   ));
 
-  let ok = 0;
+  // Separar exitosas y fallidas
+  const _nrosOk = new Set();
   chks.forEach((c, i) => {
     if (resultados[i].status === 'fulfilled' && resultados[i].value.ok) {
-      c.disabled = true;
-      c.closest('.factura-item')?.classList.replace('fac-pendiente-cobro', 'fac-cobrada');
-      ok++;
+      _nrosOk.add(c.dataset.nro);
     } else {
+      // Solo revertir visualmente las que fallaron (el re-render maneja el resto)
       c.checked = false;
       c.closest('.factura-item')?.classList.remove('fac-pendiente-cobro');
     }
   });
+  const ok = _nrosOk.size;
 
   window._cuitsConCobradas = window._cuitsConCobradas || new Set();
   if (ok > 0) {
     window._cuitsConCobradas.add(String(cuit).replace(/\D/g, ''));
 
-    // Actualizar SALDOS_MAP en memoria para que el fallback local tenga el estado correcto
+    // Actualizar datos en memoria
     const _nc = String(cuit).replace(/\D/g, '');
-    const _nrosOk = new Set(
-      chks.filter((c,i) => resultados[i].status === 'fulfilled' && resultados[i].value.ok)
-          .map(c => c.dataset.nro)
-    );
     const _applyToCobradas = (entry) => {
       if (!entry?.facturas) return;
       entry.facturas.forEach(f => {
-        if (_nrosOk.has(f.nroFactura)) f._cobrada = true;
+        if (_nrosOk.has(String(f.nroFactura))) f._cobrada = true;
       });
       entry.total_saldo = entry.facturas.reduce(
         (s, f) => s + (f._cobrada ? 0 : (parseFloat(f.saldo) || 0)), 0
@@ -2183,11 +2180,17 @@ async function confirmarRendicion() {
     if (_cached) _applyToCobradas(_cached);
     if (window._modalFacturasData) _applyToCobradas(window._modalFacturasData);
 
-    // Reflejar el nuevo saldo en el badge de la tarjeta del listado
+    // Reflejar el nuevo saldo en la card del listado
     const _cardSaldo = document.querySelector(`.cliente-card[data-cuit="${cuit}"] .card-saldo-monto`);
     if (_cardSaldo && _cached) {
       const _svEl = _cardSaldo.querySelector('svg');
       _cardSaldo.innerHTML = (_svEl ? _svEl.outerHTML + ' ' : '') + '$' + fmtFull(_cached.total_saldo || 0);
+    }
+
+    // Re-renderizar el tab para que las cobradas queden con checkbox destildable (sin disabled)
+    const factEl = document.getElementById('mtab-facturas');
+    if (factEl && window._modalFacturasData) {
+      factEl.innerHTML = renderFacturas(window._modalFacturasData, window._modalNombre || '');
     }
   }
 
