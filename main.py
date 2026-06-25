@@ -1991,6 +1991,7 @@ def _scrape_bora_razon_social(cuit: str) -> str:
 
     # BORA indexa con guiones (formato estándar de los edictos)
     cuit_fmt = f"{cuit_limpio[:2]}-{cuit_limpio[2:10]}-{cuit_limpio[10]}"
+    import re as _re_bora
     result = None
     try:
         _hdrs = {
@@ -2016,7 +2017,7 @@ def _scrape_bora_razon_social(cuit: str) -> str:
                 r'"nombre"\s*:\s*"([^"]{4,120})"',
             ]
             for pat in _PATS:
-                m = re.search(pat, _body)
+                m = _re_bora.search(pat, _body)
                 if m:
                     candidate = m.group(1).strip().rstrip('.,;')
                     # Filtrar resultados que son solo números o muy cortos
