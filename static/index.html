@@ -1368,9 +1368,12 @@
   </div>
 
   <div id="buscador" class="section">
-    <div class="buscador-wrap">
-      <svg class="buscador-ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input type="text" id="buscar-buscador" class="buscador-input" placeholder="Buscar cliente por nombre o CUIT..." oninput="debouncedRenderBuscador(this.value)" translate="no" autocomplete="off" spellcheck="false" />
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+      <div class="buscador-wrap" style="flex:1;margin-bottom:0;">
+        <svg class="buscador-ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="buscar-buscador" class="buscador-input" placeholder="Buscar cliente por nombre o CUIT..." oninput="debouncedRenderBuscador(this.value)" translate="no" autocomplete="off" spellcheck="false" />
+      </div>
+      <button onclick="abrirModalAgregarCliente('','',{})" class="primary" style="white-space:nowrap;padding:10px 16px;border-radius:10px;font-size:13px;font-weight:600;flex-shrink:0;">+ Nuevo</button>
     </div>
     <div id="buscador-count" class="buscador-count"></div>
     <div id="buscador-lista"></div>
@@ -6339,22 +6342,45 @@ var _modalAgregarCuit = '';
 var _modalAgregarNombre = '';
 
 async function abrirModalAgregarCliente(cuit, nombre, prefill) {
-  if (cartera.some(function(c){ return c.cuit === cuit; })) { return; }
-  _modalAgregarCuit = cuit;
-  _modalAgregarNombre = nombre;
+  // Si ya está en cartera y no es alta manual, no hacer nada
+  if (cuit && cartera.some(function(c){ return (c.cuit||'').replace(/-/g,'') === cuit.replace(/-/g,''); })) { return; }
+  _modalAgregarCuit = cuit || '';
+  _modalAgregarNombre = nombre || '';
   var vendedores = await _cargarVendedores();
   var sel = document.getElementById('agregar-vendedor');
   sel.innerHTML = '<option value="">-- Seleccioná un vendedor --</option>' +
     vendedores.map(function(vn){ return '<option value="' + vn + '">' + vn + '</option>'; }).join('');
-  // Pre-rellenar con datos de la consulta si están disponibles
   var pf = prefill || {};
   document.getElementById('agregar-limite').value = pf.limite || '';
   document.getElementById('agregar-plazo').value  = pf.plazo  || '';
   document.getElementById('agregar-ciudad').value = pf.ciudad || '';
   document.getElementById('agregar-error').style.display = 'none';
+  // Campo nombre: si el nombre recibido es un CUIT formateado o vacío, dejar en blanco para completar
+  var _esCuitFmt = !nombre || /^\d{2}-\d{8}-\d$/.test(nombre) || /^\d{11}$/.test(nombre.replace(/-/g,''));
+  var nombreEl = document.getElementById('agregar-nombre');
+  if (nombreEl) { nombreEl.value = _esCuitFmt ? '' : nombre; }
+  // Campo CUIT manual: visible sólo cuando no viene de una consulta
+  var cuitRow = document.getElementById('agregar-cuit-row');
+  var cuitIn  = document.getElementById('agregar-cuit-input');
+  var _altaManual = !cuit;
+  if (cuitRow) { cuitRow.style.display = _altaManual ? 'block' : 'none'; }
+  if (cuitIn)  { cuitIn.value = ''; }
+  // Subtítulo
   var sub = document.getElementById('modal-agregar-subtitulo');
-  if (sub) sub.textContent = nombre + ' · CUIT ' + (cuit.length === 11 ? cuit.slice(0,2)+'-'+cuit.slice(2,10)+'-'+cuit.slice(10) : cuit);
+  if (sub) {
+    if (cuit) {
+      var _cFmt = cuit.length === 11 ? cuit.slice(0,2)+'-'+cuit.slice(2,10)+'-'+cuit.slice(10) : cuit;
+      sub.textContent = 'CUIT ' + _cFmt;
+    } else {
+      sub.textContent = 'Completá los datos del nuevo cliente';
+    }
+  }
   document.getElementById('modal-agregar-cliente').style.display = 'flex';
+  // Foco en el campo CUIT si alta manual, o en nombre si hay que completarlo
+  setTimeout(function() {
+    if (_altaManual && cuitIn) { cuitIn.focus(); }
+    else if (_esCuitFmt && nombreEl) { nombreEl.focus(); }
+  }, 80);
 }
 
 function cerrarModalAgregar() {
@@ -6364,6 +6390,19 @@ function cerrarModalAgregar() {
 async function confirmarAgregarCliente() {
   var btn = document.getElementById('btn-confirmar-agregar');
   var errEl = document.getElementById('agregar-error');
+  // Resolver CUIT: de la consulta activa o del campo manual
+  var cuit = _modalAgregarCuit;
+  if (!cuit) {
+    var _cuitRaw = ((document.getElementById('agregar-cuit-input')||{}).value || '').replace(/-/g,'').trim();
+    cuit = _cuitRaw;
+  }
+  if (!cuit || !/^\d{11}$/.test(cuit)) { errEl.textContent = 'CUIT inválido — ingresá 11 dígitos.'; errEl.style.display = 'block'; return; }
+  if (cartera.some(function(c){ return (c.cuit||'').replace(/-/g,'') === cuit; })) {
+    errEl.textContent = 'Este CUIT ya está en la cartera.'; errEl.style.display = 'block'; return;
+  }
+  // Resolver nombre: del campo editable
+  var nombre = ((document.getElementById('agregar-nombre')||{}).value || '').trim();
+  if (!nombre) { errEl.textContent = 'Ingresá la razón social del cliente.'; errEl.style.display = 'block'; return; }
   var vendedor = document.getElementById('agregar-vendedor').value;
   var limite = document.getElementById('agregar-limite').value;
   var plazo = document.getElementById('agregar-plazo').value;
@@ -6373,9 +6412,9 @@ async function confirmarAgregarCliente() {
   if (!plazo || parseInt(plazo) <= 0) { errEl.textContent = 'Ingresá el plazo de pago en días.'; errEl.style.display = 'block'; return; }
   btn.disabled = true; btn.textContent = 'Guardando...';
   errEl.style.display = 'none';
-  var _scNuevo = window._ultimoScoreVende || {};
+  var _scNuevo = (_modalAgregarCuit && window._ultimoScoreVende) ? window._ultimoScoreVende : {};
   var nuevo = {
-    cuit: _modalAgregarCuit, nombre: _modalAgregarNombre,
+    cuit: cuit, nombre: nombre,
     vendedor: vendedor, ciudad: ciudad,
     fechaAlta: new Date().toLocaleDateString('es-AR'),
     limiteCredito: parseFloat(limite), limiteCreditoARS: parseFloat(limite),
@@ -6394,14 +6433,17 @@ async function confirmarAgregarCliente() {
     });
     var _gd = await _gr.json();
     if (!_gd.ok) { errEl.textContent = _gd.error || 'Error al guardar.'; errEl.style.display = 'block'; return; }
-    var idx = cartera.findIndex(function(c){ return c.cuit === _modalAgregarCuit; });
+    var idx = cartera.findIndex(function(c){ return (c.cuit||'').replace(/-/g,'') === cuit; });
     if (idx >= 0) cartera[idx] = Object.assign({}, cartera[idx], nuevo);
     else cartera.push(nuevo);
     _vendedoresCache = null;
     localStorage.setItem('piat_cartera', JSON.stringify(cartera));
     cerrarModalAgregar();
-    var acEl = document.getElementById('cli-acciones');
-    if (acEl) acEl.innerHTML = '<span style="font-size:11px;color:var(--verde);padding:4px 10px;background:var(--verde-bg);border-radius:6px;font-weight:600;">Agregado a cartera ✓</span>';
+    // Si venía de una consulta, actualizar el badge en el header
+    if (_modalAgregarCuit) {
+      var acEl = document.getElementById('cli-acciones');
+      if (acEl) acEl.innerHTML = '<span style="font-size:11px;color:var(--verde);padding:4px 10px;background:var(--verde-bg);border-radius:6px;font-weight:600;">Agregado a cartera ✓</span>';
+    }
     renderCartera(); actualizarMetricas(); sincronizarServidor();
   } catch(e) {
     errEl.textContent = 'Error de conexión: ' + e.message;
@@ -7191,7 +7233,7 @@ function renderBuscador(filtro) {
   }
   var el = document.getElementById('buscador-lista');
   if (!el) return;
-  if (!cartera.length) { el.innerHTML = '<div class="empty-state">No hay clientes en la cartera.<br>Agregá clientes en la pestaña Cartera.</div>'; return; }
+  if (!cartera.length) { el.innerHTML = '<div class="empty-state">No hay clientes en la cartera.<br>Usá el botón <strong>+ Nuevo</strong> para agregar manualmente, o consultá un CUIT y usá el botón <em>Agregar</em>.</div>'; return; }
   if (!shown.length) { el.innerHTML = '<div class="empty-state">Sin resultados para "' + filtro + '"</div>'; return; }
 
   var _cardsHtml = shown.map(function(c, idx) {
@@ -8167,6 +8209,10 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
     <div style="font-size:12px;color:#64748b;margin-bottom:18px;" id="modal-agregar-subtitulo"></div>
     <div style="display:flex;flex-direction:column;gap:12px;">
+      <div id="agregar-cuit-row" style="display:none;"><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">CUIT *</label>
+        <input id="agregar-cuit-input" type="text" placeholder="Ej: 30-12345678-9" maxlength="13" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" /></div>
+      <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Razón social *</label>
+        <input id="agregar-nombre" type="text" placeholder="Razón social del cliente" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" /></div>
       <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Vendedor asignado *</label>
         <select id="agregar-vendedor" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;background:#fff;color:#1e293b;"></select></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
