@@ -2046,6 +2046,7 @@ function renderFacturas(data, nombre) {
         <span class="factura-fecha"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Vence: ${f.fechaPago}</span>
       </div>
       ${diferencia ? `<div style="font-size:11px;color:var(--text3);margin-top:4px">Total fac: $${fmtFull(f.totalFactura)}</div>` : ''}
+      ${cobradaConfirmada ? `<div style="text-align:right;margin-top:5px;"><button onclick="desmarcarCobrado('${nroData}')" style="font-size:11px;color:#64748b;background:none;border:1px solid #d1d5db;border-radius:6px;padding:3px 9px;cursor:pointer;font-family:inherit;">↩ Deshacer cobro</button></div>` : ''}
     </div>`;
   });
 
@@ -2069,6 +2070,30 @@ function renderFacturas(data, nombre) {
 }
 
 // ── COBRO RÁPIDO DE FACTURAS ──────────────────────────────────────────────────
+
+// desmarcarCobrado: revierte un cobro ya confirmado (error del vendedor)
+async function desmarcarCobrado(nro) {
+  const cuit = window._modalCuit;
+  if (!cuit) return;
+  const r = await fetch(API + '/api/facturas/' + encodeURIComponent(cuit) + '/desmarcar-cobrada', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ nroFactura: nro }),
+  });
+  if (!r.ok) { alert('No se pudo revertir el cobro. Intentá de nuevo.'); return; }
+  // Actualizar estado en memoria
+  const _sd = window._modalFacturasData;
+  if (_sd?.facturas) {
+    const _f = _sd.facturas.find(f => String(f.nroFactura) === String(nro));
+    if (_f) {
+      _f._cobrada = false;
+      _sd.total_saldo = _sd.facturas.reduce((s, f) => s + (f._cobrada ? 0 : (parseFloat(f.saldo) || 0)), 0);
+    }
+  }
+  // Re-renderizar el tab de facturas
+  const factEl = document.getElementById('mtab-facturas');
+  if (factEl && _sd) factEl.innerHTML = renderFacturas(_sd, window._modalNombre || '');
+}
 
 // toggleCobrado: solo estado local + visual. Backend se llama en confirmarRendicion.
 function toggleCobrado(chk, saldo) {
