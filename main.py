@@ -8550,11 +8550,13 @@ def get_historial(cuit):
             return jsonify(_retry_data), 200
         return jsonify({"results": {"periodos": []}, "sin_deudas": True, "error_bcra": None}), 200
 
-    # Fallback offline: si la API falló por completo y el CUIT existe en el padrón masivo,
-    # servir al menos el último periodo conocido con nombre de entidad resuelto.
-    _offline_hist = _nomdeu_build_deudas_resp(cuit_limpio)
-    if _offline_hist:
-        print(f"[historial] {cuit_limpio} fallback nomdeu offline", flush=True)
+    # Fallback offline: si la API falló por completo, reconstruir 24 meses sintéticos
+    # desde historial_bulk — mismo criterio que usa el motor de scoring. Un solo período
+    # (lo que daba _nomdeu_build_deudas_resp) no sirve para un análisis de tendencia real.
+    _deuda_bulk = _nomdeu_get_deuda(cuit_limpio)
+    if _deuda_bulk:
+        _offline_hist = _bulk_to_hist_data(_deuda_bulk)
+        print(f"[historial] {cuit_limpio} fallback historial_bulk (24m sintético)", flush=True)
         return jsonify(_offline_hist), 200
 
     return jsonify({"results": None, "sin_deudas": None, "error_bcra": "sin_respuesta"}), 200
