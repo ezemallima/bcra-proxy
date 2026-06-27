@@ -66,6 +66,16 @@ BRIGHTDATA_PORT    = int(os.environ.get('BRIGHTDATA_PORT', '22225'))
 # Contraseña efectiva: zona residencial (BRIGHTDATA_PASS) tiene prioridad sobre API key
 _BRD_PASSWORD      = BRIGHTDATA_PASS or BRIGHTDATA_API_KEY
 
+# ── Cloudflare R2 — bucket privado para bcra_nomdeu.db (padrón offline 24m) ────
+# Si están las 4 variables configuradas, la descarga autenticada por R2 tiene
+# prioridad sobre BCRA_NOMDEU_URL — evita exponer el archivo (datos de deuda de
+# millones de CUITs) en una URL pública.
+R2_ACCESS_KEY_ID     = os.environ.get('R2_ACCESS_KEY_ID', '').strip()
+R2_SECRET_ACCESS_KEY = os.environ.get('R2_SECRET_ACCESS_KEY', '').strip()
+R2_ENDPOINT_URL      = os.environ.get('R2_ENDPOINT_URL', '').strip()
+R2_BUCKET_NAME       = os.environ.get('R2_BUCKET_NAME', '').strip()
+_R2_CONFIGURADO      = bool(R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY and R2_ENDPOINT_URL and R2_BUCKET_NAME)
+
 # ── Rate limiter global para API de BCRA — máx 2 llamadas directas simultáneas ─
 # Evita que consultas concurrentes saturen la IP de Render y generen rate-limit.
 _bcra_api_sem = threading.Semaphore(2)
@@ -7698,8 +7708,9 @@ def analizar_bodegas():
         return jsonify({"es_negativo": False, "motivo": str(e)})
 
 # ── PADRÓN OFICIAL BCRA LOCAL (bcra_nomdeu.db) ───────────────────────────────
-# Descargado al arrancar desde BCRA_NOMDEU_URL (R2 o Google Drive).
-# Soporta archivos >100 MB en Google Drive via gdown (maneja el token de confirmación).
+# Descargado al arrancar: R2 autenticado (prioridad, bucket privado) si están
+# configuradas R2_ACCESS_KEY_ID/SECRET/ENDPOINT_URL/BUCKET_NAME, sino BCRA_NOMDEU_URL
+# (Google Drive o URL HTTP directa). Soporta archivos >100 MB en Drive via gdown.
 # Tablas: denominaciones, entidades, deudas_resumen, historial_bulk.
 
 _nomdeu_conn: sqlite3.Connection = None  # type: ignore[assignment]
@@ -7717,11 +7728,36 @@ def _extraer_gdrive_id(url: str) -> str | None:
 
 def _descargar_nomdeu(url: str, dest: str) -> bool:
     """
-    Descarga bcra_nomdeu.db desde R2 o Google Drive.
-    - Google Drive: usa gdown que maneja el token de confirmación para archivos grandes.
-    - Otros: requests con streaming.
+    Descarga bcra_nomdeu.db. Prioridad:
+      1. R2 autenticado (boto3) — si R2_ACCESS_KEY_ID/SECRET/ENDPOINT_URL/BUCKET_NAME
+         están configurados, bucket privado, sin exponer el archivo públicamente.
+      2. Google Drive: usa gdown que maneja el token de confirmación para archivos grandes.
+      3. Otros: requests con streaming directo a BCRA_NOMDEU_URL.
     Retorna True si la descarga fue exitosa.
     """
+    if _R2_CONFIGURADO:
+        try:
+            import boto3
+            from botocore.config import Config
+            print(f"[nomdeu] Descargando desde R2 (autenticado, bucket={R2_BUCKET_NAME})...", flush=True)
+            s3 = boto3.client(
+                service_name='s3',
+                endpoint_url=R2_ENDPOINT_URL,
+                aws_access_key_id=R2_ACCESS_KEY_ID,
+                aws_secret_access_key=R2_SECRET_ACCESS_KEY,
+                config=Config(signature_version='s3v4'),
+            )
+            s3.download_file(R2_BUCKET_NAME, 'bcra_nomdeu.db', dest)
+            if not os.path.exists(dest) or os.path.getsize(dest) < 1_000_000:
+                print("[nomdeu] Descarga R2 falló o archivo demasiado pequeño", flush=True)
+                return False
+            size_mb = os.path.getsize(dest) / 1_048_576
+            print(f"[nomdeu] Descarga R2 completa: {size_mb:.0f} MB", flush=True)
+            return True
+        except Exception as e:
+            print(f"[nomdeu] Error descarga R2: {e}", flush=True)
+            return False
+
     if any(url.startswith(p) for p in _GDRIVE_PREFIXES):
         file_id = _extraer_gdrive_id(url)
         if not file_id:
@@ -7784,11 +7820,11 @@ def _nomdeu_db_valida() -> bool:
 
 
 def _init_nomdeu_db() -> None:
-    """Descarga bcra_nomdeu.db si BCRA_NOMDEU_URL está configurada."""
+    """Descarga bcra_nomdeu.db desde R2 (prioridad si está configurado) o BCRA_NOMDEU_URL."""
     global _nomdeu_conn
     url = os.environ.get('BCRA_NOMDEU_URL', '').strip()
-    if not url:
-        print("[nomdeu] BCRA_NOMDEU_URL no configurada — padrón offline desactivado", flush=True)
+    if not _R2_CONFIGURADO and not url:
+        print("[nomdeu] Ni R2 ni BCRA_NOMDEU_URL configurados — padrón offline desactivado", flush=True)
         return
 
     descarga = True
