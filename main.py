@@ -8140,6 +8140,46 @@ def _nomdeu_get_deuda(cuit: str):
         return None
 
 
+@app.route("/admin/nomdeu-lookup/<cuit>")
+def admin_nomdeu_lookup(cuit):
+    """Diagnóstico: muestra exactamente qué hay (o no) para un CUIT en
+    deudas_resumen / historial_bulk, más metadatos de cobertura de ambas
+    tablas (cantidad de filas, período más reciente). Sirve para confirmar
+    si una ausencia es real (CUIT fuera del filtro/cobertura del import)
+    o un bug, sin necesidad de acceso directo al disco de Render."""
+    cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
+    if _nomdeu_conn is None:
+        return jsonify({"ok": False, "error": "nomdeu_conn no inicializada"}), 503
+    out = {"ok": True, "cuit": cuit_limpio}
+    try:
+        out["deudas_resumen_row"] = list(_nomdeu_conn.execute(
+            "SELECT cuit, sit_max, monto_total, entidades_cod, periodo FROM deudas_resumen WHERE cuit = ?",
+            (cuit_limpio,)
+        ).fetchone() or []) or None
+    except Exception as e:
+        out["deudas_resumen_row"] = f"error: {e}"
+    try:
+        out["historial_bulk_row"] = list(_nomdeu_conn.execute(
+            "SELECT cuit, sit_max_24m, meses_en_mora, monto_max FROM historial_bulk WHERE cuit = ?",
+            (cuit_limpio,)
+        ).fetchone() or []) or None
+    except Exception as e:
+        out["historial_bulk_row"] = f"error: {e}"
+    try:
+        out["deudas_resumen_total"]  = _nomdeu_conn.execute("SELECT COUNT(*) FROM deudas_resumen").fetchone()[0]
+        out["deudas_resumen_max_periodo"] = _nomdeu_conn.execute("SELECT MAX(periodo) FROM deudas_resumen").fetchone()[0]
+    except Exception as e:
+        out["deudas_resumen_total"] = f"error: {e}"
+    try:
+        out["historial_bulk_total"] = _nomdeu_conn.execute("SELECT COUNT(*) FROM historial_bulk").fetchone()[0]
+        out["historial_bulk_sit1_count"] = _nomdeu_conn.execute(
+            "SELECT COUNT(*) FROM historial_bulk WHERE sit_max_24m = 1"
+        ).fetchone()[0]
+    except Exception as e:
+        out["historial_bulk_total"] = f"error: {e}"
+    return jsonify(out)
+
+
 def _nomdeu_get_entidad(codigo: str):
     """Nombre de entidad financiera por código Maeent (5 chars). Retorna str o None."""
     if _nomdeu_conn is None:
