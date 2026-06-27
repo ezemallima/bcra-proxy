@@ -1734,6 +1734,16 @@ def consultar_bcra(cuit, reintentos=3):
             pass
 
     if _best[0]:
+        # Mismo criterio de seguridad que para el 404: una respuesta "exitosa" pero
+        # vacía (sin_deudas=True) también puede ser un falso negativo de la API
+        # legacy. Cross-check contra historial_bulk antes de confiar — si el padrón
+        # offline tiene antecedentes reales, esos mandan sobre un 200 vacío.
+        if _best[0].get('sin_deudas'):
+            _nomdeu_vacio = _nomdeu_build_deudas_resp(cuit)
+            if _nomdeu_vacio:
+                _sit_off = _nomdeu_vacio['results']['periodos'][0]['entidades'][0]['situacion']
+                print(f"[bcra] {cuit} respuesta en vivo vacía pero historial_bulk tiene antecedentes — bulk manda (sit_max={_sit_off})", flush=True)
+                return _nomdeu_vacio, None
         return _best[0], None
     if got_404:
         # CRÍTICO (riesgo crediticio): 404 en TODOS los endpoints en vivo no es
