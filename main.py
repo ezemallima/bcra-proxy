@@ -1736,6 +1736,17 @@ def consultar_bcra(cuit, reintentos=3):
     if _best[0]:
         return _best[0], None
     if got_404:
+        # CRÍTICO (riesgo crediticio): 404 en TODOS los endpoints en vivo no es
+        # prueba confiable de "sin deudas" — BCRA puede responder 404 durante un
+        # bloqueo/rate-limit en vez de un 5xx. Antes de asumir Situación 1, el
+        # padrón offline (historial_bulk, 24m, cargado desde R2) tiene la última
+        # palabra: si existe con sit_max>1, ese dato manda y NUNCA se subestima
+        # el riesgo de un deudor real disfrazado de "cliente nuevo".
+        _nomdeu_404 = _nomdeu_build_deudas_resp(cuit)
+        if _nomdeu_404:
+            _sit_off = _nomdeu_404['results']['periodos'][0]['entidades'][0]['situacion']
+            print(f"[bcra] {cuit} 404 en todos los endpoints en vivo — historial_bulk offline manda (sit_max={_sit_off})", flush=True)
+            return _nomdeu_404, None
         return {"results": {"denominacion": "", "periodos": []}, "sin_deudas": True}, None
     data_rb, _ = _consultar_respaldo(cuit)
     if data_rb is not None:
@@ -3628,6 +3639,17 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
                     with open(os.path.join(DATA_DIR, f'historial_{cuit_limpio}.json'), 'w') as f:
                         json.dump({'payload': hist_data, 'ts': time.time()}, f)
                 except: pass
+
+    # BCRA en vivo caído/sin periodos — usar padrón offline 24m (historial_bulk, cargado
+    # desde R2 al arrancar) en vez de degradar la tendencia a un solo período (periodos_curr).
+    if not hist_data or not (hist_data.get('results') or {}).get('periodos'):
+        try:
+            _deuda_bulk = _nomdeu_get_deuda(cuit_limpio)
+            if _deuda_bulk:
+                hist_data = _bulk_to_hist_data(_deuda_bulk)
+                print(f"[score] {cuit_limpio} hist_data offline desde historial_bulk (24m, R2)", flush=True)
+        except Exception as _e_bulk:
+            print(f"[score] {cuit_limpio} historial_bulk fallback error: {_e_bulk}", flush=True)
 
     # Módulo cheques — aislado con fallback absoluto.
     # Un timeout o error en este módulo NO debe abortar el cálculo del score.
