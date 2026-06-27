@@ -8548,11 +8548,19 @@ def get_historial(cuit):
             except: pass
             print(f"[historial] {cuit_limpio} OK en retry post-404 (2s delay)", flush=True)
             return jsonify(_retry_data), 200
+        # Antes de declarar "sin datos": un 404 en un endpoint + connection-reset en el otro
+        # no es prueba de que no haya historial — probar el padrón offline primero.
+        _deuda_bulk_404 = _nomdeu_get_deuda(cuit_limpio)
+        if _deuda_bulk_404:
+            _offline_hist_404 = _bulk_to_hist_data(_deuda_bulk_404)
+            print(f"[historial] {cuit_limpio} fallback historial_bulk (24m sintético, post-404)", flush=True)
+            return jsonify(_offline_hist_404), 200
         return jsonify({"results": {"periodos": []}, "sin_deudas": True, "error_bcra": None}), 200
 
-    # Fallback offline: si la API falló por completo, reconstruir 24 meses sintéticos
-    # desde historial_bulk — mismo criterio que usa el motor de scoring. Un solo período
-    # (lo que daba _nomdeu_build_deudas_resp) no sirve para un análisis de tendencia real.
+    # Fallback offline: si la API falló por completo (sin 404, ej. ConnectionResetError en
+    # ambos endpoints), reconstruir 24 meses sintéticos desde historial_bulk — mismo criterio
+    # que usa el motor de scoring. Un solo período (_nomdeu_build_deudas_resp) no sirve para
+    # un análisis de tendencia real.
     _deuda_bulk = _nomdeu_get_deuda(cuit_limpio)
     if _deuda_bulk:
         _offline_hist = _bulk_to_hist_data(_deuda_bulk)
