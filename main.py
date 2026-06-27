@@ -8218,6 +8218,22 @@ def admin_nomdeu_lookup(cuit):
         ).fetchone()[0]
     except Exception as e:
         out["historial_bulk_total"] = f"error: {e}"
+    # Diagnóstico temporal: cómo está tipado/almacenado realmente el cuit
+    # en la tabla, para detectar mismatches de formato (texto vs numérico,
+    # ceros a la izquierda, etc.) sin necesitar acceso directo al disco.
+    try:
+        out["_debug_cuit_typeof"] = _nomdeu_conn.execute(
+            "SELECT typeof(cuit) FROM historial_bulk LIMIT 1"
+        ).fetchone()[0]
+        out["_debug_cuit_samples"] = [r[0] for r in _nomdeu_conn.execute(
+            "SELECT cuit FROM historial_bulk LIMIT 5"
+        ).fetchall()]
+        out["_debug_like_match"] = _nomdeu_conn.execute(
+            "SELECT COUNT(*) FROM historial_bulk WHERE CAST(cuit AS TEXT) LIKE ?",
+            (f"%{cuit_limpio}%",)
+        ).fetchone()[0]
+    except Exception as e:
+        out["_debug_error"] = f"error: {e}"
     return jsonify(out)
 
 
