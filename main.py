@@ -1353,7 +1353,16 @@ def _bcra_get(url: str, timeout: int = 0) -> requests.Response:
 
     # ── 3. Directo — con semáforo para limitar llamadas concurrentes a BCRA ───
     with _bcra_api_sem:
-        return requests.get(url, timeout=_t, verify=False)
+        try:
+            return requests.get(url, timeout=_t, verify=False)
+        except requests.exceptions.ConnectionError as _e_conn:
+            # BCRA resetea la conexión (ConnectionResetError) de forma esporádica
+            # bajo carga, no necesariamente porque el dato no exista. Un reintento
+            # corto recupera la mayoría de estos casos sin penalizar la latencia
+            # cuando el endpoint está realmente caído (ahí el 2do intento también falla).
+            print(f"[bcra_get] conexión reseteada en {url[:60]}... — reintentando en 0.6s", flush=True)
+            time.sleep(0.6)
+            return requests.get(url, timeout=_t, verify=False)
 
 
 def _map_detalle_bcra(raw: dict) -> dict:
