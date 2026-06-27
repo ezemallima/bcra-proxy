@@ -3244,9 +3244,14 @@ def calcular_rating_predictivo(
         periodos_hist, periodos_curr
     )
     # Proporcionalidad: < 15% mora Y entidad principal en Sit.1 → no bloquear
+    # "Entidad principal" = mayor exposición por monto, NO el primer elemento del
+    # array — BCRA no garantiza que las entidades vengan ordenadas por monto, así
+    # que _ents_curr[0] podía ser cualquier banco y dar un falso "banco sucio"
+    # incluso cuando el acreedor dominante real estaba en Sit.1.
     banco_principal_limpio = False
     if _ents_curr and pct_mora < 0.15:
-        banco_principal_limpio = int(_ents_curr[0].get('situacion') or 1) == 1
+        _banco_ppal = max(_ents_curr, key=lambda e: float(e.get('monto') or 0))
+        banco_principal_limpio = int(_banco_ppal.get('situacion') or 1) == 1
 
     # Criterio Humano: para mora administrativa, toda la lógica de caps usa
     # sit_efectivo = round(sit_ponderada) en lugar del max_sit del outlier.
