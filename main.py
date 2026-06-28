@@ -7466,14 +7466,19 @@ def _check_cheques_cartera_bg():
                 nombre  = str(cliente.get('nombre') or cliente.get('cliente') or cuit)
                 diff    = n_rechazados - n_anterior
                 alertas_nuevas.append({
-                    'cuit':        cuit,
-                    'nombre':      nombre,
-                    'fecha':       fecha_ahora,
-                    'tipo':        'cheque_nuevo',
-                    'detalle':     f"{diff} cheque(s) rechazado(s) nuevo(s) detectado(s) · total {n_rechazados}",
-                    'rango':       '',
-                    'score_nuevo': None,
-                    'leida':       False,
+                    'cuit':         cuit,
+                    'nombre':       nombre,
+                    'fecha':        fecha_ahora,
+                    # 'cheque' (no 'cheque_nuevo'): el contador y las tarjetas del
+                    # dashboard ("CHEQUES RECH.") filtran por tipo === 'cheque' y
+                    # leen nroCheques/totalCheques — con otro tipo quedan invisibles.
+                    'tipo':         'cheque',
+                    'nroCheques':   n_rechazados,
+                    'totalCheques': n_rechazados,
+                    'detalle':      f"{diff} cheque(s) rechazado(s) nuevo(s) detectado(s) · total {n_rechazados}",
+                    'rango':        '',
+                    'score_nuevo':  None,
+                    'leida':        False,
                 })
 
             # Actualizar estado
