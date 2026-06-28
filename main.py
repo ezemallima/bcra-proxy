@@ -1214,10 +1214,10 @@ def consultar_bcra_cached(cuit):
     # 3. Consulta en vivo vía Bright Data → Workers → BCRA oficial
     data, error = consultar_bcra(cuit)
     if error or not data:
-        # 3.5. Fallback: padrón offline nomdeu (historial_bulk 24m) — sin red, sin TTL
+        # 3.5. Fallback: padrón offline nomdeu (historial_detalle) — sin red, sin TTL
         _nomdeu_fb = _nomdeu_build_deudas_resp(cuit)
         if _nomdeu_fb:
-            print(f"[bcra] {cuit} fallback nomdeu offline (BCRA saturado — historial_bulk)", flush=True)
+            print(f"[bcra] {cuit} fallback nomdeu offline (BCRA saturado — historial_detalle)", flush=True)
             return _nomdeu_fb, None
         data_cache = {
             "results": None, "sin_deudas": None,
@@ -1755,26 +1755,26 @@ def consultar_bcra(cuit, reintentos=3):
     if _best[0]:
         # Mismo criterio de seguridad que para el 404: una respuesta "exitosa" pero
         # vacía (sin_deudas=True) también puede ser un falso negativo de la API
-        # legacy. Cross-check contra historial_bulk antes de confiar — si el padrón
+        # legacy. Cross-check contra historial_detalle antes de confiar — si el padrón
         # offline tiene antecedentes reales, esos mandan sobre un 200 vacío.
         if _best[0].get('sin_deudas'):
             _nomdeu_vacio = _nomdeu_build_deudas_resp(cuit)
             if _nomdeu_vacio:
                 _sit_off = _nomdeu_vacio['results']['periodos'][0]['entidades'][0]['situacion']
-                print(f"[bcra] {cuit} respuesta en vivo vacía pero historial_bulk tiene antecedentes — bulk manda (sit_max={_sit_off})", flush=True)
+                print(f"[bcra] {cuit} respuesta en vivo vacía pero historial_detalle tiene antecedentes — bulk manda (sit_max={_sit_off})", flush=True)
                 return _nomdeu_vacio, None
         return _best[0], None
     if got_404:
         # CRÍTICO (riesgo crediticio): 404 en TODOS los endpoints en vivo no es
         # prueba confiable de "sin deudas" — BCRA puede responder 404 durante un
         # bloqueo/rate-limit en vez de un 5xx. Antes de asumir Situación 1, el
-        # padrón offline (historial_bulk, 24m, cargado desde R2) tiene la última
-        # palabra: si existe con sit_max>1, ese dato manda y NUNCA se subestima
-        # el riesgo de un deudor real disfrazado de "cliente nuevo".
+        # padrón offline (historial_detalle, _HIST_DETALLE_MESES meses reales, R2)
+        # tiene la última palabra: si existe con sit_max>1, ese dato manda y NUNCA
+        # se subestima el riesgo de un deudor real disfrazado de "cliente nuevo".
         _nomdeu_404 = _nomdeu_build_deudas_resp(cuit)
         if _nomdeu_404:
             _sit_off = _nomdeu_404['results']['periodos'][0]['entidades'][0]['situacion']
-            print(f"[bcra] {cuit} 404 en todos los endpoints en vivo — historial_bulk offline manda (sit_max={_sit_off})", flush=True)
+            print(f"[bcra] {cuit} 404 en todos los endpoints en vivo — historial_detalle offline manda (sit_max={_sit_off})", flush=True)
             return _nomdeu_404, None
         return {"results": {"denominacion": "", "periodos": []}, "sin_deudas": True}, None
     data_rb, _ = _consultar_respaldo(cuit)
@@ -3674,16 +3674,16 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
                         json.dump({'payload': hist_data, 'ts': time.time()}, f)
                 except: pass
 
-    # BCRA en vivo caído/sin periodos — usar padrón offline 24m (historial_bulk, cargado
+    # BCRA en vivo caído/sin periodos — usar padrón offline (historial_detalle, cargado
     # desde R2 al arrancar) en vez de degradar la tendencia a un solo período (periodos_curr).
     if not hist_data or not (hist_data.get('results') or {}).get('periodos'):
         try:
             _deuda_bulk = _nomdeu_get_deuda(cuit_limpio)
             if _deuda_bulk:
-                hist_data = _bulk_to_hist_data(_deuda_bulk)
-                print(f"[score] {cuit_limpio} hist_data offline desde historial_bulk (24m, R2)", flush=True)
+                hist_data = _bulk_to_hist_data(cuit_limpio)
+                print(f"[score] {cuit_limpio} hist_data offline desde historial_detalle ({_HIST_DETALLE_MESES}m reales, R2)", flush=True)
         except Exception as _e_bulk:
-            print(f"[score] {cuit_limpio} historial_bulk fallback error: {_e_bulk}", flush=True)
+            print(f"[score] {cuit_limpio} historial_detalle fallback error: {_e_bulk}", flush=True)
 
     # Módulo cheques — aislado con fallback absoluto.
     # Un timeout o error en este módulo NO debe abortar el cálculo del score.
@@ -3875,56 +3875,108 @@ def _mes_anterior(yyyymm: int, n: int) -> int:
     return año * 100 + mes
 
 
+# Cantidad de meses reales guardados en historial_detalle (mes_01 = más
+# reciente / período _PERIODO_BASE_BULK). Si en el futuro se reconstruye la
+# base con más o menos meses, solo hay que ajustar esta constante.
+_HIST_DETALLE_MESES = 12
+
+
+def _historial_detalle_rows(cuit: str) -> list:
+    """Filas crudas de historial_detalle para un CUIT — una por entidad
+    financiera, con situación y monto reales de cada uno de los
+    _HIST_DETALLE_MESES meses (None donde no hay dato ese mes)."""
+    if _nomdeu_conn is None:
+        return []
+    cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
+    if not cuit_limpio:
+        return []
+    try:
+        cur = _nomdeu_conn.execute(
+            "SELECT * FROM historial_detalle WHERE cuit = ?", (cuit_limpio,)
+        )
+        cols = [d[0] for d in cur.description]
+        return [dict(zip(cols, row)) for row in cur.fetchall()]
+    except Exception:
+        return []
+
+
+def _nomdeu_agregar_filas(filas: list) -> dict:
+    """
+    Agrega las filas de historial_detalle de un CUIT (una por entidad) a un
+    resumen compatible con el resto del motor de scoring.
+
+    - sit_max / meses_en_mora / monto_max: peor situación, cantidad total de
+      meses en mora (situación > 1) y monto máximo vistos en CUALQUIER
+      entidad durante los _HIST_DETALLE_MESES meses reales — ya no son
+      estimados ni distribuidos sintéticamente, son los datos tal cual
+      vinieron del archivo 24DSF del BCRA.
+    - sit_padron / monto_total / entidades_cod: snapshot del mes más
+      reciente (mes_01) únicamente — reemplaza a deudas_resumen.
+    """
+    sit_max = 1
+    meses_en_mora = 0
+    monto_max = 0.0
+    sit_actual = 1
+    monto_actual_total = 0.0
+    ent_codigos_actuales = []
+
+    for fila in filas:
+        sit_01 = fila.get('sit_01')
+        if sit_01 is not None:
+            ent_codigos_actuales.append(fila['entidad'])
+            monto_actual_total += (fila.get('monto_01') or 0) / 10.0
+            if sit_01 > sit_actual:
+                sit_actual = sit_01
+        for i in range(1, _HIST_DETALLE_MESES + 1):
+            sit_i = fila.get(f'sit_{i:02d}')
+            if sit_i is None:
+                continue
+            if sit_i > sit_max:
+                sit_max = sit_i
+            if sit_i > 1:
+                meses_en_mora += 1
+            monto_i = (fila.get(f'monto_{i:02d}') or 0) / 10.0
+            if monto_i > monto_max:
+                monto_max = monto_i
+
+    return {
+        'sit_max':       max(sit_max, sit_actual),
+        'monto_total':   round(monto_actual_total, 1),
+        'entidades_cod': ','.join(ent_codigos_actuales),
+        'periodo':       str(_PERIODO_BASE_BULK),
+        'sit_padron':    sit_actual,
+        'sit_hist_12m':  sit_max,
+        'meses_en_mora': meses_en_mora,
+        'monto_max':     round(monto_max, 1),
+    }
+
+
 def _nomdeu_batch(cuits: list) -> dict:
     """
-    Consulta masiva de bcra_nomdeu.db para N CUITs en dos SELECT ... IN (...).
+    Consulta masiva de historial_detalle para N CUITs en una sola query.
     Mucho más eficiente que N llamadas individuales a _nomdeu_get_deuda().
     Retorna {cuit: {'sit_max': N, 'meses_en_mora': N, 'monto_max': N, ...}}.
     """
     if _nomdeu_conn is None or not cuits:
         return {}
-    # Normalizar a 11 dígitos sin guiones — formato exacto de historial_bulk (Colab)
-    cuits = [str(c).replace('-', '').replace(' ', '').strip() for c in cuits]
-    cuits = [c for c in cuits if c]
-    if not cuits:
+    cuits_norm = [str(c).replace('-', '').replace(' ', '').strip() for c in cuits]
+    cuits_norm = [c for c in cuits_norm if c]
+    if not cuits_norm:
         return {}
-    result = {}
-    placeholders = ','.join('?' * len(cuits))
-    # 1. Snapshot último mes (deudas_resumen — del archivo PADRON)
     try:
-        rows = _nomdeu_conn.execute(
-            f"SELECT cuit, sit_max, monto_total, entidades_cod, periodo "
-            f"FROM deudas_resumen WHERE cuit IN ({placeholders})", cuits
-        ).fetchall()
-        for row in rows:
-            c = str(row[0])
-            result[c] = {
-                'sit_padron': int(row[1] or 1), 'monto_total': float(row[2] or 0),
-                'entidades_cod': row[3] or '', 'periodo': str(row[4] or ''),
-            }
+        placeholders = ','.join('?' * len(cuits_norm))
+        cur = _nomdeu_conn.execute(
+            f"SELECT * FROM historial_detalle WHERE cuit IN ({placeholders})", cuits_norm
+        )
+        cols = [d[0] for d in cur.description]
+        filas_por_cuit: dict = {}
+        for row in cur.fetchall():
+            fila = dict(zip(cols, row))
+            filas_por_cuit.setdefault(fila['cuit'], []).append(fila)
     except Exception as _e:
-        print(f"[bulk_batch] deudas_resumen: {_e}", flush=True)
-    # 2. Historial 24 meses (historial_bulk — del archivo 24DSF)
-    try:
-        rows = _nomdeu_conn.execute(
-            f"SELECT cuit, sit_max_24m, meses_en_mora, monto_max "
-            f"FROM historial_bulk WHERE cuit IN ({placeholders})", cuits
-        ).fetchall()
-        for row in rows:
-            c = str(row[0])
-            if c not in result:
-                result[c] = {'sit_padron': 1, 'monto_total': 0, 'entidades_cod': '', 'periodo': ''}
-            result[c].update({
-                'sit_hist_24m': int(row[1] or 1),
-                'meses_en_mora': int(row[2] or 0),
-                'monto_max': float(row[3] or 0),
-            })
-    except Exception as _e:
-        print(f"[bulk_batch] historial_bulk: {_e}", flush=True)
-    # Normalizar: sit_max = peor entre padrón actual e historial 24m
-    for d in result.values():
-        d['sit_max'] = max(d.get('sit_padron', 1), d.get('sit_hist_24m', 1))
-    return result
+        print(f"[bulk_batch] historial_detalle: {_e}", flush=True)
+        return {}
+    return {c: _nomdeu_agregar_filas(filas) for c, filas in filas_por_cuit.items()}
 
 
 # ── Módulo MiPyME — padrón de empresas PyME inscriptas (Min. Producción) ─────
@@ -4100,27 +4152,43 @@ def _bulk_to_bcra_data(nombre: str, deuda: dict) -> dict:
     }
 
 
-def _bulk_to_hist_data(deuda: dict) -> dict:
+def _bulk_to_hist_data(cuit: str) -> dict:
     """
-    Historial sintético de 24 meses desde historial_bulk.
-    Distribuye meses_en_mora como los períodos MÁS RECIENTES (conservador:
-    peor escenario → alertas más tempranas, nunca minimiza el riesgo).
+    Historial REAL de los últimos _HIST_DETALLE_MESES meses, leído directo
+    de historial_detalle: situación y monto reales de cada entidad en cada
+    mes, tal cual figuran en el archivo 24DSF del BCRA — ya no son
+    estimados ni distribuidos sintéticamente en los períodos más recientes.
     """
-    sit      = deuda.get('sit_max', 1)
-    sit_24m  = deuda.get('sit_hist_24m') or sit
-    meses_m  = min(int(deuda.get('meses_en_mora') or 0), 24)
-    monto    = float(deuda.get('monto_max') or deuda.get('monto_total') or 0)
+    filas = _historial_detalle_rows(cuit)
+    if not filas:
+        return {
+            'results': {'denominacion': '', 'periodos': []},
+            'sin_deudas': True, 'fuente_offline': 'historial_detalle',
+        }
+
     periodos = []
-    for i in range(24):
-        sit_i    = sit_24m if i < meses_m else 1
-        monto_i  = monto if sit_i > 1 else 0
-        periodos.append({
-            'periodo': _mes_anterior(_PERIODO_BASE_BULK, i),
-            'entidades': [{'entidad': 'Padron_BCRA_Bulk', 'situacion': sit_i, 'monto': monto_i}],
-        })
+    sit_max_total = 1
+    for i in range(1, _HIST_DETALLE_MESES + 1):
+        periodo = _mes_anterior(_PERIODO_BASE_BULK, i - 1)
+        entidades = []
+        for fila in filas:
+            sit = fila.get(f'sit_{i:02d}')
+            if sit is None:
+                continue
+            monto = (fila.get(f'monto_{i:02d}') or 0) / 10.0
+            entidades.append({
+                'entidad': _nomdeu_get_entidad(fila['entidad']) or f"Entidad {fila['entidad']}",
+                'situacion': sit,
+                'monto': round(monto, 1),
+            })
+            if sit > sit_max_total:
+                sit_max_total = sit
+        if entidades:
+            periodos.append({'periodo': periodo, 'entidades': entidades})
+
     return {
         'results': {'denominacion': '', 'periodos': periodos},
-        'sin_deudas': sit <= 1 and meses_m == 0, 'fuente_offline': 'historial_bulk',
+        'sin_deudas': sit_max_total <= 1, 'fuente_offline': 'historial_detalle',
     }
 
 
@@ -4328,7 +4396,7 @@ def ejecutar_verificacion(cartera_data):
                 'mipyme':   _mipyme0,
                 'categoria': _cat0,
                 'bcra_bulk': _bulk_to_bcra_data(_nom0, _deuda0) if _deuda0 else None,
-                'hist_bulk': _bulk_to_hist_data(_deuda0) if _deuda0 else None,
+                'hist_bulk': _bulk_to_hist_data(_cuit0) if _deuda0 else None,
             }
         print(
             f"[verif] FASE 0 OK ({time.time()-_t0_bulk:.1f}s) — "
@@ -6605,7 +6673,7 @@ def _ejecutar_proceso_integral(cartera_data: list):
                     bcra_data = _rb
                     print(f'[proceso-integral] Respaldo OK para {cuit}', flush=True)
                 else:
-                    # Fallback final: padrón offline nomdeu (historial_bulk 24m)
+                    # Fallback final: padrón offline nomdeu (historial_detalle)
                     _nomdeu_pi = _nomdeu_build_deudas_resp(cuit)
                     if _nomdeu_pi:
                         bcra_data = _nomdeu_pi
@@ -7711,7 +7779,8 @@ def analizar_bodegas():
 # Descargado al arrancar: R2 autenticado (prioridad, bucket privado) si están
 # configuradas R2_ACCESS_KEY_ID/SECRET/ENDPOINT_URL/BUCKET_NAME, sino BCRA_NOMDEU_URL
 # (Google Drive o URL HTTP directa). Soporta archivos >100 MB en Drive via gdown.
-# Tablas: denominaciones, entidades, deudas_resumen, historial_bulk.
+# Tablas: denominaciones, entidades, deudas_resumen (legacy), historial_detalle
+# (situación y monto reales por CUIT+entidad de los últimos _HIST_DETALLE_MESES meses).
 
 _nomdeu_conn: sqlite3.Connection = None  # type: ignore[assignment]
 _mipyme_conn: sqlite3.Connection = None  # type: ignore[assignment]
@@ -7807,12 +7876,12 @@ def _descargar_nomdeu(url: str, dest: str) -> bool:
 
 
 def _nomdeu_db_valida() -> bool:
-    """Verifica que la DB local tenga historial_bulk con datos."""
+    """Verifica que la DB local tenga historial_detalle con datos."""
     if not os.path.exists(NOMDEU_DB_PATH):
         return False
     try:
         c = sqlite3.connect(NOMDEU_DB_PATH)
-        n = c.execute("SELECT COUNT(*) FROM historial_bulk").fetchone()[0]
+        n = c.execute("SELECT COUNT(*) FROM historial_detalle").fetchone()[0]
         c.close()
         return n > 0
     except Exception:
@@ -7832,9 +7901,9 @@ def _init_nomdeu_db() -> None:
         edad_dias = (time.time() - os.path.getmtime(NOMDEU_DB_PATH)) / 86400
         if edad_dias < 32 and _nomdeu_db_valida():
             descarga = False
-            print(f"[nomdeu] DB existente ({edad_dias:.0f}d) con historial_bulk — reutilizando", flush=True)
+            print(f"[nomdeu] DB existente ({edad_dias:.0f}d) con historial_detalle — reutilizando", flush=True)
         else:
-            print(f"[nomdeu] DB stale o sin historial_bulk — re-descargando", flush=True)
+            print(f"[nomdeu] DB stale o sin historial_detalle — re-descargando", flush=True)
 
     if descarga:
         ok = _descargar_nomdeu(url, NOMDEU_DB_PATH)
@@ -7846,7 +7915,7 @@ def _init_nomdeu_db() -> None:
         conn = sqlite3.connect(NOMDEU_DB_PATH, check_same_thread=False)
         conn.execute("PRAGMA query_only = 1")
         conn.execute("PRAGMA cache_size  = -65536")   # 64 MB caché lectura
-        # denominaciones puede no existir si la DB solo tiene historial_bulk
+        # denominaciones puede no existir si la DB solo tiene historial_detalle
         try:
             n_den = conn.execute("SELECT COUNT(*) FROM denominaciones").fetchone()[0]
         except Exception:
@@ -7855,15 +7924,16 @@ def _init_nomdeu_db() -> None:
             n_deu = conn.execute("SELECT COUNT(*) FROM deudas_resumen").fetchone()[0]
         except Exception:
             n_deu = 0
-        # historial_bulk puede no existir en DB generadas con la versión anterior del script
+        # historial_detalle puede no existir en DB generadas con versiones anteriores del script
         try:
-            n_hist = conn.execute("SELECT COUNT(*) FROM historial_bulk").fetchone()[0]
+            n_hist = conn.execute("SELECT COUNT(*) FROM historial_detalle").fetchone()[0]
+            n_cuits_hist = conn.execute("SELECT COUNT(DISTINCT cuit) FROM historial_detalle").fetchone()[0]
         except Exception:
-            n_hist = 0
+            n_hist, n_cuits_hist = 0, 0
         _nomdeu_conn = conn
         print(
             f"[nomdeu] Listo — {n_den:,} denominaciones | {n_deu:,} en deudas_resumen"
-            f" | {n_hist:,} en historial_bulk",
+            f" | {n_hist:,} filas / {n_cuits_hist:,} CUITs en historial_detalle ({_HIST_DETALLE_MESES}m reales)",
             flush=True,
         )
     except Exception as e:
@@ -8129,95 +8199,46 @@ def _nomdeu_get_nombre(cuit: str):
 
 def _nomdeu_get_deuda(cuit: str):
     """
-    Resumen de deuda del padrón offline.
+    Resumen de deuda del padrón offline, derivado 100% de historial_detalle
+    (situación y monto reales de los últimos _HIST_DETALLE_MESES meses, por
+    entidad — ver _nomdeu_agregar_filas). El mes_01 (más reciente) funciona
+    como snapshot actual, equivalente a lo que antes daba deudas_resumen.
 
-    Fuente primaria : deudas_resumen (snapshot PADRON actual, si existe)
-    Fuente secundaria: historial_bulk (24DSF — peor sit. en 24 meses)
-                       Schema real: cuit, sit_max_24m, meses_en_mora, monto_max
-
-    Retorna el peor sit_max entre ambas fuentes para no subestimar el riesgo.
-    Retorna None si el CUIT no existe en ninguna tabla (sin antecedentes).
+    Retorna None si el CUIT no tiene ninguna fila en historial_detalle.
     """
-    if _nomdeu_conn is None:
+    filas = _historial_detalle_rows(cuit)
+    if not filas:
         return None
-    cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
-    try:
-        # 1. Snapshot actual (PADRON — puede no existir si la DB es solo historial)
-        row_p = None
-        try:
-            row_p = _nomdeu_conn.execute(
-                "SELECT sit_max, monto_total, entidades_cod, periodo "
-                "FROM deudas_resumen WHERE cuit = ?", (cuit_limpio,)
-            ).fetchone()
-        except Exception:
-            pass
-
-        # 2. Historial 24 meses — schema real: sit_max_24m, meses_en_mora, monto_max
-        row_h = None
-        try:
-            row_h = _nomdeu_conn.execute(
-                "SELECT sit_max_24m, meses_en_mora, monto_max "
-                "FROM historial_bulk WHERE cuit = ?", (cuit_limpio,)
-            ).fetchone()
-        except Exception:
-            pass
-
-        if row_p is None and row_h is None:
-            return None  # CUIT sin antecedentes en ninguna fuente
-
-        sit_p   = int(row_p[0]) if row_p else 1
-        sit_h   = int(row_h[0]) if row_h else 1
-        sit_max = max(sit_p, sit_h)
-        return {
-            'sit_max':       sit_max,
-            'monto_total':   float(row_p[1]) if row_p else float(row_h[2] if row_h else 0),
-            'entidades_cod': row_p[2] if row_p else '',
-            'periodo':       row_p[3] if row_p else '',
-            'sit_padron':    sit_p,
-            'sit_hist_24m':  sit_h,
-            'meses_en_mora': int(row_h[1]) if row_h else 0,
-        }
-    except Exception:
-        return None
+    return _nomdeu_agregar_filas(filas)
 
 
 @app.route("/admin/nomdeu-lookup/<cuit>")
 def admin_nomdeu_lookup(cuit):
-    """Diagnóstico: muestra exactamente qué hay (o no) para un CUIT en
-    deudas_resumen / historial_bulk, más metadatos de cobertura de ambas
-    tablas (cantidad de filas, período más reciente). Sirve para confirmar
-    si una ausencia es real (CUIT fuera del filtro/cobertura del import)
-    o un bug, sin necesidad de acceso directo al disco de Render."""
+    """Diagnóstico: muestra el resumen agregado (_nomdeu_get_deuda) y las
+    filas crudas de historial_detalle para un CUIT, más la cobertura total
+    de la tabla. Sirve para confirmar si una ausencia es real (CUIT fuera
+    del filtro/cobertura del import) o un bug, sin acceso directo al disco."""
     cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
     if _nomdeu_conn is None:
         return jsonify({"ok": False, "error": "nomdeu_conn no inicializada"}), 503
     out = {"ok": True, "cuit": cuit_limpio}
     try:
-        out["deudas_resumen_row"] = list(_nomdeu_conn.execute(
-            "SELECT cuit, sit_max, monto_total, entidades_cod, periodo FROM deudas_resumen WHERE cuit = ?",
-            (cuit_limpio,)
-        ).fetchone() or []) or None
+        out["resumen"] = _nomdeu_get_deuda(cuit_limpio)
     except Exception as e:
-        out["deudas_resumen_row"] = f"error: {e}"
+        out["resumen"] = f"error: {e}"
     try:
-        out["historial_bulk_row"] = list(_nomdeu_conn.execute(
-            "SELECT cuit, sit_max_24m, meses_en_mora, monto_max FROM historial_bulk WHERE cuit = ?",
-            (cuit_limpio,)
-        ).fetchone() or []) or None
+        out["filas_detalle"] = _historial_detalle_rows(cuit_limpio)
     except Exception as e:
-        out["historial_bulk_row"] = f"error: {e}"
+        out["filas_detalle"] = f"error: {e}"
     try:
-        out["deudas_resumen_total"]  = _nomdeu_conn.execute("SELECT COUNT(*) FROM deudas_resumen").fetchone()[0]
-        out["deudas_resumen_max_periodo"] = _nomdeu_conn.execute("SELECT MAX(periodo) FROM deudas_resumen").fetchone()[0]
-    except Exception as e:
-        out["deudas_resumen_total"] = f"error: {e}"
-    try:
-        out["historial_bulk_total"] = _nomdeu_conn.execute("SELECT COUNT(*) FROM historial_bulk").fetchone()[0]
-        out["historial_bulk_sit1_count"] = _nomdeu_conn.execute(
-            "SELECT COUNT(*) FROM historial_bulk WHERE sit_max_24m = 1"
+        out["historial_detalle_total"] = _nomdeu_conn.execute(
+            "SELECT COUNT(*) FROM historial_detalle"
+        ).fetchone()[0]
+        out["historial_detalle_cuits"] = _nomdeu_conn.execute(
+            "SELECT COUNT(DISTINCT cuit) FROM historial_detalle"
         ).fetchone()[0]
     except Exception as e:
-        out["historial_bulk_total"] = f"error: {e}"
+        out["historial_detalle_total"] = f"error: {e}"
     return jsonify(out)
 
 
@@ -8255,7 +8276,8 @@ def _nomdeu_build_deudas_resp(cuit: str):
                 'monto': round(deuda['monto_total'] / n_ents, 1),
             })
     else:
-        # Solo historial_bulk (sin deudas_resumen): entidad sintética con sit_max del historial
+        # Sin entidades en el mes más reciente (deuda histórica ya cerrada/no reportada
+        # en el snapshot actual): entidad sintética con el sit_max histórico
         entidades_list = [{
             'entidad': 'Sistema Financiero',
             'situacion': deuda['sit_max'],
@@ -8593,19 +8615,19 @@ def get_historial(cuit):
         # no es prueba de que no haya historial — probar el padrón offline primero.
         _deuda_bulk_404 = _nomdeu_get_deuda(cuit_limpio)
         if _deuda_bulk_404:
-            _offline_hist_404 = _bulk_to_hist_data(_deuda_bulk_404)
-            print(f"[historial] {cuit_limpio} fallback historial_bulk (24m sintético, post-404)", flush=True)
+            _offline_hist_404 = _bulk_to_hist_data(cuit_limpio)
+            print(f"[historial] {cuit_limpio} fallback historial_detalle ({_HIST_DETALLE_MESES}m reales, post-404)", flush=True)
             return jsonify(_offline_hist_404), 200
         return jsonify({"results": {"periodos": []}, "sin_deudas": True, "error_bcra": None}), 200
 
     # Fallback offline: si la API falló por completo (sin 404, ej. ConnectionResetError en
-    # ambos endpoints), reconstruir 24 meses sintéticos desde historial_bulk — mismo criterio
-    # que usa el motor de scoring. Un solo período (_nomdeu_build_deudas_resp) no sirve para
-    # un análisis de tendencia real.
+    # ambos endpoints), reconstruir el historial real desde historial_detalle — mismo
+    # criterio que usa el motor de scoring. Un solo período (_nomdeu_build_deudas_resp)
+    # no sirve para un análisis de tendencia real.
     _deuda_bulk = _nomdeu_get_deuda(cuit_limpio)
     if _deuda_bulk:
-        _offline_hist = _bulk_to_hist_data(_deuda_bulk)
-        print(f"[historial] {cuit_limpio} fallback historial_bulk (24m sintético)", flush=True)
+        _offline_hist = _bulk_to_hist_data(cuit_limpio)
+        print(f"[historial] {cuit_limpio} fallback historial_detalle ({_HIST_DETALLE_MESES}m reales)", flush=True)
         return jsonify(_offline_hist), 200
 
     return jsonify({"results": None, "sin_deudas": None, "error_bcra": "sin_respuesta"}), 200
