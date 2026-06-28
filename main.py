@@ -3921,15 +3921,18 @@ def _nomdeu_agregar_filas(filas: list) -> dict:
     ent_codigos_actuales = []
 
     for fila in filas:
+        # BCRA usa el dígito "0" (no NULL/blanco) para marcar "sin información
+        # ese mes en esa entidad" — no es una situación válida (los códigos
+        # reales son 1-5 y 11), así que se descarta igual que None.
         sit_01 = fila.get('sit_01')
-        if sit_01 is not None:
+        if sit_01:
             ent_codigos_actuales.append(fila['entidad'])
             monto_actual_total += (fila.get('monto_01') or 0) / 10.0
             if sit_01 > sit_actual:
                 sit_actual = sit_01
         for i in range(1, _HIST_DETALLE_MESES + 1):
             sit_i = fila.get(f'sit_{i:02d}')
-            if sit_i is None:
+            if not sit_i:
                 continue
             if sit_i > sit_max:
                 sit_max = sit_i
@@ -4172,8 +4175,10 @@ def _bulk_to_hist_data(cuit: str) -> dict:
         periodo = _mes_anterior(_PERIODO_BASE_BULK, i - 1)
         entidades = []
         for fila in filas:
+            # "0" (no None) marca "sin informacion ese mes" — no es una
+            # situacion valida, se descarta igual que en _nomdeu_agregar_filas.
             sit = fila.get(f'sit_{i:02d}')
-            if sit is None:
+            if not sit:
                 continue
             monto = (fila.get(f'monto_{i:02d}') or 0) / 10.0
             entidades.append({
