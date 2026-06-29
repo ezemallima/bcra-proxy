@@ -8252,6 +8252,40 @@ def admin_nomdeu_lookup(cuit):
     return jsonify(out)
 
 
+@app.route("/admin/cheques-lookup/<cuit>")
+def admin_cheques_lookup(cuit):
+    """Diagnóstico temporal: muestra cómo está guardado realmente el cuit en
+    cheques_bcra (tipo, longitud, muestras) y si matchea el cuit consultado,
+    para descartar un mismatch de formato como el que tuvo historial_bulk."""
+    cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
+    if not os.path.exists(PADRON_DB_PATH):
+        return jsonify({"ok": False, "error": "PADRON_DB_PATH no existe"}), 503
+    out = {"ok": True, "cuit": cuit_limpio}
+    try:
+        conn = sqlite3.connect(PADRON_DB_PATH, check_same_thread=False)
+        out["filas_exactas"] = conn.execute(
+            "SELECT cuit, nro_cheque, fecha_rechazo, monto, estado, tipo, cuit_entidad "
+            "FROM cheques_bcra WHERE cuit = ?", (cuit_limpio,)
+        ).fetchall()
+        out["like_match"] = conn.execute(
+            "SELECT cuit FROM cheques_bcra WHERE cuit LIKE ? LIMIT 5",
+            (f"%{cuit_limpio}%",)
+        ).fetchall()
+        out["_debug_cuit_typeof"] = conn.execute(
+            "SELECT typeof(cuit), length(cuit) FROM cheques_bcra LIMIT 1"
+        ).fetchone()
+        out["_debug_cuit_samples"] = [r[0] for r in conn.execute(
+            "SELECT cuit FROM cheques_bcra LIMIT 5"
+        ).fetchall()]
+        out["total_registros"] = conn.execute(
+            "SELECT COUNT(*) FROM cheques_bcra"
+        ).fetchone()[0]
+        conn.close()
+    except Exception as e:
+        out["error"] = f"{e}"
+    return jsonify(out)
+
+
 def _nomdeu_get_entidad(codigo: str):
     """Nombre de entidad financiera por código Maeent (5 chars). Retorna str o None."""
     if _nomdeu_conn is None:
