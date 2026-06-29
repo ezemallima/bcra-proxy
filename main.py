@@ -6684,7 +6684,7 @@ def _ejecutar_proceso_integral(cartera_data: list):
     # ═══════════════════════════════════════════════════════════════════════
     # FASE 1 — BCRA en vivo EN PARALELO, solo para zona_gris + nuevo.
     # ═══════════════════════════════════════════════════════════════════════
-    _live_resultados_pi: dict = {}  # {cuit: (bcra_data, cheq_cdi_data)}
+    _live_resultados_pi: dict = {}  # {cuit: (bcra_data, cheq_cdi_data, hist_data)}
     if _para_live_pi:
         _N_WORKERS_PI = 8
         with _proceso_lock:
@@ -6725,25 +6725,91 @@ def _ejecutar_proceso_integral(cartera_data: list):
                     os.replace(_tmp_cheq, _cheq_path)
                 except Exception:
                     pass
-            return cuit_f, bd, cheq_d
+            # Historial 24m en vivo — se busca acá (en paralelo) y NO en el motor de
+            # scoring (Paso 2), que de otro modo haría un fetch en vivo SECUENCIAL por
+            # cliente y anularía toda la ganancia de la Fase 0/1 (causa real del "se
+            # cuelga procesando 1/1283" reportado).
+            try:
+                hist_d, _ = _consultar_bcra_directo(cuit_f, 'historial', timeout_per_req=8, max_intentos=1)
+            except Exception as _he:
+                print(f'[proceso-integral] Historial fallo {cuit_f}: {_he}', flush=True)
+                hist_d = None
+            if hist_d and isinstance(hist_d, dict) and (hist_d.get('results') or {}).get('periodos'):
+                try:
+                    _hist_path = os.path.join(DATA_DIR, f'historial_{cuit_f}.json')
+                    _tmp_hist  = _hist_path + '.tmp'
+                    with open(_tmp_hist, 'w', encoding='utf-8') as _hf:
+                        json.dump({'payload': hist_d, 'ts': time.time()}, _hf, ensure_ascii=False)
+                        _hf.flush(); os.fsync(_hf.fileno())
+                    os.replace(_tmp_hist, _hist_path)
+                except Exception:
+                    pass
+            else:
+                hist_d = None
+            return cuit_f, bd, cheq_d, hist_d
 
         with ThreadPoolExecutor(max_workers=_N_WORKERS_PI) as _pool_pi:
             _futs_pi = {_pool_pi.submit(_fetch_live_pi, cuit): cuit for cuit in _para_live_pi}
             _done_pi = 0
             for _fut_pi in as_completed(_futs_pi, timeout=1800):
                 try:
-                    _cuit_r, _bd_r, _cheq_r = _fut_pi.result(timeout=40)
-                    _live_resultados_pi[_cuit_r] = (_bd_r, _cheq_r)
+                    _cuit_r, _bd_r, _cheq_r, _hist_r = _fut_pi.result(timeout=40)
+                    _live_resultados_pi[_cuit_r] = (_bd_r, _cheq_r, _hist_r)
                 except Exception as _fe_pi:
                     _cuit_r = _futs_pi[_fut_pi]
                     print(f'[proceso-integral] Live fetch fallo {_cuit_r}: {_fe_pi}', flush=True)
-                    _live_resultados_pi[_cuit_r] = ({}, None)
+                    _live_resultados_pi[_cuit_r] = ({}, None, None)
                 _done_pi += 1
                 if _done_pi % 20 == 0:
                     print(f"[proceso-integral] FASE 1: {_done_pi}/{len(_para_live_pi)} live", flush=True)
         print(f"[proceso-integral] FASE 1 OK — {len(_live_resultados_pi)} clientes resueltos en vivo", flush=True)
     else:
         print("[proceso-integral] FASE 1: sin clientes para BCRA en vivo — todo resuelto por bulk", flush=True)
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # FASE 1.5 — Pre-calentar solvencia (AFIP/TangoFactura/ANSES) en paralelo.
+    # Es una cadena de fetch totalmente independiente de BCRA (Fase 0/1 no la
+    # cubre): get_solvency_data hace su propio scraping AFIP con proxies
+    # Bright Data/ScraperAPI cuando el caché de 24h está vencido. Sin este
+    # pre-calentado, el Paso 3 de la Fase 2 termina haciendo ese fetch en
+    # vivo SECUENCIAL por cliente — el motivo real por el que el proceso
+    # seguía lento incluso con la cartera ya triada por bulk en Fase 0.
+    # get_solvency_data ya valida su propio caché de 24h, así que llamarla
+    # para un cliente ya cacheado es gratis (solo lectura de disco).
+    # ═══════════════════════════════════════════════════════════════════════
+    _para_solvencia_pi = []
+    for _cuit_sv in _cuits_lista_pi:
+        _sv_path_pi = os.path.join(DATA_DIR, f'solvency_{_cuit_sv}.json')
+        try:
+            if os.path.exists(_sv_path_pi):
+                with open(_sv_path_pi, 'r') as _svf_pi:
+                    _sv_cached_pi = json.load(_svf_pi)
+                if time.time() - _sv_cached_pi.get('ts', 0) < 86400:
+                    continue
+        except Exception:
+            pass
+        _para_solvencia_pi.append(_cuit_sv)
+
+    if _para_solvencia_pi:
+        with _proceso_lock:
+            _proceso_integral_estado['mensaje'] = (
+                f'Fase 1.5/2: solvencia AFIP para {len(_para_solvencia_pi)} clientes (8 workers)...'
+            )
+        print(f"[proceso-integral] FASE 1.5: solvencia — {len(_para_solvencia_pi)} clientes sin caché vigente", flush=True)
+        with ThreadPoolExecutor(max_workers=8) as _pool_sv:
+            _futs_sv = {_pool_sv.submit(get_solvency_data, _cs): _cs for _cs in _para_solvencia_pi}
+            _done_sv = 0
+            for _fut_sv in as_completed(_futs_sv, timeout=1800):
+                try:
+                    _fut_sv.result(timeout=40)
+                except Exception as _e_sv:
+                    print(f'[proceso-integral] Solvencia fallo {_futs_sv[_fut_sv]}: {_e_sv}', flush=True)
+                _done_sv += 1
+                if _done_sv % 50 == 0:
+                    print(f"[proceso-integral] FASE 1.5: {_done_sv}/{len(_para_solvencia_pi)} solvencia", flush=True)
+        print("[proceso-integral] FASE 1.5 OK", flush=True)
+    else:
+        print("[proceso-integral] FASE 1.5: toda la solvencia ya estaba cacheada (<24h)", flush=True)
 
     # ═══════════════════════════════════════════════════════════════════════
     # FASE 2 — Scoring secuencial usando datos ya resueltos (sin I/O BCRA aquí).
@@ -6770,14 +6836,16 @@ def _ejecutar_proceso_integral(cartera_data: list):
 
             # ── Paso 1: BCRA — resuelto por bulk (FASE 0) o por vivo (FASE 1) ────────
             if cuit in _live_resultados_pi:
-                bcra_data, _cheq_cdi_pi = _live_resultados_pi[cuit]
+                bcra_data, _cheq_cdi_pi, _hist_live_pi = _live_resultados_pi[cuit]
             else:
                 _deuda_bulk_pi = _bulk_deudas_pi.get(cuit)
-                bcra_data    = _bulk_to_bcra_data(nombre, _deuda_bulk_pi) if _deuda_bulk_pi else {}
-                _cheq_cdi_pi = None  # no se consultó vivo: este cliente lo resolvió el bulk
+                bcra_data     = _bulk_to_bcra_data(nombre, _deuda_bulk_pi) if _deuda_bulk_pi else {}
+                _cheq_cdi_pi  = None  # no se consultó vivo: este cliente lo resolvió el bulk
+                _hist_live_pi = None
 
             # ── Paso 1.5b: Detectar cheques rechazados activos para alertas ──────────
             _cheq_activos_pi = 0
+            _cheq_para_score_pi = _bulk_cheques_pi.get(cuit)  # default seguro si el try de abajo falla
             try:
                 _cheq_raw_pi = _cheq_cdi_pi or {}
                 # Fallback: caché en disco del CUIT (solo si hubo intento en vivo y falló)
@@ -6795,8 +6863,10 @@ def _ejecutar_proceso_integral(cartera_data: list):
                 _act_bulk_pi, _, _det_bulk_pi = _cheques_activos_de(_bulk_cheques_pi.get(cuit))
                 if _act_bulk_pi > _act_live_pi:
                     _cheq_activos_pi, _det_pi = _act_bulk_pi, _det_bulk_pi
+                    _cheq_para_score_pi = _bulk_cheques_pi.get(cuit)
                 else:
                     _cheq_activos_pi, _det_pi = _act_live_pi, _det_live_pi
+                    _cheq_para_score_pi = _cheq_raw_pi
 
                 if _cheq_activos_pi > 0:
                     _pi_alertas.append({
@@ -6820,8 +6890,20 @@ def _ejecutar_proceso_integral(cartera_data: list):
                 print(f'[proceso-integral] Cheques alert parse fallo {cuit}: {_cal_e}', flush=True)
 
             # ── Paso 2: Score (try propio — no mata el ciclo completo si falla) ───────
+            # IMPORTANTE: NO usar calcular_score_servidor acá — ese wrapper hace su
+            # propio fetch en vivo de historial/cheques cuando no hay caché en disco,
+            # lo que vuelve a convertir este loop en secuencial+red por cliente (la
+            # causa real de la lentitud, ya resuelta arriba en Fase 0/1). Se llama
+            # directo al motor con los datos ya resueltos en memoria.
+            _hist_para_score_pi = _hist_live_pi or _bulk_to_hist_data(cuit)
             try:
-                score_data = calcular_score_servidor(cuit, bcra_data or {})
+                score_data = calcular_rating_predictivo(
+                    cuit=cuit, bcra_data=bcra_data or {},
+                    hist_data=_hist_para_score_pi, cheq_data=_cheq_para_score_pi,
+                    en_mora=None, ciudad=str(c.get('ciudad', '') or ''),
+                )
+                if score_data:
+                    score_data['bcra_disponible'] = bool(bcra_data) and not bool((bcra_data or {}).get('error_bcra'))
             except Exception as _sce:
                 _tb_full = _tb.format_exc().strip()
                 _err_msg = f"{type(_sce).__name__}: {str(_sce)[:400]}"
