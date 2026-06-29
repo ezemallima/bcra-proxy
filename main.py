@@ -8727,23 +8727,6 @@ def get_afip(cuit):
     except Exception as _e:
         print(f"[afip] {cuit_limpio} historial_cache error: {_e}", flush=True)
 
-    # 4.5. Padron AFIP via datos.gob.ar (IVA / Ganancias — sin auth requerida)
-    try:
-        _afip_r = requests.get(
-            "https://aws.datos.gob.ar/datastore/api/3/action/datastore_search",
-            params={"resource_id": "a6eb09c0-e44b-4b12-b0aa-9e4e7c65a51e", "q": cuit_limpio},
-            timeout=5, verify=False
-        )
-        if _afip_r.status_code == 200:
-            _afip_j = _afip_r.json()
-            _afip_recs = (_afip_j.get('result') or {}).get('records') or []
-            for _rec in _afip_recs:
-                _rs = str(_rec.get('razon_social') or _rec.get('nombre') or '').strip()
-                if _rs and not _rs.isdigit():
-                    print(f"[afip] {cuit_limpio} padron_datos_gob: {_rs}", flush=True)
-                    return jsonify({"nombre": _rs, "fuente": "afip_padron"})
-    except Exception: pass
-
     # 4.6. TangoFactura — razonSocial/apellidoNombre del contribuyente
     try:
         _ua_tf = request.headers.get('User-Agent', 'Mozilla/5.0')
@@ -8771,6 +8754,32 @@ def get_afip(cuit):
                 return jsonify({"nombre": _rs_tf, "fuente": "tangofactura"})
     except Exception as _etf:
         print(f"[afip] {cuit_limpio} tangofactura error: {_etf}", flush=True)
+
+    # 4.7. CuitOnline — directorio público (cubre personas físicas y jurídicas que
+    # no figuran en BCRA ni en tangofactura). Se valida que el CUIT del resultado
+    # coincida exacto con el buscado, para no devolver una coincidencia ajena.
+    try:
+        import re as _re_co
+        _co_r = requests.get(
+            "https://www.cuitonline.com/search.php",
+            params={"q": cuit_limpio},
+            headers={'User-Agent': request.headers.get('User-Agent', 'Mozilla/5.0')},
+            timeout=10, verify=True
+        )
+        print(f"[afip] {cuit_limpio} cuitonline HTTP={_co_r.status_code}", flush=True)
+        if _co_r.status_code == 200:
+            _co_m = _re_co.search(
+                r'href="detalle/(\d{11})/[^"]*"[^>]*title="Ver detalles de ([^"]+)"',
+                _co_r.text
+            )
+            if _co_m and _co_m.group(1) == cuit_limpio:
+                import html as _html_co
+                _rs_co = _html_co.unescape(_co_m.group(2)).strip()
+                if _rs_co and not _rs_co.isdigit():
+                    print(f"[afip] {cuit_limpio} cuitonline OK: {_rs_co}", flush=True)
+                    return jsonify({"nombre": _rs_co, "fuente": "cuitonline"})
+    except Exception as _eco:
+        print(f"[afip] {cuit_limpio} cuitonline error: {_eco}", flush=True)
 
     # 5. API BCRA — historial en vivo (solo si no hay caché)
     try:
