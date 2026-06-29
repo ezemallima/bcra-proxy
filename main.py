@@ -8378,14 +8378,89 @@ def admin_cheques_lookup(cuit):
     return jsonify(out)
 
 
+# Código BCRA (zero-padded a 5 dígitos) → denominación real del banco. Fuente:
+# api.bcra.gob.ar/cheques/v1.0/entidades (endpoint público oficial del BCRA,
+# mismo código numérico que usa el bulk de deudores 24DSF.txt). Solo cubre
+# bancos habilitados en la cámara de cheques — entidades no bancarias (tarjetas
+# de crédito, fintechs, etc., con códigos de 6 dígitos) no están en esta lista
+# y siguen mostrando el fallback "Entidad NNNNN".
+_ENTIDADES_BCRA = {
+    '00005': 'The Royal Bank of Scotland N.V.',
+    '00007': 'Banco de Galicia y Buenos Aires S.A.',
+    '00011': 'Banco de la Nación Argentina',
+    '00014': 'Banco de la Provincia de Buenos Aires',
+    '00015': 'Industrial and Commercial Bank of China',
+    '00016': 'Citibank N.A.',
+    '00017': 'Banco BBVA Argentina S.A.',
+    '00018': 'MUFG Bank, Ltd',
+    '00020': 'Banco de la Provincia de Córdoba S.A.',
+    '00027': 'Banco Supervielle S.A.',
+    '00029': 'Banco de la Ciudad de Buenos Aires',
+    '00034': 'Banco Patagonia S.A.',
+    '00044': 'Banco Hipotecario S.A.',
+    '00045': 'Banco de San Juan S.A.',
+    '00060': 'Banco del Tucumán S.A.',
+    '00065': 'Banco Municipal de Rosario',
+    '00072': 'Banco Santander Argentina S.A.',
+    '00079': 'Banco Regional de Cuyo S.A.',
+    '00083': 'Banco del Chubut S.A.',
+    '00086': 'Banco de Santa Cruz S.A.',
+    '00093': 'La Pampa S.A.',
+    '00094': 'Banco de Corrientes S.A.',
+    '00097': 'Banco Provincia del Neuquén S.A.',
+    '00147': 'Bibank S.A.',
+    '00150': 'Banco GGAL S.A.',
+    '00191': 'Banco Credicoop Cooperativo Limitado',
+    '00198': 'Banco de Valores S.A.',
+    '00247': 'Banco Roela S.A.',
+    '00254': 'Banco Mariva S.A.',
+    '00259': 'Banco BMA S.A.U.',
+    '00266': 'BNP Paribas',
+    '00268': 'Banco Provincia de Tierra del Fuego',
+    '00277': 'Banco Saenz S.A.',
+    '00281': 'Banco Meridian S.A.',
+    '00285': 'Banco Macro S.A.',
+    '00297': 'Banco Banex S.A.',
+    '00299': 'Banco Comafi Sociedad Anónima',
+    '00301': 'Banco Piano S.A.',
+    '00303': 'Banco Finansur S.A.',
+    '00305': 'Banco Julio Sociedad Anónima',
+    '00306': 'Banco Privado de Inversiones S.A.',
+    '00309': 'Banco Rioja Sociedad Anónima Unipersonal',
+    '00310': 'Banco del Sol S.A.',
+    '00311': 'Nuevo Banco del Chaco S.A.',
+    '00315': 'Banco de Formosa S.A.',
+    '00319': 'Banco CMF S.A.',
+    '00321': 'Banco de Santiago del Estero S.A.',
+    '00322': 'Banco Industrial',
+    '00330': 'Nuevo Banco de Santa Fe Sociedad Anónima',
+    '00336': 'Banco Bradesco Argentina S.A.U.',
+    '00338': 'Banco de Servicios y Transacciones S.A.U.',
+    '00341': 'Banco Masventas S.A.',
+    '00386': 'Nuevo Banco de Entre Ríos S.A.',
+    '00389': 'Banco Columbia S.A.',
+    '00426': 'Banco Bica S.A.',
+    '00431': 'Banco Coinag S.A.',
+    '00432': 'Banco de Comercio S.A.',
+    '00435': 'Banco Sucredito Regional S.A.U.',
+    '00448': 'Banco Dino S.A.',
+}
+
+
 def _nomdeu_get_entidad(codigo: str):
-    """Nombre de entidad financiera por código Maeent (5 chars). Retorna str o None."""
+    """Nombre de entidad financiera por código Maeent (5 chars). Retorna str o None.
+    Prioriza la lista oficial estática (bancos, vía API pública BCRA) y recurre
+    a la tabla 'entidades' de la base offline solo como respaldo futuro."""
+    cod5 = str(codigo).strip().zfill(5)
+    nombre_estatico = _ENTIDADES_BCRA.get(cod5)
+    if nombre_estatico:
+        return nombre_estatico
     if _nomdeu_conn is None:
         return None
     try:
         row = _nomdeu_conn.execute(
             "SELECT nombre FROM entidades WHERE codigo = ?",
-            (str(codigo).strip().zfill(5),)
+            (cod5,)
         ).fetchone()
         return row[0] if row else None
     except Exception:
