@@ -6645,6 +6645,109 @@ def _ejecutar_proceso_integral(cartera_data: list):
     # en ráfaga contra BCRA y rate-limiting después del cliente 4.
     # El caché nocturno (warm-padron) garantiza datos frescos sin golpear el rate-limit.
 
+    # ═══════════════════════════════════════════════════════════════════════
+    # FASE 0 — Triage bulk local (historial_detalle + cheques_bcra), sin red.
+    # El BCRA en vivo se bloquea/da falsos negativos a partir de la 2da consulta
+    # seguida — el bulk local (snapshot diario oficial) es la fuente prioritaria.
+    # Solo van a BCRA en vivo los clientes que el bulk no puede resolver con
+    # certeza: zona_gris (mora ambigua) y nuevo (sin antecedentes en el bulk).
+    # ═══════════════════════════════════════════════════════════════════════
+    with _proceso_lock:
+        _proceso_integral_estado['mensaje'] = 'Fase 1/2: clasificando cartera con datos bulk (sin red)...'
+
+    _clientes_validos_pi = []
+    for c in cartera_data:
+        if isinstance(c, dict):
+            _cuit_n = str(c.get('cuit', '')).replace('-', '').replace(' ', '').strip()
+            if _cuit_n and len(_cuit_n) >= 10:
+                _clientes_validos_pi.append((c, _cuit_n))
+
+    _cuits_lista_pi  = [cuit for _, cuit in _clientes_validos_pi]
+    _bulk_deudas_pi  = _nomdeu_batch(_cuits_lista_pi)
+    _bulk_cheques_pi = _cheques_local_batch(_cuits_lista_pi)
+
+    _categoria_pi: dict = {}
+    _cat_count_pi = {'alto_riesgo': 0, 'zona_gris': 0, 'limpio_bulk': 0, 'nuevo': 0}
+    for _, cuit in _clientes_validos_pi:
+        _cat = _clasificar_bulk(_bulk_deudas_pi.get(cuit))
+        _categoria_pi[cuit] = _cat
+        _cat_count_pi[_cat] = _cat_count_pi.get(_cat, 0) + 1
+
+    _para_live_pi = [cuit for cuit in _cuits_lista_pi if _categoria_pi.get(cuit) in ('zona_gris', 'nuevo')]
+    print(
+        f"[proceso-integral] FASE 0 OK — alto_riesgo={_cat_count_pi['alto_riesgo']} | "
+        f"zona_gris={_cat_count_pi['zona_gris']} | limpio_bulk={_cat_count_pi['limpio_bulk']} | "
+        f"nuevo={_cat_count_pi['nuevo']} → {len(_para_live_pi)} van a BCRA en vivo",
+        flush=True,
+    )
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # FASE 1 — BCRA en vivo EN PARALELO, solo para zona_gris + nuevo.
+    # ═══════════════════════════════════════════════════════════════════════
+    _live_resultados_pi: dict = {}  # {cuit: (bcra_data, cheq_cdi_data)}
+    if _para_live_pi:
+        _N_WORKERS_PI = 8
+        with _proceso_lock:
+            _proceso_integral_estado['mensaje'] = (
+                f'Fase 2/2: BCRA en vivo para {len(_para_live_pi)} clientes ({_N_WORKERS_PI} workers)...'
+            )
+        print(f"[proceso-integral] FASE 1: BCRA en vivo — {len(_para_live_pi)} clientes", flush=True)
+
+        def _fetch_live_pi(cuit_f):
+            try:
+                bd, _ = consultar_bcra_cached(cuit_f)
+            except Exception as _be:
+                print(f'[proceso-integral] BCRA cache fallo {cuit_f}: {_be}', flush=True)
+                bd = None
+            _sin_datos = (
+                not bd or not isinstance(bd, dict) or bd.get('error_bcra') or
+                (not (bd.get('results') or {}).get('periodos') and not bd.get('sin_deudas'))
+            )
+            if _sin_datos:
+                _rb, _ = _consultar_respaldo(cuit_f)
+                if _rb:
+                    bd = _rb
+                else:
+                    _nomdeu_pi2 = _nomdeu_build_deudas_resp(cuit_f)
+                    bd = _nomdeu_pi2 or {}
+            try:
+                cheq_d, _ = _consultar_bcra_directo(cuit_f, 'cheques')
+            except Exception as _ce:
+                print(f'[proceso-integral] Cheques CDI fallo {cuit_f}: {_ce}', flush=True)
+                cheq_d = None
+            if cheq_d and isinstance(cheq_d, dict):
+                try:
+                    _cheq_path = os.path.join(DATA_DIR, f'cheques_{cuit_f}.json')
+                    _tmp_cheq  = _cheq_path + '.tmp'
+                    with open(_tmp_cheq, 'w', encoding='utf-8') as _cf:
+                        json.dump({'payload': cheq_d, 'ts': time.time()}, _cf, ensure_ascii=False)
+                        _cf.flush(); os.fsync(_cf.fileno())
+                    os.replace(_tmp_cheq, _cheq_path)
+                except Exception:
+                    pass
+            return cuit_f, bd, cheq_d
+
+        with ThreadPoolExecutor(max_workers=_N_WORKERS_PI) as _pool_pi:
+            _futs_pi = {_pool_pi.submit(_fetch_live_pi, cuit): cuit for cuit in _para_live_pi}
+            _done_pi = 0
+            for _fut_pi in as_completed(_futs_pi, timeout=1800):
+                try:
+                    _cuit_r, _bd_r, _cheq_r = _fut_pi.result(timeout=40)
+                    _live_resultados_pi[_cuit_r] = (_bd_r, _cheq_r)
+                except Exception as _fe_pi:
+                    _cuit_r = _futs_pi[_fut_pi]
+                    print(f'[proceso-integral] Live fetch fallo {_cuit_r}: {_fe_pi}', flush=True)
+                    _live_resultados_pi[_cuit_r] = ({}, None)
+                _done_pi += 1
+                if _done_pi % 20 == 0:
+                    print(f"[proceso-integral] FASE 1: {_done_pi}/{len(_para_live_pi)} live", flush=True)
+        print(f"[proceso-integral] FASE 1 OK — {len(_live_resultados_pi)} clientes resueltos en vivo", flush=True)
+    else:
+        print("[proceso-integral] FASE 1: sin clientes para BCRA en vivo — todo resuelto por bulk", flush=True)
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # FASE 2 — Scoring secuencial usando datos ya resueltos (sin I/O BCRA aquí).
+    # ═══════════════════════════════════════════════════════════════════════
     for i, c in enumerate(cartera_data):
         if not isinstance(c, dict):
             with _proceso_lock:
@@ -6663,56 +6766,22 @@ def _ejecutar_proceso_integral(cartera_data: list):
             _proceso_integral_estado['mensaje'] = f'Procesando {i+1}/{total}: {nombre or cuit}'
 
         try:
-            # ── Paso 1: BCRA — try propio con fallback explícito a _consultar_respaldo ──
             _score_session_cache.pop(cuit, None)
-            try:
-                bcra_data, _ = consultar_bcra_cached(cuit)
-            except Exception as _be:
-                print(f'[proceso-integral] BCRA cache fallo {cuit}: {_be}', flush=True)
-                bcra_data = None
 
-            # Si cache devolvió error o datos vacíos, activar respaldo directo
-            _bcra_sin_datos = (
-                not bcra_data or
-                not isinstance(bcra_data, dict) or
-                bcra_data.get('error_bcra') or
-                (not (bcra_data.get('results') or {}).get('periodos') and not bcra_data.get('sin_deudas'))
-            )
-            if _bcra_sin_datos:
-                print(f'[proceso-integral] Activando _consultar_respaldo para {cuit}', flush=True)
-                _rb, _rb_err = _consultar_respaldo(cuit)
-                if _rb:
-                    bcra_data = _rb
-                    print(f'[proceso-integral] Respaldo OK para {cuit}', flush=True)
-                else:
-                    # Fallback final: padrón offline nomdeu (historial_detalle)
-                    _nomdeu_pi = _nomdeu_build_deudas_resp(cuit)
-                    if _nomdeu_pi:
-                        bcra_data = _nomdeu_pi
-                        print(f'[proceso-integral] Nomdeu offline OK para {cuit}', flush=True)
-                    else:
-                        bcra_data = {}
-
-            # ── Paso 1.5: CDI Cheques — pre-caching para _layer_liquidez ─────────────
-            _cheq_cdi_pi = None
-            try:
-                _cheq_cdi_pi, _ = _consultar_bcra_directo(cuit, 'cheques')
-                if _cheq_cdi_pi and isinstance(_cheq_cdi_pi, dict):
-                    _cheq_path = os.path.join(DATA_DIR, f'cheques_{cuit}.json')
-                    _tmp_cheq  = _cheq_path + '.tmp'
-                    with open(_tmp_cheq, 'w', encoding='utf-8') as _cf:
-                        json.dump({'payload': _cheq_cdi_pi, 'ts': time.time()}, _cf, ensure_ascii=False)
-                        _cf.flush(); os.fsync(_cf.fileno())
-                    os.replace(_tmp_cheq, _cheq_path)
-            except Exception as _cheq_e:
-                print(f'[proceso-integral] Cheques CDI fallo {cuit}: {_cheq_e}', flush=True)
+            # ── Paso 1: BCRA — resuelto por bulk (FASE 0) o por vivo (FASE 1) ────────
+            if cuit in _live_resultados_pi:
+                bcra_data, _cheq_cdi_pi = _live_resultados_pi[cuit]
+            else:
+                _deuda_bulk_pi = _bulk_deudas_pi.get(cuit)
+                bcra_data    = _bulk_to_bcra_data(nombre, _deuda_bulk_pi) if _deuda_bulk_pi else {}
+                _cheq_cdi_pi = None  # no se consultó vivo: este cliente lo resolvió el bulk
 
             # ── Paso 1.5b: Detectar cheques rechazados activos para alertas ──────────
             _cheq_activos_pi = 0
             try:
                 _cheq_raw_pi = _cheq_cdi_pi or {}
-                # Fallback 1: caché en disco del CUIT (solo si el CDI en vivo falló del todo)
-                if not _cheq_raw_pi:
+                # Fallback: caché en disco del CUIT (solo si hubo intento en vivo y falló)
+                if not _cheq_raw_pi and cuit in _live_resultados_pi:
                     _cheq_path_pi = os.path.join(DATA_DIR, f'cheques_{cuit}.json')
                     if os.path.exists(_cheq_path_pi):
                         with open(_cheq_path_pi, 'r', encoding='utf-8') as _cpf:
@@ -6720,11 +6789,10 @@ def _ejecutar_proceso_integral(cartera_data: list):
 
                 _act_live_pi, _, _det_live_pi = _cheques_activos_de(_cheq_raw_pi)
                 # Cruzar SIEMPRE contra el bulk local (snapshot diario BCRA, importado
-                # por /update-cheques-db), no solo cuando el CDI en vivo está vacío —
-                # un "sin_deudas=True" en vivo puede ser un falso negativo, igual que
-                # con deudas/historial. Nunca subestimar el riesgo: usar la fuente con
-                # más cheques activos.
-                _act_bulk_pi, _, _det_bulk_pi = _cheques_activos_de(get_cheques_local(cuit))
+                # por /update-cheques-db) — un "sin_deudas=True" en vivo puede ser un
+                # falso negativo, igual que con deudas/historial. Nunca subestimar el
+                # riesgo: usar la fuente con más cheques activos.
+                _act_bulk_pi, _, _det_bulk_pi = _cheques_activos_de(_bulk_cheques_pi.get(cuit))
                 if _act_bulk_pi > _act_live_pi:
                     _cheq_activos_pi, _det_pi = _act_bulk_pi, _det_bulk_pi
                 else:
@@ -6872,7 +6940,8 @@ def _ejecutar_proceso_integral(cartera_data: list):
 
         with _proceso_lock:
             _proceso_integral_estado['procesados'] = i + 1
-        time.sleep(3)  # 3s entre clientes: ~1h para 1300 clientes, evita rate-limit BCRA
+        # Sin sleep: ya no hay I/O a BCRA en este loop (se resolvió en FASE 0/1,
+        # bulk + paralelo). Lo único que corre acá es CPU (scoring) y disco local.
 
     # ── Merge atómico de alertas BCRA en db_v17_final.json ───────────────────────
     # Preserva alertas tipo 'bodegas' (WhatsApp) del run anterior; reemplaza las 'bcra'
