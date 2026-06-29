@@ -678,6 +678,22 @@ def get_cheques_local(cuit: str):
         return None
 
 
+def _cheques_activos_de(cheq_data: dict):
+    """Extrae (cantidad_activos, total, detalle) de una respuesta de cheques
+    (en vivo, caché o DB local) — activo = sin fecha de pago o IMPAGA."""
+    if not cheq_data or cheq_data.get('sin_deudas') or not isinstance(cheq_data.get('results'), dict):
+        return 0, 0, []
+    causales = cheq_data['results'].get('causales') or []
+    detalle = []
+    for cau in causales:
+        if isinstance(cau, dict):
+            for ent in (cau.get('entidades') or []):
+                if isinstance(ent, dict):
+                    detalle.extend(x for x in (ent.get('detalle') or []) if isinstance(x, dict))
+    activos = sum(1 for d in detalle if not d.get('fechaPago') or d.get('estadoMulta') == 'IMPAGA')
+    return activos, len(detalle), detalle
+
+
 def _import_cheques_zip(date_str: str = None) -> bool:
     """Descarga e importa el snapshot diario de cheques rechazados del BCRA.
 
@@ -4750,46 +4766,37 @@ def ejecutar_verificacion(cartera_data):
                                     _cheq_v = _loaded_cheq
                         except Exception:
                             pass
-                # Fallback 3: SQLite local (snapshot diario BCRA, cero latencia de red)
-                if not _cheq_v:
-                    _cheq_v = get_cheques_local(cuit)
-                if (_cheq_v and not _cheq_v.get('sin_deudas') and
-                        isinstance(_cheq_v.get('results'), dict)):
-                    _caus_v = _cheq_v['results'].get('causales') or []
-                    _det_v  = []
-                    for _cau_v in _caus_v:
-                        if isinstance(_cau_v, dict):
-                            for _ent_v in (_cau_v.get('entidades') or []):
-                                if isinstance(_ent_v, dict):
-                                    _det_v.extend(
-                                        x for x in (_ent_v.get('detalle') or [])
-                                        if isinstance(x, dict)
-                                    )
-                    _activos_v = sum(
-                        1 for d in _det_v
-                        if not d.get('fechaPago') or d.get('estadoMulta') == 'IMPAGA'
-                    )
-                    if _activos_v > 0 and not any(
-                        a.get('cuit') == cuit and a.get('tipo') == 'cheque'
-                        for a in nuevas_alertas
-                    ):
-                        alerta_ch = {
-                            'nombre':       nombre,
-                            'cuit':         cuit,
-                            'tipo':         'cheque',
-                            'nroCheques':   _activos_v,
-                            'totalCheques': len(_det_v),
-                            'fecha':        time.strftime('%d/%m/%Y'),
-                        }
-                        if score_data:
-                            alerta_ch.update({
-                                'scoreCompleto': score_data.get('score'),
-                                'scoreRango':    score_data.get('rango'),
-                                'scoreColor':    score_data.get('color'),
-                                'scoreEmoji':    score_data.get('emoji'),
-                            })
-                        nuevas_alertas.append(alerta_ch)
-                        print(f"{tag} ALERTA CHEQUES: {_activos_v}/{len(_det_v)} cheque(s) activo(s)", flush=True)
+                _act_live_v, _, _det_live_v = _cheques_activos_de(_cheq_v)
+                # Cruzar SIEMPRE contra el bulk local (snapshot diario BCRA), no solo
+                # cuando la fuente en vivo/caché está vacía — un "sin_deudas=True" en
+                # vivo puede ser un falso negativo, igual que con deudas/historial.
+                # Nunca subestimar el riesgo: usar la fuente con más cheques activos.
+                _act_bulk_v, _, _det_bulk_v = _cheques_activos_de(get_cheques_local(cuit))
+                if _act_bulk_v > _act_live_v:
+                    _activos_v, _det_v = _act_bulk_v, _det_bulk_v
+                else:
+                    _activos_v, _det_v = _act_live_v, _det_live_v
+                if _activos_v > 0 and not any(
+                    a.get('cuit') == cuit and a.get('tipo') == 'cheque'
+                    for a in nuevas_alertas
+                ):
+                    alerta_ch = {
+                        'nombre':       nombre,
+                        'cuit':         cuit,
+                        'tipo':         'cheque',
+                        'nroCheques':   _activos_v,
+                        'totalCheques': len(_det_v),
+                        'fecha':        time.strftime('%d/%m/%Y'),
+                    }
+                    if score_data:
+                        alerta_ch.update({
+                            'scoreCompleto': score_data.get('score'),
+                            'scoreRango':    score_data.get('rango'),
+                            'scoreColor':    score_data.get('color'),
+                            'scoreEmoji':    score_data.get('emoji'),
+                        })
+                    nuevas_alertas.append(alerta_ch)
+                    print(f"{tag} ALERTA CHEQUES: {_activos_v}/{len(_det_v)} cheque(s) activo(s)", flush=True)
             except Exception as _cheq_v_e:
                 print(f"{tag} Cheques alert parse fallo: {_cheq_v_e}", flush=True)
 
@@ -6704,51 +6711,43 @@ def _ejecutar_proceso_integral(cartera_data: list):
             _cheq_activos_pi = 0
             try:
                 _cheq_raw_pi = _cheq_cdi_pi or {}
-                # Fallback 1: caché en disco del CUIT
+                # Fallback 1: caché en disco del CUIT (solo si el CDI en vivo falló del todo)
                 if not _cheq_raw_pi:
                     _cheq_path_pi = os.path.join(DATA_DIR, f'cheques_{cuit}.json')
                     if os.path.exists(_cheq_path_pi):
                         with open(_cheq_path_pi, 'r', encoding='utf-8') as _cpf:
                             _cheq_raw_pi = json.load(_cpf).get('payload') or {}
-                # Fallback 2: snapshot bulk local (bcra_padron.db — importado por /update-cheques-db)
-                if not _cheq_raw_pi:
-                    _cheq_local_pi = get_cheques_local(cuit)
-                    if _cheq_local_pi:
-                        _cheq_raw_pi = _cheq_local_pi
-                if (not _cheq_raw_pi.get('sin_deudas') and
-                        isinstance(_cheq_raw_pi.get('results'), dict)):
-                    _caus_pi = _cheq_raw_pi['results'].get('causales') or []
-                    _det_pi  = []
-                    for _cau_pi in _caus_pi:
-                        if isinstance(_cau_pi, dict):
-                            for _ent_pi in (_cau_pi.get('entidades') or []):
-                                if isinstance(_ent_pi, dict):
-                                    _det_pi.extend(
-                                        x for x in (_ent_pi.get('detalle') or [])
-                                        if isinstance(x, dict)
-                                    )
-                    _cheq_activos_pi = sum(
-                        1 for d in _det_pi
-                        if not d.get('fechaPago') or d.get('estadoMulta') == 'IMPAGA'
+
+                _act_live_pi, _, _det_live_pi = _cheques_activos_de(_cheq_raw_pi)
+                # Cruzar SIEMPRE contra el bulk local (snapshot diario BCRA, importado
+                # por /update-cheques-db), no solo cuando el CDI en vivo está vacío —
+                # un "sin_deudas=True" en vivo puede ser un falso negativo, igual que
+                # con deudas/historial. Nunca subestimar el riesgo: usar la fuente con
+                # más cheques activos.
+                _act_bulk_pi, _, _det_bulk_pi = _cheques_activos_de(get_cheques_local(cuit))
+                if _act_bulk_pi > _act_live_pi:
+                    _cheq_activos_pi, _det_pi = _act_bulk_pi, _det_bulk_pi
+                else:
+                    _cheq_activos_pi, _det_pi = _act_live_pi, _det_live_pi
+
+                if _cheq_activos_pi > 0:
+                    _pi_alertas.append({
+                        'nombre':        nombre,
+                        'cuit':          cuit,
+                        'tipo':          'cheque',
+                        'nroCheques':    _cheq_activos_pi,
+                        'totalCheques':  len(_det_pi),
+                        'fecha':         time.strftime('%d/%m/%Y'),
+                        'scoreCompleto': None,
+                        'scoreRango':    None,
+                        'scoreColor':    None,
+                        'scoreEmoji':    None,
+                    })
+                    print(
+                        f'[proceso-integral] ALERTA CHEQUES: {nombre} ({cuit})'
+                        f' — {_cheq_activos_pi}/{len(_det_pi)} cheque(s) activo(s)',
+                        flush=True,
                     )
-                    if _cheq_activos_pi > 0:
-                        _pi_alertas.append({
-                            'nombre':        nombre,
-                            'cuit':          cuit,
-                            'tipo':          'cheque',
-                            'nroCheques':    _cheq_activos_pi,
-                            'totalCheques':  len(_det_pi),
-                            'fecha':         time.strftime('%d/%m/%Y'),
-                            'scoreCompleto': None,
-                            'scoreRango':    None,
-                            'scoreColor':    None,
-                            'scoreEmoji':    None,
-                        })
-                        print(
-                            f'[proceso-integral] ALERTA CHEQUES: {nombre} ({cuit})'
-                            f' — {_cheq_activos_pi}/{len(_det_pi)} cheque(s) activo(s)',
-                            flush=True,
-                        )
             except Exception as _cal_e:
                 print(f'[proceso-integral] Cheques alert parse fallo {cuit}: {_cal_e}', flush=True)
 
