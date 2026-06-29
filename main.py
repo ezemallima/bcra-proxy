@@ -8251,6 +8251,30 @@ def admin_nomdeu_lookup(cuit):
     return jsonify(out)
 
 
+@app.route("/admin/cheques-activos/<cuit>")
+def admin_cheques_activos(cuit):
+    """Diagnóstico rápido: corre para UN cuit la misma lógica de cruce
+    vivo+bulk que usan ejecutar_verificacion/proceso-integral
+    (_cheques_activos_de), sin necesidad de esperar la verificación
+    completa de cartera (que puede tardar horas). Sirve para confirmar el
+    fix de cheques al instante sobre un cliente puntual."""
+    cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
+    out = {"ok": True, "cuit": cuit_limpio}
+    try:
+        _cheq_cdi, _ = _consultar_bcra_directo(cuit_limpio, 'cheques')
+    except Exception as e:
+        _cheq_cdi = None
+        out["error_cdi"] = str(e)
+    act_live, tot_live, _ = _cheques_activos_de(_cheq_cdi)
+    out["activos_vivo"] = act_live
+    out["total_vivo"] = tot_live
+    act_bulk, tot_bulk, _ = _cheques_activos_de(get_cheques_local(cuit_limpio))
+    out["activos_bulk"] = act_bulk
+    out["total_bulk"] = tot_bulk
+    out["activos_final"] = max(act_live, act_bulk)
+    return jsonify(out)
+
+
 @app.route("/admin/cheques-lookup/<cuit>")
 def admin_cheques_lookup(cuit):
     """Diagnóstico temporal: muestra cómo está guardado realmente el cuit en
