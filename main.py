@@ -3878,7 +3878,7 @@ def _analizar_bodegas_batch(clientes_batch):
 # locales (bcra_nomdeu.db + cheques_bcra) antes de ir a BCRA live.
 # Resultado: 500 clientes → consulta bulk < 2s, live BCRA solo para ~100-150.
 
-_PERIODO_BASE_BULK = 202604  # Abril 2026 — último período del archivo histórico
+_PERIODO_BASE_BULK = 202605  # Mayo 2026 — último período del archivo histórico
 
 
 def _mes_anterior(yyyymm: int, n: int) -> int:
