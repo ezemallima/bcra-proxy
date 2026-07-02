@@ -3,28 +3,32 @@
 bcra_import_local.py — Importación de archivos bulk del BCRA.
 
 Tablas generadas en bcra_nomdeu.db:
-  denominaciones  — Nomdeu.txt      : CUIT → nombre oficial
-  entidades       — Maeent.txt      : código banco → nombre
-  deudas_resumen  — PADRON / DEUDORES : situación ACTUAL por CUIT (snapshot mensual)
-  historial_bulk  — 24DSF            : evolución mes a mes 24 meses por CUIT+periodo
+  denominaciones    — Nomdeu.txt       : CUIT → nombre oficial
+  entidades         — Maeent.txt       : código banco → nombre
+  deudas_resumen    — PADRON/DEUDORES  : situación actual por CUIT (snapshot mensual)
+  historial_detalle — 24DSF            : sit+monto real por CUIT+entidad, N meses
+                      (1 fila por par CUIT+entidad; columnas sit_01..sit_N, monto_01..monto_N
+                       donde 01 = período más reciente. Montos guardados × 10 para
+                       compatibilidad con main.py que los divide por 10.0 al leer.)
 
 Detección automática de modo por nombre de archivo:
-  *24DSF*   → historial_bulk  (también actualiza deudas_resumen si no existe)
-  *PADRON* / *DEUDORES* / *DSF* → deudas_resumen (snapshot actual)
+  *24DSF*            → historial_detalle + deudas_resumen
+  *PADRON* / *DSF*   → deudas_resumen (snapshot actual)
 
 Formatos soportados: .zip, .7z
   Para .7z en Google Colab ejecutar primero:
     !apt-get install -q p7zip-full
 
 Uso:
-    # 1. Importar padrón actual (mayo 2026) — reemplaza deudas_resumen
+    # 1. Importar 24 meses de historial — genera historial_detalle + sube a R2
+    R2_ACCESS_KEY_ID=... R2_SECRET_ACCESS_KEY=... R2_ENDPOINT_URL=... R2_BUCKET_NAME=... \\
+        python bcra_import_local.py 24DSF202605.7Z bcra_nomdeu.db
+
+    # 2. Sin upload automático (omitir vars R2)
+    python bcra_import_local.py 24DSF202605.7Z bcra_nomdeu.db
+
+    # 3. Solo snapshot actual (padrón mensual)
     python bcra_import_local.py 20260531PADRON.7Z bcra_nomdeu.db
-
-    # 2. Importar 24 meses de historial (abril 2026) — agrega historial_bulk
-    python bcra_import_local.py 24DSF202604.7Z bcra_nomdeu.db
-
-    # 3. Subir a Cloudflare R2
-    # rclone copy bcra_nomdeu.db r2:tu-bucket/
 """
 
 import os
@@ -42,6 +46,11 @@ if len(sys.argv) < 2:
 
 ZIP_PATH = sys.argv[1]
 DB_PATH  = sys.argv[2] if len(sys.argv) > 2 else "bcra_nomdeu.db"
+
+# Meses a guardar en historial_detalle.
+# main.py lee hasta _HIST_DETALLE_MESES (actualmente 12); poner 24 guarda todo el 24DSF
+# sin cambios en main.py (los meses 13-24 quedan en la DB para uso futuro).
+N_MESES_HISTORIAL = 24
 
 _CUIT_PREFIJOS = {"20", "23", "24", "27", "30", "33", "34"}
 
@@ -71,7 +80,6 @@ def _upsert_batch(conn: sqlite3.Connection, tabla: str, batch: list, n_cols: int
 
 
 def _detectar_modo(path: str) -> str:
-    """Retorna '24dsf' o 'padron' según el nombre del archivo."""
     nombre = Path(path).stem.upper()
     if "24DSF" in nombre:
         return "24dsf"
@@ -79,7 +87,6 @@ def _detectar_modo(path: str) -> str:
 
 
 def _extraer_a_tmpdir(path: str) -> str:
-    """Extrae el archivo comprimido a un directorio temporal y retorna su ruta."""
     tmpdir = tempfile.mkdtemp(prefix="bcra_import_")
     suffix = Path(path).suffix.lower()
     _log(f"Extrayendo {Path(path).name} ({Path(path).stat().st_size / 1e6:.0f} MB)...")
@@ -108,7 +115,6 @@ def _extraer_a_tmpdir(path: str) -> str:
 
 
 def _encontrar_archivo(tmpdir: str, patrones: list) -> str | None:
-    """Busca el primer archivo .txt que contenga alguno de los patrones en su nombre."""
     candidatos = sorted(
         [f for f in Path(tmpdir).rglob("*") if f.is_file() and f.suffix.lower() == ".txt"],
         key=lambda f: f.stat().st_size,
@@ -118,7 +124,6 @@ def _encontrar_archivo(tmpdir: str, patrones: list) -> str | None:
         for f in candidatos:
             if patron.lower() in f.name.lower():
                 return str(f)
-    # Fallback: el .txt más grande (probablemente el de deudores)
     if candidatos:
         _log(f"Patrón no encontrado — usando mayor: {candidatos[0].name}")
         return str(candidatos[0])
@@ -126,6 +131,7 @@ def _encontrar_archivo(tmpdir: str, patrones: list) -> str | None:
 
 
 def _init_db(conn: sqlite3.Connection) -> None:
+    """Crea las tablas base (historial_detalle se crea en _proc_24dsf con columnas dinámicas)."""
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS denominaciones (
             cuit   TEXT PRIMARY KEY,
@@ -142,25 +148,13 @@ def _init_db(conn: sqlite3.Connection) -> None:
             entidades_cod TEXT    NOT NULL,
             periodo       TEXT    NOT NULL
         );
-        -- Resumen 24 meses del 24DSF: 1 fila por CUIT (no 24 filas).
-        -- ~3M filas total — misma escala que deudas_resumen, descargable en Render.
-        CREATE TABLE IF NOT EXISTS historial_bulk (
-            cuit          TEXT    PRIMARY KEY,
-            sit_max_24m   INTEGER NOT NULL,   -- peor sit en 24 meses
-            meses_en_mora INTEGER NOT NULL,   -- meses con sit >= 3
-            meses_critico INTEGER NOT NULL,   -- meses con sit >= 5 (irrecuperable)
-            periodo_inicio TEXT    NOT NULL,  -- primer período con datos
-            periodo_fin    TEXT    NOT NULL,  -- último período con datos
-            monto_max      REAL    NOT NULL   -- monto máximo registrado
-        );
-        CREATE INDEX IF NOT EXISTS idx_den_cuit  ON denominaciones(cuit);
-        CREATE INDEX IF NOT EXISTS idx_deu_cuit  ON deudas_resumen(cuit);
-        CREATE INDEX IF NOT EXISTS idx_hist_cuit ON historial_bulk(cuit);
+        CREATE INDEX IF NOT EXISTS idx_den_cuit ON denominaciones(cuit);
+        CREATE INDEX IF NOT EXISTS idx_deu_cuit ON deudas_resumen(cuit);
     """)
     conn.commit()
 
 
-# ─── procesadores ──────────────────────────────────────────────────────────────
+# ─── procesadores ─────────────────────────────────────────────────────────────
 
 def _proc_nomdeu(conn: sqlite3.Connection, path: str) -> None:
     _log("Procesando Nomdeu.txt (denominaciones)...")
@@ -199,14 +193,13 @@ def _proc_maeent(conn: sqlite3.Connection, path: str) -> None:
 
 def _parse_linea_deudor(linea: str) -> tuple | None:
     """
-    Parsea una línea del formato fijo BCRA deudores/padrón.
+    Parsea una línea del formato fijo BCRA.
     Retorna (entidad, periodo, cuit, sit, monto) o None si inválida.
-
-    Formato (posiciones 0-indexed):
-      0-4   código entidad    (5 chars)
-      5-12  fecha YYYYMMDD    (8 chars) → periodo = s[5:11]
-      13-23 CUIT deudor       (11 chars)
-      24-27 situación         (4 chars, 0-padded)
+    Posiciones 0-indexed:
+      0-4   código entidad (5 chars)
+      5-12  fecha YYYYMMDD (8 chars) → periodo = s[5:11]
+      13-23 CUIT deudor   (11 chars)
+      24-27 situación      (4 chars, 0-padded)
       28+   10 columnas monto (12 chars c/u, decimal con coma)
     """
     if len(linea) < 30:
@@ -234,17 +227,30 @@ def _parse_linea_deudor(linea: str) -> tuple | None:
     return entidad, periodo, cuit, sit, monto
 
 
+def _detectar_periodos(path: str, max_lineas: int = 300_000) -> list[str]:
+    """
+    Escanea las primeras max_lineas para encontrar todos los períodos YYYYMM.
+    El 24DSF tiene ~24 períodos distintos, que aparecen en los primeros miles de líneas.
+    Retorna lista ordenada descendente (más reciente primero).
+    """
+    periodos: set[str] = set()
+    with open(path, "r", encoding="latin-1") as f:
+        for i, linea in enumerate(f):
+            if i >= max_lineas:
+                break
+            if len(linea) >= 11:
+                p = linea[5:11]
+                if p.isdigit() and len(p) == 6 and "200" <= p[:3] <= "202":
+                    periodos.add(p)
+    return sorted(periodos, reverse=True)
+
+
 def _proc_padron(conn: sqlite3.Connection, path: str) -> None:
-    """
-    Importa PADRON / DEUDORES → deudas_resumen.
-    Trunca la tabla y reconstruye completamente (snapshot mensual).
-    Agrega: sit_max y monto_total por CUIT a través de todas sus entidades.
-    """
+    """Importa PADRON/DEUDORES → deudas_resumen (snapshot mensual completo)."""
     _log("Truncando deudas_resumen para snapshot fresco...")
     conn.execute("DELETE FROM deudas_resumen")
     conn.commit()
 
-    # Acumula en RAM: {cuit: [sit_max, monto_acum, {entidades}, periodo_max]}
     por_cuit: dict = {}
     count = skip = 0
     t0 = time.time()
@@ -287,23 +293,53 @@ def _proc_padron(conn: sqlite3.Connection, path: str) -> None:
     _log("deudas_resumen: completo")
 
 
-def _proc_24dsf(conn: sqlite3.Connection, path: str) -> None:
+def _proc_24dsf(conn: sqlite3.Connection, path: str, n_meses: int = N_MESES_HISTORIAL) -> None:
     """
-    Importa 24DSF → historial_bulk (1 fila por CUIT, resumen de 24 meses).
+    Importa 24DSF → historial_detalle.
 
-    Agrega en RAM: sit_max, meses_en_mora, meses_critico, periodo_inicio/fin, monto_max.
-    ~3M entradas en el dict ≈ 600 MB RAM — manejable en Colab (12 GB disponibles).
-    La DB resultante tiene la misma escala que deudas_resumen: ~150-250 MB en SQLite.
+    Una fila por (cuit, entidad) con columnas sit_01..sit_N y monto_01..monto_N:
+      - sit_01 / monto_01 = período más reciente
+      - Montos guardados como int(monto * 10) → main.py los divide por 10.0 al leer
+      - None donde no hay dato para ese mes en esa entidad
 
-    NO almacena 24 filas por CUIT (hubiera sido 72M filas / ~4 GB en Render).
+    También completa deudas_resumen con CUITs que solo aparecen en 24DSF.
     """
-    _log("Preparando historial_bulk (resumen 24 meses, 1 fila por CUIT)...")
-    conn.execute("DELETE FROM historial_bulk")
+    # 1. Detectar períodos disponibles (escaneo rápido de las primeras líneas)
+    _log("Detectando períodos disponibles en 24DSF (escaneo rápido)...")
+    todos_periodos = _detectar_periodos(path)
+    if not todos_periodos:
+        _log("ERROR: No se encontraron períodos válidos en el archivo")
+        sys.exit(1)
+
+    periodos_a_usar = todos_periodos[:n_meses]
+    periodo_a_col   = {p: i + 1 for i, p in enumerate(periodos_a_usar)}
+    periodos_set    = set(periodo_a_col)
+    periodo_reciente = periodos_a_usar[0]
+
+    _log(f"Períodos disponibles ({len(todos_periodos)}): {todos_periodos}")
+    _log(f"Guardando {len(periodos_a_usar)} meses: {periodo_reciente} → {periodos_a_usar[-1]}")
+
+    # 2. Crear/recrear historial_detalle con columnas para los N meses
+    col_defs = ", ".join(
+        f"sit_{i:02d} INTEGER, monto_{i:02d} INTEGER"
+        for i in range(1, n_meses + 1)
+    )
+    conn.executescript(f"""
+        DROP TABLE IF EXISTS historial_detalle;
+        CREATE TABLE historial_detalle (
+            cuit    TEXT NOT NULL,
+            entidad TEXT NOT NULL,
+            {col_defs},
+            PRIMARY KEY (cuit, entidad)
+        );
+        CREATE INDEX IF NOT EXISTS idx_hist_det_cuit ON historial_detalle(cuit);
+    """)
     conn.commit()
 
-    # {cuit: [sit_max, meses_mora, meses_critico, periodo_min, periodo_max, monto_max, periodos_set]}
-    # periodos_set: para contar meses únicos con mora (evitar doble-contar por entidad)
-    por_cuit: dict = {}
+    # 3. Leer 24DSF y acumular en RAM: {{(cuit, entidad): {{col: [sit, monto_int]}}}}
+    # Para deudas_resumen usamos solo el período más reciente (col=1).
+    datos: dict         = {}
+    resumen: dict       = {}   # {cuit: [sit_max, monto_total, ents_set, periodo]}
     count = skip = 0
     t0 = time.time()
 
@@ -313,82 +349,141 @@ def _proc_24dsf(conn: sqlite3.Connection, path: str) -> None:
             if not parsed:
                 skip += 1
                 continue
-            _, periodo, cuit, sit, monto = parsed
+            entidad, periodo, cuit, sit, monto = parsed
+            col = periodo_a_col.get(periodo)
+            if col is None:
+                skip += 1
+                continue
 
-            entry = por_cuit.get(cuit)
+            monto_int = int(monto * 10)
+            key = (cuit, entidad)
+            if key not in datos:
+                datos[key] = {}
+            entry = datos[key].get(col)
             if entry is None:
-                por_cuit[cuit] = [
-                    sit,                        # sit_max
-                    set(),                      # periodos_mora (sit >= 3)
-                    set(),                      # periodos_critico (sit >= 5)
-                    periodo,                    # periodo_min
-                    periodo,                    # periodo_max
-                    monto,                      # monto_max
-                ]
+                datos[key][col] = [sit, monto_int]
             else:
                 if sit > entry[0]:
                     entry[0] = sit
-                if sit >= 3:
-                    entry[1].add(periodo)
-                if sit >= 5:
-                    entry[2].add(periodo)
-                if periodo < entry[3]:
-                    entry[3] = periodo
-                if periodo > entry[4]:
-                    entry[4] = periodo
-                if monto > entry[5]:
-                    entry[5] = monto
+                if monto_int > entry[1]:
+                    entry[1] = monto_int
 
-            # Registrar período mora/crítico en la entrada inicial también
-            if entry is None:
-                entry = por_cuit[cuit]
-                if sit >= 3:
-                    entry[1].add(periodo)
-                if sit >= 5:
-                    entry[2].add(periodo)
+            # Acumular resumen del período más reciente para deudas_resumen
+            if col == 1:
+                r = resumen.get(cuit)
+                if r is None:
+                    resumen[cuit] = [sit, monto, {entidad}, periodo_reciente]
+                else:
+                    if sit > r[0]:
+                        r[0] = sit
+                    r[1] += monto
+                    r[2].add(entidad)
 
             count += 1
             if count % 5_000_000 == 0:
                 elapsed = time.time() - t0
-                _log(f"  {count / 1e6:.0f}M líneas | {len(por_cuit):,} CUITs | {elapsed:.0f}s")
+                _log(f"  {count / 1e6:.0f}M líneas | {len(datos):,} pares CUIT+entidad | {elapsed:.0f}s")
 
     elapsed = time.time() - t0
     _log(f"Streaming: {count:,} válidos | {skip:,} saltados | {elapsed:.0f}s")
-    _log(f"Volcando {len(por_cuit):,} CUITs → historial_bulk...")
+
+    # 4. Volcar historial_detalle
+    _log(f"Volcando {len(datos):,} filas → historial_detalle...")
+    col_names   = "cuit, entidad, " + ", ".join(
+        f"sit_{i:02d}, monto_{i:02d}" for i in range(1, n_meses + 1)
+    )
+    n_total_cols  = 2 + n_meses * 2
+    placeholders  = ", ".join(["?"] * n_total_cols)
+    sql_insert    = f"INSERT OR REPLACE INTO historial_detalle ({col_names}) VALUES ({placeholders})"
 
     batch = []
-    for cuit, (sit_max, periodos_mora, periodos_crit, p_ini, p_fin, monto_max) in por_cuit.items():
-        batch.append((
-            cuit,
-            sit_max,
-            len(periodos_mora),   # meses_en_mora
-            len(periodos_crit),   # meses_critico
-            p_ini,
-            p_fin,
-            round(monto_max, 1),
-        ))
+    for (cuit, entidad), cols_data in datos.items():
+        row: list = [cuit, entidad]
+        for i in range(1, n_meses + 1):
+            v = cols_data.get(i)
+            row.extend(v if v else [None, None])
+        batch.append(tuple(row))
         if len(batch) >= 50_000:
-            _upsert_batch(conn, "historial_bulk", batch, 7)
+            conn.executemany(sql_insert, batch)
+            conn.commit()
             batch = []
     if batch:
-        _upsert_batch(conn, "historial_bulk", batch, 7)
-    del por_cuit
+        conn.executemany(sql_insert, batch)
+        conn.commit()
+    del datos
 
-    n_hist = conn.execute("SELECT COUNT(*) FROM historial_bulk").fetchone()[0]
-    _log(f"historial_bulk: {n_hist:,} CUITs")
+    n_hist = conn.execute("SELECT COUNT(*) FROM historial_detalle").fetchone()[0]
+    _log(f"historial_detalle: {n_hist:,} filas (pares CUIT+entidad)")
 
-    # Completar deudas_resumen con CUITs que solo aparecen en 24DSF (no en padrón actual)
-    _log("Completando deudas_resumen con CUITs del 24DSF no presentes en padrón...")
-    conn.execute("""
-        INSERT OR IGNORE INTO deudas_resumen (cuit, sit_max, monto_total, entidades_cod, periodo)
-        SELECT cuit, sit_max_24m, monto_max, '24DSF', periodo_fin
-        FROM historial_bulk
-    """)
-    conn.commit()
-    _log("historial_bulk + deudas_resumen: completo")
+    # 5. Completar deudas_resumen con CUITs del 24DSF no presentes en padrón
+    _log(f"Completando deudas_resumen con {len(resumen):,} CUITs del período {periodo_reciente}...")
+    batch = []
+    for cuit, (sit_max, monto_total, ents, periodo) in resumen.items():
+        batch.append((cuit, sit_max, round(monto_total, 1), ",".join(sorted(ents)), periodo))
+        if len(batch) >= 50_000:
+            conn.executemany(
+                "INSERT OR IGNORE INTO deudas_resumen "
+                "(cuit, sit_max, monto_total, entidades_cod, periodo) VALUES (?,?,?,?,?)",
+                batch,
+            )
+            conn.commit()
+            batch = []
+    if batch:
+        conn.executemany(
+            "INSERT OR IGNORE INTO deudas_resumen "
+            "(cuit, sit_max, monto_total, entidades_cod, periodo) VALUES (?,?,?,?,?)",
+            batch,
+        )
+        conn.commit()
+    del resumen
+    _log("historial_detalle + deudas_resumen: completo")
 
 
-# ─── entrada principal ────────────────────────────────────────────────────────
+# ─── upload R2 ────────────────────────────────────────────────────────────────
+
+def _upload_r2(db_path: str) -> None:
+    """
+    Sube db_path a Cloudflare R2 como 'bcra_nomdeu.db'.
+    Requiere variables de entorno: R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY,
+    R2_ENDPOINT_URL, R2_BUCKET_NAME.
+    """
+    access_key = os.environ.get("R2_ACCESS_KEY_ID", "").strip()
+    secret_key  = os.environ.get("R2_SECRET_ACCESS_KEY", "").strip()
+    endpoint    = os.environ.get("R2_ENDPOINT_URL", "").strip()
+    bucket      = os.environ.get("R2_BUCKET_NAME", "").strip()
+
+    if not all([access_key, secret_key, endpoint, bucket]):
+        _log("R2 no configurado — omitiendo upload automático")
+        _log("Para subir, exportar: R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_ENDPOINT_URL, R2_BUCKET_NAME")
+        return
+
+    try:
+        import boto3
+        from botocore.config import Config
+    except ImportError:
+        _log("boto3 no instalado — ejecutar: pip install boto3")
+        return
+
+    size_mb = Path(db_path).stat().st_size / 1_048_576
+    _log(f"Subiendo {db_path} → R2 bucket={bucket} ({size_mb:.0f} MB)...")
+
+    s3 = boto3.client(
+        service_name="s3",
+        endpoint_url=endpoint,
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key,
+        config=Config(signature_version="s3v4"),
+    )
+
+    s3.upload_file(
+        db_path, bucket, "bcra_nomdeu.db",
+        ExtraArgs={"ContentType": "application/octet-stream"},
+        Callback=lambda bytes_transferred: None,
+    )
+    _log(f"✓ Upload R2 completo: bcra_nomdeu.db ({size_mb:.0f} MB)")
+
+
+# ─── entrada principal ─────────────────────────────────────────────────────────
 
 def importar(zip_path: str, db_path: str) -> None:
     if not Path(zip_path).exists():
@@ -399,13 +494,13 @@ def importar(zip_path: str, db_path: str) -> None:
     _log(f"{'='*60}")
     _log(f"Archivo : {Path(zip_path).name}")
     _log(f"Base    : {db_path}")
-    _log(f"Modo    : {modo.upper()} ({'historial 24 meses' if modo=='24dsf' else 'snapshot actual'})")
+    _log(f"Modo    : {modo.upper()} ({'historial_detalle ' + str(N_MESES_HISTORIAL) + 'm' if modo=='24dsf' else 'snapshot actual'})")
     _log(f"{'='*60}")
 
     conn = sqlite3.connect(db_path)
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA synchronous   = NORMAL")
-    conn.execute("PRAGMA cache_size    = -131072")   # 128 MB caché
+    conn.execute("PRAGMA cache_size    = -131072")   # 128 MB caché escritura
     conn.execute("PRAGMA temp_store    = MEMORY")
     conn.execute("PRAGMA locking_mode  = EXCLUSIVE")
 
@@ -413,21 +508,18 @@ def importar(zip_path: str, db_path: str) -> None:
 
     tmpdir = _extraer_a_tmpdir(zip_path)
     try:
-        # Nomdeu.txt — denominaciones (presente en ambos tipos de archivo)
         nomdeu = _encontrar_archivo(tmpdir, ["nomdeu"])
         if nomdeu:
             _proc_nomdeu(conn, nomdeu)
         else:
             _log("Nomdeu.txt no encontrado — saltando denominaciones")
 
-        # Maeent.txt — entidades
         maeent = _encontrar_archivo(tmpdir, ["maeent"])
         if maeent:
             _proc_maeent(conn, maeent)
         else:
             _log("Maeent.txt no encontrado — saltando entidades")
 
-        # Archivo principal de deudores
         deudores = _encontrar_archivo(tmpdir, ["deudor", "padron", "dsf", "1dsf", "24dsf"])
         if not deudores:
             _log("ERROR: No se encontró el archivo de deudores dentro del comprimido")
@@ -449,9 +541,9 @@ def importar(zip_path: str, db_path: str) -> None:
     size_mb = Path(db_path).stat().st_size / 1_048_576
     _log(f"{'='*60}")
     _log(f"✓ Listo: {db_path} ({size_mb:.1f} MB)")
-    _log(f"Próximo paso: subir a Cloudflare R2")
-    _log(f"  rclone copy {db_path} r2:tu-bucket/")
     _log(f"{'='*60}")
+
+    _upload_r2(db_path)
 
 
 if __name__ == "__main__":
