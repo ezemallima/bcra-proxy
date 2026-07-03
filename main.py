@@ -8056,12 +8056,39 @@ def _init_nomdeu_db() -> None:
         print("[nomdeu] Ni R2 ni BCRA_NOMDEU_URL configurados — padrón offline desactivado", flush=True)
         return
 
+    # Si BCRA_NOMDEU_PERIODO está seteado (ej: "202605"), fuerza re-descarga
+    # cuando el período local no coincide — útil tras subir una DB nueva a R2.
+    periodo_esperado = os.environ.get('BCRA_NOMDEU_PERIODO', '').strip()
+
     descarga = True
     if os.path.exists(NOMDEU_DB_PATH):
         edad_dias = (time.time() - os.path.getmtime(NOMDEU_DB_PATH)) / 86400
         if edad_dias < 32 and _nomdeu_db_valida():
-            descarga = False
-            print(f"[nomdeu] DB existente ({edad_dias:.0f}d) con historial_detalle — reutilizando", flush=True)
+            if periodo_esperado:
+                try:
+                    c = sqlite3.connect(NOMDEU_DB_PATH)
+                    periodo_local = c.execute(
+                        "SELECT periodo FROM deudas_resumen ORDER BY periodo DESC LIMIT 1"
+                    ).fetchone()
+                    c.close()
+                    periodo_local = periodo_local[0] if periodo_local else ''
+                except Exception:
+                    periodo_local = ''
+                if periodo_local != periodo_esperado:
+                    print(
+                        f"[nomdeu] Período local ({periodo_local}) ≠ BCRA_NOMDEU_PERIODO ({periodo_esperado})"
+                        f" — re-descargando", flush=True
+                    )
+                    os.remove(NOMDEU_DB_PATH)
+                else:
+                    descarga = False
+                    print(
+                        f"[nomdeu] DB existente ({edad_dias:.0f}d) período={periodo_local} — reutilizando",
+                        flush=True
+                    )
+            else:
+                descarga = False
+                print(f"[nomdeu] DB existente ({edad_dias:.0f}d) con historial_detalle — reutilizando", flush=True)
         else:
             print(f"[nomdeu] DB stale o sin historial_detalle — re-descargando", flush=True)
 
