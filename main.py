@@ -8871,6 +8871,30 @@ def get_afip(cuit):
     except Exception as _etf:
         print(f"[afip] {cuit_limpio} tangofactura error: {_etf}", flush=True)
 
+    # 4.65. AfipSDK público — proxy REST gratuito sin certificado, mismo dato que ARCA Padrón
+    try:
+        _sdk_r = requests.get(
+            f"https://app.afipsdk.com/api/v1/afip/persons/{cuit_limpio}",
+            headers={'Accept': 'application/json', 'User-Agent': 'VendeSeguro/1.0'},
+            timeout=10,
+        )
+        print(f"[afip] {cuit_limpio} afipsdk HTTP={_sdk_r.status_code}", flush=True)
+        if _sdk_r.status_code == 200:
+            _sdk_data = _sdk_r.json()
+            _apellido_sdk = str(_sdk_data.get('apellido') or '').strip()
+            _nombre_sdk   = str(_sdk_data.get('nombre') or '').strip()
+            _fisico_sdk   = (_apellido_sdk + ' ' + _nombre_sdk).strip() if _apellido_sdk else _nombre_sdk
+            _rs_sdk = str(
+                _sdk_data.get('razonSocial') or
+                _sdk_data.get('denominacion') or
+                _fisico_sdk or ''
+            ).strip()
+            if _rs_sdk and not _rs_sdk.isdigit():
+                print(f"[afip] {cuit_limpio} afipsdk OK: {_rs_sdk}", flush=True)
+                return jsonify({"nombre": _rs_sdk, "fuente": "afipsdk"})
+    except Exception as _esdk:
+        print(f"[afip] {cuit_limpio} afipsdk error: {_esdk}", flush=True)
+
     # 4.7. CuitOnline — directorio público (cubre personas físicas y jurídicas que
     # no figuran en BCRA ni en tangofactura). Se valida que el CUIT del resultado
     # coincida exacto con el buscado, para no devolver una coincidencia ajena.
