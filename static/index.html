@@ -1352,7 +1352,7 @@
           </button>
         </div>
       </div>
-      <div id="alertas-auto-lista"></div>
+      <div id="alertas-auto-lista" style="max-height:340px;overflow-y:auto;padding-right:2px;"></div>
       <div id="alertas-auto-empty" style="display:none;text-align:center;padding:28px;color:#94a3b8;font-size:13px;background:#f8fafc;border-radius:10px;border:1px dashed #e2e8f0;">
         Sin alertas automáticas pendientes
       </div>
@@ -6704,6 +6704,7 @@ async function limpiarAlertas() {
     if (data.ok) {
       renderAlertas();
       actualizarMetricas();
+      cargarAlertasAuto();
       alert('✓ ' + (data.mensaje || 'Alertas eliminadas con éxito.'));
     } else {
       alert('✗ Error: ' + (data.error || 'No se pudo eliminar el archivo.'));

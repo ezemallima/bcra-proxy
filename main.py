@@ -6504,19 +6504,21 @@ def save_datos_bodega():
 
 @app.route("/alertas/limpiar", methods=["POST", "DELETE"])
 def limpiar_alertas():
-    """Elimina físicamente alertas_cartera.json. Más robusto que sobrescribir."""
-    try:
-        if os.path.exists(ALERTAS_FILE):
-            os.remove(ALERTAS_FILE)
-            print(f"[alertas] Archivo eliminado: {ALERTAS_FILE}", flush=True)
-            return jsonify({"ok": True, "mensaje": "Archivo eliminado con éxito. Las alertas fueron limpiadas."})
-        return jsonify({"ok": True, "mensaje": "No había archivo de alertas. La cartera está limpia."})
-    except PermissionError as e:
-        print(f"[alertas] Sin permisos para eliminar: {e}", flush=True)
-        return jsonify({"ok": False, "error": f"Sin permisos para eliminar el archivo: {e}"}), 500
-    except Exception as e:
-        print(f"[alertas] Error al eliminar: {e}", flush=True)
-        return jsonify({"ok": False, "error": str(e)}), 500
+    """Elimina físicamente alertas_cartera.json y alertas_automaticas.json."""
+    eliminados = []
+    errores = []
+    for path, label in [(ALERTAS_FILE, 'alertas_cartera'), (_ALERTAS_AUTO_FILE, 'alertas_automaticas')]:
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+                print(f"[alertas] Eliminado: {path}", flush=True)
+                eliminados.append(label)
+        except Exception as e:
+            errores.append(f"{label}: {e}")
+    if errores:
+        return jsonify({"ok": False, "error": "; ".join(errores)}), 500
+    msg = "Alertas limpiadas." if eliminados else "No había alertas. La cartera está limpia."
+    return jsonify({"ok": True, "mensaje": msg})
 
 @app.route("/alertas", methods=["GET"])
 def get_alertas():
@@ -7478,6 +7480,11 @@ def _recalcular_scores_post_upload():
             bcra_data = bcra_cache_data.get(cuit)
             if not bcra_data:
                 continue   # sin BCRA en caché → score incompleto, skip
+            # bcra_cache.json guarda en formato {data, error, ts} — extraer el contenido real
+            if isinstance(bcra_data, dict) and 'data' in bcra_data and 'ts' in bcra_data:
+                bcra_data = bcra_data.get('data') or {}
+                if not bcra_data:
+                    continue
 
             hist_data = None
             try:
