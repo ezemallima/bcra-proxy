@@ -1273,9 +1273,14 @@
         Consulta BCRA, recalcula scores con datos frescos y detecta cambios de situación para todos los clientes. Recomendado: una vez por semana.
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
-        <button id="btn-proceso-integral" onclick="ejecutarProcesoIntegral()"
+        <button id="btn-proceso-integral" onclick="ejecutarProcesoIntegral(true)"
           style="background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;border:none;border-radius:10px;padding:10px 22px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(37,99,235,0.3);">
           Actualizar toda la cartera →
+        </button>
+        <button onclick="ejecutarProcesoIntegral(false)"
+          style="font-size:12px;color:#475569;padding:9px 14px;border-radius:8px;border:1px solid #e2e8f0;background:#f8fafc;cursor:pointer;font-weight:600;"
+          title="Consulta BCRA en vivo para clientes en zona gris o nuevos. Más lento.">
+          ⚡ Modo completo
         </button>
         <button onclick="limpiarAlertas()"
           style="font-size:13px;color:#991b1b;padding:9px 16px;border-radius:8px;border:1px solid #fecaca;background:#fff5f5;cursor:pointer;font-weight:600;">
@@ -6727,10 +6732,14 @@ function _alrScoreData(c) {
 var _procesoIntegralInterval = null;
 var _procesoIntegralTotal    = 0;   // total conocido desde el POST
 
-async function ejecutarProcesoIntegral() {
+async function ejecutarProcesoIntegral(modo_rapido) {
   var btn  = document.getElementById('btn-proceso-integral');
   var btn2 = document.getElementById('btn-reprocesar-vacios');
-  if (!confirm('Iniciará el proceso completo (BCRA + Score + Mora) para toda la cartera.\n\nEsto puede tardar varios minutos. ¿Continuar?')) return;
+  var _rapido = (modo_rapido !== false);  // true por defecto
+  var _msg = _rapido
+    ? 'Actualizará toda la cartera usando datos bulk locales (rápido, sin consultar BCRA en vivo).\n\n¿Continuar?'
+    : 'Iniciará el proceso completo (BCRA en vivo + Score + Mora) para toda la cartera.\n\nEsto puede tardar varios minutos. ¿Continuar?';
+  if (!confirm(_msg)) return;
   btn.disabled = true;
   btn.textContent = 'Procesando...';
   if (btn2) { btn2.disabled = true; btn2.textContent = 'Proceso en curso...'; }
@@ -6746,7 +6755,11 @@ async function ejecutarProcesoIntegral() {
   var _pctEl = document.getElementById('proceso-integral-pct');
   if (_pctEl) _pctEl.textContent = '0%';
   try {
-    var r = await fetch('/proceso-integral', { method: 'POST' });
+    var r = await fetch('/proceso-integral', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({modo_rapido: _rapido})
+    });
     var d = await r.json();
     if ((!r.ok && r.status !== 202) || d.error) {
       alert('Error: ' + (d.error || ('HTTP ' + r.status)));

@@ -6615,7 +6615,7 @@ def verificar_cartera():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-def _ejecutar_proceso_integral(cartera_data: list):
+def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
     import traceback as _tb
     global _proceso_integral_estado
 
@@ -6675,11 +6675,14 @@ def _ejecutar_proceso_integral(cartera_data: list):
         _categoria_pi[cuit] = _cat
         _cat_count_pi[_cat] = _cat_count_pi.get(_cat, 0) + 1
 
-    _para_live_pi = [cuit for cuit in _cuits_lista_pi if _categoria_pi.get(cuit) in ('zona_gris', 'nuevo')]
+    _para_live_pi = [] if modo_rapido else [
+        cuit for cuit in _cuits_lista_pi if _categoria_pi.get(cuit) in ('zona_gris', 'nuevo')
+    ]
     print(
         f"[proceso-integral] FASE 0 OK — alto_riesgo={_cat_count_pi['alto_riesgo']} | "
         f"zona_gris={_cat_count_pi['zona_gris']} | limpio_bulk={_cat_count_pi['limpio_bulk']} | "
-        f"nuevo={_cat_count_pi['nuevo']} → {len(_para_live_pi)} van a BCRA en vivo",
+        f"nuevo={_cat_count_pi['nuevo']} → {len(_para_live_pi)} van a BCRA en vivo"
+        + (" (modo rápido: BCRA live omitido)" if modo_rapido else ""),
         flush=True,
     )
 
@@ -6780,17 +6783,20 @@ def _ejecutar_proceso_integral(cartera_data: list):
     # para un cliente ya cacheado es gratis (solo lectura de disco).
     # ═══════════════════════════════════════════════════════════════════════
     _para_solvencia_pi = []
-    for _cuit_sv in _cuits_lista_pi:
-        _sv_path_pi = os.path.join(DATA_DIR, f'solvency_{_cuit_sv}.json')
-        try:
-            if os.path.exists(_sv_path_pi):
-                with open(_sv_path_pi, 'r') as _svf_pi:
-                    _sv_cached_pi = json.load(_svf_pi)
-                if time.time() - _sv_cached_pi.get('ts', 0) < 86400:
-                    continue
-        except Exception:
-            pass
-        _para_solvencia_pi.append(_cuit_sv)
+    if modo_rapido:
+        print("[proceso-integral] FASE 1.5: omitida (modo rápido)", flush=True)
+    else:
+        for _cuit_sv in _cuits_lista_pi:
+            _sv_path_pi = os.path.join(DATA_DIR, f'solvency_{_cuit_sv}.json')
+            try:
+                if os.path.exists(_sv_path_pi):
+                    with open(_sv_path_pi, 'r') as _svf_pi:
+                        _sv_cached_pi = json.load(_svf_pi)
+                    if time.time() - _sv_cached_pi.get('ts', 0) < 86400:
+                        continue
+            except Exception:
+                pass
+            _para_solvencia_pi.append(_cuit_sv)
 
     if _para_solvencia_pi:
         with _proceso_lock:
@@ -7117,10 +7123,12 @@ def iniciar_proceso_integral():
             "iniciado_en": _dt.datetime.now().strftime("%d/%m/%Y %H:%M"),
             "log_errores": [],
         })
-    t = threading.Thread(target=_ejecutar_proceso_integral, args=(cartera,), daemon=True)
+    _modo_rapido = bool((request.get_json(silent=True) or {}).get('modo_rapido', False))
+    t = threading.Thread(target=_ejecutar_proceso_integral, args=(cartera, _modo_rapido), daemon=True)
     t.start()
+    _modo_label = " (modo rápido: solo bulk)" if _modo_rapido else ""
     return jsonify({"ok": True, "total": len(cartera), "corriendo": True,
-                    "mensaje": f"Proceso integral iniciado: {len(cartera)} clientes"}), 202
+                    "mensaje": f"Proceso integral iniciado{_modo_label}: {len(cartera)} clientes"}), 202
 
 
 @app.route("/proceso-integral/progreso")
