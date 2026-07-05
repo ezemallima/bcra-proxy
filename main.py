@@ -7471,6 +7471,14 @@ def _recalcular_scores_post_upload():
         _nn = lambda x: str(x or '').upper().strip()
         nombres_con_saldo: set = {_nn(f.get('cliente', '')) for f in facturas_mem}
 
+        # Índice saldo total por nombre (para detectar exceso de límite de crédito)
+        saldo_por_nombre: dict = {}
+        for _f in facturas_mem:
+            _nn_f = _nn(str(_f.get('cliente', '') or ''))
+            _sal_f = float(_f.get('saldo', 0) or 0)
+            if _nn_f and _sal_f > 0:
+                saldo_por_nombre[_nn_f] = saldo_por_nombre.get(_nn_f, 0) + _sal_f
+
         alertas_nuevas  = []
         scores_nuevos   = {}
         procesados      = 0
@@ -7557,6 +7565,34 @@ def _recalcular_scores_post_upload():
                     'tipo':           'dso_deteriora',
                     'detalle':        f"DSO deterioró >15% en 60 días · score actual {score_nuevo_val}",
                     'score_anterior': int(score_ant_val) if score_ant_val else None,
+                })
+
+            # Límite de crédito superado (≥90% de uso)
+            _limite_cred = float(cliente.get('limiteCredito') or 0)
+            _saldo_total = saldo_por_nombre.get(_nn(nombre), 0)
+            if _limite_cred > 0 and _saldo_total >= _limite_cred * 0.90:
+                _uso_pct = int(_saldo_total / _limite_cred * 100)
+                alertas_nuevas.append({
+                    **alerta_base,
+                    'tipo':    'limite_excedido',
+                    'detalle': f"Saldo ${_saldo_total:,.0f} ({_uso_pct}% del límite de ${_limite_cred:,.0f})",
+                })
+
+            # Deterioro estructural bancario sostenido
+            if score_nuevo.get('deterioro_estructural'):
+                alertas_nuevas.append({
+                    **alerta_base,
+                    'tipo':    'deterioro_bcra',
+                    'detalle': f"Problemas bancarios sostenidos · score {score_nuevo_val}",
+                })
+
+            # Deuda interna antigua (>90 días sin pagar en Odoo)
+            _monto_90d = float(score_nuevo.get('monto_deuda_90d') or 0)
+            if score_nuevo.get('deuda_90d_interna') and _monto_90d > 50000:
+                alertas_nuevas.append({
+                    **alerta_base,
+                    'tipo':    'deuda_antigua',
+                    'detalle': f"Facturas sin cobrar hace más de 90 días · ${_monto_90d:,.0f}",
                 })
 
             resp = _score_response(score_nuevo, None)
@@ -9497,6 +9533,9 @@ def update_cheques_db():
     def _run():
         ok = _import_cheques_zip(fecha)
         print(f"[cheques_db] Actualización {'exitosa' if ok else 'fallida'} para {fecha}", flush=True)
+        if ok and list(_cartera_comercial):
+            threading.Thread(target=_check_cheques_cartera_bg, daemon=True).start()
+            print("[cheques_db] Verificación de cheques de cartera iniciada automáticamente", flush=True)
 
     threading.Thread(target=_run, daemon=True).start()
     return jsonify({
@@ -10968,6 +11007,7 @@ def confirmar_upload_cartera():
                 'ciudad':        str(c.get('ciudad', '') or '').strip(),
                 'email':         str(c.get('email', '') or '').strip(),
                 'limiteCredito': float(c.get('limiteCredito') or 0),
+                'plazo':         int(c.get('plazo') or 0),
             })
 
         tmp = _CC_FILE + '.tmp'

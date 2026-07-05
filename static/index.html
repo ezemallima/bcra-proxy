@@ -8105,9 +8105,12 @@ init()
 // ══════════════════════════════════════════════════════════════════════════════
 
 var _ALERTA_COLORES = {
-  score_drop:    { bg: '#fef2f2', border: '#dc2626', txt: '#991b1b', ico: '↓' },
-  dso_deteriora: { bg: '#fffbeb', border: '#d97706', txt: '#92400e', ico: '⏱' },
-  cheque_nuevo:  { bg: '#f5f3ff', border: '#7c3aed', txt: '#5b21b6', ico: '✕' },
+  score_drop:      { bg: '#fef2f2', border: '#dc2626', txt: '#991b1b', ico: '↓',  label: 'Riesgo aumentó'           },
+  dso_deteriora:   { bg: '#fffbeb', border: '#d97706', txt: '#92400e', ico: '⏱', label: 'Paga más tarde'           },
+  cheque_nuevo:    { bg: '#f5f3ff', border: '#7c3aed', txt: '#5b21b6', ico: '✕',  label: 'Cheque rechazado'         },
+  limite_excedido: { bg: '#fff7ed', border: '#ea580c', txt: '#9a3412', ico: '⚠',  label: 'Límite superado'          },
+  deterioro_bcra:  { bg: '#fef2f2', border: '#b91c1c', txt: '#7f1d1d', ico: '📉', label: 'Problemas en el banco'    },
+  deuda_antigua:   { bg: '#fef2f2', border: '#dc2626', txt: '#991b1b', ico: '⏰', label: 'Deuda vieja sin pagar'    },
 };
 
 async function cargarAlertasAuto() {
@@ -8135,15 +8138,18 @@ async function cargarAlertasAuto() {
     if (empty) empty.style.display = 'none';
 
     lista.innerHTML = alertas.map(function(a) {
-      var c = _ALERTA_COLORES[a.tipo] || { bg:'#f8fafc', border:'#94a3b8', txt:'#64748b', ico:'!' };
+      var c = _ALERTA_COLORES[a.tipo] || { bg:'#f8fafc', border:'#94a3b8', txt:'#64748b', ico:'!', label:'' };
+      var etiqueta = c.label || a.tipo;
       return '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 13px;background:' + c.bg + ';border-radius:9px;border-left:3px solid ' + c.border + ';margin-bottom:6px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">' +
         '<div style="width:22px;height:22px;background:' + c.border + ';border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:900;flex-shrink:0;">' + c.ico + '</div>' +
         '<div style="flex:1;min-width:0;">' +
-          '<div style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:1px;">' + (a.nombre || a.cuit) + '</div>' +
+          '<div style="display:flex;align-items:center;gap:6px;margin-bottom:1px;">' +
+            '<span style="font-size:13px;font-weight:700;color:#1e293b;">' + (a.nombre || a.cuit) + '</span>' +
+            '<span style="font-size:10px;font-weight:700;color:' + c.txt + ';background:' + c.border + '1a;padding:1px 6px;border-radius:8px;">' + etiqueta + '</span>' +
+          '</div>' +
           '<div style="font-size:12px;color:#475569;line-height:1.4;">' + a.detalle + '</div>' +
           '<div style="font-size:10px;color:#94a3b8;margin-top:3px;">' + a.fecha + '</div>' +
         '</div>' +
-        (a.rango ? '<div style="font-size:11px;font-weight:600;color:' + c.txt + ';background:' + c.border + '22;padding:2px 8px;border-radius:12px;white-space:nowrap;flex-shrink:0;">' + a.rango + '</div>' : '') +
       '</div>';
     }).join('');
 

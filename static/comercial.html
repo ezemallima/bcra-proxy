@@ -375,6 +375,23 @@
   .cliente-row2 { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
   .cliente-ciudad { font-size: 11px; color: var(--text3); }
 
+  /* ── Panel de alertas del vendedor ── */
+  #alertas-vendedor-panel { margin-bottom: 12px; }
+  .av-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .av-titulo { font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .8px; }
+  .av-count  { font-size: 11px; font-weight: 800; background: #ef4444; color: #fff; border-radius: 10px; padding: 1px 8px; }
+  .av-item   { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 10px; margin-bottom: 6px; border-left: 3px solid; }
+  .av-item.rojo    { background: #fef2f2; border-color: #dc2626; }
+  .av-item.naranja { background: #fff7ed; border-color: #ea580c; }
+  .av-item.amarillo{ background: #fffbeb; border-color: #d97706; }
+  .av-ico    { font-size: 18px; flex-shrink: 0; line-height: 1.2; margin-top: 1px; }
+  .av-info   { flex: 1; min-width: 0; }
+  .av-nombre { font-size: 13px; font-weight: 700; color: #1e293b; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .av-msg    { font-size: 12px; color: #475569; line-height: 1.4; }
+  .av-ver    { font-size: 12px; font-weight: 700; color: var(--azul); cursor: pointer; white-space: nowrap; flex-shrink: 0; align-self: center; padding: 4px 8px; border-radius: 7px; background: rgba(37,99,235,.07); }
+  .av-toggle { font-size: 12px; color: #94a3b8; cursor: pointer; padding: 5px 0; text-align: center; font-weight: 600; }
+  .av-toggle:hover { color: var(--azul); }
+
   /* Status badges */
   .sit-badge { font-size: 10px; font-weight: 700; border-radius: 5px; padding: 2px 6px; }
   .alerta-badge      { font-size: 10px; font-weight: 700; background: rgba(239,68,68,0.13);   color: var(--red);    border-radius: 5px; padding: 2px 6px; }
@@ -828,6 +845,9 @@
       <!-- Banner DSO global de cartera -->
       <div id="cartera-dso-banner" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:10px;"></div>
 
+      <!-- Panel de alertas del vendedor -->
+      <div id="alertas-vendedor-panel" style="display:none;"></div>
+
       <!-- Buscador sticky con blur -->
       <div class="sticky-search">
         <input type="text" class="buscar-input" id="buscar-cartera"
@@ -1087,6 +1107,9 @@ async function iniciarApp(perfil) {
       }
     }
   } catch(e) { console.warn('[init] Alertas no disponibles (archivo puede no existir):', e); }
+
+  // Cargar panel de alertas del vendedor (alertas_automaticas.json filtradas por su cartera)
+  cargarAlertasVendedor();
 
   hideLoading();
   const n = CARTERA_LOCAL.length;
@@ -1439,6 +1462,9 @@ function switchTab(tab, btn) {
   if (tab === 'cartera' || tab === 'oport') {
     refrescarScores();
     cargarSaldosCartera(); // detecta si hay un DSO nuevo en el servidor
+  }
+  if (tab === 'cartera') {
+    cargarAlertasVendedor();
   }
 }
 
@@ -3730,6 +3756,84 @@ function matchBusqueda(nombre, query, cuit) {
   // B\u00fasqueda por nombre (todas las palabras deben estar presentes)
   const n = nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
   return q.split(' ').every(p => p.length < 2 || n.includes(p));
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// PANEL DE ALERTAS DEL VENDEDOR
+// ══════════════════════════════════════════════════════════════════════
+
+var _AV_CACHE    = [];
+var _AV_EXPAND   = false;
+var _AV_MAX_SHOW = 3;
+
+// Traducciones simples: sin jerga financiera para el vendedor de campo
+var _AV_TIPOS = {
+  score_drop:      { ico: '🔴', nivel: 'rojo',     texto: function(a) { return 'El riesgo de este cliente aumentó' + (a.delta ? ' (' + Math.abs(a.delta) + ' puntos)' : '') + '.'; } },
+  dso_deteriora:   { ico: '🟡', nivel: 'amarillo',  texto: function()  { return 'Está tardando más en pagar sus facturas.'; } },
+  limite_excedido: { ico: '🔴', nivel: 'naranja',   texto: function(a) { return a.detalle || 'Superó el límite de crédito aprobado.'; } },
+  deterioro_bcra:  { ico: '🔴', nivel: 'rojo',      texto: function()  { return 'Tiene problemas en el banco.'; } },
+  deuda_antigua:   { ico: '🔴', nivel: 'rojo',      texto: function()  { return 'Tiene facturas sin pagar hace más de 90 días.'; } },
+  cheque_nuevo:    { ico: '🔴', nivel: 'rojo',      texto: function()  { return 'Tiene un cheque rechazado.'; } },
+};
+
+async function cargarAlertasVendedor() {
+  try {
+    var r = await fetch('/api/alertas');
+    if (!r || !r.ok) return;
+    var data = await r.json();
+    var todas = data.alertas || [];
+
+    // Filtrar solo alertas de clientes del vendedor
+    var normC = function(c) { return String(c || '').replace(/-/g, '').replace(/\s/g, '').trim(); };
+    var misCuits = new Set((CARTERA_LOCAL || []).map(function(c) { return normC(c.cuit); }));
+    _AV_CACHE = todas.filter(function(a) { return misCuits.has(normC(a.cuit)); });
+
+    _renderAlertasVendedor();
+  } catch(e) {
+    console.warn('[alertas-vendedor]', e);
+  }
+}
+
+function _renderAlertasVendedor() {
+  var panel = document.getElementById('alertas-vendedor-panel');
+  if (!panel) return;
+
+  if (!_AV_CACHE.length) {
+    panel.style.display = 'none';
+    return;
+  }
+
+  var visibles = _AV_EXPAND ? _AV_CACHE : _AV_CACHE.slice(0, _AV_MAX_SHOW);
+  var html = '<div class="av-header">'
+    + '<span class="av-titulo">Atención — tus clientes</span>'
+    + '<span class="av-count">' + _AV_CACHE.length + '</span>'
+    + '</div>';
+
+  visibles.forEach(function(a) {
+    var t = _AV_TIPOS[a.tipo] || { ico: '⚠️', nivel: 'amarillo', texto: function() { return a.detalle || 'Revisar cliente.'; } };
+    var cuitEnc = (a.cuit || '').replace(/'/g, '');
+    var nomEnc  = (a.nombre || a.cuit || '').replace(/'/g, '').substring(0, 40);
+    html += '<div class="av-item ' + t.nivel + '">'
+      + '<span class="av-ico">' + t.ico + '</span>'
+      + '<div class="av-info">'
+      +   '<div class="av-nombre">' + (a.nombre || a.cuit) + '</div>'
+      +   '<div class="av-msg">'   + t.texto(a)            + '</div>'
+      + '</div>'
+      + '<span class="av-ver" onclick="abrirModalCliente(\'' + cuitEnc + '\',\'' + nomEnc + '\')">Ver →</span>'
+      + '</div>';
+  });
+
+  if (_AV_CACHE.length > _AV_MAX_SHOW) {
+    if (_AV_EXPAND) {
+      html += '<div class="av-toggle" onclick="_AV_EXPAND=false;_renderAlertasVendedor()">Ver menos ▲</div>';
+    } else {
+      html += '<div class="av-toggle" onclick="_AV_EXPAND=true;_renderAlertasVendedor()">Ver '
+        + (_AV_CACHE.length - _AV_MAX_SHOW) + ' más ▼</div>';
+    }
+  }
+
+  panel.innerHTML = html;
+  panel.style.display = 'block';
 }
 </script>
 </body>
