@@ -6675,9 +6675,18 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
         _categoria_pi[cuit] = _cat
         _cat_count_pi[_cat] = _cat_count_pi.get(_cat, 0) + 1
 
-    _para_live_pi = [] if modo_rapido else [
-        cuit for cuit in _cuits_lista_pi if _categoria_pi.get(cuit) in ('zona_gris', 'nuevo')
-    ]
+    if modo_rapido:
+        # Modo rápido: sin BCRA en vivo. Los alto_riesgo preservan su score previo en FASE 2.
+        _para_live_pi = []
+    else:
+        # Modo completo: zona_gris + nuevo + alto_riesgo van a BCRA en vivo.
+        # alto_riesgo es el grupo donde más importa tener datos frescos: sin el historial
+        # de 24 periodos el motor activa hard_block_bcra y devuelve score=1 en lugar del
+        # rango real (elastic bounding 300-550). zona_gris/nuevo se mantienen por ambigüedad.
+        _para_live_pi = [
+            cuit for cuit in _cuits_lista_pi
+            if _categoria_pi.get(cuit) in ('zona_gris', 'nuevo', 'alto_riesgo')
+        ]
     print(
         f"[proceso-integral] FASE 0 OK — alto_riesgo={_cat_count_pi['alto_riesgo']} | "
         f"zona_gris={_cat_count_pi['zona_gris']} | limpio_bulk={_cat_count_pi['limpio_bulk']} | "
