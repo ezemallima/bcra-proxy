@@ -6829,6 +6829,24 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
         print("[proceso-integral] FASE 1.5: toda la solvencia ya estaba cacheada (<24h)", flush=True)
 
     # ═══════════════════════════════════════════════════════════════════════
+    # FASE 1.8 — Cargar bcra_cache.json una sola vez antes del loop.
+    # Para clientes que no van a BCRA en vivo (limpio_bulk / modo_rapido),
+    # priorizamos datos reales cacheados de consultas individuales previas
+    # sobre los datos sintéticos de _bulk_to_bcra_data().  Esto es lo que
+    # hace que el score del proceso integral coincida con el de la consulta
+    # individual: ambos usan los mismos datos BCRA.
+    # ═══════════════════════════════════════════════════════════════════════
+    _bcra_cache_pi: dict = {}
+    try:
+        _bc_path_pi = os.path.join(DATA_DIR, 'bcra_cache.json')
+        if os.path.exists(_bc_path_pi):
+            with open(_bc_path_pi, 'r', encoding='utf-8') as _bc_f_pi:
+                _bcra_cache_pi = json.load(_bc_f_pi)
+            print(f"[proceso-integral] FASE 1.8: bcra_cache.json cargado — {len(_bcra_cache_pi)} CUITs", flush=True)
+    except Exception as _bc_load_e:
+        print(f"[proceso-integral] FASE 1.8: bcra_cache.json no disponible: {_bc_load_e}", flush=True)
+
+    # ═══════════════════════════════════════════════════════════════════════
     # FASE 2 — Scoring secuencial usando datos ya resueltos (sin I/O BCRA aquí).
     # ═══════════════════════════════════════════════════════════════════════
     for i, c in enumerate(cartera_data):
@@ -6851,14 +6869,35 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
         try:
             _score_session_cache.pop(cuit, None)
 
-            # ── Paso 1: BCRA — resuelto por bulk (FASE 0) o por vivo (FASE 1) ────────
+            # ── Paso 1: BCRA — resuelto por vivo (FASE 1) > caché disco > bulk sintético ──
+            # Orden de prioridad:
+            #   1. BCRA en vivo (FASE 1)  — datos frescos de la API, 24m de periodos
+            #   2. bcra_cache.json        — datos reales de consultas individuales previas
+            #   3. _bulk_to_bcra_data()   — sintético, solo 1 periodo; puede divergir del real
+            # Usar (2) cuando está disponible elimina la divergencia entre "proceso integral"
+            # y "consulta individual": ambos paths terminan usando los mismos datos BCRA.
             if cuit in _live_resultados_pi:
                 bcra_data, _cheq_cdi_pi, _hist_live_pi = _live_resultados_pi[cuit]
             else:
-                _deuda_bulk_pi = _bulk_deudas_pi.get(cuit)
-                bcra_data     = _bulk_to_bcra_data(nombre, _deuda_bulk_pi) if _deuda_bulk_pi else {}
-                _cheq_cdi_pi  = None  # no se consultó vivo: este cliente lo resolvió el bulk
+                _cheq_cdi_pi  = None
                 _hist_live_pi = None
+                _deuda_bulk_pi = _bulk_deudas_pi.get(cuit)
+
+                # Intentar bcra_cache.json primero (datos reales, aunque no sean de hoy)
+                _entry_cache_pi = _bcra_cache_pi.get(cuit)
+                if isinstance(_entry_cache_pi, dict):
+                    # Desempaquetar wrapper {data, error, ts} que usa bcra_cache.json
+                    if 'data' in _entry_cache_pi and 'ts' in _entry_cache_pi:
+                        _entry_cache_pi = _entry_cache_pi.get('data') or {}
+                    # Usar solo si tiene datos reales (no error, results presente)
+                    if (_entry_cache_pi and
+                            isinstance(_entry_cache_pi.get('results'), dict) and
+                            not _entry_cache_pi.get('error_bcra')):
+                        bcra_data = _entry_cache_pi
+                    else:
+                        bcra_data = _bulk_to_bcra_data(nombre, _deuda_bulk_pi) if _deuda_bulk_pi else {}
+                else:
+                    bcra_data = _bulk_to_bcra_data(nombre, _deuda_bulk_pi) if _deuda_bulk_pi else {}
 
             # ── Paso 1.5b: Detectar cheques rechazados activos para alertas ──────────
             _cheq_activos_pi = 0
