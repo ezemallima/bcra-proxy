@@ -1327,12 +1327,7 @@ async function cargarSaldosCartera(forzar = false) {
       } catch(e) {}
     }));
   }
-  const filtroActivo = document.querySelector('.filter-chip.active');
-  const filtro = filtroActivo ? (
-    filtroActivo.textContent.includes('saldo') ? 'saldo' :
-    filtroActivo.textContent.includes('Alertas') ? 'alertas' : 'todos'
-  ) : 'todos';
-  renderCartera(filtro);
+  renderCartera(_getFiltroActual());
   renderOportunidades();
   // Cargar saldos del DSO tool como fallback para badges de clientes
   cargarSaldosDSOFallback();
@@ -1353,8 +1348,9 @@ async function cargarSaldosDSOFallback() {
       if (!porCliente[k]) porCliente[k] = [];
       if ((parseFloat(s.saldo) || 0) > 0) {
         porCliente[k].push({
-          fechaPago: s.fecha_pago || s.fecha_factura || '',
-          saldo:     parseFloat(s.saldo) || 0
+          fechaFactura: s.fecha_factura || '',
+          fechaPago:    s.fecha_pago    || '',
+          saldo:        parseFloat(s.saldo) || 0
         });
       }
     });
@@ -1502,8 +1498,7 @@ async function refrescarScores() {
       if (sitAnterior < 2 && sitNueva >= 2) degradados.push(c.nombre);
     });
 
-    renderCartera(document.querySelector('.filter-chip.active')?.textContent?.includes('Alertas') ? 'alertas' :
-      document.querySelector('.filter-chip.active')?.textContent?.includes('saldo') ? 'saldo' : 'todos');
+    renderCartera(_getFiltroActual());
     if (document.getElementById('tab-oport').classList.contains('active')) renderOportunidades();
     console.log('[refresh] Scores:', actualizados + '/' + CARTERA_LOCAL.length, '| Degradados BCRA:', degradados.length);
 
@@ -2232,6 +2227,13 @@ window._cuitsConCobradas = new Set();
 window._cuitsConWA       = new Set();
 // CUITs de clientes con facturas emitidas hace >20 días (fuente: backend)
 window._emit20CUITs      = new Set();
+
+// Devuelve el filtro activo actual leyendo el estado real del panel (radio buttons).
+// Reemplaza la detección por .filter-chip.active que quedó obsoleta.
+function _getFiltroActual() {
+  const radio = document.querySelector('input[name="ftipo"]:checked');
+  return radio?.value || 'todos';
+}
 
 function toggleFiltrosPanel(e) {
   e.stopPropagation();
@@ -3718,10 +3720,7 @@ function setFiltroVend(v, btn) {
   _filtroVendedor = v;
   document.querySelectorAll('#sup-vend-row .filter-chip').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
-  // Re-aplicar el filtro de tipo (todos/alertas/saldo) que esté activo
-  const chipActivo = document.querySelector('.filter-row .filter-chip.active');
-  const tipoFiltro = chipActivo?.getAttribute('onclick')?.match(/'([^']+)'/)?.[1] || 'todos';
-  renderCartera(tipoFiltro);
+  renderCartera(_getFiltroActual());
 }
 
 // ── BUSCADORES ──
@@ -3730,12 +3729,7 @@ var _oportFiltrada = null;
 
 function buscarEnCartera(q) {
   _carteraFiltrada = q.trim().toLowerCase();
-  const filtroBtn = document.querySelector('.filter-chip.active');
-  const filtro = filtroBtn ? (
-    filtroBtn.textContent.includes('Alertas') ? 'alertas' :
-    filtroBtn.textContent.includes('saldo') ? 'saldo' : 'todos'
-  ) : 'todos';
-  renderCartera(filtro);
+  renderCartera(_getFiltroActual());
 }
 
 function buscarEnOport(q) {
