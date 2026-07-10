@@ -6641,17 +6641,17 @@ def eliminar_cliente_cartera():
         # 5. Limpiar session cache en memoria
         _score_session_cache.pop(cuit_raw, None)
 
-        # 6. Limpiar padrón local (bcra_padron_local.json) si existe
-        _pl_path = os.path.join(DATA_DIR, 'bcra_padron_local.json')
+        # 6. Limpiar padrón local (bcra_padron.db SQLite) para forzar re-fetch de BCRA
         try:
-            if os.path.exists(_pl_path):
-                with open(_pl_path, 'r', encoding='utf-8') as _f:
-                    _pl = json.load(_f)
-                if cuit_raw in _pl:
-                    del _pl[cuit_raw]
+            if os.path.exists(PADRON_DB_PATH):
+                _pl_conn = sqlite3.connect(PADRON_DB_PATH, check_same_thread=False)
+                _pl_rows = _pl_conn.execute(
+                    "DELETE FROM bcra_padron_local WHERE cuit = ?", (cuit_raw,)
+                ).rowcount
+                _pl_conn.commit()
+                _pl_conn.close()
+                if _pl_rows:
                     _limpiados.append('padron_local')
-                    with open(_pl_path, 'w', encoding='utf-8') as _f:
-                        json.dump(_pl, _f, ensure_ascii=False)
         except Exception as _e:
             print(f"[eliminar] padron_local error: {_e}", flush=True)
 
@@ -9023,6 +9023,17 @@ def get_afip(cuit):
             if den_h: return jsonify({"nombre": den_h, "fuente": "bcra_hist_cache"})
     except Exception as _e:
         print(f"[afip] {cuit_limpio} historial_cache error: {_e}", flush=True)
+
+    # 4.1. Padrón local BCRA (bcra_padron.db) — guarda denominacion cuando BCRA live responde OK.
+    # Es la fuente más directa para CUITs con historial bancario que no están en AFIP/TangoFactura.
+    try:
+        _pl_den = (consultar_padron_local(cuit_limpio) or {})
+        _pl_den_str = str((_pl_den.get('results') or {}).get('denominacion') or '').strip()
+        if _pl_den_str and not _pl_den_str.isdigit():
+            print(f"[afip] {cuit_limpio} padron_local OK: {_pl_den_str}", flush=True)
+            return jsonify({"nombre": _pl_den_str, "fuente": "padron_local_bcra"})
+    except Exception as _e:
+        print(f"[afip] {cuit_limpio} padron_local error: {_e}", flush=True)
 
     # 4.6. TangoFactura — razonSocial/apellidoNombre del contribuyente
     try:
