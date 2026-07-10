@@ -8971,7 +8971,7 @@ def get_afip(cuit):
             timeout=10,
         )
         print(f"[afip] {cuit_limpio} afipsdk HTTP={_sdk_r.status_code}", flush=True)
-        if _sdk_r.status_code == 200:
+        if _sdk_r.status_code == 200 and _sdk_r.text.strip():
             _sdk_data = _sdk_r.json()
             _apellido_sdk = str(_sdk_data.get('apellido') or '').strip()
             _nombre_sdk   = str(_sdk_data.get('nombre') or '').strip()
@@ -9033,6 +9033,14 @@ def get_afip(cuit):
     _bora_nom = _scrape_bora_razon_social(cuit_limpio)
     if _bora_nom:
         return jsonify({"nombre": _bora_nom, "fuente": "bora_seccion2"})
+
+    # 7.5. Nomdeu SQLite (tabla denominaciones — nombres oficiales del BCRA)
+    # Cubre cualquier CUIT que haya tenido deuda en el sistema financiero argentino,
+    # incluso si no figura en AFIP/TangoFactura/AfipSDK por ser persona jurídica antigua.
+    _nomdeu_nom = _nomdeu_get_nombre(cuit_limpio)
+    if _nomdeu_nom and not _nomdeu_nom.isdigit():
+        print(f"[afip] {cuit_limpio} nomdeu_sqlite OK: {_nomdeu_nom}", flush=True)
+        return jsonify({"nombre": _nomdeu_nom, "fuente": "nomdeu_bcra"})
 
     # Ninguna fuente devolvió denominación — puede ser padrón temporalmente offline.
     # El frontend trata fuente=fallback como "sin nombre real" y deja que el score decida.
