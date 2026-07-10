@@ -4508,7 +4508,19 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
       if (/^\d/.test(nombreMostrar)) {
         nombreMostrar = 'Sin denominación registrada';
         var _elNomFbk = document.querySelector('#cliente-header .nombre-cliente');
-        if (_elNomFbk) _elNomFbk.textContent = nombreMostrar;
+        if (_elNomFbk) {
+          _elNomFbk.textContent = nombreMostrar;
+          // Botón para ingresar nombre manualmente cuando todas las fuentes automáticas fallan
+          if (!document.getElementById('btn-nombre-custom')) {
+            var _btnNomCust = document.createElement('button');
+            _btnNomCust.id = 'btn-nombre-custom';
+            _btnNomCust.title = 'Ingresar nombre manualmente';
+            _btnNomCust.style.cssText = 'background:none;border:1px solid #93c5fd;border-radius:5px;padding:2px 7px;font-size:10px;color:#3b82f6;cursor:pointer;margin-left:6px;font-family:inherit;vertical-align:middle;';
+            _btnNomCust.textContent = '✏ Editar nombre';
+            _btnNomCust.onclick = function() { _editarNombreCustom(cuit, _elNomFbk); };
+            _elNomFbk.parentNode.appendChild(_btnNomCust);
+          }
+        }
       }
       // Limpiar el banner "CUIT SIN REGISTRO" que se insertó antes de que llegara el score
       var _mAlertElFx = document.getElementById('mora-alert-container');
@@ -6462,6 +6474,29 @@ function verCliente(cuit) {
   document.querySelectorAll('.tab')[0].click();
   document.getElementById('cuit-input').value = cuit;
   consultarCliente();
+}
+
+async function _editarNombreCustom(cuit, elNom) {
+  var actual = (elNom && elNom.textContent !== 'Sin denominación registrada') ? elNom.textContent : '';
+  var nuevo = prompt('Ingresá el nombre para CUIT ' + cuit + ':\n(Quedará guardado permanentemente en el servidor)', actual);
+  if (nuevo === null) return;
+  nuevo = nuevo.trim();
+  try {
+    var r = await fetch('/api/nombre-custom', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cuit: cuit.replace(/\D/g, ''), nombre: nuevo })
+    });
+    var d = await r.json();
+    if (!d.ok) { alert('Error: ' + (d.error || 'desconocido')); return; }
+    if (nuevo && elNom) {
+      elNom.textContent = nuevo;
+      var _btnCust = document.getElementById('btn-nombre-custom');
+      if (_btnCust) _btnCust.remove();
+    }
+  } catch(e) {
+    alert('Error de conexión: ' + e.message);
+  }
 }
 
 async function eliminarClienteCartera(cuit, nombre) {

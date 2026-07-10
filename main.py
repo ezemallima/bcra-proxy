@@ -356,10 +356,11 @@ _EMPLEADOS_RANGO: dict = {
     'Mediana_T1': '51-200',
     'Mediana_T2': '51-200',
 }
-ALERTAS_FILE      = os.path.join(DATA_DIR, 'db_v17_final.json')
-ALERTAS_BCRA_FILE = os.path.join(DATA_DIR, 'alertas_bcra.json')
-DATOS_FILE        = os.path.join(DATA_DIR, 'datos_bodega.json')
-SCORE_CACHE_FILE  = os.path.join(DATA_DIR, 'score_cache.json')
+ALERTAS_FILE        = os.path.join(DATA_DIR, 'db_v17_final.json')
+ALERTAS_BCRA_FILE   = os.path.join(DATA_DIR, 'alertas_bcra.json')
+DATOS_FILE          = os.path.join(DATA_DIR, 'datos_bodega.json')
+SCORE_CACHE_FILE    = os.path.join(DATA_DIR, 'score_cache.json')
+NOMBRES_CUSTOM_FILE = os.path.join(DATA_DIR, 'nombres_custom.json')
 print(f"[init] Almacenamiento en: {DATA_DIR}", flush=True)
 print(
     f"[init] ScraperAPI: {'ACTIVO — proxy rotativo habilitado' if SCRAPERAPI_KEY else 'no configurado — modo directo legacy'}",
@@ -404,6 +405,16 @@ bcra_cache = {}
 CACHE_TTL = 60 * 60 * 24   # 24 horas — reduce consultas al BCRA y mejora latencia
 CACHE_TTL_ERROR = 300
 BCRA_VACIO = {"results": None, "sin_deudas": None, "error_bcra": None}
+
+# ── Nombres personalizados (admin puede fijar nombre manualmente cuando todas las fuentes fallan) ──
+_nombres_custom: dict = {}
+try:
+    if os.path.exists(NOMBRES_CUSTOM_FILE):
+        with open(NOMBRES_CUSTOM_FILE, 'r', encoding='utf-8') as _nc_f:
+            _nombres_custom = json.load(_nc_f)
+        print(f"[nombres_custom] {len(_nombres_custom)} nombres cargados", flush=True)
+except Exception as _nc_e:
+    print(f"[nombres_custom] Error cargando: {_nc_e}", flush=True)
 
 # ── Cartera comercial ──
 _cartera_comercial = []
@@ -6662,6 +6673,33 @@ def eliminar_cliente_cartera():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+@app.route("/api/nombre-custom", methods=["POST"])
+def set_nombre_custom():
+    """Guarda un nombre personalizado para un CUIT cuando todas las fuentes automáticas fallan.
+    Body JSON: { "cuit": "30719070481", "nombre": "BELTE S.R.L" }
+    El nombre se persiste en nombres_custom.json (DATA_DIR) y queda como primer resultado
+    de /afip/<cuit>, con fuente="custom".
+    """
+    global _nombres_custom
+    try:
+        body = request.get_json(force=True) or {}
+        cuit_raw = str(body.get('cuit', '')).replace('-', '').replace(' ', '').strip()
+        nombre = str(body.get('nombre', '')).strip()
+        if not cuit_raw or len(cuit_raw) != 11 or not cuit_raw.isdigit():
+            return jsonify({"ok": False, "error": "CUIT inválido"}), 400
+        if not nombre:
+            # Permite borrar nombre custom si se pasa vacío
+            _nombres_custom.pop(cuit_raw, None)
+        else:
+            _nombres_custom[cuit_raw] = nombre
+        with open(NOMBRES_CUSTOM_FILE, 'w', encoding='utf-8') as _nc_w:
+            json.dump(_nombres_custom, _nc_w, ensure_ascii=False, indent=2)
+        print(f"[nombres_custom] {cuit_raw} → {repr(nombre)}", flush=True)
+        return jsonify({"ok": True, "cuit": cuit_raw, "nombre": nombre or None})
+    except Exception as _e:
+        return jsonify({"ok": False, "error": str(_e)}), 500
+
+
 @app.route("/verificar-cartera", methods=["POST"])
 def verificar_cartera():
     if verificacion_estado["corriendo"]:
@@ -8978,6 +9016,11 @@ def get_afip(cuit):
     cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
     cuit_fmt = cuit_limpio[:2] + '-' + cuit_limpio[2:10] + '-' + cuit_limpio[10:] if len(cuit_limpio) == 11 else cuit
 
+    # 0.5. Nombres custom (admin guardó manualmente vía POST /api/nombre-custom)
+    _nc_nombre = _nombres_custom.get(cuit_limpio, '').strip()
+    if _nc_nombre:
+        return jsonify({"nombre": _nc_nombre, "fuente": "custom"})
+
     # 1. Cartera comercial Piattelli (O(1), sin red) — respuesta garantizada para clientes propios
     nombre_cc = next(
         (str(c.get('nombre', '')).strip() for c in _cartera_comercial
@@ -9112,6 +9155,29 @@ def get_afip(cuit):
                     return jsonify({"nombre": _rs_co, "fuente": "cuitonline"})
     except Exception as _eco:
         print(f"[afip] {cuit_limpio} cuitonline error: {_eco}", flush=True)
+
+    # 4.8. cuit.com.ar — directorio público, cubre empresas disueltas y antiguas
+    try:
+        import re as _re_ctc
+        _ctc_r = requests.get(
+            f"https://www.cuit.com.ar/quees.php?p_cuit={cuit_limpio}",
+            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'},
+            timeout=8,
+        )
+        print(f"[afip] {cuit_limpio} cuit.com.ar HTTP={_ctc_r.status_code}", flush=True)
+        if _ctc_r.status_code == 200:
+            _m_ctc = _re_ctc.search(
+                r'<h1[^>]*>\s*([A-ZÁÉÍÓÚÑa-záéíóúñ0-9][^<]{2,80}?)\s*</h1>',
+                _ctc_r.text
+            )
+            if _m_ctc:
+                import html as _html_ctc
+                _nom_ctc = _html_ctc.unescape(_m_ctc.group(1)).strip()
+                if _nom_ctc and not _nom_ctc.isdigit() and 'CUIT' not in _nom_ctc.upper():
+                    print(f"[afip] {cuit_limpio} cuit.com.ar OK: {_nom_ctc}", flush=True)
+                    return jsonify({"nombre": _nom_ctc, "fuente": "cuit_com_ar"})
+    except Exception as _ectc:
+        print(f"[afip] {cuit_limpio} cuit.com.ar error: {_ectc}", flush=True)
 
     # 5. API BCRA — historial en vivo (solo si no hay caché)
     try:
