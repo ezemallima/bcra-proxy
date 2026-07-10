@@ -6573,6 +6573,95 @@ def save_alertas():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api/cartera/eliminar-cliente", methods=["POST"])
+def eliminar_cliente_cartera():
+    """Elimina un cliente de la cartera y limpia todas sus cachés.
+    Body JSON: { "cuit": "30719070481" }
+    """
+    global _cartera_comercial
+    try:
+        body = request.get_json(force=True) or {}
+        cuit_raw = str(body.get('cuit') or '').replace('-', '').replace(' ', '').strip()
+        if len(cuit_raw) < 10:
+            return jsonify({"ok": False, "error": "CUIT inválido"}), 400
+
+        _nc = lambda x: str(x or '').replace('-', '').replace(' ', '').strip()
+
+        # 1. Eliminar de cartera_comercial en memoria y en disco
+        antes = len(_cartera_comercial)
+        _cartera_comercial = [c for c in _cartera_comercial if _nc(c.get('cuit', '')) != cuit_raw]
+        if len(_cartera_comercial) == antes:
+            return jsonify({"ok": False, "error": "Cliente no encontrado en cartera"}), 404
+
+        _cc_tmp = _CC_FILE + '.tmp'
+        with open(_cc_tmp, 'w', encoding='utf-8') as _f:
+            json.dump(_cartera_comercial, _f, ensure_ascii=False, indent=2)
+            _f.flush(); os.fsync(_f.fileno())
+        os.replace(_cc_tmp, _CC_FILE)
+
+        # 2. Limpiar bcra_cache.json
+        _limpiados = []
+        _bc_path = os.path.join(DATA_DIR, 'bcra_cache.json')
+        try:
+            if os.path.exists(_bc_path):
+                with open(_bc_path, 'r', encoding='utf-8') as _f:
+                    _bc = json.load(_f)
+                if cuit_raw in _bc:
+                    del _bc[cuit_raw]
+                    _limpiados.append('bcra_cache')
+                    with open(_bc_path, 'w', encoding='utf-8') as _f:
+                        json.dump(_bc, _f, ensure_ascii=False)
+        except Exception as _e:
+            print(f"[eliminar] bcra_cache error: {_e}", flush=True)
+
+        # 3. Limpiar score_cache.json
+        with _score_cache_lock:
+            _sc = _score_cache_read()
+            if cuit_raw in _sc:
+                del _sc[cuit_raw]
+                _limpiados.append('score_cache')
+                _score_cache_write(_sc)
+
+        # 4. Limpiar entrada en ALERTAS_FILE (sección cartera[])
+        try:
+            with _alertas_file_lock:
+                with open(ALERTAS_FILE, 'r', encoding='utf-8') as _f:
+                    _af = json.load(_f)
+                _af['cartera'] = [c for c in (_af.get('cartera') or [])
+                                  if _nc(c.get('cuit', '')) != cuit_raw]
+                _af_tmp = ALERTAS_FILE + '.tmp'
+                with open(_af_tmp, 'w', encoding='utf-8') as _f:
+                    json.dump(_af, _f, ensure_ascii=False, default=str)
+                    _f.flush(); os.fsync(_f.fileno())
+                os.replace(_af_tmp, ALERTAS_FILE)
+                _limpiados.append('alertas_cartera')
+        except Exception as _e:
+            print(f"[eliminar] alertas_file error: {_e}", flush=True)
+
+        # 5. Limpiar session cache en memoria
+        _score_session_cache.pop(cuit_raw, None)
+
+        # 6. Limpiar padrón local (bcra_padron_local.json) si existe
+        _pl_path = os.path.join(DATA_DIR, 'bcra_padron_local.json')
+        try:
+            if os.path.exists(_pl_path):
+                with open(_pl_path, 'r', encoding='utf-8') as _f:
+                    _pl = json.load(_f)
+                if cuit_raw in _pl:
+                    del _pl[cuit_raw]
+                    _limpiados.append('padron_local')
+                    with open(_pl_path, 'w', encoding='utf-8') as _f:
+                        json.dump(_pl, _f, ensure_ascii=False)
+        except Exception as _e:
+            print(f"[eliminar] padron_local error: {_e}", flush=True)
+
+        print(f"[eliminar] CUIT {cuit_raw} eliminado de cartera. Cachés limpiadas: {_limpiados}", flush=True)
+        return jsonify({"ok": True, "cuit": cuit_raw, "caches_limpiadas": _limpiados})
+
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @app.route("/verificar-cartera", methods=["POST"])
 def verificar_cartera():
     if verificacion_estado["corriendo"]:

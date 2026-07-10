@@ -6464,6 +6464,28 @@ function verCliente(cuit) {
   consultarCliente();
 }
 
+async function eliminarClienteCartera(cuit, nombre) {
+  if (!confirm('¿Eliminar "' + (nombre || cuit) + '" de la cartera y limpiar toda su caché?\n\nPodrás volver a consultarlo como cliente nuevo.')) return;
+  try {
+    var r = await fetch('/api/cartera/eliminar-cliente', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cuit: cuit })
+    });
+    var d = await r.json();
+    if (!d.ok) { alert('Error: ' + (d.error || 'desconocido')); return; }
+    // Quitar de la lista en memoria y re-renderizar sin recargar
+    cartera = cartera.filter(function(c) {
+      return String(c.cuit||'').replace(/\D/g,'') !== String(cuit).replace(/\D/g,'');
+    });
+    localStorage.setItem('piat_cartera', JSON.stringify(cartera));
+    renderCartera();
+    console.log('[cartera] Eliminado ' + cuit + ' | cachés: ' + (d.caches_limpiadas||[]).join(', '));
+  } catch(e) {
+    alert('Error de conexión: ' + e.message);
+  }
+}
+
 function mostrarErrorCuitInexistente(raw) {
   var cuitFmt = raw.length === 11 ? raw.slice(0,2)+'-'+raw.slice(2,10)+'-'+raw.slice(10) : raw;
   document.getElementById('loading-state').style.display = 'none';
@@ -7326,6 +7348,7 @@ function renderBuscador(filtro) {
     if (c.vendedor) html += '<span class="cli-meta-tag">' + c.vendedor + '</span>';
     if (c.plazo) html += '<span class="cli-meta-tag">Plazo: ' + c.plazo + 'd</span>';
     html += '<button class="primary ficha-btn-ver" onclick="event.stopPropagation();verCliente(\'' + c.cuit + '\')">Ver consulta →</button>';
+    html += '<button onclick="event.stopPropagation();eliminarClienteCartera(\'' + c.cuit + '\',\'' + (c.nombre||'').replace(/'/g,"\\'") + '\')" title="Eliminar de cartera y limpiar caché" style="background:none;border:1px solid #fca5a5;border-radius:6px;padding:5px 9px;font-size:11px;color:#ef4444;cursor:pointer;font-family:inherit;margin-left:4px;">✕ Eliminar</button>';
     html += '</div></div></div>';
     return html;
   }).join('');
