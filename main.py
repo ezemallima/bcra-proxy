@@ -1224,12 +1224,15 @@ def _guardar_en_padron_local(cuit: str, data: dict):
         print(f"[padron] Error al guardar {cuit}: {e}", flush=True)
 
 
-def consultar_bcra_cached(cuit):
+def consultar_bcra_cached(cuit, skip_padron=False):
     # 1. Padrón local indexado — respuesta instantánea sin red
-    local = consultar_padron_local(cuit)
-    if local is not None:
-        print(f"[bcra] {cuit} desde padrón local (offline)", flush=True)
-        return local, None
+    # Se omite cuando skip_padron=True (fresh=1) para forzar consulta en vivo y
+    # actualizar el padrón local con datos frescos del BCRA.
+    if not skip_padron:
+        local = consultar_padron_local(cuit)
+        if local is not None:
+            print(f"[bcra] {cuit} desde padrón local (offline)", flush=True)
+            return local, None
 
     print(f"[bcra] {cuit} consultando BCRA en vivo...", flush=True)
     # 2. Caché de disco (24 h) — evita re-consultas recientes
@@ -9229,8 +9232,9 @@ def get_deudas(cuit):
                     print(f"[deudas] {cuit_limpio} bcra_cache invalidado (fresh=1)", flush=True)
         except Exception:
             pass
+    _fresh = request.args.get('fresh') == '1'
     try:
-        data, error = consultar_bcra_cached(cuit_limpio)
+        data, error = consultar_bcra_cached(cuit_limpio, skip_padron=_fresh)
         return jsonify(data), 200
     except Exception as e:
         import traceback
