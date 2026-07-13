@@ -7023,21 +7023,31 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
                 _cheq_cdi_pi  = None
                 _hist_live_pi = None
                 _deuda_bulk_pi = _bulk_deudas_pi.get(cuit)
+                bcra_data = None
 
-                # Intentar bcra_cache.json primero (datos reales, aunque no sean de hoy)
+                # 1. bcra_cache.json — datos reales de consultas anteriores
                 _entry_cache_pi = _bcra_cache_pi.get(cuit)
                 if isinstance(_entry_cache_pi, dict):
-                    # Desempaquetar wrapper {data, error, ts} que usa bcra_cache.json
                     if 'data' in _entry_cache_pi and 'ts' in _entry_cache_pi:
                         _entry_cache_pi = _entry_cache_pi.get('data') or {}
-                    # Usar solo si tiene datos reales (no error, results presente)
                     if (_entry_cache_pi and
                             isinstance(_entry_cache_pi.get('results'), dict) and
                             not _entry_cache_pi.get('error_bcra')):
                         bcra_data = _entry_cache_pi
-                    else:
-                        bcra_data = _bulk_to_bcra_data(nombre, _deuda_bulk_pi) if _deuda_bulk_pi else {}
-                else:
+
+                # 2. Padrón local SQLite — misma fuente que consultar_bcra_cached().
+                # Garantiza que el proceso integral use los mismos datos BCRA que la
+                # consulta individual: si el cliente fue consultado antes, sus datos
+                # están acá y el score va a coincidir.
+                if bcra_data is None:
+                    _pl_pi = consultar_padron_local(cuit)
+                    if (_pl_pi and
+                            isinstance((_pl_pi.get('results') or {}).get('periodos'), list) and
+                            len((_pl_pi.get('results') or {}).get('periodos') or []) > 0):
+                        bcra_data = _pl_pi
+
+                # 3. Bulk sintético — último recurso cuando nunca fue consultado en vivo
+                if bcra_data is None:
                     bcra_data = _bulk_to_bcra_data(nombre, _deuda_bulk_pi) if _deuda_bulk_pi else {}
 
             # ── Paso 1.5b: Detectar cheques rechazados activos para alertas ──────────
@@ -7092,7 +7102,23 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
             # lo que vuelve a convertir este loop en secuencial+red por cliente (la
             # causa real de la lentitud, ya resuelta arriba en Fase 0/1). Se llama
             # directo al motor con los datos ya resueltos en memoria.
-            _hist_para_score_pi = _hist_live_pi or _bulk_to_hist_data(cuit)
+            # Historial: live (FASE 1) > caché disco > bulk sintético.
+            # El caché de disco (historial_<cuit>.json) lo genera la consulta individual,
+            # por lo que si el cliente fue consultado antes, el score va a ser idéntico.
+            _hist_para_score_pi = _hist_live_pi
+            if not _hist_para_score_pi:
+                try:
+                    _hpath_pi = os.path.join(DATA_DIR, f'historial_{cuit}.json')
+                    if os.path.exists(_hpath_pi):
+                        with open(_hpath_pi, 'r', encoding='utf-8') as _hf_pi:
+                            _hcached_pi = json.load(_hf_pi).get('payload')
+                            if _hcached_pi and (_hcached_pi.get('results') or {}).get('periodos'):
+                                _hist_para_score_pi = _hcached_pi
+                except Exception:
+                    pass
+            if not _hist_para_score_pi:
+                _hist_para_score_pi = _bulk_to_hist_data(cuit)
+
             try:
                 score_data = calcular_rating_predictivo(
                     cuit=cuit, bcra_data=bcra_data or {},
