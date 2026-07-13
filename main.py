@@ -6817,17 +6817,14 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
         _cat_count_pi[_cat] = _cat_count_pi.get(_cat, 0) + 1
 
     if modo_rapido:
-        # Modo rápido: sin BCRA en vivo. Los alto_riesgo preservan su score previo en FASE 2.
+        # Modo rápido: sin BCRA en vivo. Usa datos cacheados tal cual.
         _para_live_pi = []
     else:
-        # Modo completo: zona_gris + nuevo + alto_riesgo van a BCRA en vivo.
-        # alto_riesgo es el grupo donde más importa tener datos frescos: sin el historial
-        # de 24 periodos el motor activa hard_block_bcra y devuelve score=1 en lugar del
-        # rango real (elastic bounding 300-550). zona_gris/nuevo se mantienen por ambigüedad.
-        _para_live_pi = [
-            cuit for cuit in _cuits_lista_pi
-            if _categoria_pi.get(cuit) in ('zona_gris', 'nuevo', 'alto_riesgo')
-        ]
+        # Modo completo: TODOS los clientes van a BCRA en vivo.
+        # Es la única forma de garantizar que el score del proceso integral
+        # coincida con la consulta individual. Los datos cacheados (padron_local,
+        # bcra_cache, historial disco) siguen actuando como fallback si BCRA falla.
+        _para_live_pi = list(_cuits_lista_pi)
     print(
         f"[proceso-integral] FASE 0 OK — alto_riesgo={_cat_count_pi['alto_riesgo']} | "
         f"zona_gris={_cat_count_pi['zona_gris']} | limpio_bulk={_cat_count_pi['limpio_bulk']} | "
@@ -6837,11 +6834,11 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
     )
 
     # ═══════════════════════════════════════════════════════════════════════
-    # FASE 1 — BCRA en vivo EN PARALELO, solo para zona_gris + nuevo.
+    # FASE 1 — BCRA en vivo EN PARALELO para todos los clientes (modo completo).
     # ═══════════════════════════════════════════════════════════════════════
     _live_resultados_pi: dict = {}  # {cuit: (bcra_data, cheq_cdi_data, hist_data)}
     if _para_live_pi:
-        _N_WORKERS_PI = 8
+        _N_WORKERS_PI = 16  # 16 workers para procesar ~200 clientes en ~2-3 min
         with _proceso_lock:
             _proceso_integral_estado['mensaje'] = (
                 f'Fase 2/2: BCRA en vivo para {len(_para_live_pi)} clientes ({_N_WORKERS_PI} workers)...'
