@@ -3480,9 +3480,20 @@ def calcular_rating_predictivo(
     elif sit_grave_6m and es_mora_tecnica and sit_efectivo >= 3 and max_sit < 3:
         puntos = min(puntos, 350)
 
-    # ── Hard Block D2: Default Real BCRA → score forzado a 1 ─────────────
+    # ── Hard Block D2: Default Real BCRA → cap en rango Rechazar ────────
+    # max_sit>=3: puntos=0 (el elastic bounding lo lleva a [300-550] abajo).
+    # max_sit==2: score=1 era demasiado drástico para un cliente que cayó a sit≥4
+    # y ya está recuperando a sit=2. Se diferencia por historial:
+    #   - deterioro_estructural (sit≥3 sostenido en últimos 6m): cap ~80
+    #   - default_real moderado (sin historial sit≥3 reciente):  cap ~150
+    # Score=1 queda reservado para cheques críticos y sit=5 activo.
     if hard_block_bcra:
-        puntos = 0
+        if max_sit >= 3:
+            puntos = 0  # Elastic bounding aplica debajo
+        elif deterioro_estructural:
+            puntos = min(puntos, 80)
+        else:
+            puntos = min(puntos, 150)
 
     # ── Elastic Bounding v12.1: max_sit >= 3 → penalización dinámica ─────
     # Aplica SIEMPRE para max_sit >= 3, incluso si hard_block_bcra es True.
