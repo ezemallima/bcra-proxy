@@ -4176,6 +4176,41 @@ def _cheques_local_batch(cuits: list) -> dict:
         return {}
 
 
+def _bulk_bcra_from_historial(cuit: str, nombre: str = '') -> dict:
+    """BCRA data del periodo más reciente desde historial_detalle (datos reales per-entidad).
+    Usa sit_01/monto_01 de cada entidad — misma fuente que _bulk_to_hist_data() pero
+    devuelve solo el periodo actual en formato compatible con /deudas/{cuit}.
+    A diferencia de _bulk_to_bcra_data(), NO distribuye sit_max a todas las entidades:
+    cada entidad tiene su situación y monto real del último periodo del bulk."""
+    filas = _historial_detalle_rows(cuit)
+    if not filas:
+        return {}
+    entidades = []
+    for fila in filas:
+        sit = fila.get('sit_01')
+        if not sit:
+            continue
+        monto = (fila.get('monto_01') or 0) / 10.0
+        entidades.append({
+            'entidad':   _nomdeu_get_entidad(fila['entidad']) or f"Entidad {fila['entidad']}",
+            'situacion': sit,
+            'monto':     round(monto, 1),
+        })
+    if not entidades:
+        return {}
+    periodo = _mes_anterior(_PERIODO_BASE_BULK, 0)
+    denom = _nomdeu_get_nombre(cuit) or nombre or ''
+    return {
+        'results': {
+            'denominacion': denom,
+            'periodos': [{'periodo': periodo, 'entidades': entidades}],
+        },
+        'sin_deudas': all(e['situacion'] <= 1 for e in entidades),
+        'bcra_disponible': False,
+        'fuente_offline': 'historial_detalle',
+    }
+
+
 def _bulk_to_bcra_data(nombre: str, deuda: dict) -> dict:
     """Respuesta BCRA sintética desde datos del padrón offline."""
     sit    = deuda.get('sit_max', 1)
@@ -6820,11 +6855,13 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
         # Modo rápido: sin BCRA en vivo. Usa datos cacheados tal cual.
         _para_live_pi = []
     else:
-        # Modo completo: TODOS los clientes van a BCRA en vivo.
-        # Es la única forma de garantizar que el score del proceso integral
-        # coincida con la consulta individual. Los datos cacheados (padron_local,
-        # bcra_cache, historial disco) siguen actuando como fallback si BCRA falla.
-        _para_live_pi = list(_cuits_lista_pi)
+        # Modo completo: zona_gris + nuevo + alto_riesgo van a BCRA en vivo.
+        # limpio_bulk usa historial_detalle (datos reales per-entidad del bulk mensual BCRA).
+        # No se llama BCRA vivo para limpio_bulk: la API bloquea tras pocas consultas.
+        _para_live_pi = [
+            cuit for cuit in _cuits_lista_pi
+            if _categoria_pi.get(cuit) in ('zona_gris', 'nuevo', 'alto_riesgo')
+        ]
     print(
         f"[proceso-integral] FASE 0 OK — alto_riesgo={_cat_count_pi['alto_riesgo']} | "
         f"zona_gris={_cat_count_pi['zona_gris']} | limpio_bulk={_cat_count_pi['limpio_bulk']} | "
@@ -6834,11 +6871,11 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
     )
 
     # ═══════════════════════════════════════════════════════════════════════
-    # FASE 1 — BCRA en vivo EN PARALELO para todos los clientes (modo completo).
+    # FASE 1 — BCRA en vivo EN PARALELO, solo zona_gris + nuevo + alto_riesgo.
     # ═══════════════════════════════════════════════════════════════════════
     _live_resultados_pi: dict = {}  # {cuit: (bcra_data, cheq_cdi_data, hist_data)}
     if _para_live_pi:
-        _N_WORKERS_PI = 16  # 16 workers para procesar ~200 clientes en ~2-3 min
+        _N_WORKERS_PI = 8
         with _proceso_lock:
             _proceso_integral_estado['mensaje'] = (
                 f'Fase 2/2: BCRA en vivo para {len(_para_live_pi)} clientes ({_N_WORKERS_PI} workers)...'
@@ -7032,10 +7069,15 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
                             not _entry_cache_pi.get('error_bcra')):
                         bcra_data = _entry_cache_pi
 
-                # 2. Padrón local SQLite — misma fuente que consultar_bcra_cached().
-                # Garantiza que el proceso integral use los mismos datos BCRA que la
-                # consulta individual: si el cliente fue consultado antes, sus datos
-                # están acá y el score va a coincidir.
+                # 2. historial_detalle (bulk real per-entidad) — sit_01/monto_01 por entidad.
+                # Datos reales del archivo mensual BCRA: cada entidad tiene su situación
+                # y monto real, sin distribución sintética. Misma fuente que _bulk_to_hist_data().
+                if bcra_data is None:
+                    _hd_bcra_pi = _bulk_bcra_from_historial(cuit, nombre)
+                    if _hd_bcra_pi:
+                        bcra_data = _hd_bcra_pi
+
+                # 3. Padrón local SQLite — fallback si el CUIT no está en historial_detalle
                 if bcra_data is None:
                     _pl_pi = consultar_padron_local(cuit)
                     if (_pl_pi and
@@ -7043,7 +7085,7 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
                             len((_pl_pi.get('results') or {}).get('periodos') or []) > 0):
                         bcra_data = _pl_pi
 
-                # 3. Bulk sintético — último recurso cuando nunca fue consultado en vivo
+                # 4. Bulk sintético — último recurso (agregado, sit_max a todas las entidades)
                 if bcra_data is None:
                     bcra_data = _bulk_to_bcra_data(nombre, _deuda_bulk_pi) if _deuda_bulk_pi else {}
 
