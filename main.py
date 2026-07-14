@@ -7022,6 +7022,23 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
         print(f"[proceso-integral] FASE 1.8: bcra_cache.json no disponible: {_bc_load_e}", flush=True)
 
     # ═══════════════════════════════════════════════════════════════════════
+    # FASE 1.9 — Cargar score_cache.json para reutilizar scores de consultas
+    # individuales recientes. Si un cliente fue consultado en vivo en los últimos
+    # 7 días (bcra_cache tiene su entrada con ts fresco), su score ya fue calculado
+    # con datos reales del BCRA — el proceso integral lo usa directamente en vez
+    # de recalcular con bulk y producir un score diferente.
+    # ═══════════════════════════════════════════════════════════════════════
+    _score_cache_pi: dict = {}
+    try:
+        with _score_cache_lock:
+            _score_cache_pi = _score_cache_read()
+        print(f"[proceso-integral] FASE 1.9: score_cache.json cargado — {len(_score_cache_pi)} CUITs", flush=True)
+    except Exception as _sc_load_e:
+        print(f"[proceso-integral] FASE 1.9: score_cache.json no disponible: {_sc_load_e}", flush=True)
+
+    _SCORE_CACHE_TTL_PI = 7 * 86400  # 7 días: score de consulta individual es válido
+
+    # ═══════════════════════════════════════════════════════════════════════
     # FASE 2 — Scoring secuencial usando datos ya resueltos (sin I/O BCRA aquí).
     # ═══════════════════════════════════════════════════════════════════════
     for i, c in enumerate(cartera_data):
@@ -7043,6 +7060,34 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
 
         try:
             _score_session_cache.pop(cuit, None)
+
+            # ── Paso 0: Reutilizar score de consulta individual reciente ──────────────
+            # Si el cliente fue consultado individualmente en los últimos 7 días
+            # (bcra_cache tiene su entrada con ts reciente), su score ya fue calculado
+            # con datos reales del BCRA. Usarlo directamente evita el recálculo con
+            # datos bulk que inevitablemente produce un score diferente.
+            _bcra_entry_ts = (_bcra_cache_pi.get(cuit) or {}).get('ts', 0)
+            _score_cached_pi = _score_cache_pi.get(cuit)
+            if (_bcra_entry_ts and
+                    time.time() - _bcra_entry_ts < _SCORE_CACHE_TTL_PI and
+                    isinstance(_score_cached_pi, dict) and
+                    _score_cached_pi.get('score')):
+                score_data = _score_cached_pi
+                solvency   = get_solvency_data(cuit) or {}
+                print(
+                    f"[proceso-integral] {nombre or cuit} score reutilizado "
+                    f"(consulta individual reciente: {_score_cached_pi.get('score')} {_score_cached_pi.get('rango')})",
+                    flush=True,
+                )
+                with _alertas_file_lock:
+                    _actualizar_score_en_cartera(cuit, score_data, solvency)
+                with _score_cache_lock:
+                    _sc_w = _score_cache_read()
+                    _sc_w[cuit] = score_data
+                    _score_cache_write(_sc_w)
+                with _proceso_lock:
+                    _proceso_integral_estado['procesados'] = i + 1
+                continue
 
             # ── Paso 1: BCRA — resuelto por vivo (FASE 1) > caché disco > bulk sintético ──
             # Orden de prioridad:
