@@ -7062,14 +7062,14 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
             _score_session_cache.pop(cuit, None)
 
             # ── Paso 0: Reutilizar score de consulta individual reciente ──────────────
-            # Si el cliente fue consultado individualmente en los últimos 7 días
-            # (bcra_cache tiene su entrada con ts reciente), su score ya fue calculado
-            # con datos reales del BCRA. Usarlo directamente evita el recálculo con
-            # datos bulk que inevitablemente produce un score diferente.
-            _bcra_entry_ts = (_bcra_cache_pi.get(cuit) or {}).get('ts', 0)
+            # _ts en score_cache indica que el score fue calculado por una consulta
+            # individual real (datos BCRA en vivo o padron_local fresco). El proceso
+            # integral no agrega _ts: sí lo agrega, lo pierde en el siguiente paso.
+            # Así se distingue "score individual" de "score bulk anterior".
             _score_cached_pi = _score_cache_pi.get(cuit)
-            if (_bcra_entry_ts and
-                    time.time() - _bcra_entry_ts < _SCORE_CACHE_TTL_PI and
+            _score_indiv_ts  = (_score_cached_pi or {}).get('_ts', 0)
+            if (_score_indiv_ts and
+                    time.time() - _score_indiv_ts < _SCORE_CACHE_TTL_PI and
                     isinstance(_score_cached_pi, dict) and
                     _score_cached_pi.get('score')):
                 score_data = _score_cached_pi
@@ -8156,9 +8156,16 @@ def _calcular_score_handler(cuit: str):
         solvency     = get_solvency_data(cuit_limpio)
         if not isinstance(solvency, dict): solvency = {}
         _actualizar_score_en_cartera(cuit_limpio, score_data, solvency)
-        # Incluir cheques en la respuesta: calcular_score_servidor ya los cacheó en disco
-        cheq_cached = _cheques_cache_get(cuit_limpio)
-        return jsonify(_score_response(score_data, solvency, cheq_cached))
+        cheq_cached  = _cheques_cache_get(cuit_limpio)
+        _resp_indiv  = _score_response(score_data, solvency, cheq_cached)
+        # Persistir en score_cache.json con _ts → proceso integral reutiliza este score
+        # en lugar de recalcular con datos bulk (evita divergencia individual vs. cartera).
+        _resp_indiv['_ts'] = time.time()
+        with _score_cache_lock:
+            _sc_i = _score_cache_read()
+            _sc_i[cuit_limpio] = _resp_indiv
+            _score_cache_write(_sc_i)
+        return jsonify(_resp_indiv)
     except Exception as e:
         import traceback
         print(f"[score] ERROR {cuit_limpio}: {e}\n{traceback.format_exc()}", flush=True)
