@@ -11958,6 +11958,61 @@ _init_padron_db()
 _init_nomdeu_db()   # padrón oficial BCRA (Nomdeu.txt mensual desde R2)
 _init_mipyme_db()   # padrón PyME (Min. Producción — importado via /update-mipyme-db)
 
+
+def _cheques_auto_update_loop():
+    """Verifica y actualiza la DB de cheques rechazados automáticamente cada 24h.
+    Al arrancar: si la última importación tiene más de 1 día, dispara actualización.
+    Luego duerme 24h y repite. No depende de cron-job.org externo."""
+    import datetime as _dt
+    # Esperar 60s al arrancar para que la app esté lista antes de descargar
+    time.sleep(60)
+    while True:
+        try:
+            last_date_str = ''
+            try:
+                if os.path.exists(PADRON_DB_PATH):
+                    _conn = sqlite3.connect(PADRON_DB_PATH, check_same_thread=False)
+                    row = _conn.execute(
+                        "SELECT valor FROM _cheques_meta WHERE key = 'last_import_date'"
+                    ).fetchone()
+                    _conn.close()
+                    if row:
+                        last_date_str = row[0]
+            except Exception:
+                pass
+
+            hoy_str = time.strftime('%Y%m%d')
+            necesita_update = (last_date_str != hoy_str)
+
+            if necesita_update and not _cheques_db_estado.get('corriendo'):
+                print(
+                    f"[cheques-auto] última importación={last_date_str or 'nunca'}, "
+                    f"hoy={hoy_str} → disparando actualización automática",
+                    flush=True,
+                )
+                ok = _import_cheques_zip(hoy_str)
+                if ok and list(_cartera_comercial):
+                    threading.Thread(target=_check_cheques_cartera_bg, daemon=True).start()
+                    print("[cheques-auto] Verificación de cheques de cartera iniciada", flush=True)
+                elif not ok:
+                    # Si falla con la fecha de hoy (puede que el BCRA aún no publicó),
+                    # probar con ayer
+                    ayer = (_dt.date.today() - _dt.timedelta(days=1)).strftime('%Y%m%d')
+                    if ayer != last_date_str:
+                        print(f"[cheques-auto] Reintentando con ayer={ayer}", flush=True)
+                        ok2 = _import_cheques_zip(ayer)
+                        if ok2 and list(_cartera_comercial):
+                            threading.Thread(target=_check_cheques_cartera_bg, daemon=True).start()
+            else:
+                print(f"[cheques-auto] DB al día ({last_date_str})", flush=True)
+        except Exception as _cau_e:
+            print(f"[cheques-auto] Error: {_cau_e}", flush=True)
+
+        time.sleep(86400)  # Volver a verificar en 24 horas
+
+
+threading.Thread(target=_cheques_auto_update_loop, daemon=True).start()
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port, threaded=True)
