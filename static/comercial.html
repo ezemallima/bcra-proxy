@@ -3866,19 +3866,35 @@ document.getElementById('cuit-input').addEventListener('keypress',e=>{if(e.key==
 
 // ── Guard dual: Supabase Auth + sesión legacy CUIT/PIN ───────────────────────
 (async function() {
+  function _mostrarError(msg) {
+    document.getElementById('loading-overlay').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+    var tc = document.querySelector('.tab-content');
+    if (tc) tc.innerHTML =
+      '<div style="padding:32px 24px;text-align:center;color:#991b1b;margin:24px;background:#fff3f3;border:1px solid #fca5a5;border-radius:12px;">' +
+      '<b>Error al iniciar la app:</b><br><br>' +
+      '<code style="font-size:11px;color:#7f1d1d;word-break:break-all;">' + msg + '</code>' +
+      '<br><br><button onclick="localStorage.clear();window.location.replace(\'/login\')" ' +
+      'style="padding:10px 20px;background:#2563eb;color:#fff;border:none;border-radius:8px;cursor:pointer;">' +
+      'Borrar sesión y reintentar</button></div>';
+  }
   try {
-    // Camino 0: sesión legacy SINCRÓNICA — verificar PRIMERO para no depender del CDN de Supabase
-    // Los vendedores con CUIT+PIN arrancan al instante sin esperar ninguna red externa
+    // Camino 0: sesión legacy SINCRÓNICA — verificar PRIMERO (no necesita CDN de Supabase)
+    var _legacySess = null;
     var _savedSess = localStorage.getItem('vendeSeguro_session');
     if (_savedSess) {
       try {
         var _sess = JSON.parse(_savedSess);
         if (_sess && _sess.nombre && _sess.cuit) {
-          SESSION = { nombre: _sess.nombre, cuit: _sess.cuit, rol: _sess.rol || 'vendedor' };
-          await iniciarApp(null);
-          return;
+          _legacySess = { nombre: _sess.nombre, cuit: _sess.cuit, rol: _sess.rol || 'vendedor' };
         }
-      } catch(_) {}
+      } catch(_e1) {}
+    }
+
+    if (_legacySess) {
+      SESSION = _legacySess;
+      await iniciarApp(null);  // errores propagan al catch externo → se muestran en pantalla
+      return;
     }
 
     // Camino 1: Supabase Auth con timeout de 6s (usuarios email/password)
@@ -3888,7 +3904,7 @@ document.getElementById('cuit-input').addEventListener('keypress',e=>{if(e.key==
         verificarSesion(),
         new Promise(function(_, reject) { setTimeout(function() { reject(new Error('timeout')); }, 6000); })
       ]);
-    } catch(_) { perfil = null; }
+    } catch(_e2) { perfil = null; }
 
     if (perfil) { await iniciarApp(perfil); return; }
 
@@ -3896,14 +3912,8 @@ document.getElementById('cuit-input').addEventListener('keypress',e=>{if(e.key==
     window.location.replace('/login');
 
   } catch (e) {
-    console.error('[guard] Excepción crítica en arranque:', e);
-    document.getElementById('loading-overlay').style.display = 'none';
-    document.getElementById('app').style.display = 'flex';
-    document.querySelector('.tab-content').innerHTML =
-      '<div style="padding:40px 24px;text-align:center;color:#991b1b">' +
-      '<b>Error al iniciar la aplicación.</b><br><small>' + (e?.message || e) + '</small><br><br>' +
-      '<button onclick="doLogout()" style="margin-top:8px;padding:10px 20px;background:#2563eb;color:#fff;border:none;border-radius:8px;cursor:pointer">Volver al login</button>' +
-      '</div>';
+    console.error('[guard] Error crítico:', e);
+    _mostrarError(e?.message || String(e));
   }
 })();
 
