@@ -3446,41 +3446,22 @@ async function enviarEstadoCuenta(btnEl) {
     f.fechaPago && Math.floor((hoy - parseFecha(f.fechaPago)) / 86400000) > 0
   ).length;
   const notaVenc = cntVencidas > 0
-    ? '
-' + cntVencidas + ' factura' + (cntVencidas !== 1 ? 's' : '') + ' vencida' + (cntVencidas !== 1 ? 's' : '')
+    ? '\n' + cntVencidas + ' factura' + (cntVencidas !== 1 ? 's' : '') + ' vencida' + (cntVencidas !== 1 ? 's' : '')
     : '';
 
   const msg =
-    'Estimado/a ' + nombre + ', ' + saludo + '.
-
-' +
-    'Te acerco el detalle de tu cuenta corriente en *Bodega Piattelli*:
-
-' +
-    '*FACTURAS PENDIENTES*
-
-' +
-    detalle + '
-
-' +
-    SEP + '
-' +
-    '*TOTAL PENDIENTE: $' + fmtFull(totalSel) + '*' + notaVenc + '
-' +
-    SEP + '
-
-' +
-    '*Datos de Pago:*
-' +
-    'Banco Galicia - CC $: 10653-1 081-8
-' +
-    'CBU: 0070081820000010653188
-' +
-    'ALIAS: ARTELINCGALICIA
-' +
-    'CUIT: 30710295022
-
-' +
+    'Estimado/a ' + nombre + ', ' + saludo + '.\n\n' +
+    'Te acerco el detalle de tu cuenta corriente en *Bodega Piattelli*:\n\n' +
+    '*FACTURAS PENDIENTES*\n\n' +
+    detalle + '\n\n' +
+    SEP + '\n' +
+    '*TOTAL PENDIENTE: $' + fmtFull(totalSel) + '*' + notaVenc + '\n' +
+    SEP + '\n\n' +
+    '*Datos de Pago:*\n' +
+    'Banco Galicia - CC $: 10653-1 081-8\n' +
+    'CBU: 0070081820000010653188\n' +
+    'ALIAS: ARTELINCGALICIA\n' +
+    'CUIT: 30710295022\n\n' +
     'Quedo a tu disposicion para coordinar el pago. Muchas gracias!';
 
   window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
