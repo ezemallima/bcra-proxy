@@ -737,7 +737,52 @@
   #btn-confirmar-rendicion:active { background: #15803d; }
   #btn-confirmar-rendicion:disabled { background: #86efac; cursor: not-allowed; }
 </style>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js">
+// ── IMPORTAR ZIP DE FACTURAS ODOO ─────────────────────────────────────────────
+async function importarZipFacturas(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById('zip-facturas-status');
+  const btnEl    = document.getElementById('btn-zip-import');
+  if (statusEl) statusEl.textContent = 'Subiendo...';
+  if (btnEl)    btnEl.style.opacity = '0.6';
+  try {
+    const form = new FormData();
+    form.append('zip', file);
+    const resp = await fetch(API + '/api/facturas/importar-zip', { method: 'POST', body: form });
+    const data = await resp.json();
+    if (data.ok) {
+      if (statusEl) statusEl.innerHTML =
+        '<span style="color:#16a34a;">✓ ' + data.total_pdfs + ' PDFs disponibles (' + (data.fecha||'').slice(0,10) + ')</span>';
+    } else {
+      if (statusEl) statusEl.innerHTML = '<span style="color:#dc2626;">Error: ' + (data.error || 'desconocido') + '</span>';
+    }
+  } catch(e) {
+    if (statusEl) statusEl.innerHTML = '<span style="color:#dc2626;">Error de conexión</span>';
+  } finally {
+    if (btnEl) btnEl.style.opacity = '1';
+    input.value = '';
+  }
+}
+
+// Cargar estado del ZIP al abrir el modal de facturas
+async function cargarZipFacturasStatus() {
+  const statusEl = document.getElementById('zip-facturas-status');
+  if (!statusEl) return;
+  try {
+    const resp = await fetch(API + '/api/facturas/zip-meta');
+    if (!resp.ok) return;
+    const meta = await resp.json();
+    if (meta.zip_disponible && meta.total_pdfs) {
+      statusEl.innerHTML =
+        '<span style="color:#16a34a;">✓ ' + meta.total_pdfs + ' PDFs disponibles (' + (meta.fecha_importacion||'').slice(0,10) + ')</span>';
+    } else {
+      statusEl.textContent = 'Sin ZIP cargado';
+    }
+  } catch(e) {}
+}
+
+</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/supabase-session.js"></script>
 </head>
@@ -1945,6 +1990,7 @@ async function abrirModalCliente(cuit, nombre) {
     factEl.innerHTML = sd?.facturas?.length
       ? renderFacturas(sd, nombre)
       : '<div class="empty"><div class="empty-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="20 6 9 17 4 12"/></svg></div><div class="empty-text">Sin facturas pendientes</div></div>';
+    setTimeout(cargarZipFacturasStatus, 200);
   });
 
   // ── BCRA: renderiza en cuanto llegan los 3 endpoints (sin esperar score) ──
@@ -2073,6 +2119,16 @@ function renderFacturas(data, nombre) {
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20.52 3.48A11.93 11.93 0 0 0 12 0C5.37 0 0 5.37 0 12c0 2.11.55 4.17 1.6 5.98L0 24l6.18-1.62A11.96 11.96 0 0 0 12 24c6.63 0 12-5.37 12-12 0-3.21-1.25-6.22-3.48-8.52zm-8.52 18.43c-1.8 0-3.56-.48-5.1-1.39l-.37-.22-3.8.99 1.02-3.68-.24-.38A9.93 9.93 0 0 1 2.07 12c0-5.48 4.45-9.93 9.93-9.93 2.65 0 5.14 1.03 7.01 2.9a9.88 9.88 0 0 1 2.92 7.03c0 5.48-4.45 9.93-9.93 9.93zm5.44-7.44c-.3-.15-1.77-.87-2.04-.97-.28-.1-.48-.15-.68.15-.2.3-.77.97-.94 1.17-.17.2-.35.22-.65.07a8.14 8.14 0 0 1-2.4-1.48 9.1 9.1 0 0 1-1.66-2.07c-.17-.3-.02-.46.13-.61.13-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.07-.15-.68-1.63-.93-2.23-.24-.58-.49-.5-.68-.51-.17-.01-.37-.01-.57-.01-.2 0-.52.07-.79.37-.27.3-1.04 1.02-1.04 2.48s1.07 2.88 1.21 3.08c.15.2 2.1 3.2 5.08 4.49.71.31 1.26.49 1.69.63.71.23 1.36.2 1.87.12.57-.08 1.77-.72 2.02-1.42.25-.7.25-1.3.17-1.42-.08-.12-.28-.2-.57-.35z" fill="currentColor"/></svg>
     <span id="wsp-btn-label">Enviar Estado de Cuenta</span>
   </button>
+
+  <!-- Importar ZIP de facturas Odoo para enviar PDFs por WhatsApp -->
+  <div id="zip-facturas-bar" style="display:flex;align-items:center;gap:8px;margin:6px 0 2px;flex-wrap:wrap;">
+    <label for="zip-facturas-input" id="btn-zip-import" style="display:inline-flex;align-items:center;gap:6px;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:600;color:#475569;cursor:pointer;transition:background .15s;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      Subir ZIP facturas
+    </label>
+    <input type="file" id="zip-facturas-input" accept=".zip" style="display:none" onchange="importarZipFacturas(this)">
+    <span id="zip-facturas-status" style="font-size:11px;color:#64748b;"></span>
+  </div>
 
   <!-- Barra de confirmación de rendición (se muestra cuando hay cobros pendientes de confirmar) -->
   <div id="barra-rendicion">
@@ -3226,7 +3282,7 @@ function actualizarTotalSeleccionado() {
   el.textContent = n === 0 ? '' : `${n} factura${n!==1?'s':''} seleccionada${n!==1?'s':''} · Total: $${fmtFull(total)}`;
 }
 
-function enviarEstadoCuenta(btnEl) {
+async function enviarEstadoCuenta(btnEl) {
   const data   = window._modalFacturasData;
   const nombre = window._modalNombre || '';
   if (!data?.facturas?.length) { alert('No hay facturas pendientes para enviar.'); return; }
@@ -3235,15 +3291,28 @@ function enviarEstadoCuenta(btnEl) {
   const sorted     = [...data.facturas].sort((a,b) => parseFecha(a.fechaPago)-parseFecha(b.fechaPago));
   const seleccionadas = sorted.filter((_, i) => chks[i]?.checked);
 
-  if (!seleccionadas.length) { alert('Seleccioná al menos una factura para enviar.'); return; }
+  if (!seleccionadas.length) { alert('Seleccioná al menos una factura para enviar.'); return; }
 
   const hora   = new Date().getHours();
   const saludo = hora < 13 ? 'Buenos días' : hora < 20 ? 'Buenas tardes' : 'Buenas noches';
   const hoy    = new Date(); hoy.setHours(0, 0, 0, 0);
 
   const SEP = '------------------------------';
+  const BASE_URL = window.location.origin;
 
-  // Una entrada por factura: negrita sin espacios antes del *
+  // Verificar qué PDFs están disponibles en el ZIP importado
+  let pdfDisponibles = new Set();
+  try {
+    const metaResp = await fetch(API + '/api/facturas/zip-meta');
+    if (metaResp.ok) {
+      const meta = await metaResp.json();
+      if (meta.zip_disponible && Array.isArray(meta.nombres)) {
+        meta.nombres.forEach(n => pdfDisponibles.add(n.replace(/\.pdf$/i, '').toLowerCase()));
+      }
+    }
+  } catch(e) { /* sin PDFs disponibles, no bloquear el envío */ }
+
+  // Una entrada por factura con link al PDF si está disponible
   const detalle = seleccionadas.map(f => {
     const fechaEm  = f.fechaFactura || '-';
     const fechaVto = f.fechaPago    || '-';
@@ -3251,40 +3320,67 @@ function enviarEstadoCuenta(btnEl) {
       ? Math.floor((hoy - parseFecha(f.fechaPago)) / 86400000)
       : null;
     const esVencida = diasAtraso !== null && diasAtraso > 0;
+    const nro = f.nroFactura || '';
 
     const lineas = [
-      '*Nro: ' + (f.nroFactura || 'Sin numero') + '*',
+      '*Nro: ' + (nro || 'Sin numero') + '*',
       'Emitida:     ' + fechaEm,
       (esVencida ? 'Vencio el:   ' : 'Vencimiento: ') + fechaVto,
       'Saldo:       *$' + fmtFull(f.saldo) + '*',
     ];
     if (esVencida) {
-      lineas.push('!! VENCIDA hace ' + diasAtraso + ' dia' + (diasAtraso !== 1 ? 's' : ''));
+      lineas.push('⚠️ VENCIDA hace ' + diasAtraso + ' dia' + (diasAtraso !== 1 ? 's' : ''));
     }
-    return lineas.join('\n');
-  }).join('\n\n');
+    if (nro && pdfDisponibles.has(nro.toLowerCase())) {
+      const pdfUrl = BASE_URL + '/api/facturas-pdf/' + encodeURIComponent(nro + '.pdf');
+      lineas.push('📄 Ver factura: ' + pdfUrl);
+    }
+    return lineas.join('
+');
+  }).join('
+
+');
 
   const totalSel    = seleccionadas.reduce((acc, f) => acc + (parseFloat(f.saldo) || 0), 0);
   const cntVencidas = seleccionadas.filter(f =>
     f.fechaPago && Math.floor((hoy - parseFecha(f.fechaPago)) / 86400000) > 0
   ).length;
   const notaVenc = cntVencidas > 0
-    ? '\n' + cntVencidas + ' factura' + (cntVencidas !== 1 ? 's' : '') + ' vencida' + (cntVencidas !== 1 ? 's' : '')
+    ? '
+' + cntVencidas + ' factura' + (cntVencidas !== 1 ? 's' : '') + ' vencida' + (cntVencidas !== 1 ? 's' : '')
     : '';
 
   const msg =
-    'Estimado/a ' + nombre + ', ' + saludo + '.\n\n' +
-    'Te acerco el detalle de tu cuenta corriente en *Bodega Piattelli*:\n\n' +
-    '*FACTURAS PENDIENTES*\n\n' +
-    detalle + '\n\n' +
-    SEP + '\n' +
-    '*TOTAL PENDIENTE: $' + fmtFull(totalSel) + '*' + notaVenc + '\n' +
-    SEP + '\n\n' +
-    '*Datos de Pago:*\n' +
-    'Banco Galicia - CC $: 10653-1 081-8\n' +
-    'CBU: 0070081820000010653188\n' +
-    'ALIAS: ARTELINCGALICIA\n' +
-    'CUIT: 30710295022\n\n' +
+    'Estimado/a ' + nombre + ', ' + saludo + '.
+
+' +
+    'Te acerco el detalle de tu cuenta corriente en *Bodega Piattelli*:
+
+' +
+    '*FACTURAS PENDIENTES*
+
+' +
+    detalle + '
+
+' +
+    SEP + '
+' +
+    '*TOTAL PENDIENTE: $' + fmtFull(totalSel) + '*' + notaVenc + '
+' +
+    SEP + '
+
+' +
+    '*Datos de Pago:*
+' +
+    'Banco Galicia - CC $: 10653-1 081-8
+' +
+    'CBU: 0070081820000010653188
+' +
+    'ALIAS: ARTELINCGALICIA
+' +
+    'CUIT: 30710295022
+
+' +
     'Quedo a tu disposicion para coordinar el pago. Muchas gracias!';
 
   window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');

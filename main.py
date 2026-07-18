@@ -4,6 +4,7 @@ from flask_cors import CORS
 import requests
 import urllib3
 import os
+import io
 import json
 import sqlite3
 import time
@@ -10913,6 +10914,178 @@ def facturas_estado_resumen():
         if e.get('enviado_whatsapp'):
             cuits_wa.add(c)
     return jsonify({'cobradas': list(cuits_cobradas), 'wa_enviadas': list(cuits_wa)})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FACTURAS PDF — ZIP importado desde Odoo
+# Flujo: comercial sube el ZIP mensual → se guarda en disco + R2 (backup) →
+# endpoint /api/facturas-pdf/<nombre> extrae y sirve el PDF al vuelo →
+# link se incluye en el mensaje de WhatsApp de cuenta corriente.
+# ══════════════════════════════════════════════════════════════════════════════
+
+_FACTURAS_ZIP_LOCAL  = os.path.join(DATA_DIR, 'facturas_odoo.zip')
+_FACTURAS_ZIP_R2_KEY = 'facturas_odoo.zip'
+_FACTURAS_ZIP_META   = os.path.join(DATA_DIR, 'facturas_zip_meta.json')
+_FACTURAS_ZIP_LOCK   = threading.Lock()
+
+
+def _facturas_zip_meta_read() -> dict:
+    try:
+        with open(_FACTURAS_ZIP_META, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _r2_upload_bytes(key: str, data: bytes, content_type: str = 'application/octet-stream') -> bool:
+    """Sube bytes a R2. Retorna True si OK."""
+    if not _R2_CONFIGURADO:
+        return False
+    try:
+        import boto3
+        from botocore.config import Config
+        import io
+        s3 = boto3.client(
+            service_name='s3',
+            endpoint_url=R2_ENDPOINT_URL,
+            aws_access_key_id=R2_ACCESS_KEY_ID,
+            aws_secret_access_key=R2_SECRET_ACCESS_KEY,
+            config=Config(signature_version='s3v4'),
+        )
+        s3.upload_fileobj(
+            io.BytesIO(data), R2_BUCKET_NAME, key,
+            ExtraArgs={'ContentType': content_type},
+        )
+        return True
+    except Exception as e:
+        print(f"[r2-upload] Error subiendo {key}: {e}", flush=True)
+        return False
+
+
+def _r2_download_bytes(key: str) -> bytes | None:
+    """Descarga un objeto de R2. Retorna bytes o None si no existe/falla."""
+    if not _R2_CONFIGURADO:
+        return None
+    try:
+        import boto3
+        import io
+        from botocore.config import Config
+        s3 = boto3.client(
+            service_name='s3',
+            endpoint_url=R2_ENDPOINT_URL,
+            aws_access_key_id=R2_ACCESS_KEY_ID,
+            aws_secret_access_key=R2_SECRET_ACCESS_KEY,
+            config=Config(signature_version='s3v4'),
+        )
+        buf = io.BytesIO()
+        s3.download_fileobj(R2_BUCKET_NAME, key, buf)
+        return buf.getvalue()
+    except Exception as e:
+        print(f"[r2-download] Error descargando {key}: {e}", flush=True)
+        return None
+
+
+def _facturas_zip_ensure_local() -> bool:
+    """Garantiza que el ZIP esté en disco. Si no está, lo descarga desde R2."""
+    if os.path.exists(_FACTURAS_ZIP_LOCAL):
+        return True
+    print("[facturas-zip] ZIP no encontrado en disco — intentando recuperar desde R2", flush=True)
+    data = _r2_download_bytes(_FACTURAS_ZIP_R2_KEY)
+    if data:
+        with _FACTURAS_ZIP_LOCK:
+            with open(_FACTURAS_ZIP_LOCAL, 'wb') as f:
+                f.write(data)
+        print(f"[facturas-zip] ZIP recuperado desde R2 ({len(data)//1024} KB)", flush=True)
+        return True
+    return False
+
+
+@app.route("/api/facturas/importar-zip", methods=["POST"])
+def importar_facturas_zip():
+    """Recibe el ZIP mensual de facturas Odoo, lo guarda en disco y en R2."""
+    if 'zip' not in request.files:
+        return jsonify({"ok": False, "error": "Campo 'zip' requerido"}), 400
+    archivo = request.files['zip']
+    if not archivo.filename.lower().endswith('.zip'):
+        return jsonify({"ok": False, "error": "El archivo debe ser un ZIP"}), 400
+    try:
+        import zipfile
+        raw = archivo.read()
+        # Validar que sea un ZIP válido con PDFs
+        with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+            nombres = [n for n in zf.namelist() if n.lower().endswith('.pdf')]
+        if not nombres:
+            return jsonify({"ok": False, "error": "El ZIP no contiene archivos PDF"}), 400
+
+        # Guardar en disco
+        with _FACTURAS_ZIP_LOCK:
+            with open(_FACTURAS_ZIP_LOCAL, 'wb') as f:
+                f.write(raw)
+
+        # Subir a R2 en background (no bloquear la respuesta)
+        def _bg_upload():
+            ok = _r2_upload_bytes(_FACTURAS_ZIP_R2_KEY, raw, 'application/zip')
+            print(f"[facturas-zip] R2 upload {'OK' if ok else 'FALLÓ'}", flush=True)
+        threading.Thread(target=_bg_upload, daemon=True).start()
+
+        # Guardar meta
+        meta = {
+            'fecha_importacion': time.strftime('%Y-%m-%d %H:%M'),
+            'total_pdfs': len(nombres),
+            'nombres': nombres,
+        }
+        with open(_FACTURAS_ZIP_META, 'w', encoding='utf-8') as f:
+            json.dump(meta, f, ensure_ascii=False)
+
+        print(f"[facturas-zip] Importado OK — {len(nombres)} PDFs", flush=True)
+        return jsonify({"ok": True, "total_pdfs": len(nombres), "fecha": meta['fecha_importacion']})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/facturas/zip-meta")
+def facturas_zip_meta_endpoint():
+    """Metadatos del ZIP importado: fecha, total PDFs y lista de nombres."""
+    meta = _facturas_zip_meta_read()
+    existe = os.path.exists(_FACTURAS_ZIP_LOCAL)
+    return jsonify({**meta, "zip_disponible": existe or bool(meta)})
+
+
+@app.route("/api/facturas-pdf/<path:nombre_pdf>")
+def servir_factura_pdf(nombre_pdf):
+    """Extrae y sirve un PDF específico del ZIP importado.
+    nombre_pdf: nombre sin extensión o con .pdf (ej: 'FA-A 00016-00007069' o 'FA-A 00016-00007069.pdf')
+    """
+    import zipfile
+    from flask import send_file
+
+    # Normalizar nombre
+    nombre_limpio = nombre_pdf.strip()
+    if not nombre_limpio.lower().endswith('.pdf'):
+        nombre_limpio += '.pdf'
+
+    if not _facturas_zip_ensure_local():
+        return jsonify({"error": "ZIP de facturas no disponible. Por favor importalo desde la app."}), 404
+    try:
+        with _FACTURAS_ZIP_LOCK:
+            with zipfile.ZipFile(_FACTURAS_ZIP_LOCAL, 'r') as zf:
+                nombres_zip = zf.namelist()
+                # Buscar match exacto o case-insensitive
+                match = next(
+                    (n for n in nombres_zip if n.lower() == nombre_limpio.lower()),
+                    None,
+                )
+                if not match:
+                    return jsonify({"error": f"PDF '{nombre_limpio}' no encontrado en el ZIP"}), 404
+                pdf_bytes = zf.read(match)
+        return send_file(
+            io.BytesIO(pdf_bytes),
+            mimetype='application/pdf',
+            as_attachment=False,
+            download_name=nombre_limpio,
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/alertas-vencimiento")
