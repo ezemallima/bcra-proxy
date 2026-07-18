@@ -3438,11 +3438,8 @@ async function enviarEstadoCuenta(btnEl) {
       const pdfUrl = BASE_URL + '/api/facturas-pdf/' + encodeURIComponent(nro + '.pdf');
       lineas.push('📄 Ver factura: ' + pdfUrl);
     }
-    return lineas.join('
-');
-  }).join('
-
-');
+    return lineas.join('\n');
+  }).join('\n\n');
 
   const totalSel    = seleccionadas.reduce((acc, f) => acc + (parseFloat(f.saldo) || 0), 0);
   const cntVencidas = seleccionadas.filter(f =>
