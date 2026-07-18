@@ -738,30 +738,43 @@
   #btn-confirmar-rendicion:disabled { background: #86efac; cursor: not-allowed; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js">
-// ── IMPORTAR ZIP DE FACTURAS ODOO ─────────────────────────────────────────────
-async function importarZipFacturas(input) {
-  const file = input.files[0];
-  if (!file) return;
-  const statusEl = document.getElementById('zip-facturas-status');
-  const btnEl    = document.getElementById('btn-zip-import');
-  if (statusEl) statusEl.textContent = 'Subiendo...';
-  if (btnEl)    btnEl.style.opacity = '0.6';
+// ── IMPORTAR ZIP DE FACTURAS ODOO DESDE GOOGLE DRIVE ──────────────────────────
+function abrirPanelZip() {
+  const panel = document.getElementById('zip-drive-panel');
+  if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+function cerrarPanelZip() {
+  const panel = document.getElementById('zip-drive-panel');
+  if (panel) panel.style.display = 'none';
+}
+
+async function importarZipDesdeDrive() {
+  const urlInput  = document.getElementById('zip-drive-url');
+  const progressEl = document.getElementById('zip-drive-progress');
+  const statusEl   = document.getElementById('zip-facturas-status');
+  const url = (urlInput?.value || '').trim();
+  if (!url) { alert('Pegá la URL de Google Drive primero.'); return; }
+
+  if (progressEl) { progressEl.style.display = 'block'; progressEl.textContent = 'Descargando desde Drive... (puede tardar 1-2 min según el tamaño)'; }
+  if (statusEl)   statusEl.textContent = '';
+
   try {
-    const form = new FormData();
-    form.append('zip', file);
-    const resp = await fetch(API + '/api/facturas/importar-zip', { method: 'POST', body: form });
+    const resp = await fetch(API + '/api/facturas/importar-desde-drive', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ url }),
+    });
     const data = await resp.json();
     if (data.ok) {
       if (statusEl) statusEl.innerHTML =
         '<span style="color:#16a34a;">✓ ' + data.total_pdfs + ' PDFs disponibles (' + (data.fecha||'').slice(0,10) + ')</span>';
+      if (progressEl) progressEl.style.display = 'none';
+      cerrarPanelZip();
     } else {
-      if (statusEl) statusEl.innerHTML = '<span style="color:#dc2626;">Error: ' + (data.error || 'desconocido') + '</span>';
+      if (progressEl) progressEl.innerHTML = '<span style="color:#dc2626;">Error: ' + (data.error || 'desconocido') + '</span>';
     }
   } catch(e) {
-    if (statusEl) statusEl.innerHTML = '<span style="color:#dc2626;">Error de conexión</span>';
-  } finally {
-    if (btnEl) btnEl.style.opacity = '1';
-    input.value = '';
+    if (progressEl) progressEl.innerHTML = '<span style="color:#dc2626;">Error de conexión</span>';
   }
 }
 
@@ -777,7 +790,7 @@ async function cargarZipFacturasStatus() {
       statusEl.innerHTML =
         '<span style="color:#16a34a;">✓ ' + meta.total_pdfs + ' PDFs disponibles (' + (meta.fecha_importacion||'').slice(0,10) + ')</span>';
     } else {
-      statusEl.textContent = 'Sin ZIP cargado';
+      statusEl.innerHTML = '<span style="color:#94a3b8;">Sin PDFs cargados</span>';
     }
   } catch(e) {}
 }
@@ -2120,14 +2133,25 @@ function renderFacturas(data, nombre) {
     <span id="wsp-btn-label">Enviar Estado de Cuenta</span>
   </button>
 
-  <!-- Importar ZIP de facturas Odoo para enviar PDFs por WhatsApp -->
-  <div id="zip-facturas-bar" style="display:flex;align-items:center;gap:8px;margin:6px 0 2px;flex-wrap:wrap;">
-    <label for="zip-facturas-input" id="btn-zip-import" style="display:inline-flex;align-items:center;gap:6px;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:600;color:#475569;cursor:pointer;transition:background .15s;">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-      Subir ZIP facturas
-    </label>
-    <input type="file" id="zip-facturas-input" accept=".zip" style="display:none" onchange="importarZipFacturas(this)">
-    <span id="zip-facturas-status" style="font-size:11px;color:#64748b;"></span>
+  <!-- Importar ZIP de facturas Odoo desde Google Drive -->
+  <div id="zip-facturas-bar" style="margin:6px 0 2px;">
+    <div id="zip-facturas-status-row" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <button onclick="abrirPanelZip()" id="btn-zip-import" style="display:inline-flex;align-items:center;gap:6px;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:600;color:#475569;cursor:pointer;transition:background .15s;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        PDFs de facturas
+      </button>
+      <span id="zip-facturas-status" style="font-size:11px;color:#64748b;"></span>
+    </div>
+    <div id="zip-drive-panel" style="display:none;margin-top:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;">
+      <div style="font-size:12px;font-weight:600;color:#334155;margin-bottom:6px;">Importar ZIP desde Google Drive</div>
+      <div style="font-size:11px;color:#64748b;margin-bottom:8px;">Compartí el archivo en Drive con acceso "Cualquier persona con el link" y pegá la URL acá.</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <input id="zip-drive-url" type="url" placeholder="https://drive.google.com/file/d/..." style="flex:1;min-width:200px;padding:7px 10px;border:1px solid #cbd5e1;border-radius:7px;font-size:12px;color:#1e293b;background:#fff;">
+        <button onclick="importarZipDesdeDrive()" style="background:#2563eb;color:#fff;border:none;border-radius:7px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">Descargar e importar</button>
+        <button onclick="cerrarPanelZip()" style="background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;line-height:1;">×</button>
+      </div>
+      <div id="zip-drive-progress" style="margin-top:8px;font-size:11px;color:#64748b;display:none;"></div>
+    </div>
   </div>
 
   <!-- Barra de confirmación de rendición (se muestra cuando hay cobros pendientes de confirmar) -->

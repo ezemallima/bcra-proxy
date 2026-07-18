@@ -11000,46 +11000,94 @@ def _facturas_zip_ensure_local() -> bool:
     return False
 
 
+def _procesar_zip_facturas(raw: bytes) -> dict:
+    """Valida el ZIP, lo guarda en disco, sube a R2 y escribe el meta. Retorna meta dict."""
+    import zipfile
+    with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+        nombres = [n for n in zf.namelist() if n.lower().endswith('.pdf')]
+    if not nombres:
+        raise ValueError("El ZIP no contiene archivos PDF")
+    with _FACTURAS_ZIP_LOCK:
+        with open(_FACTURAS_ZIP_LOCAL, 'wb') as f:
+            f.write(raw)
+    def _bg_upload():
+        ok = _r2_upload_bytes(_FACTURAS_ZIP_R2_KEY, raw, 'application/zip')
+        print(f"[facturas-zip] R2 upload {'OK' if ok else 'FALLÓ'}", flush=True)
+    threading.Thread(target=_bg_upload, daemon=True).start()
+    meta = {
+        'fecha_importacion': time.strftime('%Y-%m-%d %H:%M'),
+        'total_pdfs': len(nombres),
+        'nombres': nombres,
+    }
+    with open(_FACTURAS_ZIP_META, 'w', encoding='utf-8') as f:
+        json.dump(meta, f, ensure_ascii=False)
+    print(f"[facturas-zip] Importado OK — {len(nombres)} PDFs", flush=True)
+    return meta
+
+
 @app.route("/api/facturas/importar-zip", methods=["POST"])
 def importar_facturas_zip():
-    """Recibe el ZIP mensual de facturas Odoo, lo guarda en disco y en R2."""
+    """Recibe el ZIP mensual de facturas Odoo subido directamente (multipart)."""
     if 'zip' not in request.files:
         return jsonify({"ok": False, "error": "Campo 'zip' requerido"}), 400
     archivo = request.files['zip']
     if not archivo.filename.lower().endswith('.zip'):
         return jsonify({"ok": False, "error": "El archivo debe ser un ZIP"}), 400
     try:
-        import zipfile
-        raw = archivo.read()
-        # Validar que sea un ZIP válido con PDFs
-        with zipfile.ZipFile(io.BytesIO(raw)) as zf:
-            nombres = [n for n in zf.namelist() if n.lower().endswith('.pdf')]
-        if not nombres:
-            return jsonify({"ok": False, "error": "El ZIP no contiene archivos PDF"}), 400
-
-        # Guardar en disco
-        with _FACTURAS_ZIP_LOCK:
-            with open(_FACTURAS_ZIP_LOCAL, 'wb') as f:
-                f.write(raw)
-
-        # Subir a R2 en background (no bloquear la respuesta)
-        def _bg_upload():
-            ok = _r2_upload_bytes(_FACTURAS_ZIP_R2_KEY, raw, 'application/zip')
-            print(f"[facturas-zip] R2 upload {'OK' if ok else 'FALLÓ'}", flush=True)
-        threading.Thread(target=_bg_upload, daemon=True).start()
-
-        # Guardar meta
-        meta = {
-            'fecha_importacion': time.strftime('%Y-%m-%d %H:%M'),
-            'total_pdfs': len(nombres),
-            'nombres': nombres,
-        }
-        with open(_FACTURAS_ZIP_META, 'w', encoding='utf-8') as f:
-            json.dump(meta, f, ensure_ascii=False)
-
-        print(f"[facturas-zip] Importado OK — {len(nombres)} PDFs", flush=True)
-        return jsonify({"ok": True, "total_pdfs": len(nombres), "fecha": meta['fecha_importacion']})
+        meta = _procesar_zip_facturas(archivo.read())
+        return jsonify({"ok": True, "total_pdfs": meta['total_pdfs'], "fecha": meta['fecha_importacion']})
     except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/facturas/importar-desde-drive", methods=["POST"])
+def importar_facturas_desde_drive():
+    """Descarga el ZIP de facturas Odoo directamente desde Google Drive.
+    El servidor hace la descarga — evita límites de upload del navegador.
+    Payload: {"url": "https://drive.google.com/file/d/..."}
+    """
+    body = request.get_json(force=True) or {}
+    url  = (body.get('url') or '').strip()
+    if not url:
+        return jsonify({"ok": False, "error": "URL requerida"}), 400
+
+    try:
+        import tempfile
+        print(f"[facturas-zip] Descargando desde Drive: {url[:80]}", flush=True)
+
+        file_id = _extraer_gdrive_id(url)
+        if not file_id:
+            return jsonify({"ok": False, "error": "URL de Google Drive inválida. Asegurate de compartir con 'Cualquier persona con el link'."}), 400
+
+        # Descargar con gdown (maneja la confirmación de archivos grandes de Drive)
+        tmp = tempfile.mktemp(suffix='.zip')
+        try:
+            import gdown
+            gdrive_dl = f"https://drive.google.com/uc?id={file_id}"
+            gdown.download(gdrive_dl, tmp, quiet=False)
+        except ImportError:
+            # Fallback: descarga directa si gdown no está instalado
+            dl_url = f"https://drive.google.com/uc?export=download&id={file_id}&confirm=t"
+            r = requests.get(dl_url, timeout=300, stream=True)
+            r.raise_for_status()
+            with open(tmp, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=1_048_576):
+                    f.write(chunk)
+
+        if not os.path.exists(tmp) or os.path.getsize(tmp) < 1000:
+            return jsonify({"ok": False, "error": "La descarga falló o el archivo está vacío. Verificá que el link de Drive sea público."}), 400
+
+        with open(tmp, 'rb') as f:
+            raw = f.read()
+        try:
+            os.remove(tmp)
+        except Exception:
+            pass
+
+        meta = _procesar_zip_facturas(raw)
+        return jsonify({"ok": True, "total_pdfs": meta['total_pdfs'], "fecha": meta['fecha_importacion']})
+    except Exception as e:
+        print(f"[facturas-zip] Error Drive import: {e}", flush=True)
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
