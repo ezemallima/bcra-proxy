@@ -766,8 +766,9 @@ async function importarZipDesdeDrive() {
     });
     const data = await resp.json();
     if (data.ok) {
+      const _nuevos = data.nuevos_este_import > 0 ? ' (+' + data.nuevos_este_import + ' nuevas)' : '';
       if (statusEl) statusEl.innerHTML =
-        '<span style="color:#16a34a;">✓ ' + data.total_pdfs + ' PDFs disponibles (' + (data.fecha||'').slice(0,10) + ')</span>';
+        '<span style="color:#16a34a;">✓ ' + data.total_pdfs + ' PDFs disponibles' + _nuevos + ' (' + (data.fecha||'').slice(0,10) + ')</span>';
       if (progressEl) progressEl.style.display = 'none';
       cerrarPanelZip();
     } else {
@@ -2004,6 +2005,9 @@ async function abrirModalCliente(cuit, nombre) {
       ? renderFacturas(sd, nombre)
       : '<div class="empty"><div class="empty-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="20 6 9 17 4 12"/></svg></div><div class="empty-text">Sin facturas pendientes</div></div>';
     setTimeout(cargarZipFacturasStatus, 200);
+    // Mostrar botón de importar solo al supervisor
+    const _zipBtn = document.getElementById('btn-zip-import');
+    if (_zipBtn) _zipBtn.style.display = (SESSION?.rol === 'supervisor') ? '' : 'none';
   });
 
   // ── BCRA: renderiza en cuanto llegan los 3 endpoints (sin esperar score) ──

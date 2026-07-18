@@ -11001,27 +11001,71 @@ def _facturas_zip_ensure_local() -> bool:
 
 
 def _procesar_zip_facturas(raw: bytes) -> dict:
-    """Valida el ZIP, lo guarda en disco, sube a R2 y escribe el meta. Retorna meta dict."""
+    """Merge acumulativo: agrega los PDFs del nuevo ZIP al archivo maestro existente.
+    Los PDFs de importaciones anteriores se conservan — nunca se borran.
+    Si un PDF ya existe y viene en el nuevo ZIP, se actualiza (corrección de factura).
+    El ZIP maestro resultante se guarda en disco y en R2.
+    """
     import zipfile
+
+    # Leer PDFs del nuevo ZIP
+    nuevos: dict[str, bytes] = {}
     with zipfile.ZipFile(io.BytesIO(raw)) as zf:
-        nombres = [n for n in zf.namelist() if n.lower().endswith('.pdf')]
-    if not nombres:
+        for nombre in zf.namelist():
+            if nombre.lower().endswith('.pdf'):
+                nuevos[nombre] = zf.read(nombre)
+
+    if not nuevos:
         raise ValueError("El ZIP no contiene archivos PDF")
+
     with _FACTURAS_ZIP_LOCK:
+        # Cargar PDFs existentes del ZIP maestro en memoria
+        existentes: dict[str, bytes] = {}
+        if os.path.exists(_FACTURAS_ZIP_LOCAL):
+            try:
+                with zipfile.ZipFile(_FACTURAS_ZIP_LOCAL, 'r') as zf_old:
+                    for nombre in zf_old.namelist():
+                        if nombre.lower().endswith('.pdf'):
+                            existentes[nombre] = zf_old.read(nombre)
+                print(f"[facturas-zip] ZIP maestro existente: {len(existentes)} PDFs", flush=True)
+            except Exception as e:
+                print(f"[facturas-zip] ZIP maestro corrupto, descartando: {e}", flush=True)
+                existentes = {}
+
+        # Merge: existentes + nuevos (nuevos sobreescriben si mismo nombre)
+        merged = {**existentes, **nuevos}
+        nuevos_count = len([n for n in nuevos if n not in existentes])
+        print(f"[facturas-zip] Merge: {len(existentes)} existentes + {len(nuevos)} nuevos "
+              f"({nuevos_count} agregados) = {len(merged)} total", flush=True)
+
+        # Escribir ZIP maestro
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as zf_out:
+            for nombre, data in merged.items():
+                zf_out.writestr(nombre, data)
+        merged_bytes = buf.getvalue()
+
         with open(_FACTURAS_ZIP_LOCAL, 'wb') as f:
-            f.write(raw)
+            f.write(merged_bytes)
+
+    # Subir ZIP maestro a R2 en background
     def _bg_upload():
-        ok = _r2_upload_bytes(_FACTURAS_ZIP_R2_KEY, raw, 'application/zip')
-        print(f"[facturas-zip] R2 upload {'OK' if ok else 'FALLÓ'}", flush=True)
+        ok = _r2_upload_bytes(_FACTURAS_ZIP_R2_KEY, merged_bytes, 'application/zip')
+        print(f"[facturas-zip] R2 upload {'OK' if ok else 'FALLÓ'} ({len(merged_bytes)//1024} KB)", flush=True)
     threading.Thread(target=_bg_upload, daemon=True).start()
+
+    # Meta acumulativo
+    nombres_sin_ext = [n.replace('.pdf', '').replace('.PDF', '') for n in merged]
     meta = {
-        'fecha_importacion': time.strftime('%Y-%m-%d %H:%M'),
-        'total_pdfs': len(nombres),
-        'nombres': nombres,
+        'fecha_importacion':  time.strftime('%Y-%m-%d %H:%M'),
+        'total_pdfs':         len(merged),
+        'nuevos_este_import': nuevos_count,
+        'nombres':            nombres_sin_ext,
     }
     with open(_FACTURAS_ZIP_META, 'w', encoding='utf-8') as f:
         json.dump(meta, f, ensure_ascii=False)
-    print(f"[facturas-zip] Importado OK — {len(nombres)} PDFs", flush=True)
+
+    print(f"[facturas-zip] ZIP maestro actualizado — {len(merged)} PDFs totales", flush=True)
     return meta
 
 
