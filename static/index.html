@@ -1851,6 +1851,8 @@ async function uploadArchivoGestion(input) {
       var ahora = new Date().toLocaleTimeString('es-AR', {hour:'2-digit', minute:'2-digit'});
       status.innerHTML = '✓ <strong>' + data.total + '</strong> facturas actualizadas (' + ahora + '). Los vendedores ya ven los nuevos saldos.';
       localStorage.setItem('piat_saldos_ts', Date.now().toString());
+      // Invalidar caché del portfolio para que recargue con datos frescos
+      if (typeof _pfLoaded !== 'undefined') { _pfLoaded = false; _pfData = null; }
     } else {
       area.innerHTML = '<div style="font-size:12px;color:#dc2626;">✗ ' + (data.error || 'Error') + '</div>';
       status.style.display = 'block';
