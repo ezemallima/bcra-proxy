@@ -1555,6 +1555,29 @@
       <div id="cartera-upload-status" style="font-size:13px;margin-top:8px;"></div>
     </div>
 
+    <div class="card" style="margin-top:1rem;" id="card-facturas-drive">
+      <div class="card-title">Facturas PDF (Google Drive)</div>
+      <p style="font-size:13px;color:#666;line-height:1.6;margin-bottom:12px;">
+        Conectá un archivo ZIP de facturas Odoo desde Google Drive. El servidor acumula todos los PDFs — cada semana subís solo las facturas nuevas y el historial se conserva.
+      </p>
+      <div id="facturas-drive-estado" style="margin-bottom:14px;padding:10px 12px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;font-size:13px;color:#64748b;">
+        Cargando...
+      </div>
+      <div style="margin-bottom:10px;">
+        <div style="font-size:12px;color:#64748b;margin-bottom:4px;">Enlace de Google Drive (archivo ZIP compartido — acceso "cualquiera con el enlace")</div>
+        <div class="input-row">
+          <input type="text" id="input-facturas-drive-url" placeholder="https://drive.google.com/file/d/..." style="flex:1;font-size:12px;" />
+          <button class="primary" onclick="guardarUrlFacturasDrive()">Guardar y descargar</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;">
+        <button onclick="reimportarFacturasDrive()" style="font-size:13px;padding:7px 14px;border-radius:6px;border:1px solid #3b82f6;background:#eff6ff;color:#1d4ed8;cursor:pointer;">↻ Reimportar ahora</button>
+        <span style="font-size:12px;color:#64748b;">Auto-importa cada lunes 8 AM (hora Argentina)</span>
+      </div>
+      <div id="facturas-drive-progress" style="display:none;margin-top:10px;padding:8px 12px;background:#eff6ff;border-radius:6px;font-size:13px;color:#1d4ed8;"></div>
+      <div id="facturas-drive-status" style="font-size:12px;margin-top:6px;"></div>
+    </div>
+
   </div>
 
   
@@ -3777,6 +3800,7 @@ function switchTab(tab, el) {
   if (tab === 'historial') renderHistorial();
   if (tab === 'cartera') { switchTab('buscador', null); return; }
   if (tab === 'portfolio') cargarPortfolio();
+  if (tab === 'configuracion') cargarEstadoFacturasDrive();
   if (tab === 'buscador') renderBuscador('');
   if (tab === 'alertas') {
     _alertasFilter = null;
@@ -6033,6 +6057,101 @@ async function actualizarWSP(input) {
   document.getElementById('wsp-dot').style.background = '#22c55e';
   document.getElementById('wsp-label').textContent = 'Red activa · ' + total + ' bodegas';
   statusEl.textContent = `Listo. ${nuevos} CUITs nuevos. Total: ${total} clientes indexados.`;
+}
+
+async function cargarEstadoFacturasDrive() {
+  const el = document.getElementById('facturas-drive-estado');
+  if (!el) return;
+  try {
+    const r = await fetch('/api/facturas/zip-meta');
+    if (!r.ok) { el.textContent = 'Error al cargar estado'; return; }
+    const d = await r.json();
+    const inputUrl = document.getElementById('input-facturas-drive-url');
+    if (d.drive_url && inputUrl && !inputUrl.value) inputUrl.value = d.drive_url;
+    if (!d.zip_disponible) {
+      el.innerHTML = '<span style="color:#92400e;">⚠ Sin ZIP de facturas — configurá el enlace de Drive abajo.</span>';
+      return;
+    }
+    let html = '<span style="color:#166534;">✓ ' + (d.total_pdfs || 0) + ' PDFs cargados en servidor</span>';
+    if (d.ultima_fecha) html += '<br><span style="color:#64748b;font-size:12px;">Último import: ' + d.ultima_fecha + '</span>';
+    if (d.ultimo_import_auto) html += '<br><span style="color:#64748b;font-size:12px;">Auto-import: ' + d.ultimo_import_auto + '</span>';
+    el.innerHTML = html;
+  } catch(e) {
+    el.textContent = 'Error de conexión';
+  }
+}
+
+async function guardarUrlFacturasDrive() {
+  const urlInput = document.getElementById('input-facturas-drive-url');
+  const statusEl = document.getElementById('facturas-drive-status');
+  const progressEl = document.getElementById('facturas-drive-progress');
+  const url = (urlInput ? urlInput.value : '').trim();
+  if (!url.includes('drive.google.com')) {
+    statusEl.textContent = 'URL inválida — debe ser un enlace de Google Drive.';
+    statusEl.style.color = '#b91c1c';
+    return;
+  }
+  statusEl.textContent = '';
+  try {
+    const r = await fetch('/api/facturas/configurar-drive', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({drive_url: url})
+    });
+    const d = await r.json();
+    if (!d.ok) { statusEl.textContent = d.error || 'Error al guardar'; statusEl.style.color = '#b91c1c'; return; }
+    statusEl.textContent = 'URL guardada. Iniciando descarga...';
+    statusEl.style.color = '#166534';
+    const ir = await fetch('/api/facturas/reimportar', {method: 'POST'});
+    const id = await ir.json();
+    if (!id.ok) { statusEl.textContent = id.error || 'Error al importar'; statusEl.style.color = '#b91c1c'; return; }
+    progressEl.style.display = '';
+    progressEl.textContent = 'Descargando ZIP desde Drive...';
+    await _pollFacturasEstado(progressEl, statusEl);
+  } catch(e) {
+    statusEl.textContent = 'Error: ' + e.message;
+    statusEl.style.color = '#b91c1c';
+  }
+}
+
+async function reimportarFacturasDrive() {
+  const statusEl = document.getElementById('facturas-drive-status');
+  const progressEl = document.getElementById('facturas-drive-progress');
+  statusEl.textContent = '';
+  try {
+    const r = await fetch('/api/facturas/reimportar', {method: 'POST'});
+    const d = await r.json();
+    if (!d.ok) { statusEl.textContent = d.error || 'Error al reimportar'; statusEl.style.color = '#b91c1c'; return; }
+    progressEl.style.display = '';
+    progressEl.textContent = 'Iniciando reimport...';
+    await _pollFacturasEstado(progressEl, statusEl);
+  } catch(e) {
+    statusEl.textContent = 'Error: ' + e.message;
+    statusEl.style.color = '#b91c1c';
+  }
+}
+
+async function _pollFacturasEstado(progressEl, statusEl) {
+  for (let i = 0; i < 60; i++) {
+    await new Promise(function(res) { setTimeout(res, 2000); });
+    try {
+      const r = await fetch('/api/facturas/import-estado');
+      const d = await r.json();
+      if (d.ultimo_paso) progressEl.textContent = d.ultimo_paso;
+      if (!d.corriendo) {
+        progressEl.style.display = 'none';
+        if (d.ultimo_resultado) {
+          statusEl.textContent = d.ultimo_resultado;
+          statusEl.style.color = d.ultimo_resultado.includes('Error') ? '#b91c1c' : '#166534';
+        }
+        await cargarEstadoFacturasDrive();
+        return;
+      }
+    } catch(e) { break; }
+  }
+  progressEl.style.display = 'none';
+  statusEl.textContent = 'Tiempo de espera agotado — verificá el estado más tarde.';
+  statusEl.style.color = '#92400e';
 }
 
 function guardarEnHistorial(cuit, bcraData, nombreOverride) {
