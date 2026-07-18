@@ -10923,10 +10923,140 @@ def facturas_estado_resumen():
 # link se incluye en el mensaje de WhatsApp de cuenta corriente.
 # ══════════════════════════════════════════════════════════════════════════════
 
-_FACTURAS_ZIP_LOCAL  = os.path.join(DATA_DIR, 'facturas_odoo.zip')
-_FACTURAS_ZIP_R2_KEY = 'facturas_odoo.zip'
-_FACTURAS_ZIP_META   = os.path.join(DATA_DIR, 'facturas_zip_meta.json')
-_FACTURAS_ZIP_LOCK   = threading.Lock()
+_FACTURAS_ZIP_LOCAL   = os.path.join(DATA_DIR, 'facturas_odoo.zip')
+_FACTURAS_ZIP_R2_KEY  = 'facturas_odoo.zip'
+_FACTURAS_ZIP_META    = os.path.join(DATA_DIR, 'facturas_zip_meta.json')
+_FACTURAS_CFG         = os.path.join(DATA_DIR, 'facturas_config.json')
+_FACTURAS_CFG_R2_KEY  = 'facturas_config.json'
+_FACTURAS_ZIP_LOCK    = threading.Lock()
+_FACTURAS_IMPORT_LOCK = threading.Lock()   # evita imports simultáneos
+
+# Estado del último import automático (en memoria, para polling del frontend)
+_facturas_import_estado: dict = {
+    'corriendo': False,
+    'ultimo_paso': '',
+    'ultimo_resultado': '',  # 'ok' | 'error' | ''
+    'ultima_fecha': '',
+}
+
+
+def _facturas_cfg_read() -> dict:
+    """Lee la config de facturas PDF (drive_url, etc.). Intenta disco → R2."""
+    try:
+        with open(_FACTURAS_CFG, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        pass
+    # Fallback: intentar recuperar desde R2
+    data = _r2_download_bytes(_FACTURAS_CFG_R2_KEY)
+    if data:
+        try:
+            cfg = json.loads(data.decode('utf-8'))
+            with open(_FACTURAS_CFG, 'w', encoding='utf-8') as f:
+                f.write(data.decode('utf-8'))
+            return cfg
+        except Exception:
+            pass
+    return {}
+
+
+def _facturas_cfg_write(cfg: dict):
+    with open(_FACTURAS_CFG, 'w', encoding='utf-8') as f:
+        json.dump(cfg, f, ensure_ascii=False)
+    # Backup en R2 en background
+    def _bg():
+        _r2_upload_bytes(_FACTURAS_CFG_R2_KEY, json.dumps(cfg).encode(), 'application/json')
+    threading.Thread(target=_bg, daemon=True).start()
+
+
+def _facturas_auto_import() -> bool:
+    """Descarga el ZIP desde la URL de Drive configurada y hace el merge.
+    Retorna True si importó OK, False si no hay URL o falló."""
+    if _FACTURAS_IMPORT_LOCK.locked():
+        print("[facturas-auto] Ya hay un import en curso, saltando.", flush=True)
+        return False
+    with _FACTURAS_IMPORT_LOCK:
+        cfg = _facturas_cfg_read()
+        url = (cfg.get('drive_url') or '').strip()
+        if not url:
+            print("[facturas-auto] Sin URL de Drive configurada — saltando import.", flush=True)
+            return False
+        _facturas_import_estado['corriendo']   = True
+        _facturas_import_estado['ultimo_paso'] = 'Descargando ZIP desde Drive...'
+        _facturas_import_estado['ultimo_resultado'] = ''
+        try:
+            file_id = _extraer_gdrive_id(url)
+            if not file_id:
+                raise ValueError("URL de Drive inválida")
+
+            import tempfile
+            tmp = tempfile.mktemp(suffix='.zip')
+            try:
+                import gdown
+                gdown.download(f"https://drive.google.com/uc?id={file_id}", tmp, quiet=True)
+            except ImportError:
+                dl_url = f"https://drive.google.com/uc?export=download&id={file_id}&confirm=t"
+                r = requests.get(dl_url, timeout=300, stream=True)
+                r.raise_for_status()
+                with open(tmp, 'wb') as f:
+                    for chunk in r.iter_content(chunk_size=1_048_576):
+                        f.write(chunk)
+
+            if not os.path.exists(tmp) or os.path.getsize(tmp) < 1000:
+                raise ValueError("Descarga vacía — verificá que el link de Drive sea público")
+
+            _facturas_import_estado['ultimo_paso'] = 'Procesando ZIP...'
+            with open(tmp, 'rb') as f:
+                raw = f.read()
+            try:
+                os.remove(tmp)
+            except Exception:
+                pass
+
+            meta = _procesar_zip_facturas(raw)
+
+            # Actualizar config con fecha del último import automático
+            cfg['ultimo_import_auto'] = time.strftime('%Y-%m-%d %H:%M')
+            cfg['ultimo_import_total'] = meta['total_pdfs']
+            _facturas_cfg_write(cfg)
+
+            _facturas_import_estado['ultimo_resultado'] = 'ok'
+            _facturas_import_estado['ultima_fecha']     = time.strftime('%Y-%m-%d %H:%M')
+            _facturas_import_estado['ultimo_paso']      = f"OK — {meta['total_pdfs']} PDFs totales (+{meta.get('nuevos_este_import',0)} nuevos)"
+            print(f"[facturas-auto] Import automático OK — {meta['total_pdfs']} PDFs", flush=True)
+            return True
+        except Exception as e:
+            _facturas_import_estado['ultimo_resultado'] = 'error'
+            _facturas_import_estado['ultimo_paso']      = f"Error: {e}"
+            print(f"[facturas-auto] Error: {e}", flush=True)
+            return False
+        finally:
+            _facturas_import_estado['corriendo'] = False
+
+
+def _facturas_auto_loop():
+    """Corre el import automático cada lunes a las 8 AM (hora del servidor, UTC-3 AR)."""
+    import datetime as _dt
+    time.sleep(120)  # esperar 2 min al arrancar antes del primer check
+    while True:
+        try:
+            ahora = _dt.datetime.utcnow() - _dt.timedelta(hours=3)  # hora Argentina
+            # Lunes=0, hora 8 AM
+            es_lunes = (ahora.weekday() == 0)
+            hora_ok  = (8 <= ahora.hour < 9)
+
+            if es_lunes and hora_ok:
+                cfg = _facturas_cfg_read()
+                ultima = cfg.get('ultimo_import_auto', '')
+                hoy    = ahora.strftime('%Y-%m-%d')
+                if not ultima.startswith(hoy):  # no importar dos veces el mismo día
+                    print(f"[facturas-auto] Lunes {hoy} — disparando import automático", flush=True)
+                    _facturas_auto_import()
+                else:
+                    print(f"[facturas-auto] Ya importado hoy ({hoy}), saltando.", flush=True)
+        except Exception as e:
+            print(f"[facturas-auto] Error en loop: {e}", flush=True)
+        time.sleep(3600)  # revisar cada hora
 
 
 def _facturas_zip_meta_read() -> dict:
@@ -11137,10 +11267,50 @@ def importar_facturas_desde_drive():
 
 @app.route("/api/facturas/zip-meta")
 def facturas_zip_meta_endpoint():
-    """Metadatos del ZIP importado: fecha, total PDFs y lista de nombres."""
-    meta = _facturas_zip_meta_read()
+    """Metadatos del ZIP importado: fecha, total PDFs, config Drive y estado de import."""
+    meta  = _facturas_zip_meta_read()
+    cfg   = _facturas_cfg_read()
     existe = os.path.exists(_FACTURAS_ZIP_LOCAL)
-    return jsonify({**meta, "zip_disponible": existe or bool(meta)})
+    return jsonify({
+        **meta,
+        "zip_disponible":      existe or bool(meta),
+        "drive_url_ok":        bool(cfg.get('drive_url')),
+        "ultimo_import_auto":  cfg.get('ultimo_import_auto', ''),
+        "import_estado":       _facturas_import_estado,
+    })
+
+
+@app.route("/api/facturas/configurar-drive", methods=["POST"])
+def facturas_configurar_drive():
+    """Guarda la URL de Google Drive del ZIP de facturas. Solo admin/supervisor."""
+    body = request.get_json(force=True) or {}
+    url  = (body.get('drive_url') or '').strip()
+    if not url:
+        return jsonify({"ok": False, "error": "URL requerida"}), 400
+    if not _extraer_gdrive_id(url):
+        return jsonify({"ok": False, "error": "URL de Google Drive inválida"}), 400
+    cfg = _facturas_cfg_read()
+    cfg['drive_url'] = url
+    _facturas_cfg_write(cfg)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/facturas/reimportar", methods=["POST"])
+def facturas_reimportar():
+    """Dispara el import manual desde la URL de Drive configurada (background)."""
+    if _facturas_import_estado.get('corriendo'):
+        return jsonify({"ok": False, "error": "Ya hay un import en curso"}), 202
+    cfg = _facturas_cfg_read()
+    if not cfg.get('drive_url'):
+        return jsonify({"ok": False, "error": "URL de Drive no configurada"}), 400
+    threading.Thread(target=_facturas_auto_import, daemon=True).start()
+    return jsonify({"ok": True, "mensaje": "Import iniciado en background"})
+
+
+@app.route("/api/facturas/import-estado")
+def facturas_import_estado():
+    """Polling del estado del import en curso."""
+    return jsonify(_facturas_import_estado)
 
 
 @app.route("/api/facturas-pdf/<path:nombre_pdf>")
@@ -12277,6 +12447,7 @@ def _cheques_auto_update_loop():
 
 
 threading.Thread(target=_cheques_auto_update_loop, daemon=True).start()
+threading.Thread(target=_facturas_auto_loop, daemon=True).start()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
