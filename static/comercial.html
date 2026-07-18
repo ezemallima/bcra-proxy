@@ -3866,8 +3866,15 @@ document.getElementById('cuit-input').addEventListener('keypress',e=>{if(e.key==
 // ── Guard dual: Supabase Auth + sesión legacy CUIT/PIN ───────────────────────
 (async function() {
   try {
-    // Camino 1: Supabase Auth
-    const perfil = await verificarSesion();
+    // Camino 1: Supabase Auth con timeout de 6s (evita pantalla en blanco en mobile si CDN tarda)
+    let perfil = null;
+    try {
+      perfil = await Promise.race([
+        verificarSesion(),
+        new Promise(function(_, reject) { setTimeout(function() { reject(new Error('timeout')); }, 6000); })
+      ]);
+    } catch(_) { perfil = null; }
+
     if (perfil) { await iniciarApp(perfil); return; }
 
     // Camino 2: sesión legacy (vendedores / supervisores con CUIT+PIN)
