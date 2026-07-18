@@ -10753,6 +10753,30 @@ def api_cartera_saldos():
     return api_director_data.__wrapped__()
 
 
+@app.route("/api/debug-saldos")
+@require_login
+def api_debug_saldos():
+    """Diagnóstico del estado actual de _saldos_gestion para detectar problemas de columnas."""
+    _saldos_gestion_desde_disco()
+    fuente = _saldos_gestion if _saldos_gestion else _saldos_facturas
+    clientes = list(set(s.get('cliente', '') for s in fuente))
+    vendedores = list(set(s.get('vendedor', '') for s in fuente))
+    sg_path = os.path.join(DATA_DIR, 'saldos_gestion_vendedores.json')
+    sf_path = os.path.join(DATA_DIR, 'saldos_facturas.json')
+    return jsonify({
+        'total_registros': len(fuente),
+        'clientes_unicos': len(clientes),
+        'vendedores_unicos': len(vendedores),
+        'primeros_3': fuente[:3],
+        'usando_gestion': bool(_saldos_gestion),
+        'sg_en_disco': os.path.exists(sg_path),
+        'sf_en_disco': os.path.exists(sf_path),
+        'data_dir': DATA_DIR,
+        'muestra_clientes': sorted(clientes)[:10],
+        'muestra_vendedores': sorted(vendedores)[:10],
+    })
+
+
 @app.route("/api/facturas/<cuit>")
 def api_facturas_por_cuit(cuit):
     """
@@ -11483,8 +11507,13 @@ def upload_saldos_gestion():
             col_fp = _col_fp if _col_fp is not None else 4
             col_t  = _col_t  if _col_t  is not None else 5
             col_s  = _col_s  if _col_s  is not None else 6
+            print(f"[upload-gestion] Headers detectados: {hu}", flush=True)
+            print(f"[upload-gestion] Cols → vendedor={col_v}('{hu[col_v] if col_v < len(hu) else '?'}') "
+                  f"cliente={col_c}('{hu[col_c] if col_c < len(hu) else '?'}') "
+                  f"saldo={col_s}('{hu[col_s] if col_s < len(hu) else '?'}')", flush=True)
         else:
             col_v = 0; col_c = 1; col_nf = 2; col_ff = 3; col_fp = 4; col_t = 5; col_s = 6
+            print(f"[upload-gestion] Sin header — modo posicional. Primera fila: {primera}", flush=True)
 
         def fmt_fecha(d):
             if not d: return ''
@@ -11519,6 +11548,12 @@ def upload_saldos_gestion():
                 'totalFactura': total_f,
                 'saldo': saldo_f
             })
+        clientes_unicos = len(set(s['cliente'] for s in saldos))
+        vendedores_unicos = len(set(s['vendedor'] for s in saldos))
+        print(f"[upload-gestion] Parseados: {len(saldos)} registros | "
+              f"{clientes_unicos} clientes únicos | {vendedores_unicos} vendedores únicos", flush=True)
+        if saldos:
+            print(f"[upload-gestion] Primeras 3 filas: {saldos[:3]}", flush=True)
         sg_path = os.path.join(DATA_DIR, 'saldos_gestion_vendedores.json')
         with open(sg_path, 'w', encoding='utf-8') as f:
             json.dump(saldos, f, ensure_ascii=False, indent=2)
