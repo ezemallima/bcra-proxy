@@ -3471,11 +3471,15 @@ async function enviarEstadoCuenta(btnEl) {
   const SEP = '------------------------------';
   const BASE_URL = window.location.origin;
 
-  // Usar cache pre-cargado de zip-meta (evita await que rompe popup-blocker en móvil)
+  // Usar cache pre-cargado de zip-meta; extraer solo el basename para que coincida con nroFactura
   let pdfDisponibles = new Set();
   const _zm = window._zipMetaCache || {};
   if (_zm.zip_disponible && Array.isArray(_zm.nombres)) {
-    _zm.nombres.forEach(n => pdfDisponibles.add(n.replace(/\.pdf$/i, '').toLowerCase()));
+    _zm.nombres.forEach(function(n) {
+      // Quitar carpeta (ZIP Odoo suele tener "Facturas/FA-A 00016-xxx.pdf")
+      var base = n.split('/').pop().replace(/\.pdf$/i, '').toLowerCase();
+      pdfDisponibles.add(base);
+    });
   }
 
   // Una entrada por factura con link al PDF si está disponible
@@ -3527,17 +3531,7 @@ async function enviarEstadoCuenta(btnEl) {
     'CUIT: 30710295022\n\n' +
     'Quedo a tu disposicion para coordinar el pago. Muchas gracias!';
 
-  window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
-
-  // Actualizar contador visual en el botón (nunca se deshabilita)
-  window._wspEnvioCount = (window._wspEnvioCount || 0) + 1;
-  const _cnt    = window._wspEnvioCount;
-  const _label  = document.getElementById('wsp-btn-label') || (btnEl ? btnEl.querySelector('span') : null);
-  if (_label) {
-    _label.textContent = _cnt === 1 ? 'Enviado 1 vez' : `Enviado ${_cnt} veces`;
-  }
-
-  // Auto-marcar las facturas seleccionadas como enviadas por WA (en segundo plano)
+  // Marcar facturas como enviadas ANTES de navegar (keepalive sobrevive al navigation)
   const cuit = window._modalCuit;
   if (cuit) {
     seleccionadas.forEach(f => {
@@ -3546,31 +3540,13 @@ async function enviarEstadoCuenta(btnEl) {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ nroFactura: f.nroFactura }),
-      }).then(r => {
-        if (r.ok) {
-          // Mostrar badge WA en la fila correspondiente
-          const chks  = [...document.querySelectorAll('#mtab-facturas .fac-chk')];
-          const frows = [...document.querySelectorAll('#mtab-facturas .factura-item')];
-          const idx   = sorted.findIndex(sf => sf.nroFactura === f.nroFactura);
-          if (idx !== -1 && frows[idx]) {
-            const existsBadge = frows[idx].querySelector('.wsp-badge');
-            if (!existsBadge) {
-              const saldoEl = frows[idx].querySelector('.factura-saldo');
-              if (saldoEl) {
-                const badge = document.createElement('span');
-                badge.className = 'wsp-badge';
-                badge.title = 'Enviado por WhatsApp';
-                badge.innerHTML = _SVG_WA_BADGE;
-                saldoEl.insertAdjacentElement('afterend', badge);
-              }
-            }
-          }
-          window._cuitsConWA = window._cuitsConWA || new Set();
-          window._cuitsConWA.add(String(cuit).replace(/\D/g, ''));
-        }
+        keepalive: true,   // survives page navigation
       }).catch(() => {});
     });
   }
+
+  // Navegar en el mismo tab → iOS no deja tab vacío, el botón Atrás vuelve a la app
+  window.location.href = 'https://wa.me/?text=' + encodeURIComponent(msg);
 }
 
 // closeModal: cierra el modal sin redirigir la página.

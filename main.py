@@ -11208,8 +11208,11 @@ def _procesar_zip_facturas(raw: bytes) -> dict:
         print(f"[facturas-zip] R2 upload {'OK' if ok else 'FALLÓ'} ({len(merged_bytes)//1024} KB)", flush=True)
     threading.Thread(target=_bg_upload, daemon=True).start()
 
-    # Meta acumulativo
-    nombres_sin_ext = [n.replace('.pdf', '').replace('.PDF', '') for n in merged]
+    # Meta acumulativo — guardar solo el basename (sin subcarpeta del ZIP)
+    nombres_sin_ext = [
+        n.split('/')[-1].replace('.pdf', '').replace('.PDF', '')
+        for n in merged
+    ]
     meta = {
         'fecha_importacion':  time.strftime('%Y-%m-%d %H:%M'),
         'total_pdfs':         len(merged),
