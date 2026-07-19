@@ -11515,6 +11515,17 @@ def upload_saldos_gestion():
             col_v = 0; col_c = 1; col_nf = 2; col_ff = 3; col_fp = 4; col_t = 5; col_s = 6
             print(f"[upload-gestion] Sin header — modo posicional. Primera fila: {primera}", flush=True)
 
+        # Resolver colisión: en exportes Odoo agrupados por vendedor, la columna
+        # "Empresa" corresponde al VENDEDOR (no al cliente). La detección de 'EMPRESA'
+        # en _col_c queda apuntando al mismo índice que col_v.
+        # En ese caso el cliente real está en la columna "Referencia" (col_nf).
+        if col_c == col_v:
+            old_nf = col_nf
+            col_c  = col_nf       # cliente real estaba en la columna "Referencia"
+            _usadas = {col_v, col_c, col_ff, col_fp, col_t, col_s}
+            col_nf  = next((i for i in range(max(_usadas, default=6) + 3) if i not in _usadas), old_nf)
+            print(f"[upload-gestion] Colisión col_c==col_v resuelta → col_c={col_c} col_nf={col_nf}", flush=True)
+
         def fmt_fecha(d):
             if not d: return ''
             if hasattr(d, 'strftime'): return d.strftime('%d/%m/%Y')
@@ -12331,6 +12342,14 @@ def upload_saldos_facturas():
             col_s  = _col_s  if _col_s  is not None else 6
         else:
             col_v = 0; col_c = 1; col_nf = 2; col_ff = 3; col_fp = 4; col_t = 5; col_s = 6
+
+        # Resolver colisión: en exportes Odoo agrupados por vendedor, "Empresa" = vendedor.
+        # col_c queda apuntando al mismo índice que col_v → el cliente real está en col_nf.
+        if col_c == col_v:
+            old_nf = col_nf
+            col_c  = col_nf
+            _usadas = {col_v, col_c, col_ff, col_fp, col_t, col_s}
+            col_nf  = next((i for i in range(max(_usadas, default=6) + 3) if i not in _usadas), old_nf)
 
         def fmt_fecha(d):
             if not d: return ''
