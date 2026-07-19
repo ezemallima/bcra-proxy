@@ -755,6 +755,37 @@ function mostrarCambiarUrl() {
   document.getElementById('zip-panel-config-url').style.display = '';
 }
 
+async function subirZipDirecto(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const nombreEl    = document.getElementById('zip-file-nombre');
+  const progressEl  = document.getElementById('zip-upload-progress');
+  const statusEl    = document.getElementById('zip-facturas-status');
+  if (nombreEl) nombreEl.textContent = file.name;
+  if (progressEl) { progressEl.style.display = 'block'; progressEl.textContent = 'Subiendo y procesando ZIP...'; }
+
+  const fd = new FormData();
+  fd.append('zip', file);
+  try {
+    const resp = await fetch(API + '/api/facturas/importar-zip', { method: 'POST', body: fd });
+    const data = await resp.json();
+    if (data.ok) {
+      if (progressEl) progressEl.textContent = '✓ ' + (data.total_pdfs || '') + ' PDFs importados correctamente';
+      await _refreshZipMeta();
+      if (statusEl) {
+        const m = window._zipMetaCache || {};
+        statusEl.innerHTML = m.total_pdfs
+          ? '<span style="color:#16a34a;">✓ ' + m.total_pdfs + ' PDFs (' + (m.fecha_importacion||'').slice(0,10) + ')</span>'
+          : '<span style="color:#94a3b8;">Sin PDFs cargados</span>';
+      }
+    } else {
+      if (progressEl) { progressEl.style.display='block'; progressEl.textContent = '✗ ' + (data.error || 'Error al importar ZIP'); }
+    }
+  } catch(e) {
+    if (progressEl) { progressEl.style.display='block'; progressEl.textContent = '✗ Error de red: ' + e.message; }
+  }
+}
+
 async function guardarUrlDriveYImportar() {
   const urlInput   = document.getElementById('zip-drive-url');
   const errorEl    = document.getElementById('zip-config-error');
@@ -816,13 +847,21 @@ async function _dispararImport(progressEl, statusEl) {
   }
 }
 
+// Cache global de zip-meta para evitar await en enviarEstadoCuenta (popup-blocker fix)
+window._zipMetaCache = null;
+async function _refreshZipMeta() {
+  try {
+    const resp = await fetch(API + '/api/facturas/zip-meta');
+    if (resp.ok) window._zipMetaCache = await resp.json();
+  } catch(e) {}
+}
+
 async function cargarZipFacturasStatus() {
   const statusEl = document.getElementById('zip-facturas-status');
   if (!statusEl) return;
   try {
-    const resp = await fetch(API + '/api/facturas/zip-meta');
-    if (!resp.ok) return;
-    const meta = await resp.json();
+    await _refreshZipMeta();
+    const meta = window._zipMetaCache || {};
 
     if (meta.zip_disponible && meta.total_pdfs) {
       statusEl.innerHTML = '<span style="color:#16a34a;">✓ ' + meta.total_pdfs + ' PDFs (' + (meta.fecha_importacion||'').slice(0,10) + ')</span>';
@@ -1263,8 +1302,22 @@ async function iniciarApp(perfil) {
   // Al volver al tab: refrescar scores Y verificar si hay nuevos saldos
   document.addEventListener('visibilitychange', function() {
     if (document.visibilityState === 'visible') {
+      // Fix iOS: al volver de WhatsApp la pantalla puede quedar en blanco
+      var _ol = document.getElementById('loading-overlay');
+      if (_ol) _ol.style.display = 'none';
+      var _ap = document.getElementById('app');
+      if (_ap) _ap.style.display = 'flex';
       refrescarScores();
       cargarSaldosCartera(); // detecta inmediatamente si el admin subió un reporte nuevo
+    }
+  });
+  // Fix iOS bfcache: al navegar hacia atrás la página puede estar suspendida
+  window.addEventListener('pageshow', function(e) {
+    if (e.persisted) {
+      var _ol = document.getElementById('loading-overlay');
+      if (_ol) _ol.style.display = 'none';
+      var _ap = document.getElementById('app');
+      if (_ap) _ap.style.display = 'flex';
     }
   });
   // Sync cross-tab: detecta cuando la App Principal sube nuevos saldos
@@ -2221,8 +2274,23 @@ function renderFacturas(data, nombre) {
       </div>
       <!-- Sección: configurar URL (primera vez o cambio) -->
       <div id="zip-panel-config-url">
-        <div style="font-size:12px;font-weight:600;color:#334155;margin-bottom:4px;">Configurar ZIP de facturas Odoo</div>
-        <div style="font-size:11px;color:#64748b;margin-bottom:8px;">Compartí el ZIP en Drive con "Cualquier persona con el link" y pegá la URL. Se guarda para siempre — solo tenés que reemplazar el archivo en Drive cada semana.</div>
+        <div style="font-size:12px;font-weight:600;color:#334155;margin-bottom:4px;">Cargar PDFs de facturas Odoo</div>
+        <!-- Opción A: subir ZIP directo -->
+        <div style="margin-bottom:10px;padding:8px 10px;background:#f0fdf4;border:1px solid #86efac;border-radius:7px;">
+          <div style="font-size:11px;font-weight:600;color:#166534;margin-bottom:5px;">Subir ZIP directamente (recomendado)</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <label style="background:#16a34a;color:#fff;border:none;border-radius:7px;padding:7px 13px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:5px;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Elegir archivo ZIP
+              <input type="file" id="zip-file-input" accept=".zip" style="display:none" onchange="subirZipDirecto(this)">
+            </label>
+            <span id="zip-file-nombre" style="font-size:11px;color:#64748b;">Ningún archivo seleccionado</span>
+          </div>
+          <div id="zip-upload-progress" style="margin-top:6px;font-size:11px;color:#166534;display:none;"></div>
+        </div>
+        <!-- Opción B: Google Drive -->
+        <div style="font-size:11px;color:#64748b;margin-bottom:5px;font-weight:500;">O configurar auto-importación desde Google Drive:</div>
+        <div style="font-size:11px;color:#94a3b8;margin-bottom:6px;">Compartí el ZIP en Drive con "Cualquier persona con el link" y pegá la URL.</div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <input id="zip-drive-url" type="url" placeholder="https://drive.google.com/file/d/..." style="flex:1;min-width:200px;padding:7px 10px;border:1px solid #cbd5e1;border-radius:7px;font-size:12px;color:#1e293b;background:#fff;">
           <button onclick="guardarUrlDriveYImportar()" style="background:#2563eb;color:#fff;border:none;border-radius:7px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">Guardar e importar</button>
@@ -3403,17 +3471,12 @@ async function enviarEstadoCuenta(btnEl) {
   const SEP = '------------------------------';
   const BASE_URL = window.location.origin;
 
-  // Verificar qué PDFs están disponibles en el ZIP importado
+  // Usar cache pre-cargado de zip-meta (evita await que rompe popup-blocker en móvil)
   let pdfDisponibles = new Set();
-  try {
-    const metaResp = await fetch(API + '/api/facturas/zip-meta');
-    if (metaResp.ok) {
-      const meta = await metaResp.json();
-      if (meta.zip_disponible && Array.isArray(meta.nombres)) {
-        meta.nombres.forEach(n => pdfDisponibles.add(n.replace(/\.pdf$/i, '').toLowerCase()));
-      }
-    }
-  } catch(e) { /* sin PDFs disponibles, no bloquear el envío */ }
+  const _zm = window._zipMetaCache || {};
+  if (_zm.zip_disponible && Array.isArray(_zm.nombres)) {
+    _zm.nombres.forEach(n => pdfDisponibles.add(n.replace(/\.pdf$/i, '').toLowerCase()));
+  }
 
   // Una entrada por factura con link al PDF si está disponible
   const detalle = seleccionadas.map(f => {

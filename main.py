@@ -11224,6 +11224,7 @@ def _procesar_zip_facturas(raw: bytes) -> dict:
 
 
 @app.route("/api/facturas/importar-zip", methods=["POST"])
+@require_login
 def importar_facturas_zip():
     """Recibe el ZIP mensual de facturas Odoo subido directamente (multipart)."""
     if 'zip' not in request.files:
