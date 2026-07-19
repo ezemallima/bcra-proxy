@@ -11501,7 +11501,7 @@ def upload_saldos_gestion():
             _col_ff = _ci('EMISION', 'FECHA FAC', 'FECHA DE FAC') or \
                       next((i for i, h in enumerate(hu) if 'FECHA' in h and 'VENCIM' not in h and 'PAG' not in h and 'DUE' not in h), None)
             _col_fp = _ci('VENCIM', 'DUE DATE', 'FECHA VEN', 'FECHA PAG', 'FECHA PAGO')
-            _col_t  = _ci('TOTAL FAC', 'TOTAL COMP', 'IMPORTE TOTAL', 'AMOUNT DUE') or \
+            _col_t  = _ci('TOTAL FAC', 'TOTAL COMP', 'IMPORTE TOTAL', 'AMOUNT DUE', 'IMPORTE') or \
                       next((i for i, h in enumerate(hu) if 'TOTAL' in h and 'SALDO' not in h and 'ADEUDADO' not in h and 'PENDIENTE' not in h), None)
             _col_s  = _ci('SALDO PEND', 'IMPORTE ADEUD', 'ADEUDADO', 'PENDIENTE DE COBRO', 'IMPORTE PEND', 'SALDO PENDIENTE') or _ci('SALDO')
             col_v  = _col_v  if _col_v  is not None else 0
@@ -11529,6 +11529,15 @@ def upload_saldos_gestion():
             _usadas = {col_v, col_c, col_ff, col_fp, col_t, col_s}
             col_nf  = next((i for i in range(max(_usadas, default=6) + 3) if i not in _usadas), old_nf)
             print(f"[upload-gestion] Colisión col_c==col_v resuelta → col_c={col_c} col_nf={col_nf}", flush=True)
+
+        # Verificar tipos en la primera fila de datos: si col_nf apunta a un datetime
+        # y col_ff a un string, están invertidos (el número de factura quedó en col_ff
+        # y la fecha en col_nf). En ese caso los swapeamos.
+        _chk_row = ws.cell(row=min_row, column=col_nf + 1).value
+        _chk_ff  = ws.cell(row=min_row, column=col_ff + 1).value
+        if hasattr(_chk_row, 'strftime') and not hasattr(_chk_ff, 'strftime'):
+            col_nf, col_ff = col_ff, col_nf
+            print(f"[upload-gestion] Swap nf↔ff detectado (nf era datetime) → col_nf={col_nf} col_ff={col_ff}", flush=True)
 
         def fmt_fecha(d):
             if not d: return ''
@@ -12334,7 +12343,7 @@ def upload_saldos_facturas():
             _col_ff = _ci('EMISION', 'FECHA FAC', 'FECHA DE FAC') or \
                       next((i for i, h in enumerate(hu) if 'FECHA' in h and 'VENCIM' not in h and 'PAG' not in h and 'DUE' not in h), None)
             _col_fp = _ci('VENCIM', 'DUE DATE', 'FECHA VEN', 'FECHA PAG', 'FECHA PAGO')
-            _col_t  = _ci('TOTAL FAC', 'TOTAL COMP', 'IMPORTE TOTAL', 'AMOUNT DUE') or \
+            _col_t  = _ci('TOTAL FAC', 'TOTAL COMP', 'IMPORTE TOTAL', 'AMOUNT DUE', 'IMPORTE') or \
                       next((i for i, h in enumerate(hu) if 'TOTAL' in h and 'SALDO' not in h and 'ADEUDADO' not in h and 'PENDIENTE' not in h), None)
             _col_s  = _ci('SALDO PEND', 'IMPORTE ADEUD', 'ADEUDADO', 'PENDIENTE DE COBRO', 'IMPORTE PEND', 'SALDO PENDIENTE') or _ci('SALDO')
             col_v  = _col_v  if _col_v  is not None else 0
@@ -12354,6 +12363,14 @@ def upload_saldos_facturas():
             col_c  = col_nf
             _usadas = {col_v, col_c, col_ff, col_fp, col_t, col_s}
             col_nf  = next((i for i in range(max(_usadas, default=6) + 3) if i not in _usadas), old_nf)
+
+        # Verificar tipos en la primera fila: si col_nf apunta a datetime y col_ff a string,
+        # están invertidos → swapear para que col_nf = número de factura (string).
+        _chk_row = ws.cell(row=min_row, column=col_nf + 1).value
+        _chk_ff  = ws.cell(row=min_row, column=col_ff + 1).value
+        if hasattr(_chk_row, 'strftime') and not hasattr(_chk_ff, 'strftime'):
+            col_nf, col_ff = col_ff, col_nf
+            print(f"[upload-facturas] Swap nf↔ff detectado (nf era datetime) → col_nf={col_nf} col_ff={col_ff}", flush=True)
 
         def fmt_fecha(d):
             if not d: return ''
