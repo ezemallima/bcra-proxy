@@ -7181,34 +7181,17 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
             except Exception as _cal_e:
                 print(f'[proceso-integral] Cheques alert parse fallo {cuit}: {_cal_e}', flush=True)
 
-            # ── Paso 2: Score (try propio — no mata el ciclo completo si falla) ───────
-            # IMPORTANTE: NO usar calcular_score_servidor acá — ese wrapper hace su
-            # propio fetch en vivo de historial/cheques cuando no hay caché en disco,
-            # lo que vuelve a convertir este loop en secuencial+red por cliente (la
-            # causa real de la lentitud, ya resuelta arriba en Fase 0/1). Se llama
-            # directo al motor con los datos ya resueltos en memoria.
-            # Historial: live (FASE 1) > caché disco > bulk sintético.
-            # El caché de disco (historial_<cuit>.json) lo genera la consulta individual,
-            # por lo que si el cliente fue consultado antes, el score va a ser idéntico.
-            _hist_para_score_pi = _hist_live_pi
-            if not _hist_para_score_pi:
-                try:
-                    _hpath_pi = os.path.join(DATA_DIR, f'historial_{cuit}.json')
-                    if os.path.exists(_hpath_pi):
-                        with open(_hpath_pi, 'r', encoding='utf-8') as _hf_pi:
-                            _hcached_pi = json.load(_hf_pi).get('payload')
-                            if _hcached_pi and (_hcached_pi.get('results') or {}).get('periodos'):
-                                _hist_para_score_pi = _hcached_pi
-                except Exception:
-                    pass
-            if not _hist_para_score_pi:
-                _hist_para_score_pi = _bulk_to_hist_data(cuit)
-
+            # ── Paso 2: Score — idéntico a consulta individual ───────────────────────
+            # calcular_score_servidor usa exactamente la misma cadena de fuentes que la
+            # consulta individual cuit por cuit: caché disco (historial_<cuit>.json)
+            # → BCRA vivo 24m (8 s timeout, 1 intento) → bulk fallback (_bulk_to_hist_data).
+            # Para cheques: DB local (bcra_nomdeu.db) → BCRA vivo.
+            # Esto garantiza score idéntico entre "actualizar toda la cartera" y la
+            # consulta individual de un CUIT.
             try:
-                score_data = calcular_rating_predictivo(
+                score_data = calcular_score_servidor(
                     cuit=cuit, bcra_data=bcra_data or {},
-                    hist_data=_hist_para_score_pi, cheq_data=_cheq_para_score_pi,
-                    en_mora=None, ciudad=str(c.get('ciudad', '') or ''),
+                    ciudad=str(c.get('ciudad', '') or ''),
                 )
                 if score_data:
                     score_data['bcra_disponible'] = bool(bcra_data) and not bool((bcra_data or {}).get('error_bcra'))
