@@ -8442,7 +8442,7 @@ def _init_nomdeu_db() -> None:
     try:
         conn = sqlite3.connect(NOMDEU_DB_PATH, check_same_thread=False)
         conn.execute("PRAGMA query_only = 1")
-        conn.execute("PRAGMA cache_size  = -65536")   # 64 MB caché lectura
+        conn.execute("PRAGMA cache_size  = -32768")   # 32 MB caché lectura
         # denominaciones puede no existir si la DB solo tiene historial_detalle
         try:
             n_den = conn.execute("SELECT COUNT(*) FROM denominaciones").fetchone()[0]
@@ -8452,16 +8452,16 @@ def _init_nomdeu_db() -> None:
             n_deu = conn.execute("SELECT COUNT(*) FROM deudas_resumen").fetchone()[0]
         except Exception:
             n_deu = 0
-        # historial_detalle puede no existir en DB generadas con versiones anteriores del script
+        # historial_detalle puede no existir en DB generadas con versiones anteriores del script.
+        # COUNT(DISTINCT cuit) omitido — escanea 61M filas, demasiado lento al startup.
         try:
             n_hist = conn.execute("SELECT COUNT(*) FROM historial_detalle").fetchone()[0]
-            n_cuits_hist = conn.execute("SELECT COUNT(DISTINCT cuit) FROM historial_detalle").fetchone()[0]
         except Exception:
-            n_hist, n_cuits_hist = 0, 0
+            n_hist = 0
         _nomdeu_conn = conn
         print(
             f"[nomdeu] Listo — {n_den:,} denominaciones | {n_deu:,} en deudas_resumen"
-            f" | {n_hist:,} filas / {n_cuits_hist:,} CUITs en historial_detalle ({_HIST_DETALLE_MESES}m reales)",
+            f" | {n_hist:,} filas en historial_detalle ({_HIST_DETALLE_MESES}m reales)",
             flush=True,
         )
     except Exception as e:
@@ -12448,7 +12448,10 @@ def _startup_v168():
 
 _startup_v168()
 _init_padron_db()
-_init_nomdeu_db()   # padrón oficial BCRA (Nomdeu.txt mensual desde R2)
+# _init_nomdeu_db corre en background para no bloquear gunicorn al arrancar.
+# Mientras descarga (~9 min), _nomdeu_conn es None y todas las funciones retornan
+# gracefully sin datos offline. Una vez listo, funciona normalmente.
+threading.Thread(target=_init_nomdeu_db, daemon=True, name='nomdeu-init').start()
 _init_mipyme_db()   # padrón PyME (Min. Producción — importado via /update-mipyme-db)
 
 
