@@ -1235,17 +1235,31 @@ def consultar_bcra_cached(cuit, skip_padron=False):
             print(f"[bcra] {cuit} desde padrón local (offline)", flush=True)
             return local, None
 
-    print(f"[bcra] {cuit} consultando BCRA en vivo...", flush=True)
     # 2. Caché de disco (24 h) — evita re-consultas recientes
     cached_data, cached_error = cache_get(cuit)
     if cached_data is not None:
         origen = "cache-error" if cached_error else "caché"
         print(f"[bcra] {cuit} desde {origen}", flush=True)
         return _norm_bcra_resp(cached_data), cached_error
-    # 3. Consulta en vivo vía Bright Data → Workers → BCRA oficial
+
+    # 3. Bulk offline (historial_detalle 12m, ~25M CUITs) — <100ms, sin red.
+    # Tiene prioridad sobre BCRA live en consultas normales: el 95%+ de CUITs con
+    # actividad bancaria están aquí. BCRA live queda solo para CUITs genuinamente
+    # nuevos en el sistema (sin historial en los últimos 12 meses).
+    # Se omite con skip_padron=True (fresh=1) para forzar dato actualizado del día.
+    if not skip_padron:
+        _nomdeu_bulk = _nomdeu_build_deudas_resp(cuit)
+        if _nomdeu_bulk:
+            print(f"[bcra] {cuit} desde bulk offline (historial_detalle 12m)", flush=True)
+            _guardar_en_padron_local(cuit, _nomdeu_bulk)
+            return _nomdeu_bulk, None
+
+    # 4. Consulta en vivo — solo para CUITs sin historial en el bulk,
+    # o cuando el usuario forzó refresco (skip_padron=True).
+    print(f"[bcra] {cuit} consultando BCRA en vivo...", flush=True)
     data, error = consultar_bcra(cuit)
     if error or not data:
-        # 3.5. Fallback: padrón offline nomdeu (historial_detalle) — sin red, sin TTL
+        # 4.5. Último recurso: nomdeu (alcanzado solo en fresh=1 si BCRA falla)
         _nomdeu_fb = _nomdeu_build_deudas_resp(cuit)
         if _nomdeu_fb:
             print(f"[bcra] {cuit} fallback nomdeu offline (BCRA saturado — historial_detalle)", flush=True)
@@ -1260,7 +1274,7 @@ def consultar_bcra_cached(cuit, skip_padron=False):
         return data_cache, error
     data['bcra_disponible'] = True
     cache_set(cuit, data)
-    # 4. Auto-guardar en padrón local para servir sin red la próxima vez
+    # 5. Auto-guardar en padrón local para servir sin red la próxima vez
     _guardar_en_padron_local(cuit, data)
     print(f"[bcra] {cuit} OK en vivo → guardado en padrón local", flush=True)
     return data, None
