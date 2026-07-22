@@ -8391,95 +8391,106 @@ def _descargar_nomdeu(url: str, dest: str) -> bool:
 
 
 def _nomdeu_db_valida() -> bool:
-    """Verifica que la DB local tenga historial_detalle con datos."""
+    """Verificación rápida: la DB existe y historial_detalle tiene al menos una fila."""
     if not os.path.exists(NOMDEU_DB_PATH):
         return False
     try:
         c = sqlite3.connect(NOMDEU_DB_PATH)
-        n = c.execute("SELECT COUNT(*) FROM historial_detalle").fetchone()[0]
+        ok = c.execute("SELECT 1 FROM historial_detalle LIMIT 1").fetchone() is not None
         c.close()
-        return n > 0
+        return ok
     except Exception:
         return False
 
 
-def _init_nomdeu_db() -> None:
-    """Descarga bcra_nomdeu.db desde R2 (prioridad si está configurado) o BCRA_NOMDEU_URL."""
+def _abrir_nomdeu_conn() -> None:
+    """Abre la conexión SQLite a nomdeu y expone _nomdeu_conn.
+    No hace COUNT(*) — usa SELECT 1 LIMIT 1 para verificar en <1ms."""
     global _nomdeu_conn
+    try:
+        conn = sqlite3.connect(NOMDEU_DB_PATH, check_same_thread=False)
+        conn.execute("PRAGMA query_only = 1")
+        conn.execute("PRAGMA cache_size  = -32768")   # 32 MB caché lectura
+        if not conn.execute("SELECT 1 FROM historial_detalle LIMIT 1").fetchone():
+            conn.close()
+            print("[nomdeu] historial_detalle vacío — padrón offline no disponible", flush=True)
+            return
+        _nomdeu_conn = conn
+        print(f"[nomdeu] Listo — historial_detalle disponible ({_HIST_DETALLE_MESES}m reales)", flush=True)
+    except Exception as e:
+        print(f"[nomdeu] Error abriendo SQLite: {e}", flush=True)
+
+
+def _descargar_y_abrir_nomdeu(url: str) -> None:
+    """Descarga bcra_nomdeu.db y abre la conexión. Corre en hilo daemon."""
+    ok = _descargar_nomdeu(url, NOMDEU_DB_PATH)
+    if not ok:
+        print("[nomdeu] Descarga fallida — padrón offline no disponible", flush=True)
+        return
+    _abrir_nomdeu_conn()
+
+
+def _init_nomdeu_db() -> None:
+    """Inicializa el padrón offline BCRA (bcra_nomdeu.db).
+
+    Estrategia de dos velocidades:
+    - Archivo ya existe en disco (caso habitual: Render persiste /data entre deploys):
+      abre la conexión AHORA en el hilo actual (<1s) → nomdeu disponible desde
+      la primera request, sin esperar ningún background thread.
+    - Archivo no existe o está vencido/inválido: descarga en hilo daemon y abre
+      cuando termina (~9 min primer deploy). Gunicorn arranca igual de inmediato
+      pero las consultas caen a BCRA live hasta que termine la descarga.
+    """
     url = os.environ.get('BCRA_NOMDEU_URL', '').strip()
     if not _R2_CONFIGURADO and not url:
         print("[nomdeu] Ni R2 ni BCRA_NOMDEU_URL configurados — padrón offline desactivado", flush=True)
         return
 
-    # Si BCRA_NOMDEU_PERIODO está seteado (ej: "202605"), fuerza re-descarga
-    # cuando el período local no coincide — útil tras subir una DB nueva a R2.
     periodo_esperado = os.environ.get('BCRA_NOMDEU_PERIODO', '').strip()
 
-    descarga = True
+    necesita_descarga = True
     if os.path.exists(NOMDEU_DB_PATH):
         edad_dias = (time.time() - os.path.getmtime(NOMDEU_DB_PATH)) / 86400
         if edad_dias < 32 and _nomdeu_db_valida():
             if periodo_esperado:
                 try:
                     c = sqlite3.connect(NOMDEU_DB_PATH)
-                    periodo_local = c.execute(
+                    _p = c.execute(
                         "SELECT periodo FROM deudas_resumen ORDER BY periodo DESC LIMIT 1"
                     ).fetchone()
                     c.close()
-                    periodo_local = periodo_local[0] if periodo_local else ''
+                    periodo_local = _p[0] if _p else ''
                 except Exception:
                     periodo_local = ''
-                if periodo_local != periodo_esperado:
+                if str(periodo_local) != periodo_esperado:
                     print(
                         f"[nomdeu] Período local ({periodo_local}) ≠ BCRA_NOMDEU_PERIODO ({periodo_esperado})"
-                        f" — re-descargando", flush=True
+                        f" — re-descargando en background", flush=True
                     )
                     os.remove(NOMDEU_DB_PATH)
                 else:
-                    descarga = False
-                    print(
-                        f"[nomdeu] DB existente ({edad_dias:.0f}d) período={periodo_local} — reutilizando",
-                        flush=True
-                    )
+                    necesita_descarga = False
+                    print(f"[nomdeu] DB existente ({edad_dias:.0f}d) período={periodo_local} — abriendo", flush=True)
             else:
-                descarga = False
-                print(f"[nomdeu] DB existente ({edad_dias:.0f}d) con historial_detalle — reutilizando", flush=True)
+                necesita_descarga = False
+                print(f"[nomdeu] DB existente ({edad_dias:.0f}d) — abriendo", flush=True)
         else:
-            print(f"[nomdeu] DB stale o sin historial_detalle — re-descargando", flush=True)
+            print(f"[nomdeu] DB stale o sin historial_detalle — re-descargando en background", flush=True)
+            try:
+                os.remove(NOMDEU_DB_PATH)
+            except Exception:
+                pass
 
-    if descarga:
-        ok = _descargar_nomdeu(url, NOMDEU_DB_PATH)
-        if not ok:
-            print("[nomdeu] Descarga fallida — padrón offline no disponible", flush=True)
-            return
+    if necesita_descarga:
+        # Descarga en background — gunicorn arranca igual, nomdeu disponible cuando termine
+        threading.Thread(
+            target=_descargar_y_abrir_nomdeu, args=(url,),
+            daemon=True, name='nomdeu-init'
+        ).start()
+        return
 
-    try:
-        conn = sqlite3.connect(NOMDEU_DB_PATH, check_same_thread=False)
-        conn.execute("PRAGMA query_only = 1")
-        conn.execute("PRAGMA cache_size  = -32768")   # 32 MB caché lectura
-        # denominaciones puede no existir si la DB solo tiene historial_detalle
-        try:
-            n_den = conn.execute("SELECT COUNT(*) FROM denominaciones").fetchone()[0]
-        except Exception:
-            n_den = 0
-        try:
-            n_deu = conn.execute("SELECT COUNT(*) FROM deudas_resumen").fetchone()[0]
-        except Exception:
-            n_deu = 0
-        # historial_detalle puede no existir en DB generadas con versiones anteriores del script.
-        # COUNT(DISTINCT cuit) omitido — escanea 61M filas, demasiado lento al startup.
-        try:
-            n_hist = conn.execute("SELECT COUNT(*) FROM historial_detalle").fetchone()[0]
-        except Exception:
-            n_hist = 0
-        _nomdeu_conn = conn
-        print(
-            f"[nomdeu] Listo — {n_den:,} denominaciones | {n_deu:,} en deudas_resumen"
-            f" | {n_hist:,} filas en historial_detalle ({_HIST_DETALLE_MESES}m reales)",
-            flush=True,
-        )
-    except Exception as e:
-        print(f"[nomdeu] Error abriendo SQLite: {e}", flush=True)
+    # Archivo válido en disco: abrir AHORA (rápido, sin descarga)
+    _abrir_nomdeu_conn()
 
 
 # ── MiPyME: estado de importación ─────────────────────────────────────────────
@@ -12462,10 +12473,7 @@ def _startup_v168():
 
 _startup_v168()
 _init_padron_db()
-# _init_nomdeu_db corre en background para no bloquear gunicorn al arrancar.
-# Mientras descarga (~9 min), _nomdeu_conn es None y todas las funciones retornan
-# gracefully sin datos offline. Una vez listo, funciona normalmente.
-threading.Thread(target=_init_nomdeu_db, daemon=True, name='nomdeu-init').start()
+_init_nomdeu_db()   # padrón oficial BCRA — abre conexión inmediata si DB existe, descarga en bg si no
 _init_mipyme_db()   # padrón PyME (Min. Producción — importado via /update-mipyme-db)
 
 
