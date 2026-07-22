@@ -5784,6 +5784,7 @@ def guardar_cliente():
             'vendedor': str(data.get('vendedor', '')).strip(),
             'email': str(data.get('email', '')).strip(),
             'limiteCredito': float(data.get('limiteCredito', 0) or 0),
+            'plazoDias': int(data.get('plazoDias', 0) or 0),
         }
 
         idx = next((i for i, c in enumerate(_cartera_comercial)

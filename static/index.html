@@ -1108,8 +1108,12 @@
             <input id="editar-ciudad" type="text" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" /></div>
           <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Vendedor Asignado *</label>
             <select id="editar-vendedor" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;background:#fff;color:#1e293b;"></select></div>
-          <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Límite de Crédito ($)</label>
-            <input id="editar-limite" type="number" min="0" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" /></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Límite de Crédito ($)</label>
+              <input id="editar-limite" type="number" min="0" placeholder="ej: 500000" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" /></div>
+            <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Plazo de Crédito (días)</label>
+              <input id="editar-plazo" type="number" min="0" placeholder="ej: 30" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" /></div>
+          </div>
         </div>
         <div id="editar-error" style="display:none;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 12px;font-size:13px;color:#991b1b;margin-top:12px;"></div>
         <div style="display:flex;gap:10px;margin-top:20px;">
@@ -6451,6 +6455,7 @@ async function editarCliente(cuit) {
   document.getElementById('editar-cuit').value = c.cuit || '';
   document.getElementById('editar-ciudad').value = c.ciudad || '';
   document.getElementById('editar-limite').value = c.limiteCredito || c.limiteCreditoARS || '';
+  document.getElementById('editar-plazo').value = c.plazoDias || c.plazo || '';
   document.getElementById('editar-error').style.display = 'none';
   document.getElementById('modal-editar-titulo').textContent = 'Editar: ' + c.nombre;
   document.getElementById('modal-editar-cliente').style.display = 'flex';
@@ -6469,6 +6474,7 @@ async function guardarEdicionCliente() {
   var ciudad = document.getElementById('editar-ciudad').value.trim();
   var vendedor = document.getElementById('editar-vendedor').value;
   var limite = document.getElementById('editar-limite').value;
+  var plazo = document.getElementById('editar-plazo').value;
   if (!nombre || !cuit) {
     errEl.textContent = 'Nombre y CUIT son obligatorios';
     errEl.style.display = 'block'; return;
@@ -6480,6 +6486,7 @@ async function guardarEdicionCliente() {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ cuit, nombre, ciudad, vendedor,
         limiteCredito: limite ? parseFloat(limite) : 0,
+        plazoDias: plazo ? parseInt(plazo) : 0,
         _cuitOriginal: cuitOrig })
     });
     var d = await r.json();
@@ -6488,7 +6495,8 @@ async function guardarEdicionCliente() {
     var idx = cartera.findIndex(function(c){ return c.cuit === cuitOrig || c.cuit === cuit; });
     var updated = { cuit, nombre, ciudad, vendedor,
       limiteCredito: limite ? parseFloat(limite) : 0,
-      limiteCreditoARS: limite ? parseFloat(limite) : null };
+      limiteCreditoARS: limite ? parseFloat(limite) : null,
+      plazoDias: plazo ? parseInt(plazo) : 0 };
     if (idx >= 0) cartera[idx] = Object.assign({}, cartera[idx], updated);
     else cartera.push(Object.assign(updated, { fechaAlta: new Date().toLocaleDateString('es-AR') }));
     _vendedoresCache = null; // invalidar cache
@@ -7538,7 +7546,8 @@ function renderBuscador(filtro) {
     html += '<div class="ficha-footer-row">';
     if (wspTag) html += wspTag;
     if (c.vendedor) html += '<span class="cli-meta-tag">' + c.vendedor + '</span>';
-    if (c.plazo) html += '<span class="cli-meta-tag">Plazo: ' + c.plazo + 'd</span>';
+    if (c.plazoDias || c.plazo) html += '<span class="cli-meta-tag">Plazo: ' + (c.plazoDias || c.plazo) + 'd</span>';
+    html += '<button onclick="event.stopPropagation();editarCliente(\'' + c.cuit + '\')" title="Editar datos del cliente" style="margin-left:auto;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:5px 9px;font-size:11px;color:#475569;cursor:pointer;font-family:inherit;">✏ Editar</button>';
     html += '<button class="primary ficha-btn-ver" onclick="event.stopPropagation();verCliente(\'' + c.cuit + '\')">Ver consulta →</button>';
     html += '<button onclick="event.stopPropagation();eliminarClienteCartera(\'' + c.cuit + '\',\'' + (c.nombre||'').replace(/'/g,"\\'") + '\')" title="Eliminar de cartera y limpiar caché" style="background:none;border:1px solid #fca5a5;border-radius:6px;padding:5px 9px;font-size:11px;color:#ef4444;cursor:pointer;font-family:inherit;margin-left:4px;">✕ Eliminar</button>';
     html += '</div></div></div>';
