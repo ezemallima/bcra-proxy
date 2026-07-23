@@ -3471,65 +3471,117 @@ async function enviarEstadoCuenta(btnEl) {
   const SEP = '------------------------------';
   const BASE_URL = window.location.origin;
 
-  // Usar cache pre-cargado de zip-meta; extraer solo el basename para que coincida con nroFactura
-  let pdfDisponibles = new Set();
-  const _zm = window._zipMetaCache || {};
-  if (_zm.zip_disponible && Array.isArray(_zm.nombres)) {
-    _zm.nombres.forEach(function(n) {
-      // Quitar carpeta (ZIP Odoo suele tener "Facturas/FA-A 00016-xxx.pdf")
-      var base = n.split('/').pop().replace(/\.pdf$/i, '').toLowerCase();
-      pdfDisponibles.add(base);
-    });
-  }
-
-  // Una entrada por factura con link al PDF si está disponible
-  const detalle = seleccionadas.map(f => {
-    const fechaEm  = f.fechaFactura || '-';
-    const fechaVto = f.fechaPago    || '-';
-    const diasAtraso = f.fechaPago
-      ? Math.floor((hoy - parseFecha(f.fechaPago)) / 86400000)
-      : null;
-    const esVencida = diasAtraso !== null && diasAtraso > 0;
-    const nro = f.nroFactura || '';
-
-    const lineas = [
-      '*Nro: ' + (nro || 'Sin numero') + '*',
-      'Emitida:     ' + fechaEm,
-      (esVencida ? 'Vencio el:   ' : 'Vencimiento: ') + fechaVto,
-      'Saldo:       *$' + fmtFull(f.saldo) + '*',
-    ];
-    if (esVencida) {
-      lineas.push('⚠️ VENCIDA hace ' + diasAtraso + ' dia' + (diasAtraso !== 1 ? 's' : ''));
-    }
-    if (nro && pdfDisponibles.has(nro.toLowerCase())) {
-      const pdfUrl = BASE_URL + '/api/facturas-pdf/' + encodeURIComponent(nro + '.pdf');
-      lineas.push('📄 Ver factura: ' + pdfUrl);
-    }
-    return lineas.join('\n');
-  }).join('\n\n');
-
   const totalSel    = seleccionadas.reduce((acc, f) => acc + (parseFloat(f.saldo) || 0), 0);
   const cntVencidas = seleccionadas.filter(f =>
     f.fechaPago && Math.floor((hoy - parseFecha(f.fechaPago)) / 86400000) > 0
   ).length;
-  const notaVenc = cntVencidas > 0
-    ? '\n' + cntVencidas + ' factura' + (cntVencidas !== 1 ? 's' : '') + ' vencida' + (cntVencidas !== 1 ? 's' : '')
+  const nFac      = seleccionadas.length;
+  const plural    = nFac !== 1 ? 's' : '';
+  const notaVenc  = cntVencidas > 0
+    ? ' (' + cntVencidas + ' vencida' + (cntVencidas !== 1 ? 's' : '') + ')'
     : '';
 
-  const msg =
-    'Estimado/a ' + nombre + ', ' + saludo + '.\n\n' +
-    'Te acerco el detalle de tu cuenta corriente en *Bodega Piattelli*:\n\n' +
-    '*FACTURAS PENDIENTES*\n\n' +
-    detalle + '\n\n' +
-    SEP + '\n' +
-    '*TOTAL PENDIENTE: $' + fmtFull(totalSel) + '*' + notaVenc + '\n' +
-    SEP + '\n\n' +
+  const datosPago =
     '*Datos de Pago:*\n' +
     'Banco Galicia - CC $: 10653-1 081-8\n' +
     'CBU: 0070081820000010653188\n' +
     'ALIAS: ARTELINCGALICIA\n' +
     'CUIT: 30710295022\n\n' +
     'Quedo a tu disposicion para coordinar el pago. Muchas gracias!';
+
+  // ── Link único: crear lote compartible en el servidor ──────────────────────
+  // El mensaje lleva UN solo link a una página con el detalle + PDFs de cada
+  // factura. Si el servidor no responde, cae al formato viejo (links por PDF).
+  let loteUrl = null;
+  if (btnEl) { btnEl.disabled = true; btnEl.dataset._txt = btnEl.textContent; btnEl.textContent = 'Preparando…'; }
+  try {
+    const resp = await fetch(API + '/api/facturas/crear-lote', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        cuit:   window._modalCuit || '',
+        nombre: nombre,
+        facturas: seleccionadas.map(f => ({
+          nro:          f.nroFactura   || '',
+          fechaFactura: f.fechaFactura || '',
+          fechaPago:    f.fechaPago    || '',
+          saldo:        parseFloat(f.saldo) || 0,
+        })),
+      }),
+    });
+    const j = await resp.json();
+    // Preferir armar el URL con el origin del browser (siempre https detrás del
+    // proxy de Render); j.url queda como fallback
+    if (j.ok && j.token)    loteUrl = BASE_URL + '/f/' + j.token;
+    else if (j.ok && j.url) loteUrl = j.url;
+  } catch (e) {
+    // Sin conexión o error del servidor → fallback silencioso al formato viejo
+  }
+  if (btnEl) { btnEl.disabled = false; btnEl.textContent = btnEl.dataset._txt || 'Enviar'; }
+
+  let msg;
+  if (loteUrl) {
+    // Mensaje corto: resumen + link único (el detalle completo vive en la página)
+    msg =
+      'Estimado/a ' + nombre + ', ' + saludo + '.\n\n' +
+      'Te acerco el estado de tu cuenta corriente en *Bodega Piattelli*:\n\n' +
+      '*' + nFac + ' factura' + plural + ' pendiente' + plural + '*' + notaVenc + '\n' +
+      '*TOTAL: $' + fmtFull(totalSel) + '*\n\n' +
+      '📄 Ver el detalle y descargar las facturas:\n' +
+      loteUrl + '\n\n' +
+      SEP + '\n\n' +
+      datosPago;
+  } else {
+    // ── FALLBACK: formato con detalle por factura y link por PDF ─────────────
+    let pdfDisponibles = new Set();
+    const _zm = window._zipMetaCache || {};
+    if (_zm.zip_disponible && Array.isArray(_zm.nombres)) {
+      _zm.nombres.forEach(function(n) {
+        // Quitar carpeta (ZIP Odoo suele tener "Facturas/FA-A 00016-xxx.pdf")
+        var base = n.split('/').pop().replace(/\.pdf$/i, '').toLowerCase();
+        pdfDisponibles.add(base);
+      });
+    }
+
+    const detalle = seleccionadas.map(f => {
+      const fechaEm  = f.fechaFactura || '-';
+      const fechaVto = f.fechaPago    || '-';
+      const diasAtraso = f.fechaPago
+        ? Math.floor((hoy - parseFecha(f.fechaPago)) / 86400000)
+        : null;
+      const esVencida = diasAtraso !== null && diasAtraso > 0;
+      const nro = f.nroFactura || '';
+
+      const lineas = [
+        '*Nro: ' + (nro || 'Sin numero') + '*',
+        'Emitida:     ' + fechaEm,
+        (esVencida ? 'Vencio el:   ' : 'Vencimiento: ') + fechaVto,
+        'Saldo:       *$' + fmtFull(f.saldo) + '*',
+      ];
+      if (esVencida) {
+        lineas.push('⚠️ VENCIDA hace ' + diasAtraso + ' dia' + (diasAtraso !== 1 ? 's' : ''));
+      }
+      if (nro && pdfDisponibles.has(nro.toLowerCase())) {
+        const pdfUrl = BASE_URL + '/api/facturas-pdf/' + encodeURIComponent(nro + '.pdf');
+        lineas.push('📄 Ver factura: ' + pdfUrl);
+      }
+      return lineas.join('\n');
+    }).join('\n\n');
+
+    const notaVencLarga = cntVencidas > 0
+      ? '\n' + cntVencidas + ' factura' + (cntVencidas !== 1 ? 's' : '') + ' vencida' + (cntVencidas !== 1 ? 's' : '')
+      : '';
+
+    msg =
+      'Estimado/a ' + nombre + ', ' + saludo + '.\n\n' +
+      'Te acerco el detalle de tu cuenta corriente en *Bodega Piattelli*:\n\n' +
+      '*FACTURAS PENDIENTES*\n\n' +
+      detalle + '\n\n' +
+      SEP + '\n' +
+      '*TOTAL PENDIENTE: $' + fmtFull(totalSel) + '*' + notaVencLarga + '\n' +
+      SEP + '\n\n' +
+      datosPago;
+  }
 
   // Marcar facturas como enviadas ANTES de navegar (keepalive sobrevive al navigation)
   const cuit = window._modalCuit;

@@ -11387,6 +11387,255 @@ def servir_factura_pdf(nombre_pdf):
         return jsonify({"error": str(e)}), 500
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# ESTADOS DE CUENTA COMPARTIBLES — link único para WhatsApp
+# Flujo: el comercial selecciona facturas → POST /api/facturas/crear-lote genera
+# un token corto → el mensaje de WhatsApp lleva UN solo link /f/<token> →
+# el cliente abre una página mobile-first con el detalle y los PDFs.
+# Persistencia: JSON en disco + backup R2 (sobrevive redeploys de Render).
+# ══════════════════════════════════════════════════════════════════════════════
+
+_FACTURAS_LOTES_FILE   = os.path.join(DATA_DIR, 'facturas_lotes.json')
+_FACTURAS_LOTES_R2_KEY = 'facturas_lotes.json'
+_FACTURAS_LOTES_LOCK   = threading.Lock()
+_LOTE_TTL_DIAS         = 120   # los links expiran a los 120 días (ciclo de cobranza largo)
+_LOTE_MAX_FACTURAS     = 50    # sanidad: nadie reclama más de 50 facturas juntas
+
+
+def _lotes_read() -> dict:
+    """Lee los lotes de facturas compartidos. Disco primero, R2 como fallback."""
+    try:
+        with open(_FACTURAS_LOTES_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        pass
+    data = _r2_download_bytes(_FACTURAS_LOTES_R2_KEY)
+    if data:
+        try:
+            lotes = json.loads(data.decode('utf-8'))
+            with open(_FACTURAS_LOTES_FILE, 'w', encoding='utf-8') as f:
+                f.write(data.decode('utf-8'))
+            return lotes
+        except Exception:
+            pass
+    return {}
+
+
+def _lotes_write(lotes: dict):
+    with open(_FACTURAS_LOTES_FILE, 'w', encoding='utf-8') as f:
+        json.dump(lotes, f, ensure_ascii=False)
+
+    def _bg():
+        _r2_upload_bytes(_FACTURAS_LOTES_R2_KEY, json.dumps(lotes, ensure_ascii=False).encode(), 'application/json')
+    threading.Thread(target=_bg, daemon=True).start()
+
+
+def _lotes_purgar_vencidos(lotes: dict) -> dict:
+    """Elimina lotes más viejos que el TTL para que el JSON no crezca sin límite."""
+    corte = time.time() - _LOTE_TTL_DIAS * 86400
+    return {t: l for t, l in lotes.items() if l.get('ts', 0) >= corte}
+
+
+@app.route("/api/facturas/crear-lote", methods=["POST"])
+def facturas_crear_lote():
+    """Crea un lote compartible de facturas reclamadas y devuelve su URL corta.
+
+    Body: { cuit, nombre, facturas: [{nro, fechaFactura, fechaPago, saldo}] }
+    La disponibilidad de PDF se resuelve acá (server-side) contra el meta del ZIP,
+    así el link nunca promete un PDF que no existe.
+    """
+    import secrets
+
+    body     = request.get_json(force=True, silent=True) or {}
+    nombre   = str(body.get('nombre', '')).strip()[:120]
+    cuit     = str(body.get('cuit', '')).replace('-', '').replace(' ', '').strip()[:11]
+    facturas = body.get('facturas', [])
+
+    if not isinstance(facturas, list) or not facturas:
+        return jsonify({"ok": False, "error": "Lista de facturas requerida"}), 400
+    if len(facturas) > _LOTE_MAX_FACTURAS:
+        return jsonify({"ok": False, "error": f"Máximo {_LOTE_MAX_FACTURAS} facturas por lote"}), 400
+
+    # PDFs disponibles según el meta del ZIP maestro (basenames sin extensión)
+    meta_zip   = _facturas_zip_meta_read()
+    pdfs_disp  = {str(n).lower() for n in meta_zip.get('nombres', [])}
+
+    items = []
+    for f in facturas:
+        if not isinstance(f, dict):
+            continue
+        nro = str(f.get('nro', '')).strip()[:60]
+        try:
+            saldo = round(float(f.get('saldo') or 0), 2)
+        except (TypeError, ValueError):
+            saldo = 0.0
+        items.append({
+            'nro':           nro,
+            'fechaFactura':  str(f.get('fechaFactura', '')).strip()[:12],
+            'fechaPago':     str(f.get('fechaPago', '')).strip()[:12],
+            'saldo':         saldo,
+            'pdf':           bool(nro) and nro.lower() in pdfs_disp,
+        })
+
+    if not items:
+        return jsonify({"ok": False, "error": "Ninguna factura válida en el lote"}), 400
+
+    token = secrets.token_urlsafe(6)   # ~8 chars URL-safe, impredecible
+    with _FACTURAS_LOTES_LOCK:
+        lotes = _lotes_purgar_vencidos(_lotes_read())
+        lotes[token] = {
+            'nombre':   nombre,
+            'cuit':     cuit,
+            'facturas': items,
+            'ts':       time.time(),
+            'fecha':    time.strftime('%d/%m/%Y'),
+        }
+        _lotes_write(lotes)
+
+    return jsonify({"ok": True, "token": token, "url": request.host_url.rstrip('/') + '/f/' + token})
+
+
+@app.route("/f/<token>")
+def ver_lote_facturas(token):
+    """Página pública mobile-first con el estado de cuenta del lote.
+
+    Sin login: el cliente final no tiene cuenta. La protección es el token
+    aleatorio impredecible + expiración por TTL. Solo expone lo mismo que ya
+    viaja en el mensaje de WhatsApp.
+    """
+    import html as _html
+    from datetime import date as _date
+    from urllib.parse import quote as _urlquote
+
+    lote = _lotes_read().get(str(token).strip())
+    if not lote or lote.get('ts', 0) < time.time() - _LOTE_TTL_DIAS * 86400:
+        return (
+            "<!doctype html><html lang='es'><head><meta charset='utf-8'>"
+            "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+            "<title>Link no disponible</title></head>"
+            "<body style='font-family:system-ui,sans-serif;display:flex;align-items:center;"
+            "justify-content:center;min-height:100vh;margin:0;background:#f8fafc;color:#334155'>"
+            "<div style='text-align:center;padding:24px'><h2>Link no disponible</h2>"
+            "<p>Este estado de cuenta expiró o no existe.<br>"
+            "Pedile al vendedor que te lo reenvíe.</p></div></body></html>",
+            404,
+        )
+
+    def _parse_venc(s):
+        try:
+            d, m, y = str(s).strip().split('/')
+            return _date(int(y), int(m), int(d))
+        except Exception:
+            return None
+
+    def _fmt_monto(v):
+        # Formato es-AR: miles con punto, decimales con coma
+        return f"{v:,.2f}".replace(',', '§').replace('.', ',').replace('§', '.')
+
+    hoy   = _date.today()
+    total = 0.0
+    cnt_vencidas = 0
+    cards = []
+    for f in lote.get('facturas', []):
+        nro   = _html.escape(f.get('nro') or 'Sin número')
+        saldo = float(f.get('saldo') or 0)
+        total += saldo
+        venc      = _parse_venc(f.get('fechaPago'))
+        dias      = (hoy - venc).days if venc else None
+        vencida   = dias is not None and dias > 0
+        if vencida:
+            cnt_vencidas += 1
+        badge = (
+            f"<span class='badge venc'>Vencida hace {dias} día{'s' if dias != 1 else ''}</span>"
+            if vencida else "<span class='badge ok'>Al día</span>"
+        )
+        btn_pdf = (
+            f"<a class='btn-pdf' href='/api/facturas-pdf/{_html.escape(_urlquote(f['nro']), quote=True)}.pdf' "
+            f"target='_blank' rel='noopener'>Ver factura PDF</a>"
+            if f.get('pdf') else ""
+        )
+        cards.append(f"""
+      <div class="card{' card-venc' if vencida else ''}">
+        <div class="card-head"><span class="nro">{nro}</span>{badge}</div>
+        <div class="row"><span>Emitida</span><span>{_html.escape(f.get('fechaFactura') or '-')}</span></div>
+        <div class="row"><span>Vencimiento</span><span>{_html.escape(f.get('fechaPago') or '-')}</span></div>
+        <div class="row saldo"><span>Saldo</span><span>$ {_fmt_monto(saldo)}</span></div>
+        {btn_pdf}
+      </div>""")
+
+    n = len(cards)
+    nota_venc = (
+        f"<div class='alerta'>{cnt_vencidas} factura{'s' if cnt_vencidas != 1 else ''} "
+        f"vencida{'s' if cnt_vencidas != 1 else ''}</div>"
+        if cnt_vencidas else ""
+    )
+    nombre_html = _html.escape(lote.get('nombre') or '')
+
+    return f"""<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Estado de cuenta — Bodega Piattelli</title>
+<style>
+  * {{ box-sizing: border-box; margin: 0; }}
+  body {{ font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; background: #f1f5f9; color: #1e293b; }}
+  .wrap {{ max-width: 480px; margin: 0 auto; padding: 16px 14px 40px; }}
+  header {{ text-align: center; padding: 18px 0 14px; }}
+  header h1 {{ font-size: 19px; color: #0f172a; }}
+  header .sub {{ font-size: 13px; color: #64748b; margin-top: 3px; }}
+  .cliente {{ background: #1d4ed8; color: #fff; border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; }}
+  .cliente .nom {{ font-size: 15px; font-weight: 700; }}
+  .cliente .tot {{ font-size: 24px; font-weight: 800; margin-top: 6px; }}
+  .cliente .cnt {{ font-size: 12px; opacity: .85; margin-top: 2px; }}
+  .alerta {{ background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; border-radius: 10px;
+             padding: 9px 12px; font-size: 13px; font-weight: 600; margin-bottom: 14px; text-align: center; }}
+  .card {{ background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 13px 14px; margin-bottom: 10px; }}
+  .card-venc {{ border-left: 4px solid #dc2626; }}
+  .card-head {{ display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }}
+  .nro {{ font-weight: 700; font-size: 14px; }}
+  .badge {{ font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 99px; white-space: nowrap; }}
+  .badge.venc {{ background: #fef2f2; color: #dc2626; }}
+  .badge.ok {{ background: #f0fdf4; color: #16a34a; }}
+  .row {{ display: flex; justify-content: space-between; font-size: 13px; color: #475569; padding: 2px 0; }}
+  .row.saldo {{ font-weight: 700; color: #0f172a; font-size: 14px; margin-top: 4px; }}
+  .btn-pdf {{ display: block; text-align: center; margin-top: 10px; padding: 9px; border-radius: 9px;
+              background: #eff6ff; color: #1d4ed8; font-size: 13px; font-weight: 700; text-decoration: none;
+              border: 1px solid #bfdbfe; }}
+  .pago {{ background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 16px; margin-top: 16px; }}
+  .pago h3 {{ font-size: 13px; color: #0f172a; margin-bottom: 8px; }}
+  .pago .row {{ font-size: 12.5px; }}
+  .pago .row span:last-child {{ font-weight: 600; color: #1e293b; text-align: right; word-break: break-all; }}
+  footer {{ text-align: center; font-size: 11px; color: #94a3b8; margin-top: 22px; }}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Bodega Piattelli</h1>
+    <div class="sub">Estado de cuenta corriente · {_html.escape(lote.get('fecha', ''))}</div>
+  </header>
+  <div class="cliente">
+    <div class="nom">{nombre_html}</div>
+    <div class="tot">$ {_fmt_monto(total)}</div>
+    <div class="cnt">{n} factura{'s' if n != 1 else ''} pendiente{'s' if n != 1 else ''}</div>
+  </div>
+  {nota_venc}
+  {''.join(cards)}
+  <div class="pago">
+    <h3>Datos de pago</h3>
+    <div class="row"><span>Banco</span><span>Galicia — CC $ 10653-1 081-8</span></div>
+    <div class="row"><span>CBU</span><span>0070081820000010653188</span></div>
+    <div class="row"><span>Alias</span><span>ARTELINCGALICIA</span></div>
+    <div class="row"><span>CUIT</span><span>30-71029502-2</span></div>
+  </div>
+  <footer>Bodega Piattelli · Ante cualquier consulta respondé el mensaje de WhatsApp</footer>
+</div>
+</body>
+</html>"""
+
+
 @app.route("/api/alertas-vencimiento")
 def alertas_vencimiento_endpoint():
     """Clientes de la cartera con facturas a vencer en los próximos 10 días.
