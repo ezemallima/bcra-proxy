@@ -32,13 +32,22 @@ Uso:
 """
 
 import os
+import re
 import sys
 import time
 import sqlite3
 import subprocess
 import tempfile
 import shutil
+import gzip
 from pathlib import Path
+
+
+def _abrir_texto(path: str, encoding: str = "latin-1"):
+    """Abre un archivo de texto plano o .gz transparentemente."""
+    if path.endswith(".gz"):
+        return gzip.open(path, "rt", encoding=encoding, errors="replace")
+    return open(path, "r", encoding=encoding)
 
 if len(sys.argv) < 2:
     print("Uso: python bcra_import_local.py <archivo.[zip|7z]> [salida.db]")
@@ -227,22 +236,48 @@ def _parse_linea_deudor(linea: str) -> tuple | None:
     return entidad, periodo, cuit, sit, monto
 
 
-def _detectar_periodos(path: str, max_lineas: int = 300_000) -> list[str]:
+def _periodo_base_de_nombre(path: str) -> str | None:
+    """Extrae YYYYMM del nombre de archivo 24DSFyyyymm* (ej: 24DSF202605_12m.txt.gz → '202605')."""
+    m = re.search(r"24DSF(\d{6})", Path(path).stem.upper())
+    return m.group(1) if m else None
+
+
+def _restar_meses(periodo: str, n: int) -> str:
+    """Resta n meses a un período YYYYMM. Ej: _restar_meses('202605', 1) → '202604'."""
+    y, mes = int(periodo[:4]), int(periodo[4:])
+    total = y * 12 + (mes - 1) - n
+    return f"{total // 12}{(total % 12) + 1:02d}"
+
+
+def _parse_linea_24dsf(linea: str, n_meses: int) -> tuple | None:
     """
-    Escanea las primeras max_lineas para encontrar todos los períodos YYYYMM.
-    El 24DSF tiene ~24 períodos distintos, que aparecen en los primeros miles de líneas.
-    Retorna lista ordenada descendente (más reciente primero).
+    Formato condensado 24DSF (378 chars/línea, newest first):
+      0-4   código entidad (5 chars, puede tener espacios a la derecha)
+      5-6   tipo de ID (2 chars, ignorar)
+      7-17  CUIT (11 dígitos)
+      18-19 flag + espacio (ignorar)
+      20+   bloques mensuales: bloque k (k=0 = más reciente):
+              [monto_left_padded(12 chars)] + [sit(2 chars)] + [sep(1 char)]
+    Retorna (entidad, cuit, [(sit, monto), ...] con n_meses elementos) o None.
     """
-    periodos: set[str] = set()
-    with open(path, "r", encoding="latin-1") as f:
-        for i, linea in enumerate(f):
-            if i >= max_lineas:
-                break
-            if len(linea) >= 11:
-                p = linea[5:11]
-                if p.isdigit() and len(p) == 6 and "200" <= p[:3] <= "202":
-                    periodos.add(p)
-    return sorted(periodos, reverse=True)
+    if len(linea) < 35:
+        return None
+    cuit = linea[7:18]
+    if not (len(cuit) == 11 and cuit.isdigit() and cuit[:2] in _CUIT_PREFIJOS):
+        return None
+    entidad = linea[0:5].strip()
+    bloques: list = []
+    for k in range(n_meses):
+        start = 20 + k * 15
+        bloque = linea[start:start + 15]
+        sit_s = bloque[12:14] if len(bloque) >= 14 else ""
+        if not sit_s.isdigit():
+            bloques.append((0, 0.0))
+            continue
+        sit = int(sit_s)
+        monto = _monto(bloque[0:12]) if sit else 0.0
+        bloques.append((sit, monto))
+    return entidad, cuit, bloques
 
 
 def _proc_padron(conn: sqlite3.Connection, path: str) -> None:
@@ -255,7 +290,7 @@ def _proc_padron(conn: sqlite3.Connection, path: str) -> None:
     count = skip = 0
     t0 = time.time()
 
-    with open(path, "r", encoding="latin-1") as f:
+    with _abrir_texto(path) as f:
         for linea in f:
             parsed = _parse_linea_deudor(linea)
             if not parsed:
@@ -295,34 +330,38 @@ def _proc_padron(conn: sqlite3.Connection, path: str) -> None:
 
 def _proc_24dsf(conn: sqlite3.Connection, path: str, n_meses: int = N_MESES_HISTORIAL) -> None:
     """
-    Importa 24DSF → historial_detalle.
+    Importa 24DSF condensado → historial_detalle.
 
-    Una fila por (cuit, entidad) con columnas sit_01..sit_N y monto_01..monto_N:
-      - sit_01 / monto_01 = período más reciente
-      - Montos guardados como int(monto * 10) → main.py los divide por 10.0 al leer
-      - None donde no hay dato para ese mes en esa entidad
+    Formato de entrada (378 chars/línea):
+      - Encabezado (20 chars): entidad(5) + tipo(2, ignorar) + CUIT(11) + flag+espacio(2)
+      - 24 bloques mensuales de 15 chars: monto_padded(12) + sit(2) + sep(1)
+        · Bloque 1 = período más reciente (base del archivo)
+        · Bloque k = base - (k-1) meses
+    Período base se detecta automáticamente del nombre del archivo (24DSFyyyymm*).
 
-    También completa deudas_resumen con CUITs que solo aparecen en 24DSF.
+    Una fila por (cuit, entidad) con columnas sit_01..sit_N y monto_01..monto_N.
+    Montos guardados como int(monto × 10) → main.py los divide por 10.0 al leer.
     """
-    # 1. Detectar períodos disponibles (escaneo rápido de las primeras líneas)
-    _log("Detectando períodos disponibles en 24DSF (escaneo rápido)...")
-    todos_periodos = _detectar_periodos(path)
-    if not todos_periodos:
-        _log("ERROR: No se encontraron períodos válidos en el archivo")
+    # 1. Determinar período base desde el nombre del archivo
+    periodo_base = _periodo_base_de_nombre(path)
+    if not periodo_base:
+        _log(
+            "ERROR: no se puede determinar el período base del nombre del archivo. "
+            "El archivo debe incluir '24DSFYYYYmm' (ej: 24DSF202605_12m.txt.gz)."
+        )
         sys.exit(1)
 
-    periodos_a_usar = todos_periodos[:n_meses]
-    periodo_a_col   = {p: i + 1 for i, p in enumerate(periodos_a_usar)}
-    periodos_set    = set(periodo_a_col)
-    periodo_reciente = periodos_a_usar[0]
+    n_a_guardar = min(n_meses, 24)
+    periodos = [_restar_meses(periodo_base, k) for k in range(n_a_guardar)]
+    periodo_reciente = periodos[0]
 
-    _log(f"Períodos disponibles ({len(todos_periodos)}): {todos_periodos}")
-    _log(f"Guardando {len(periodos_a_usar)} meses: {periodo_reciente} → {periodos_a_usar[-1]}")
+    _log(f"Período base detectado del nombre: {periodo_base}")
+    _log(f"Guardando {n_a_guardar} meses: {periodo_reciente} → {periodos[-1]}")
 
     # 2. Crear/recrear historial_detalle con columnas para los N meses
     col_defs = ", ".join(
         f"sit_{i:02d} INTEGER, monto_{i:02d} INTEGER"
-        for i in range(1, n_meses + 1)
+        for i in range(1, n_a_guardar + 1)
     )
     conn.executescript(f"""
         DROP TABLE IF EXISTS historial_detalle;
@@ -336,106 +375,68 @@ def _proc_24dsf(conn: sqlite3.Connection, path: str, n_meses: int = N_MESES_HIST
     """)
     conn.commit()
 
-    # 3. Leer 24DSF y acumular en RAM: {{(cuit, entidad): {{col: [sit, monto_int]}}}}
-    # Para deudas_resumen usamos solo el período más reciente (col=1).
-    datos: dict         = {}
-    resumen: dict       = {}   # {cuit: [sit_max, monto_total, ents_set, periodo]}
+    # 3. Leer y stream-insertar directo (sin acumular en RAM — 61M líneas = ~1 fila por par CUIT+entidad)
+    col_names    = "cuit, entidad, " + ", ".join(
+        f"sit_{i:02d}, monto_{i:02d}" for i in range(1, n_a_guardar + 1)
+    )
+    n_total_cols = 2 + n_a_guardar * 2
+    placeholders = ", ".join(["?"] * n_total_cols)
+    sql_insert   = f"INSERT OR REPLACE INTO historial_detalle ({col_names}) VALUES ({placeholders})"
+
     count = skip = 0
+    batch: list = []
     t0 = time.time()
 
-    with open(path, "r", encoding="latin-1") as f:
+    with _abrir_texto(path) as f:
         for linea in f:
-            parsed = _parse_linea_deudor(linea)
+            parsed = _parse_linea_24dsf(linea.rstrip("\r\n"), n_a_guardar)
             if not parsed:
                 skip += 1
                 continue
-            entidad, periodo, cuit, sit, monto = parsed
-            col = periodo_a_col.get(periodo)
-            if col is None:
-                skip += 1
-                continue
+            entidad, cuit, bloques = parsed
 
-            monto_int = int(monto * 10)
-            key = (cuit, entidad)
-            if key not in datos:
-                datos[key] = {}
-            entry = datos[key].get(col)
-            if entry is None:
-                datos[key][col] = [sit, monto_int]
-            else:
-                if sit > entry[0]:
-                    entry[0] = sit
-                if monto_int > entry[1]:
-                    entry[1] = monto_int
-
-            # Acumular resumen del período más reciente para deudas_resumen
-            if col == 1:
-                r = resumen.get(cuit)
-                if r is None:
-                    resumen[cuit] = [sit, monto, {entidad}, periodo_reciente]
+            row: list = [cuit, entidad]
+            for sit, monto in bloques:
+                if sit:
+                    row.extend([sit, int(monto * 10)])
                 else:
-                    if sit > r[0]:
-                        r[0] = sit
-                    r[1] += monto
-                    r[2].add(entidad)
+                    row.extend([None, None])
+            batch.append(tuple(row))
 
             count += 1
+            if len(batch) >= 50_000:
+                conn.executemany(sql_insert, batch)
+                conn.commit()
+                batch = []
             if count % 5_000_000 == 0:
                 elapsed = time.time() - t0
-                _log(f"  {count / 1e6:.0f}M líneas | {len(datos):,} pares CUIT+entidad | {elapsed:.0f}s")
+                _log(f"  {count / 1e6:.0f}M líneas | {elapsed:.0f}s")
+
+    if batch:
+        conn.executemany(sql_insert, batch)
+        conn.commit()
 
     elapsed = time.time() - t0
     _log(f"Streaming: {count:,} válidos | {skip:,} saltados | {elapsed:.0f}s")
 
-    # 4. Volcar historial_detalle
-    _log(f"Volcando {len(datos):,} filas → historial_detalle...")
-    col_names   = "cuit, entidad, " + ", ".join(
-        f"sit_{i:02d}, monto_{i:02d}" for i in range(1, n_meses + 1)
-    )
-    n_total_cols  = 2 + n_meses * 2
-    placeholders  = ", ".join(["?"] * n_total_cols)
-    sql_insert    = f"INSERT OR REPLACE INTO historial_detalle ({col_names}) VALUES ({placeholders})"
-
-    batch = []
-    for (cuit, entidad), cols_data in datos.items():
-        row: list = [cuit, entidad]
-        for i in range(1, n_meses + 1):
-            v = cols_data.get(i)
-            row.extend(v if v else [None, None])
-        batch.append(tuple(row))
-        if len(batch) >= 50_000:
-            conn.executemany(sql_insert, batch)
-            conn.commit()
-            batch = []
-    if batch:
-        conn.executemany(sql_insert, batch)
-        conn.commit()
-    del datos
-
     n_hist = conn.execute("SELECT COUNT(*) FROM historial_detalle").fetchone()[0]
     _log(f"historial_detalle: {n_hist:,} filas (pares CUIT+entidad)")
 
-    # 5. Completar deudas_resumen con CUITs del 24DSF no presentes en padrón
-    _log(f"Completando deudas_resumen con {len(resumen):,} CUITs del período {periodo_reciente}...")
-    batch = []
-    for cuit, (sit_max, monto_total, ents, periodo) in resumen.items():
-        batch.append((cuit, sit_max, round(monto_total, 1), ",".join(sorted(ents)), periodo))
-        if len(batch) >= 50_000:
-            conn.executemany(
-                "INSERT OR IGNORE INTO deudas_resumen "
-                "(cuit, sit_max, monto_total, entidades_cod, periodo) VALUES (?,?,?,?,?)",
-                batch,
-            )
-            conn.commit()
-            batch = []
-    if batch:
-        conn.executemany(
-            "INSERT OR IGNORE INTO deudas_resumen "
-            "(cuit, sit_max, monto_total, entidades_cod, periodo) VALUES (?,?,?,?,?)",
-            batch,
-        )
-        conn.commit()
-    del resumen
+    # 4. Poblar deudas_resumen desde historial_detalle (período más reciente = sit_01/monto_01)
+    _log(f"Construyendo deudas_resumen desde historial_detalle para período {periodo_reciente}...")
+    conn.execute(f"""
+        INSERT OR IGNORE INTO deudas_resumen (cuit, sit_max, monto_total, entidades_cod, periodo)
+        SELECT
+            cuit,
+            MAX(COALESCE(sit_01, 0))                     AS sit_max,
+            ROUND(SUM(COALESCE(monto_01, 0)) / 10.0, 1) AS monto_total,
+            GROUP_CONCAT(entidad)                         AS entidades_cod,
+            '{periodo_reciente}'
+        FROM historial_detalle
+        WHERE sit_01 IS NOT NULL AND sit_01 > 0
+        GROUP BY cuit
+    """)
+    conn.commit()
     _log("historial_detalle + deudas_resumen: completo")
 
 
@@ -506,36 +507,48 @@ def importar(zip_path: str, db_path: str) -> None:
 
     _init_db(conn)
 
-    tmpdir = _extraer_a_tmpdir(zip_path)
-    try:
-        nomdeu = _encontrar_archivo(tmpdir, ["nomdeu"])
-        if nomdeu:
-            _proc_nomdeu(conn, nomdeu)
-        else:
-            _log("Nomdeu.txt no encontrado — saltando denominaciones")
-
-        maeent = _encontrar_archivo(tmpdir, ["maeent"])
-        if maeent:
-            _proc_maeent(conn, maeent)
-        else:
-            _log("Maeent.txt no encontrado — saltando entidades")
-
-        deudores = _encontrar_archivo(tmpdir, ["deudor", "padron", "dsf", "1dsf", "24dsf"])
-        if not deudores:
-            _log("ERROR: No se encontró el archivo de deudores dentro del comprimido")
-            sys.exit(1)
-
-        _log(f"Archivo de deudores: {Path(deudores).name}")
+    # Soporte para .txt / .gz directo (omite extracción del comprimido)
+    if Path(zip_path).suffix.lower() in (".txt", ".gz"):
+        _log("Modo .txt directo — saltando extracción")
+        _log(f"Archivo de deudores: {Path(zip_path).name}")
         if modo == "24dsf":
-            _proc_24dsf(conn, deudores)
+            _proc_24dsf(conn, zip_path)
         else:
-            _proc_padron(conn, deudores)
+            _proc_padron(conn, zip_path)
+    else:
+        tmpdir = _extraer_a_tmpdir(zip_path)
+        try:
+            nomdeu = _encontrar_archivo(tmpdir, ["nomdeu"])
+            if nomdeu:
+                _proc_nomdeu(conn, nomdeu)
+            else:
+                _log("Nomdeu.txt no encontrado — saltando denominaciones")
 
-    finally:
-        shutil.rmtree(tmpdir, ignore_errors=True)
+            maeent = _encontrar_archivo(tmpdir, ["maeent"])
+            if maeent:
+                _proc_maeent(conn, maeent)
+            else:
+                _log("Maeent.txt no encontrado — saltando entidades")
 
-    _log("VACUUM (compactando DB final)...")
-    conn.execute("VACUUM")
+            deudores = _encontrar_archivo(tmpdir, ["deudor", "padron", "dsf", "1dsf", "24dsf"])
+            if not deudores:
+                _log("ERROR: No se encontró el archivo de deudores dentro del comprimido")
+                sys.exit(1)
+
+            _log(f"Archivo de deudores: {Path(deudores).name}")
+            if modo == "24dsf":
+                _proc_24dsf(conn, deudores)
+            else:
+                _proc_padron(conn, deudores)
+
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    try:
+        _log("VACUUM (compactando DB final)...")
+        conn.execute("VACUUM")
+    except MemoryError:
+        _log("VACUUM omitido — sin memoria suficiente (DB válida, solo sin compactar)")
     conn.close()
 
     size_mb = Path(db_path).stat().st_size / 1_048_576
