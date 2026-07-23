@@ -1,0 +1,24 @@
+# Bases de datos locales (BCRA nomdeu/padrón) — se generan/actualizan en Render, nunca en git
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+
+# Archivos comprimidos de origen BCRA (24DSF, padrón) — pesan GBs, se procesan localmente
+*.7z
+*.zip
+*.gz
+
+# Scripts de parche puntuales (uso único, ya aplicados sobre static/*.html)
+fix_v*.js
+_patch_*.js
+gen_logo.js
+
+# Carpetas/archivos temporales de inspección
+_tmp_*/
+*.tmp
+
+# Entornos y caches de Python/Node
+__pycache__/
+*.pyc
+node_modules/
