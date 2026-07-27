@@ -13,6 +13,21 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 import random
 import traceback
+
+# Módulos de scoring fiscal e integración ARCA (guards independientes:
+# scoring_fiscal es Python puro; arca_ws requiere cryptography instalado)
+try:
+    import scoring_fiscal
+    SCORING_FISCAL_OK = True
+except ImportError as e:
+    print(f"[init] scoring_fiscal no disponible: {e}", flush=True)
+    SCORING_FISCAL_OK = False
+try:
+    import arca_ws
+    ARCA_DISPONIBLE = True   # se confirma en el init (necesita certificado)
+except ImportError as e:
+    print(f"[init] arca_ws no disponible: {e}", flush=True)
+    ARCA_DISPONIBLE = False
 try:
     import boto3
     BOTO3_OK = True
@@ -2238,8 +2253,27 @@ def get_solvency_data(cuit):
     ua   = random.choice(_USER_AGENTS)
     data = None
 
+    # ── Fuente 0: ARCA oficial (WSAA + padrón A5) — canal autorizado ───────
+    # Prioridad máxima: dato oficial sin riesgo de bloqueo. Si falla por
+    # cualquier motivo retorna None y la cadena sigue con las fuentes fallback.
+    if ARCA_DISPONIBLE:
+        arca_data = arca_ws.obtener_datos_fiscales_arca(cuit_limpio)
+        if arca_data:
+            if not arca_data.get('ingresos_anuales'):
+                ing, fi = _inferir_ingresos_afip(
+                    arca_data.get('categoria_monotrib', ''), arca_data.get('tipo_persona', ''),
+                    arca_data.get('actividad_principal', ''), arca_data.get('es_empleador', False))
+                arca_data['ingresos_anuales'] = ing
+                arca_data['fuente_ingresos']  = fi
+            data = arca_data
+            print(
+                f"[solvency] {cuit_limpio} ARCA oficial "
+                f"cat={data.get('categoria_monotrib')} empl={data.get('es_empleador')} "
+                f"clae={data.get('clae_actividad')} ant={data.get('antiguedad_anos')}a",
+                flush=True)
+
     # ── Fuente 1: API configurada ──────────────────────────────────────────
-    if CUIT_API_URL and CUIT_API_KEY:
+    if data is None and CUIT_API_URL and CUIT_API_KEY:
         try:
             r = requests.get(
                 f"{CUIT_API_URL.rstrip('/')}/{cuit_limpio}",
@@ -3351,6 +3385,33 @@ def calcular_rating_predictivo(
     if sin_historial_interno:
         # Score de Prospección: AFIP solvencia como proxy de Capa B (0-400)
         pts_cb = min(400, round(pts_c2 * 400 / 300))
+
+        # ── Cerebro Fiscal Deductivo — solo cuando BCRA viene totalmente vacío ──
+        # Sin historial interno NI historial bancario estamos "a ciegas": el perfil
+        # fiscal (antigüedad impositiva + estructura + riesgo sectorial CLAE) es la
+        # mejor evidencia disponible. Requiere al menos una señal fiscal real para
+        # no reemplazar el proxy clásico con datos inventados.
+        if (SCORING_FISCAL_OK and solvency_data
+                and n_periodos_h == 0 and not periodos_curr
+                and (solvency_data.get('antiguedad_anos')
+                     or solvency_data.get('clae_actividad')
+                     or solvency_data.get('actividad_principal'))):
+            try:
+                pts_fiscal, _dbg_fiscal = scoring_fiscal.puntaje_perfil_fiscal(
+                    antiguedad_anos=solvency_data.get('antiguedad_anos'),
+                    categoria_mipyme=solvency_data.get('categoria_mipyme') or '',
+                    categoria_monotrib=solvency_data.get('categoria_monotrib') or '',
+                    clae_actividad=(solvency_data.get('clae_actividad')
+                                    or solvency_data.get('actividad_principal') or ''),
+                    es_empleador=solvency_data.get('es_empleador') is True,
+                    tipo_persona=solvency_data.get('tipo_persona') or '',
+                )
+                pts_cb = pts_fiscal
+                print(
+                    f"[cerebro-fiscal] {cuit_limpio} BCRA vacío → Capa B fiscal: "
+                    f"{_dbg_fiscal['componentes']}", flush=True)
+            except Exception as _e_fisc:
+                print(f"[cerebro-fiscal] {cuit_limpio} error: {_e_fisc} — proxy clásico", flush=True)
 
     # ═══ CAPA C: Comunidad Chat Bodegas (0-200 pts) ══════════════════════
     pts_cc, comunidad_negativa, _neg_count, _pos_count = _evaluar_comunidad(
@@ -12725,6 +12786,18 @@ _startup_v168()
 _init_padron_db()
 _init_nomdeu_db()   # padrón oficial BCRA — abre conexión inmediata si DB existe, descarga en bg si no
 _init_mipyme_db()   # padrón PyME (Min. Producción — importado via /update-mipyme-db)
+
+# ── Inicializar ARCA (canal oficial WSAA — requiere certificado) ─────────────
+# Reutiliza los helpers R2 existentes para el caché del TA (token 12h).
+if ARCA_DISPONIBLE:
+    try:
+        arca_ws.arca_init(DATA_DIR, _r2_upload_bytes, _r2_download_bytes)
+    except FileNotFoundError as e:
+        print(f"[init] ARCA sin credenciales ({e}) — se usan las fuentes AFIP fallback", flush=True)
+        ARCA_DISPONIBLE = False
+    except Exception as e:
+        print(f"[init] Error inicializando ARCA: {e}", flush=True)
+        ARCA_DISPONIBLE = False
 
 
 def _cheques_auto_update_loop():

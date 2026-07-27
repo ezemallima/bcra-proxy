@@ -14,6 +14,13 @@ fix_v*.js
 _patch_*.js
 gen_logo.js
 
+# Credenciales ARCA/AFIP — NUNCA commitear (clave privada + certificados)
+*.key
+*.crt
+*.csr
+*.pem
+arca_token_cache.json
+
 # Carpetas/archivos temporales de inspección
 _tmp_*/
 *.tmp
