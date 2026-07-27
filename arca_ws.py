@@ -80,23 +80,71 @@ _TA_CACHE_R2_KEY = 'arca_token_cache.json'
 # INICIALIZACIÓN — carga de credenciales
 # ══════════════════════════════════════════════════════════════════════════════
 
+_PEM_BLOQUE_RE = re.compile(
+    r'-----BEGIN ([A-Z0-9 ]+?)-----(.*?)-----END \1-----',
+    re.DOTALL,
+)
+
+
+def normalizar_pem(texto: str | bytes) -> bytes:
+    """Reconstruye un PEM canónico a partir de texto en cualquier formato.
+
+    Los paneles de variables de entorno (Render entre ellos) suelen destruir el
+    formato PEM: pegan todo en una línea, convierten los saltos en espacios, o
+    los guardan como la secuencia literal '\\n'. OpenSSL rechaza esos textos
+    aunque el material criptográfico esté intacto.
+
+    La normalización extrae el cuerpo base64 de cada bloque BEGIN/END, le quita
+    todo el espacio en blanco y lo re-envuelve a 64 caracteres por línea, que es
+    el ancho canónico del formato PEM (RFC 7468).
+
+    Si el texto no contiene ningún bloque BEGIN/END reconocible se devuelve tal
+    cual: puede ser un DER binario u otro formato que el caller sepa manejar.
+    """
+    if isinstance(texto, bytes):
+        try:
+            texto = texto.decode('utf-8')
+        except UnicodeDecodeError:
+            return texto   # binario (DER/PKCS12) — no es PEM, se devuelve intacto
+
+    # Secuencias literales que llegan desde JSON/env mal escapado
+    crudo = texto.replace('\\r\\n', '\n').replace('\\n', '\n').replace('\\r', '\n')
+    crudo = crudo.replace('\r\n', '\n').replace('\r', '\n')
+
+    bloques = []
+    for match in _PEM_BLOQUE_RE.finditer(crudo):
+        etiqueta = ' '.join(match.group(1).split())      # colapsa espacios internos
+        cuerpo   = re.sub(r'\s+', '', match.group(2))    # base64 sin espacios ni saltos
+        if not cuerpo:
+            continue
+        lineas = [cuerpo[i:i + 64] for i in range(0, len(cuerpo), 64)]
+        bloques.append(
+            f"-----BEGIN {etiqueta}-----\n" + "\n".join(lineas) + f"\n-----END {etiqueta}-----\n"
+        )
+
+    if not bloques:
+        return crudo.encode('utf-8')
+    return "".join(bloques).encode('ascii')
+
+
 def _leer_pem(env_contenido: str, env_ruta: str, candidatos: list) -> bytes | None:
     """Busca un PEM en orden: contenido en env → ruta en env → archivos candidatos.
 
-    El contenido por env var permite cargar las credenciales en Render sin
-    subir archivos al disco (los saltos de línea pueden venir como '\\n').
+    Todo lo que se devuelve pasa por normalizar_pem, así que da igual si el
+    panel de Render aplastó los saltos de línea o si el archivo en disco tiene
+    finales de línea de Windows.
     """
     contenido = os.environ.get(env_contenido, '').strip()
     if contenido:
-        return contenido.replace('\\n', '\n').encode()
+        return normalizar_pem(contenido)
 
     ruta_env = os.environ.get(env_ruta, '').strip()
     if ruta_env and os.path.exists(ruta_env):
-        return Path(ruta_env).read_bytes()
+        return normalizar_pem(Path(ruta_env).read_bytes())
 
     for cand in candidatos:
         if cand.exists():
-            return cand.read_bytes()
+            return normalizar_pem(cand.read_bytes())
     return None
 
 
@@ -128,8 +176,30 @@ def arca_init(data_dir: str, r2_upload_fn=None, r2_download_fn=None) -> None:
     if not key_pem:
         raise FileNotFoundError("clave privada ARCA no encontrada (ARCA_KEY_PEM / arca_private.key)")
 
-    _cert_obj = x509.load_pem_x509_certificate(cert_pem)
-    _key_obj  = serialization.load_pem_private_key(key_pem, password=None)
+    # Errores explícitos: distinguir "no está" de "está pero es ilegible" ahorra
+    # horas de diagnóstico cuando el panel de Render mutila el PEM.
+    try:
+        _cert_obj = x509.load_pem_x509_certificate(cert_pem)
+    except Exception as e:
+        raise ValueError(
+            f"certificado ARCA ilegible tras normalizar ({type(e).__name__}: {e}). "
+            f"Debe incluir las líneas -----BEGIN/END CERTIFICATE-----"
+        ) from e
+    try:
+        _key_obj = serialization.load_pem_private_key(key_pem, password=None)
+    except Exception as e:
+        raise ValueError(
+            f"clave privada ARCA ilegible tras normalizar ({type(e).__name__}: {e}). "
+            f"Debe ser PEM sin contraseña, con las líneas -----BEGIN/END PRIVATE KEY-----"
+        ) from e
+
+    # El par debe corresponderse: un certificado de otro trámite con esta clave
+    # produce un CMS que WSAA rechaza con un error genérico difícil de rastrear.
+    if _cert_obj.public_key().public_numbers() != _key_obj.public_key().public_numbers():
+        raise ValueError(
+            "el certificado ARCA y la clave privada no son del mismo par "
+            "(la clave no corresponde al certificado emitido)"
+        )
 
     _cuit_rep = _resolver_cuit_representada()
     print(f"[arca] init OK — env={ARCA_ENV} cuit_rep={_cuit_rep} "

@@ -74,18 +74,27 @@ SCRAPERAPI_KEY  = os.environ.get('SCRAPERAPI_KEY', '')
 # Ejemplo: en dic-2026 evaluar si subir a 300 o 400 según inflación acumulada.
 MORA_TECNICA_UMBRAL_K = float(os.environ.get('MORA_TECNICA_UMBRAL_K', '200.0'))
 
-# ── Bright Data Residential Proxies — motor de consultas en vivo ─────────────
-# Zona 'vendeseguro' configurada como Residential Proxies (AR).
-# Puerto 22225 = Residential Proxies (antes 33335 era Web Unlocker).
-# BRIGHTDATA_PASS   = contraseña de la zona residencial (var de entorno en Render)
-# BRIGHTDATA_API_KEY = API key de administración (solo fallback legacy)
-BRIGHTDATA_USER    = os.environ.get('BRIGHTDATA_USER', 'brd-customer-hl_cc5957d6-zone-vendeseguro')
-BRIGHTDATA_PASS    = os.environ.get('BRIGHTDATA_PASS', '')
-BRIGHTDATA_API_KEY = os.environ.get('BRIGHTDATA_API_KEY', '')
-BRIGHTDATA_HOST    = os.environ.get('BRIGHTDATA_HOST', 'brd.superproxy.io')
-BRIGHTDATA_PORT    = int(os.environ.get('BRIGHTDATA_PORT', '22225'))
-# Contraseña efectiva: zona residencial (BRIGHTDATA_PASS) tiene prioridad sobre API key
-_BRD_PASSWORD      = BRIGHTDATA_PASS or BRIGHTDATA_API_KEY
+# ── Apalancamiento (deuda bancaria / ingresos anuales estimados) ─────────────
+# El chequeo venía comparando deuda en miles contra ingresos en pesos, así que
+# el ratio daba 1000× por debajo del real y la penalización nunca se aplicaba.
+# Corregidas las unidades, la penalización pasa a ser graduada en vez de un
+# acantilado, y se escala por un factor de transición para no desplomar de golpe
+# los scores de la cartera vigente.
+#   _APAL_UMBRAL    : ratio a partir del cual empieza a penalizar (0.5 = deuda = medio ingreso anual)
+#   _APAL_RANGO     : ancho del tramo hasta la penalización máxima (0.5 → 1.5 = tope)
+#   _APAL_PENAL_MAX : penalización nominal plena, en puntos de score
+#   _APAL_FACTOR    : calibración transicional 0..1 — subir a 1.0 aplica el rigor pleno
+_APAL_UMBRAL    = float(os.environ.get('APALANCAMIENTO_UMBRAL', '0.5'))
+_APAL_RANGO     = float(os.environ.get('APALANCAMIENTO_RANGO',  '1.0'))
+_APAL_PENAL_MAX = float(os.environ.get('APALANCAMIENTO_PENAL_MAX', '200'))
+_APAL_FACTOR    = float(os.environ.get('APALANCAMIENTO_FACTOR', '0.5'))
+
+# ── Bright Data: RETIRADO de la cadena de proxies ────────────────────────────
+# La IP de salida de Render quedó vetada en la zona residencial contratada y el
+# proxy devolvía "407 Auth Failed (code: ip_forbidden)" en el 100% de las
+# llamadas (BCRA, AFIP y scrapers), aportando solo latencia muerta antes del
+# fallback. La cadena vigente es: Directo (BCRA) / ScraperAPI (no-BCRA).
+# Las variables BRIGHTDATA_* pueden borrarse del entorno de Render: ya no se leen.
 
 # ── Cloudflare R2 — bucket privado para bcra_nomdeu.db (padrón offline 24m) ────
 # Si están las 4 variables configuradas, la descarga autenticada por R2 tiene
@@ -123,16 +132,6 @@ def _login_rate_reset(ip: str):
     """Limpia los intentos de una IP al loguearse con éxito."""
     with _login_attempts_lock:
         _login_attempts.pop(ip, None)
-
-# Log diagnóstico al iniciar — ayuda a detectar credenciales incorrectas o ausentes
-_brd_pass_src = 'BRIGHTDATA_PASS' if BRIGHTDATA_PASS else ('BRIGHTDATA_API_KEY' if BRIGHTDATA_API_KEY else 'NINGUNA')
-_brd_pass_len = len(_BRD_PASSWORD)
-print(
-    f"[brightdata] user={BRIGHTDATA_USER} | host={BRIGHTDATA_HOST}:{BRIGHTDATA_PORT} | "
-    f"pass_src={_brd_pass_src} | pass_len={_brd_pass_len} | "
-    f"{'OK — credenciales configuradas' if _brd_pass_len > 0 else 'ADVERTENCIA — sin contraseña, Bright Data deshabilitado'}",
-    flush=True
-)
 
 ADMIN_CUIT = '30710295022'
 ADMIN_PASS = 'Artel2026'
@@ -800,26 +799,7 @@ def _import_cheques_zip(date_str: str = None) -> bool:
         if resp is None and not _archivo_inexistente:
             print(f"[cheques_db] Todas las URLs directas fallaron — intentando vía proxy", flush=True)
 
-        # Intento 2: Bright Data residencial — prueba todas las URLs candidatas
-        if resp is None and not _archivo_inexistente and BRIGHTDATA_USER and _BRD_PASSWORD:
-            _pu = f"http://{BRIGHTDATA_USER}:{_BRD_PASSWORD}@{BRIGHTDATA_HOST}:{BRIGHTDATA_PORT}"
-            print(f"[cheques_db] Descarga vía Bright Data", flush=True)
-            for _url_c2 in _URL_CANDIDATAS:
-                try:
-                    _r2 = requests.get(_url_c2, headers=_browser_hdrs, timeout=180, verify=False,
-                                       stream=True, proxies={"http": _pu, "https": _pu})
-                    if _r2.status_code == 200:
-                        resp = _r2
-                        url  = _url_c2
-                        print(f"[cheques_db] Bright Data OK en {_url_c2}", flush=True)
-                        break
-                    else:
-                        print(f"[cheques_db] Bright Data HTTP {_r2.status_code} en {_url_c2}", flush=True)
-                except Exception as e_p:
-                    print(f"[cheques_db] Bright Data error en {_url_c2}: {e_p}", flush=True)
-
-        # Intento 3: ScraperAPI — proxy rotativo con salida en Argentina.
-        # Cubre el 407 ip_forbidden de Bright Data (IP de Render vetada en la zona).
+        # Intento 2: ScraperAPI — proxy rotativo con salida en Argentina.
         if resp is None and not _archivo_inexistente and SCRAPERAPI_KEY:
             print(f"[cheques_db] Descarga vía ScraperAPI", flush=True)
             for _url_c3 in _URL_CANDIDATAS:
@@ -1477,60 +1457,69 @@ def _bcra_get(url: str, timeout: int = 0) -> requests.Response:
     """Transporte HTTP unificado para consultas al BCRA y scrapers públicos.
 
     Cadena de prioridad:
-      1. Bright Data Web Unlocker — motor principal (proxy residencial, inmune a 403)
-      2. ScraperAPI               — fallback si Bright Data falla
-      3. Directo                  — último recurso
+      1. Directo    — siempre el primer intento (cero latencia añadida)
+      2. ScraperAPI — solo si el destino bloquea a la IP de Render, y solo en
+                      dominios no-BCRA (bcra.gob.ar responde 403 a ScraperAPI,
+                      así que ahí el directo es la única vía posible)
+
+    Bright Data se retiró de la cadena: la IP de Render quedó vetada en la zona
+    residencial contratada y devolvía 407 ip_forbidden en el 100% de las
+    llamadas, sumando un timeout muerto a cada consulta.
     """
-    _t = timeout if timeout > 0 else 12
+    _t      = timeout if timeout > 0 else 12
+    _is_bcra = 'bcra.gob.ar' in url
 
-    # ── 1. Bright Data Residential Proxies ───────────────────────────────────
-    # Habilitado solo para dominios NO-BCRA (scraping de AFIP, Infocred, etc.)
-    # BCRA bloquea las IPs residenciales de BD con 502 → el directo es más rápido
-    _is_bcra_api = 'bcra.gob.ar' in url
-    if BRIGHTDATA_USER and _BRD_PASSWORD and not _is_bcra_api:
-        _brd_proxy = f"http://{BRIGHTDATA_USER}:{_BRD_PASSWORD}@{BRIGHTDATA_HOST}:{BRIGHTDATA_PORT}"
-        _brd_headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-            "Accept": "application/json, text/plain, */*",
-            "Accept-Language": "es-AR,es;q=0.9,en;q=0.8",
-            "Accept-Encoding": "gzip, deflate, br",
-        }
-        try:
-            r = requests.get(
-                url,
-                headers=_brd_headers,
-                proxies={"http": _brd_proxy, "https": _brd_proxy},
-                timeout=_t,
-                verify=False,
-            )
-            if r.status_code not in (407, 502, 503):
-                return r
-            raise requests.RequestException(f"Bright Data HTTP {r.status_code}")
-        except requests.RequestException as _e:
-            print(f"[proxy] Bright Data falló ({_e}) — cayendo a ScraperAPI/directo", flush=True)
+    # ── BCRA: directo con semáforo, sin proxy posible ────────────────────────
+    if _is_bcra:
+        with _bcra_api_sem:
+            try:
+                return requests.get(url, timeout=_t, verify=False)
+            except requests.exceptions.ConnectionError:
+                # BCRA resetea la conexión de forma esporádica bajo carga, no
+                # necesariamente porque el dato no exista. Un reintento corto
+                # recupera la mayoría de estos casos sin penalizar la latencia
+                # cuando el endpoint está realmente caído (ahí el 2do también falla).
+                print(f"[bcra_get] conexión reseteada en {url[:60]}... — reintentando en 0.6s", flush=True)
+                time.sleep(0.6)
+                return requests.get(url, timeout=_t, verify=False)
 
-    # ── 2. ScraperAPI (fallback) ─────────────────────────────────────────────
-    # BCRA bloquea las IPs de ScraperAPI con 403, igual que BrightData.
-    # Solo usar ScraperAPI para dominios no-BCRA (AFIP, Infocred, etc.)
-    if SCRAPERAPI_KEY and not _is_bcra_api:
+    # ── No-BCRA (AFIP, Infocred, etc.): directo primero ──────────────────────
+    # Timeout acotado: si el sitio bloquea a Render conviene enterarse rápido y
+    # saltar a ScraperAPI, en vez de agotar los 12s completos.
+    _STATUS_BLOQUEO = (401, 403, 407, 409, 429, 451, 502, 503)
+    _resp_directa   = None
+    try:
+        _resp_directa = requests.get(
+            url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                              "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+                "Accept": "application/json, text/plain, */*",
+                "Accept-Language": "es-AR,es;q=0.9,en;q=0.8",
+            },
+            timeout=min(_t, 8), verify=False,
+        )
+        if _resp_directa.status_code not in _STATUS_BLOQUEO:
+            return _resp_directa
+        print(f"[proxy] directo HTTP {_resp_directa.status_code} en {url[:60]}... "
+              f"— cayendo a ScraperAPI", flush=True)
+    except requests.RequestException as _e_dir:
+        print(f"[proxy] directo falló ({type(_e_dir).__name__}) en {url[:60]}... "
+              f"— cayendo a ScraperAPI", flush=True)
+
+    # ── ScraperAPI: solo ante bloqueo comprobado ─────────────────────────────
+    if SCRAPERAPI_KEY:
         return requests.get(
             'http://api.scraperapi.com',
             params={'api_key': SCRAPERAPI_KEY, 'url': url, 'country_code': 'ar'},
             timeout=_t,
         )
 
-    # ── 3. Directo — con semáforo para limitar llamadas concurrentes a BCRA ───
-    with _bcra_api_sem:
-        try:
-            return requests.get(url, timeout=_t, verify=False)
-        except requests.exceptions.ConnectionError as _e_conn:
-            # BCRA resetea la conexión (ConnectionResetError) de forma esporádica
-            # bajo carga, no necesariamente porque el dato no exista. Un reintento
-            # corto recupera la mayoría de estos casos sin penalizar la latencia
-            # cuando el endpoint está realmente caído (ahí el 2do intento también falla).
-            print(f"[bcra_get] conexión reseteada en {url[:60]}... — reintentando en 0.6s", flush=True)
-            time.sleep(0.6)
-            return requests.get(url, timeout=_t, verify=False)
+    # Sin ScraperAPI configurado: devolver la respuesta bloqueada para que el
+    # caller decida (mejor que lanzar y perder el código de estado real).
+    if _resp_directa is not None:
+        return _resp_directa
+    return requests.get(url, timeout=_t, verify=False)
 
 
 def _map_detalle_bcra(raw: dict) -> dict:
@@ -3630,14 +3619,35 @@ def calcular_rating_predictivo(
                 flush=True
             )
             _ing = _ing_floor
+        # Fix de unidades: los montos del BCRA vienen en MILES de pesos, mientras
+        # que ingresos_anuales está en pesos. El ratio se venía calculando
+        # mezclando ambas escalas, quedando 1000× por debajo del real — la
+        # penalización era, en los hechos, código muerto.
+        _deu_pesos = _deu_chk * 1_000
+        _ratio_apal = (_deu_pesos / _ing) if _ing > 0 else 0.0
         print(
-            f"[score v{_SCORE_VERSION}] {cuit_limpio} ing={_ing} deu={_deu_chk} "
-            f"ratio={round(_deu_chk/_ing,3) if _ing else 'inf'}",
+            f"[score v{_SCORE_VERSION}] {cuit_limpio} ing={_ing} deu_pesos={_deu_pesos} "
+            f"ratio={round(_ratio_apal, 3) if _ing else 'inf'}",
             flush=True
         )
-        if _ing > 0 and _deu_chk / _ing > 0.5:
-            puntos -= 200
-            print(f"[score v{_SCORE_VERSION}] {cuit_limpio} apalancamiento alto → -200", flush=True)
+        # Penalización graduada + factor de transición.
+        # Antes era un acantilado: 0 puntos hasta 0.5 y −200 un centavo después.
+        # Con el ratio ya corregido eso produciría saltos bruscos de rango en la
+        # cartera, así que la penalización crece de forma lineal entre el umbral
+        # y el techo, y se escala por APALANCAMIENTO_FACTOR (0.5 = mitad de la
+        # penalización nominal). Subir esa variable a 1.0 en Render aplica el
+        # rigor pleno sin necesidad de redeploy.
+        if _ing > 0 and _ratio_apal > _APAL_UMBRAL:
+            _exceso = min(1.0, (_ratio_apal - _APAL_UMBRAL) / _APAL_RANGO)
+            _penal  = round(_APAL_PENAL_MAX * _exceso * _APAL_FACTOR)
+            if _penal > 0:
+                puntos -= _penal
+                print(
+                    f"[score v{_SCORE_VERSION}] {cuit_limpio} apalancamiento "
+                    f"ratio={_ratio_apal:.2f} exceso={_exceso:.2f} "
+                    f"factor={_APAL_FACTOR} → -{_penal}",
+                    flush=True
+                )
 
     # ── Deuda interna +90 días: penaliza aunque BCRA no lo vea aún ──────────
     if deuda_90d_interna:
