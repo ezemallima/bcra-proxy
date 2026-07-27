@@ -9124,6 +9124,34 @@ def _nomdeu_get_deuda(cuit: str):
     return _nomdeu_agregar_filas(filas)
 
 
+@app.route("/admin/arca-diagnostico")
+@require_login
+def admin_arca_diagnostico():
+    """Por qué ARCA está o no operativo, con la causa exacta del fallo.
+
+    No expone material criptográfico: de la clave privada solo informa
+    presencia, longitud y si tiene cabecera PEM reconocible.
+    Si el módulo no está configurado, reintenta la inicialización para
+    capturar y reportar el error concreto del lector de PEM.
+    """
+    if not _ARCA_MODULO_OK:
+        return jsonify({
+            "ok": False,
+            "arca_modulo": False,
+            "error": "arca_ws no pudo importarse (revisar cryptography en el build)",
+        }), 503
+    try:
+        info = arca_ws.diagnostico(DATA_DIR)
+        # Si el reintento logró configurarlo, habilitar el canal en caliente
+        global ARCA_DISPONIBLE
+        if info.get('configurado') and not ARCA_DISPONIBLE:
+            ARCA_DISPONIBLE = True
+            print("[arca] canal habilitado tras diagnóstico exitoso", flush=True)
+        return jsonify({"ok": True, "arca_activo": ARCA_DISPONIBLE, **info})
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"{type(e).__name__}: {e}"}), 500
+
+
 @app.route("/admin/nomdeu-lookup/<cuit>")
 def admin_nomdeu_lookup(cuit):
     """Diagnóstico: muestra el resumen agregado (_nomdeu_get_deuda) y las

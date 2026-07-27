@@ -234,6 +234,81 @@ def configurado() -> bool:
     return _cert_obj is not None and _key_obj is not None
 
 
+def diagnostico(data_dir: str | None = None) -> dict:
+    """Informe de por qué ARCA está (o no) operativo, sin exponer secretos.
+
+    Nunca devuelve material criptográfico: de la clave privada solo se reporta
+    presencia, longitud y si tiene cabecera PEM reconocible. Del certificado se
+    exponen únicamente datos públicos (sujeto, vigencia).
+    """
+    base_dir = data_dir or _data_dir or os.getcwd()
+    info: dict = {
+        'env': ARCA_ENV,
+        'configurado': configurado(),
+        'fuentes': {},
+        'archivos_en_disco': {},
+        'error': None,
+    }
+
+    # ── Qué llegó por variables de entorno (sin volcar el contenido) ────────
+    for etiqueta, var in (('certificado', 'ARCA_CERT_PEM'), ('clave_privada', 'ARCA_KEY_PEM')):
+        crudo = os.environ.get(var, '')
+        detalle = {
+            'env_var': var,
+            'presente': bool(crudo.strip()),
+            'longitud': len(crudo),
+        }
+        if crudo.strip():
+            normalizado = normalizar_pem(crudo)
+            try:
+                texto = normalizado.decode('ascii')
+                cabecera = next((l for l in texto.splitlines() if l.startswith('-----BEGIN')), None)
+            except UnicodeDecodeError:
+                cabecera = None
+            detalle['cabecera_detectada'] = cabecera or 'NINGUNA (no se reconoce un bloque PEM)'
+            detalle['saltos_de_linea_originales'] = crudo.count('\n')
+            detalle['secuencia_backslash_n']      = '\\n' in crudo
+        info['fuentes'][etiqueta] = detalle
+
+    # ── Qué hay en disco (Render no tiene los .crt/.key: están gitignoreados) ──
+    for nombre in ('arca_certificate.crt', 'arca_certificate.crt.crt',
+                   'arca_certificate.pem', 'arca_private.key', 'arca_private.pem'):
+        for base in {str(base_dir), os.getcwd()}:
+            ruta = Path(base) / nombre
+            if ruta.exists():
+                info['archivos_en_disco'][str(ruta)] = ruta.stat().st_size
+
+    # ── Datos públicos del certificado ya cargado ──────────────────────────
+    if _cert_obj is not None:
+        info['certificado'] = {
+            'sujeto':       _cert_obj.subject.rfc4514_string(),
+            'emisor':       _cert_obj.issuer.rfc4514_string(),
+            'vence':        _cert_obj.not_valid_after_utc.isoformat(),
+            'vencido':      _cert_obj.not_valid_after_utc < datetime.now(timezone.utc),
+            'cuit_titular': _cuit_rep,
+        }
+
+    # ── Si no está configurado, reproducir el fallo para reportar la causa ──
+    if not configurado():
+        try:
+            arca_init(base_dir, _r2_upload, _r2_download)
+            info['configurado'] = configurado()
+            info['error'] = None
+        except Exception as e:
+            info['error'] = f"{type(e).__name__}: {e}"
+
+    # ── Estado del ticket de acceso cacheado ───────────────────────────────
+    if _ta_valido(_ta_cache):
+        info['ticket_acceso'] = {
+            'vigente': True,
+            'vence_en_segundos': int(_ta_cache.get('expiration_ts', 0) - time.time()),
+        }
+    else:
+        info['ticket_acceso'] = {'vigente': False}
+
+    return info
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # WSAA — login CMS y cache del Ticket de Acceso (TA)
 # ══════════════════════════════════════════════════════════════════════════════
