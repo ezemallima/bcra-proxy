@@ -179,6 +179,108 @@ def _puntaje_estructura(es_empleador: bool, categoria_mipyme: str = '') -> float
     return 1.0  # sin estructura, neutral
 
 
+def _puntaje_estado_clave(estado_clave: str | None) -> tuple:
+    """Pondera el estado de la clave fiscal (CUIT) informado por el Padrón A13.
+
+    Una clave dada de baja o inactiva es la señal más fuerte de que el CUIT no
+    puede operar legalmente: no es un matiz de riesgo, es un impedimento.
+
+    Returns: (factor 0.3..1.0, alerta: str | None)
+    """
+    if not estado_clave:
+        return 1.0, None   # sin dato: neutral, no se castiga la ausencia
+
+    est = str(estado_clave).upper().strip()
+
+    # El orden importa: 'INACTIVO' contiene 'ACTIVO' como subcadena, así que los
+    # estados negativos deben evaluarse ANTES del positivo. Invertir este orden
+    # hace que un CUIT inactivo puntúe como plenamente operativo.
+    if 'BAJA' in est or 'CANCELAD' in est:
+        return 0.3, f'CUIT con clave fiscal dada de baja ({est})'
+    # 'RESTRI' cubre RESTRINGIDO / RESTRICCIONES / RESTRICTIVO en una sola regla
+    if any(m in est for m in ('INACTIV', 'SUSPEND', 'LIMITAD', 'RESTRI')):
+        return 0.5, f'CUIT con clave fiscal no operativa ({est})'
+    if 'ACTIVO' in est:
+        return 1.0, None
+    return 0.85, f'Estado de clave fiscal no reconocido ({est})'
+
+
+# Marcadores que ARCA usa para señalar un domicilio no verificable
+_DOMICILIO_INVALIDO = ('INEXISTENTE', 'INCORRECT', 'BAJA', 'ANULAD', 'DESCONOCID')
+
+
+def _puntaje_domicilios(domicilios: list | None) -> tuple:
+    """Evalúa la consistencia de los domicilios fiscales declarados.
+
+    Un contribuyente real tiene al menos un domicilio vigente y verificable.
+    La ausencia total de domicilio, o domicilios marcados como inexistentes,
+    es un patrón clásico de CUIT constituido solo para facturar.
+
+    Returns: (factor 0.6..1.05, alerta: str | None)
+    """
+    if not domicilios:
+        return 1.0, None   # el alcance consultado puede no traerlos: neutral
+
+    validos = 0
+    invalidos = 0
+    for dom in domicilios:
+        if not isinstance(dom, dict):
+            continue
+        estado = str(dom.get('estado') or '').upper()
+        marca  = str(dom.get('adicional') or '').upper()
+        if any(m in estado or m in marca for m in _DOMICILIO_INVALIDO):
+            invalidos += 1
+        elif dom.get('direccion') or dom.get('localidad'):
+            validos += 1
+
+    if validos == 0 and invalidos > 0:
+        return 0.6, 'Ningún domicilio fiscal vigente (todos marcados como inválidos)'
+    if validos == 0:
+        return 0.85, 'Sin domicilio fiscal con datos verificables'
+    if invalidos > 0:
+        return 0.9, f'{invalidos} domicilio(s) marcado(s) como inválido(s) por ARCA'
+    # Domicilio fiscal y legal declarados y vigentes: sustancia registral
+    return (1.05 if validos >= 2 else 1.0), None
+
+
+def _puntaje_regimenes(
+    n_impuestos_activos: int | None,
+    tiene_iva: bool,
+    tiene_ganancias: bool,
+    tiene_monotributo: bool,
+) -> tuple:
+    """Pondera la estructura impositiva activa como proxy de operación real.
+
+    IVA y Ganancias implican obligaciones de declaración periódica y capacidad
+    de emitir comprobantes fiscales: son el sello de una empresa que opera de
+    verdad. Un CUIT sin ningún impuesto activo no puede facturar — es el perfil
+    "fantasma" que hay que marcar antes de otorgar crédito.
+
+    Returns: (factor 0.5..1.25, alerta: str | None, es_fantasma: bool)
+    """
+    n = n_impuestos_activos if isinstance(n_impuestos_activos, int) else None
+
+    if n is None and not (tiene_iva or tiene_ganancias or tiene_monotributo):
+        return 1.0, None, False   # el alcance no trajo impuestos: neutral
+
+    if n == 0 and not (tiene_iva or tiene_ganancias or tiene_monotributo):
+        return 0.5, 'CUIT sin impuestos activos — no puede facturar legalmente', True
+
+    factor = 1.0
+    if tiene_iva:
+        factor += 0.12          # responsable inscripto: mayor exigencia formal
+    if tiene_ganancias:
+        factor += 0.08
+    if tiene_monotributo and not tiene_iva:
+        factor += 0.02          # monotributo: estructura simplificada
+
+    # Amplitud de regímenes: cada inscripción adicional suma sustancia, con tope
+    if n:
+        factor += min(0.03 * max(0, n - 2), 0.09)
+
+    return round(min(1.25, factor), 3), None, False
+
+
 def _puntaje_riesgo_sectorial(clae: str | None) -> float:
     """
     Busca factor de riesgo por CLAE (actividad económica).
@@ -226,6 +328,12 @@ def puntaje_perfil_fiscal(
     clae_actividad: str = '',
     es_empleador: bool = False,
     tipo_persona: str = '',
+    estado_clave: str = '',
+    domicilios: list | None = None,
+    n_impuestos_activos: int | None = None,
+    tiene_iva: bool = False,
+    tiene_ganancias: bool = False,
+    tiene_monotributo: bool = False,
 ) -> tuple:
     """
     Cerebro Fiscal Deductivo: calcula puntaje 0-400 combinando:
@@ -270,6 +378,14 @@ def puntaje_perfil_fiscal(
     factor_estructura = _puntaje_estructura(es_empl_bool, cat_mip)
     factor_riesgo = _puntaje_riesgo_sectorial(clae)
 
+    # ── Factores del Padrón A13 (neutros = 1.0 si el dato no está) ────────────
+    factor_clave, alerta_clave = _puntaje_estado_clave(estado_clave)
+    factor_domic, alerta_domic = _puntaje_domicilios(domicilios)
+    factor_regim, alerta_regim, es_fantasma = _puntaje_regimenes(
+        n_impuestos_activos, tiene_iva, tiene_ganancias, tiene_monotributo
+    )
+    alertas = [a for a in (alerta_clave, alerta_domic, alerta_regim) if a]
+
     # ── Puntaje base según tipo persona y categoría fiscal ────────────────────
     # Responsable Inscripto o Empleador → base 280
     # Monotributo A-K → base 120-220 según categoría
@@ -291,24 +407,50 @@ def puntaje_perfil_fiscal(
     # Antigüedad y estructura multiplican (más años / más nómina = mejor).
     # El riesgo sectorial DIVIDE: a mayor riesgo del rubro, menor puntaje.
     # Ej: construcción (1.4) reduce; servicios públicos (0.6) aumenta.
-    puntaje_bruto = pts_base * factor_antiguedad * factor_estructura / factor_riesgo
+    # Los factores del A13 (clave fiscal, domicilios, regímenes) multiplican y
+    # valen 1.0 cuando el dato no está disponible, de modo que un perfil sin
+    # A13 puntúa exactamente igual que antes de esta integración.
+    puntaje_bruto = (
+        pts_base
+        * factor_antiguedad
+        * factor_estructura
+        * factor_clave
+        * factor_domic
+        * factor_regim
+        / factor_riesgo
+    )
 
     # ── Caps y normalización a 0-400 ──────────────────────────────────────────
     puntaje_final = max(40, min(400, int(round(puntaje_bruto))))
+
+    # Un CUIT sin impuestos activos no puede facturar: por más antigüedad o
+    # rubro estable que tenga, no se le reconoce perfil fiscal de empresa
+    # operativa. Techo duro, en línea con el criterio conservador del negocio.
+    if es_fantasma:
+        puntaje_final = min(puntaje_final, 120)
 
     # ── Debug para logs ────────────────────────────────────────────────────────
     debug = {
         'factor_antiguedad': round(factor_antiguedad, 3),
         'factor_estructura': round(factor_estructura, 3),
         'factor_riesgo_sectorial': round(factor_riesgo, 3),
+        'factor_estado_clave': round(factor_clave, 3),
+        'factor_domicilios': round(factor_domic, 3),
+        'factor_regimenes': round(factor_regim, 3),
+        'cuit_fantasma': es_fantasma,
+        'alertas': alertas,
         'puntaje_bruto': round(puntaje_bruto, 1),
         'puntaje_final': puntaje_final,
         'componentes': (
             f"base={pts_base} × "
             f"antig={factor_antiguedad:.2f} × "
-            f"estr={factor_estructura:.2f} ÷ "
+            f"estr={factor_estructura:.2f} × "
+            f"clave={factor_clave:.2f} × "
+            f"domic={factor_domic:.2f} × "
+            f"regim={factor_regim:.2f} ÷ "
             f"riesgo={factor_riesgo:.2f} "
             f"→ {puntaje_final}"
+            + (" [CUIT FANTASMA]" if es_fantasma else "")
         ),
     }
 

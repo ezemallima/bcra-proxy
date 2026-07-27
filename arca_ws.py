@@ -42,22 +42,40 @@ from cryptography.x509.oid import NameOID
 # CONFIGURACIÓN
 # ══════════════════════════════════════════════════════════════════════════════
 
-ARCA_ENV     = os.environ.get('ARCA_ENV', 'produccion')   # 'produccion' | 'homologacion'
-ARCA_SERVICE = 'ws_sr_constancia_inscripcion'
+ARCA_ENV = os.environ.get('ARCA_ENV', 'produccion')   # 'produccion' | 'homologacion'
+
+# Servicios de negocio habilitados para el certificado (Administrador de Relaciones).
+# WSAA emite un Ticket de Acceso POR SERVICIO: cada uno tiene su propio TRA y su
+# propia entrada de caché.
+SERVICIO_CONSTANCIA = 'ws_sr_constancia_inscripcion'
+SERVICIO_PADRON_A13 = 'ws_sr_padron_a13'
+
+# Compatibilidad con el nombre anterior del módulo
+ARCA_SERVICE = SERVICIO_CONSTANCIA
 
 _URLS = {
     'produccion': {
-        'wsaa':   'https://wsaa.afip.gov.ar/ws/services/LoginCms',
-        'padron': 'https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA5',
+        'wsaa':       'https://wsaa.afip.gov.ar/ws/services/LoginCms',
+        'padron':     'https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA5',
+        'padron_a13': 'https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA13',
     },
     'homologacion': {
-        'wsaa':   'https://wsaahomo.afip.gov.ar/ws/services/LoginCms',
-        'padron': 'https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA5',
+        'wsaa':       'https://wsaahomo.afip.gov.ar/ws/services/LoginCms',
+        'padron':     'https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA5',
+        'padron_a13': 'https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA13',
     },
 }
 
-WSAA_URL   = _URLS.get(ARCA_ENV, _URLS['produccion'])['wsaa']
-PADRON_URL = _URLS.get(ARCA_ENV, _URLS['produccion'])['padron']
+_ENTORNO       = _URLS.get(ARCA_ENV, _URLS['produccion'])
+WSAA_URL       = _ENTORNO['wsaa']
+PADRON_URL     = _ENTORNO['padron']
+PADRON_A13_URL = _ENTORNO['padron_a13']
+
+# Namespace SOAP del servicio de padrón según alcance
+_NS_PADRON = {
+    SERVICIO_CONSTANCIA: 'http://a5.soap.ws.server.puc.sr/',
+    SERVICIO_PADRON_A13: 'http://a13.soap.ws.server.puc.sr/',
+}
 
 # Margen antes del vencimiento real del TA (12h) para renovar proactivamente
 _TA_MARGEN_SEG = 600
@@ -67,7 +85,7 @@ _data_dir:  str | None = None
 _cert_obj             = None   # x509.Certificate
 _key_obj              = None   # clave privada cargada
 _cuit_rep:  str | None = None  # CUIT del titular del certificado
-_ta_cache:  dict       = {}    # {'token','sign','expiration_ts'}
+_ta_cache:  dict       = {}    # {servicio: {'token','sign','expiration_ts'}}
 _ta_lock              = threading.Lock()
 _r2_upload            = None   # fn(key, bytes, content_type) — opcional
 _r2_download          = None   # fn(key) -> bytes|None — opcional
@@ -297,14 +315,16 @@ def diagnostico(data_dir: str | None = None) -> dict:
         except Exception as e:
             info['error'] = f"{type(e).__name__}: {e}"
 
-    # ── Estado del ticket de acceso cacheado ───────────────────────────────
-    if _ta_valido(_ta_cache):
-        info['ticket_acceso'] = {
-            'vigente': True,
-            'vence_en_segundos': int(_ta_cache.get('expiration_ts', 0) - time.time()),
+    # ── Estado de los tickets de acceso cacheados (uno por servicio) ───────
+    info['servicios'] = {}
+    for servicio in (SERVICIO_CONSTANCIA, SERVICIO_PADRON_A13):
+        ta = _ta_cache.get(servicio) or {}
+        info['servicios'][servicio] = {
+            'ticket_vigente': _ta_valido(ta),
+            'vence_en_segundos': (
+                int(ta.get('expiration_ts', 0) - time.time()) if _ta_valido(ta) else None
+            ),
         }
-    else:
-        info['ticket_acceso'] = {'vigente': False}
 
     return info
 
@@ -313,9 +333,12 @@ def diagnostico(data_dir: str | None = None) -> dict:
 # WSAA — login CMS y cache del Ticket de Acceso (TA)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _generar_tra() -> bytes:
+def _generar_tra(servicio: str = SERVICIO_CONSTANCIA) -> bytes:
     """TRA con generación 5 min hacia atrás (tolerancia a clock skew) y
-    vencimiento 10 min hacia adelante, en ISO 8601 con timezone."""
+    vencimiento 10 min hacia adelante, en ISO 8601 con timezone.
+
+    El TA que emite WSAA sirve únicamente para el servicio declarado acá.
+    """
     ahora = datetime.now(timezone.utc).replace(microsecond=0)
     gen   = (ahora - timedelta(minutes=5)).isoformat()
     exp   = (ahora + timedelta(minutes=10)).isoformat()
@@ -327,7 +350,7 @@ def _generar_tra() -> bytes:
         f'<generationTime>{gen}</generationTime>'
         f'<expirationTime>{exp}</expirationTime>'
         '</header>'
-        f'<service>{ARCA_SERVICE}</service>'
+        f'<service>{servicio}</service>'
         '</loginTicketRequest>'
     )
     return tra.encode('utf-8')
@@ -363,9 +386,9 @@ def _buscar_texto(root, nombre: str) -> str | None:
     return None
 
 
-def _wsaa_login() -> dict:
-    """loginCms contra WSAA. Retorna {'token','sign','expiration_ts'}."""
-    cms_b64 = _firmar_cms(_generar_tra())
+def _wsaa_login(servicio: str = SERVICIO_CONSTANCIA) -> dict:
+    """loginCms contra WSAA para un servicio. Retorna {'token','sign','expiration_ts'}."""
+    cms_b64 = _firmar_cms(_generar_tra(servicio))
 
     envelope = (
         '<soapenv:Envelope '
@@ -408,7 +431,7 @@ def _wsaa_login() -> dict:
     except (TypeError, ValueError):
         exp_ts = time.time() + 12 * 3600   # el TA dura 12h por especificación
 
-    print(f"[arca-wsaa] TA emitido OK — vence {expiracion}", flush=True)
+    print(f"[arca-wsaa] TA emitido OK para {servicio} — vence {expiracion}", flush=True)
     return {'token': token, 'sign': sign, 'expiration_ts': exp_ts}
 
 
@@ -416,84 +439,118 @@ def _ta_cache_path() -> Path:
     return Path(_data_dir or '.') / _TA_CACHE_FILE
 
 
-def _ta_valido(ta: dict) -> bool:
+def _ta_valido(ta: dict | None) -> bool:
+    """True si el TA existe y le queda margen antes de vencer.
+
+    Tolera None: con el caché multi-servicio, pedir el TA de un servicio que
+    todavía no se usó devuelve None y eso no es un error.
+    """
+    if not isinstance(ta, dict):
+        return False
     return bool(ta.get('token')) and time.time() < ta.get('expiration_ts', 0) - _TA_MARGEN_SEG
 
 
-def obtener_ta() -> dict:
-    """Ticket de Acceso vigente: memoria → disco → R2 → login WSAA nuevo.
+def _ta_cache_leer_todos() -> dict:
+    """Caché completo {servicio: TA} desde disco, con R2 como respaldo.
+
+    Migra en silencio el formato viejo (un único TA plano en la raíz del JSON,
+    anterior al soporte multi-servicio) a la estructura por servicio.
+    """
+    def _normalizar(datos: dict) -> dict:
+        if not isinstance(datos, dict):
+            return {}
+        if 'token' in datos and 'sign' in datos:     # formato legacy monoservicio
+            return {SERVICIO_CONSTANCIA: datos}
+        return {k: v for k, v in datos.items() if isinstance(v, dict)}
+
+    try:
+        return _normalizar(json.loads(_ta_cache_path().read_text()))
+    except (OSError, ValueError):
+        pass
+
+    if _r2_download:   # sobrevive redeploys de Render sin disco persistente
+        try:
+            raw = _r2_download(_TA_CACHE_R2_KEY)
+            if raw:
+                return _normalizar(json.loads(raw.decode()))
+        except Exception:
+            pass
+    return {}
+
+
+def obtener_ta(servicio: str = SERVICIO_CONSTANCIA) -> dict:
+    """Ticket de Acceso vigente para un servicio: memoria → disco → R2 → login.
 
     Thread-safe: un solo login concurrente (WSAA rechaza logins duplicados
-    mientras exista un TA vigente).
+    mientras exista un TA vigente para el mismo servicio).
     """
     global _ta_cache
-    if _ta_valido(_ta_cache):
-        return _ta_cache
+    vigente = _ta_cache.get(servicio)
+    if _ta_valido(vigente):
+        return vigente
 
     with _ta_lock:
-        if _ta_valido(_ta_cache):   # otro thread pudo renovarlo mientras esperábamos
-            return _ta_cache
+        vigente = _ta_cache.get(servicio)
+        if _ta_valido(vigente):   # otro thread pudo renovarlo mientras esperábamos
+            return vigente
 
-        # Disco
+        # Disco / R2 — se conservan los TA de los demás servicios
+        persistido = _ta_cache_leer_todos()
+        for srv, ta in persistido.items():
+            if srv not in _ta_cache or not _ta_valido(_ta_cache.get(srv)):
+                _ta_cache[srv] = ta
+        if _ta_valido(_ta_cache.get(servicio)):
+            return _ta_cache[servicio]
+
+        # Login nuevo solo para el servicio pedido
+        _ta_cache[servicio] = _wsaa_login(servicio)
+
+        # Purgar vencidos antes de persistir para que el JSON no crezca
+        snapshot = {s: t for s, t in _ta_cache.items()
+                    if t.get('expiration_ts', 0) > time.time()}
         try:
-            en_disco = json.loads(_ta_cache_path().read_text())
-            if _ta_valido(en_disco):
-                _ta_cache = en_disco
-                return _ta_cache
-        except (OSError, ValueError):
-            pass
-
-        # R2 (sobrevive redeploys de Render sin disco persistente)
-        if _r2_download:
-            try:
-                raw = _r2_download(_TA_CACHE_R2_KEY)
-                if raw:
-                    en_r2 = json.loads(raw.decode())
-                    if _ta_valido(en_r2):
-                        _ta_cache = en_r2
-                        _ta_cache_path().write_text(json.dumps(en_r2))
-                        return _ta_cache
-            except Exception:
-                pass
-
-        # Login nuevo
-        _ta_cache = _wsaa_login()
-        try:
-            _ta_cache_path().write_text(json.dumps(_ta_cache))
+            _ta_cache_path().write_text(json.dumps(snapshot))
         except OSError as e:
             print(f"[arca-wsaa] no se pudo guardar TA en disco: {e}", flush=True)
         if _r2_upload:
-            def _bg(data=dict(_ta_cache)):
+            def _bg(data=snapshot):
                 try:
                     _r2_upload(_TA_CACHE_R2_KEY, json.dumps(data).encode(), 'application/json')
                 except Exception:
                     pass
             threading.Thread(target=_bg, daemon=True).start()
-        return _ta_cache
+        return _ta_cache[servicio]
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PADRÓN A5 — getPersona (constancia de inscripción)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _get_persona_raw(cuit: str) -> ET.Element:
-    """Llama getPersona y retorna el XML parseado de la respuesta."""
-    ta = obtener_ta()
+def _get_persona_raw(cuit: str, servicio: str = SERVICIO_CONSTANCIA) -> ET.Element:
+    """Llama getPersona en el alcance indicado y retorna el XML de la respuesta.
+
+    A5 y A13 comparten la firma del método (token, sign, cuitRepresentada,
+    idPersona) y solo difieren en el endpoint y el namespace.
+    """
+    ta  = obtener_ta(servicio)
+    url = PADRON_A13_URL if servicio == SERVICIO_PADRON_A13 else PADRON_URL
+    ns  = _NS_PADRON.get(servicio, _NS_PADRON[SERVICIO_CONSTANCIA])
+
     envelope = (
         '<soapenv:Envelope '
         'xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" '
-        'xmlns:a5="http://a5.soap.ws.server.puc.sr/">'
+        f'xmlns:pad="{ns}">'
         '<soapenv:Header/><soapenv:Body>'
-        '<a5:getPersona>'
+        '<pad:getPersona>'
         f'<token>{ta["token"]}</token>'
         f'<sign>{ta["sign"]}</sign>'
         f'<cuitRepresentada>{_cuit_rep}</cuitRepresentada>'
         f'<idPersona>{cuit}</idPersona>'
-        '</a5:getPersona>'
+        '</pad:getPersona>'
         '</soapenv:Body></soapenv:Envelope>'
     )
     resp = requests.post(
-        PADRON_URL, data=envelope.encode('utf-8'),
+        url, data=envelope.encode('utf-8'),
         headers={'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': '""',
                  'User-Agent': 'VendeSeguro-ARCA/1.0'},
         timeout=20,
@@ -501,7 +558,7 @@ def _get_persona_raw(cuit: str) -> ET.Element:
     root = ET.fromstring(resp.content)
     fault = _buscar_texto(root, 'faultstring')
     if fault:
-        raise RuntimeError(f"padrón A5 fault: {fault}")
+        raise RuntimeError(f"padrón {servicio} fault: {fault}")
     resp.raise_for_status()
     return root
 
@@ -584,16 +641,14 @@ def consultar_constancia(cuit: str) -> dict:
         if id_cat and id_cat.isdigit():
             cat_mono = _MONO_ID_A_LETRA.get(int(id_cat), '')
 
-    # ── Empleador: impuesto/régimen de aportes de seguridad social ─────────
-    es_empleador = False
-    for el in root.iter():
-        if _local(el.tag) in ('descripcionImpuesto', 'descripcionRegimen'):
-            if 'EMPLEADOR' in (el.text or '').upper():
-                es_empleador = True
-                break
-        if _local(el.tag) == 'idImpuesto' and (el.text or '').strip() == '301':
-            es_empleador = True
-            break
+    # ── Impuestos y regímenes (solo el A5 los devuelve) ────────────────────
+    impuestos   = _parsear_impuestos(root)
+    activos     = [i for i in impuestos if i['activo']]
+    ids_activos = {i['id'] for i in activos}
+
+    es_empleador = bool(ids_activos & _IMP_EMPLEADOR) or any(
+        'EMPLEADOR' in (i['descripcion'] or '').upper() for i in activos
+    )
 
     # ── Antigüedad: la fecha más vieja entre inscripciones/períodos ────────
     fechas = []
@@ -614,19 +669,219 @@ def consultar_constancia(cuit: str) -> dict:
         'es_empleador':        es_empleador,
         'antiguedad_anos':     antiguedad,
         'estado_afip':         (_buscar_texto(root, 'estadoClave') or 'ACTIVO').upper(),
+        'estado_clave':        (_buscar_texto(root, 'estadoClave') or '').upper(),
+        'domicilios':          _parsear_domicilios(root),
+        'impuestos':           impuestos,
+        'n_impuestos_activos': len(activos),
+        'tiene_iva':           bool(ids_activos & _IMP_IVA),
+        'tiene_ganancias':     bool(ids_activos & _IMP_GANANCIAS),
+        'tiene_monotributo':   bool(ids_activos & _IMP_MONOTRIBUTO),
         'fuente':              'arca_oficial',
     }
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# PADRÓN ALCANCE 13 — datos ampliados (estado de clave, domicilios, impuestos)
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Identificadores de impuesto del padrón que señalan operación comercial real.
+_IMP_IVA        = {'30'}                   # IVA
+_IMP_GANANCIAS  = {'10', '11'}             # Ganancias (sociedades / personas)
+_IMP_EMPLEADOR  = {'301'}                  # Aportes de seguridad social
+_IMP_MONOTRIBUTO = {'20', '21', '24'}      # Monotributo y componentes
+
+
+def _texto_hijo(el, nombre: str) -> str:
+    """Texto de un hijo directo o descendiente por nombre local, o ''."""
+    return (_buscar_texto(el, nombre) or '').strip()
+
+
+def _parsear_domicilios(root) -> list:
+    """Domicilios declarados con su estado.
+
+    Cubre las dos formas del padrón: A13 devuelve varios <domicilio> (FISCAL y
+    LEGAL/REAL) con calle/numero/codigoPostal; A5 devuelve un único
+    <domicilioFiscal> con codPostal.
+    """
+    domicilios = []
+    for el in root.iter():
+        if _local(el.tag) not in ('domicilio', 'domicilioFiscal'):
+            continue
+        dom = {
+            'tipo':         _texto_hijo(el, 'tipoDomicilio') or _local(el.tag),
+            'estado':       _texto_hijo(el, 'estadoDomicilio'),
+            'direccion':    _texto_hijo(el, 'direccion'),
+            'localidad':    _texto_hijo(el, 'localidad'),
+            'provincia':    _texto_hijo(el, 'descripcionProvincia'),
+            'id_provincia': _texto_hijo(el, 'idProvincia'),
+            'cod_postal':   _texto_hijo(el, 'codigoPostal') or _texto_hijo(el, 'codPostal'),
+            'adicional':    _texto_hijo(el, 'datoAdicional'),
+        }
+        if any(dom[k] for k in ('direccion', 'localidad', 'provincia')):
+            domicilios.append(dom)
+    return domicilios
+
+
+# estadoImpuesto del padrón: 'AC' = activo. Cualquier otro valor implica baja
+# o inscripción no vigente.
+_ESTADO_IMPUESTO_ACTIVO = {'AC', 'ACTIVO'}
+
+
+def _parsear_impuestos(root) -> list:
+    """Impuestos y regímenes en los que el CUIT está inscripto.
+
+    Solo el alcance A5 (constancia) devuelve estos bloques; A13 no los incluye.
+    Una lista vacía por lo tanto NO significa "sin impuestos": el caller debe
+    distinguir "no consultado" de "consultado y sin resultados".
+    """
+    items = []
+    for el in root.iter():
+        if _local(el.tag) not in ('impuesto', 'regimen'):
+            continue
+        ident = _texto_hijo(el, 'idImpuesto') or _texto_hijo(el, 'idRegimen')
+        desc  = _texto_hijo(el, 'descripcionImpuesto') or _texto_hijo(el, 'descripcionRegimen')
+        if not ident and not desc:
+            continue
+        estado = (_texto_hijo(el, 'estadoImpuesto') or _texto_hijo(el, 'estado')).upper()
+        items.append({
+            'tipo':        _local(el.tag),
+            'id':          ident,
+            'descripcion': desc,
+            'estado':      estado,
+            'periodo':     _texto_hijo(el, 'periodo'),
+            # Los <regimen> no traen estado: estar listados ya implica vigencia.
+            'activo':      (estado in _ESTADO_IMPUESTO_ACTIVO) if estado else True,
+        })
+    return items
+
+
+def consultar_padron_a13(cuit: str) -> dict:
+    """Consulta el Padrón Alcance 13 y lo mapea al esquema interno de solvencia.
+
+    Sobre lo que ya devuelve la constancia (A5), agrega las señales que el
+    scoring necesita para distinguir una empresa consolidada de un CUIT
+    fantasma: estado de la clave fiscal, domicilios con su estado, y el set
+    completo de impuestos y regímenes activos.
+    """
+    cuit_limpio = re.sub(r'\D', '', str(cuit))
+    if len(cuit_limpio) != 11:
+        raise ValueError(f"CUIT inválido: {cuit}")
+
+    root = _get_persona_raw(cuit_limpio, SERVICIO_PADRON_A13)
+
+    tiene_datos = any(
+        _local(el.tag) in ('datosGenerales', 'persona', 'datosRegimenGeneral', 'datosMonotributo')
+        for el in root.iter()
+    )
+    if not tiene_datos:
+        err = _buscar_texto(root, 'error') or _buscar_texto(root, 'errorConstancia')
+        raise RuntimeError(f"padrón A13 sin datos para {cuit_limpio}: {err or 'respuesta vacía'}")
+
+    # ── Identidad ──────────────────────────────────────────────────────────
+    apellido = _buscar_texto(root, 'apellido') or ''
+    nombre   = _buscar_texto(root, 'nombre') or ''
+    razon    = (_buscar_texto(root, 'razonSocial') or f"{apellido} {nombre}".strip())
+    tipo     = (_buscar_texto(root, 'tipoPersona') or '').upper()
+    if tipo not in ('FISICA', 'JURIDICA'):
+        tipo = 'JURIDICA' if cuit_limpio[:2] in ('30', '33', '34') else 'FISICA'
+
+    estado_clave = (_buscar_texto(root, 'estadoClave') or '').upper().strip()
+
+    # ── Actividad principal (CLAE) ─────────────────────────────────────────
+    # A13 expone directamente idActividadPrincipal, que es la actividad
+    # declarada como principal. El listado <actividad> del A5, en cambio, viene
+    # con un 'orden' que no identifica a la principal (para Cencosud la primera
+    # del listado es "matanza de ganado bovino", no el hipermercado), así que
+    # este campo del A13 es la única fuente confiable del CLAE real.
+    clae = _buscar_texto(root, 'idActividadPrincipal') or ''
+    desc_actividad = _buscar_texto(root, 'descripcionActividadPrincipal') or ''
+
+    # ── Domicilios (A13 trae fiscal + legal/real) ──────────────────────────
+    domicilios = _parsear_domicilios(root)
+
+    # ── Antigüedad: la fecha más vieja declarada ───────────────────────────
+    fechas = []
+    for el in root.iter():
+        if _local(el.tag) in ('fechaInscripcion', 'fechaContratoSocial', 'fechaNacimiento'):
+            f = _parse_fecha(el.text or '')
+            if f:
+                fechas.append(f)
+    antiguedad = round((datetime.now() - min(fechas)).days / 365.25, 1) if fechas else None
+
+    return {
+        'cuit':                cuit_limpio,
+        'razon_social':        razon,
+        'tipo_persona':        tipo,
+        'forma_juridica':      _buscar_texto(root, 'formaJuridica') or '',
+        'categoria_monotrib':  '',      # el A13 no informa categoría; la aporta el A5
+        'actividad_principal': clae,
+        'clae_actividad':      clae,
+        'descripcion_actividad': desc_actividad,
+        'antiguedad_anos':     antiguedad,
+        'estado_afip':         estado_clave or 'ACTIVO',
+        'estado_clave':        estado_clave,
+        'domicilios':          domicilios,
+        # El alcance 13 NO devuelve impuestos ni regímenes: se dejan en None
+        # (desconocido). Ponerlos en 0 haría que el scoring marcara como "CUIT
+        # fantasma" a cualquier empresa consultada por esta vía.
+        'impuestos':           None,
+        'n_impuestos_activos': None,
+        'tiene_iva':           None,
+        'tiene_ganancias':     None,
+        'tiene_monotributo':   None,
+        'es_empleador':        None,
+        'fuente':              'arca_padron_a13',
+    }
+
+
 def obtener_datos_fiscales_arca(cuit: str) -> dict | None:
-    """Versión tolerante para el pipeline de solvencia: nunca lanza excepción."""
+    """Perfil fiscal oficial combinando ambos alcances del padrón.
+
+    Los dos alcances son complementarios, no redundantes:
+      - A13 aporta la actividad principal real (idActividadPrincipal), el
+        domicilio fiscal y el legal/real, y la forma jurídica.
+      - A5  aporta el set de impuestos y regímenes activos, la categoría de
+        monotributo y la condición de empleador.
+
+    Se consultan los dos y se fusionan; si uno falla se devuelve el otro. Nunca
+    lanza excepción: ante fallo total retorna None y la cadena de solvencia
+    sigue con sus fuentes de respaldo.
+    """
     if not configurado():
         return None
+
+    a13 = a5 = None
     try:
-        return consultar_constancia(cuit)
+        a13 = consultar_padron_a13(cuit)
     except Exception as e:
-        print(f"[arca] {cuit}: {e} — continuando con fuentes fallback", flush=True)
+        print(f"[arca] {cuit} A13 no disponible: {e}", flush=True)
+    try:
+        a5 = consultar_constancia(cuit)
+    except Exception as e:
+        print(f"[arca] {cuit} A5 no disponible: {e}", flush=True)
+
+    if a13 is None and a5 is None:
+        print(f"[arca] {cuit} sin datos en ningún alcance — se usan fuentes fallback", flush=True)
         return None
+    if a13 is None:
+        return a5
+    if a5 is None:
+        return a13
+
+    # Fusión: A13 manda en identidad y actividad; A5 completa lo impositivo.
+    combinado = dict(a5)
+    combinado.update({k: v for k, v in a13.items() if v not in (None, '', [])})
+    # El CLAE del A13 es el autoritativo (ver nota en consultar_padron_a13)
+    if a13.get('clae_actividad'):
+        combinado['clae_actividad']      = a13['clae_actividad']
+        combinado['actividad_principal'] = a13['clae_actividad']
+    # Lo impositivo solo puede venir del A5
+    for campo in ('impuestos', 'n_impuestos_activos', 'tiene_iva',
+                  'tiene_ganancias', 'tiene_monotributo', 'es_empleador',
+                  'categoria_monotrib'):
+        combinado[campo] = a5.get(campo)
+    combinado['fuente'] = 'arca_a13+a5'
+    return combinado
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -635,20 +890,26 @@ def obtener_datos_fiscales_arca(cuit: str) -> dict | None:
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
-        print("Uso: python arca_ws.py <cuit> [--dry-run]")
+        print("Uso: python arca_ws.py <cuit> [--dry-run] [--a5]")
+        print("  (por defecto consulta Padrón A13; --a5 fuerza la constancia)")
         sys.exit(1)
 
     arca_init(os.getcwd())
 
     if '--dry-run' in sys.argv:
         # Valida credenciales + firma CMS sin tocar la red
-        tra = _generar_tra()
-        cms = _firmar_cms(tra)
         print(f"✓ Certificado cargado (vence {_cert_obj.not_valid_after_utc:%Y-%m-%d})")
         print(f"✓ CUIT representada: {_cuit_rep}")
-        print(f"✓ TRA generado ({len(tra)} bytes) y firmado CMS OK ({len(cms)} chars b64)")
+        for srv in (SERVICIO_CONSTANCIA, SERVICIO_PADRON_A13):
+            tra = _generar_tra(srv)
+            cms = _firmar_cms(tra)
+            print(f"✓ TRA de {srv}: {len(tra)} bytes, CMS {len(cms)} chars b64")
         print("Dry-run completo — listo para la consulta real.")
         sys.exit(0)
 
-    resultado = consultar_constancia(sys.argv[1])
+    cuit_cli = sys.argv[1]
+    if '--a5' in sys.argv:
+        resultado = consultar_constancia(cuit_cli)
+    else:
+        resultado = consultar_padron_a13(cuit_cli)
     print(json.dumps(resultado, indent=2, ensure_ascii=False))

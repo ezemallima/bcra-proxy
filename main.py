@@ -241,7 +241,7 @@ _MONOTRIB_INGRESOS = {
     'I':  93_000_000, 'J': 120_000_000, 'K': 155_000_000,
 }
 
-# User-Agents rotativos para evitar bloqueos de IP en AFIP / ANSES
+# User-Agents rotativos para evitar bloqueos de IP en scrapers públicos (AFIP, BORA)
 _USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0',
@@ -2123,37 +2123,14 @@ def _scrape_afip_html(cuit, ua):
     return None
 
 
-def _check_anses_aportes(cuit, ua):
-    """Verifica actividad laboral reciente via endpoints públicos ANSES.
-    Retorna dict con capacidad_pago_validada=True si hay respuesta positiva.
-    Con SCRAPERAPI_KEY: proxy rotativo (evita timeouts por bloqueo de IP)."""
-    _headers_direct = {
-        'User-Agent': ua,
-        'Accept': 'application/json, text/html',
-        'Origin':   'https://www.anses.gob.ar',
-        'Referer':  'https://www.anses.gob.ar/consulta/certificacion-negativa',
-    }
-    endpoints = [
-        f"https://tramitesenweb.anses.gob.ar/TramitesWeb/anses/cn/evaluarDatos?cuil={cuit}",
-        f"https://www.anses.gob.ar/consultas/certNeg?cuil={cuit}",
-    ]
-    for url in endpoints:
-        try:
-            if SCRAPERAPI_KEY:
-                r = _bcra_get(url, timeout=12)
-            else:
-                r = requests.get(url, headers=_headers_direct, timeout=8, verify=False)
-            if r.status_code != 200:
-                continue
-            body = r.text.lower()
-            # "Certifica Negativa" = persona activa sin beneficios sociales = trabaja
-            if any(kw in body for kw in ['no percibe', 'no tiene', 'no registra', 'certifica']):
-                return {'capacidad_pago_validada': True, 'fuente': 'anses_certneg'}
-            if any(kw in body for kw in ['jubila', 'pension', 'pensi', 'prestacion', 'beneficio']):
-                return {'capacidad_pago_validada': True, 'fuente': 'anses_beneficio'}
-        except Exception as e:
-            print(f"[solvency] ANSES {cuit}: {e}", flush=True)
-    return None
+# Scraper de ANSES (certificación negativa) retirado del proyecto.
+# Motivos: (a) apuntaba a endpoints internos que hoy están detrás del código de
+# verificación del trámite público, por lo que no devolvía señal;
+# (b) la certificación negativa expone datos previsionales de personas físicas
+# (beneficios sociales, jubilación) cuyo tratamiento sin consentimiento del
+# titular no encuadra en los datos patrimoniales de solvencia del art. 26 de la
+# Ley 25.326. La sustancia económica se evalúa ahora con el Padrón A13 de ARCA,
+# que es canal oficial y trata datos fiscales del contribuyente consultado.
 
 
 _BORA_CACHE: dict = {}   # {cuit_11d: razon_social | None}  — in-process, reset en restart
@@ -2289,11 +2266,11 @@ def _inferir_desde_bcra(cuit):
 def get_solvency_data(cuit):
     """
     Solvencia multi-fuente con cadena de fallback activo. Caché 24h.
+      0. ARCA oficial (WSAA + Padrón A13, con A5 de respaldo) — canal autorizado
       1. API configurada (env var)
       2. TangoFactura AFIP JSON — extrae cat, actividad, empleador, antigüedad
       3. AFIP HTML scraper — endpoints públicos con UA rotativo
-      4. Enriquecimiento ANSES — valida capacidad de pago si hay aportes
-      5. Inferencia desde deuda BCRA — si el banco prestó $X, el cliente tiene ingresos
+      4. Inferencia desde deuda BCRA — si el banco prestó $X, el cliente tiene ingresos
     """
     cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
     cache_path  = os.path.join(DATA_DIR, f'solvency_{cuit_limpio}.json')
@@ -2419,15 +2396,7 @@ def get_solvency_data(cuit):
                   f"cat={data.get('categoria_monotrib')} tipo={data.get('tipo_persona')}",
                   flush=True)
 
-    # ── Fuente 4: ANSES — enriquecimiento sobre datos ya obtenidos ─────────
-    if data is not None:
-        anses = _check_anses_aportes(cuit_limpio, ua)
-        if anses and anses.get('capacidad_pago_validada'):
-            data['capacidad_pago_validada'] = True
-            data['anses_fuente']            = anses.get('fuente', 'anses')
-            print(f"[solvency] {cuit_limpio} ANSES capacidad_pago=validada", flush=True)
-
-    # ── Fuente 5: Inferencia BCRA — fallback completo y piso obligatorio ─────
+    # ── Fuente 4: Inferencia BCRA — fallback completo y piso obligatorio ─────
     if data is None or not (data or {}).get('ingresos_anuales'):
         _bcra_inf = _inferir_desde_bcra(cuit_limpio)
         if _bcra_inf:
@@ -2460,10 +2429,7 @@ def get_solvency_data(cuit):
             _es_emp  = data.get('es_empleador')
             _tipo    = (data.get('tipo_persona') or '').upper()
             _cat     = data.get('categoria_monotrib') or ''
-            _af      = data.get('anses_fuente') or ''
             if _es_emp or any(k in _tipo for k in ('JURIDICA', 'S.A.', 'S.R.L.', 'S.A.S')):
-                data['estado_empleo'] = 'activo'
-            elif _af == 'anses_certneg':
                 data['estado_empleo'] = 'activo'
             elif _cat:
                 data['estado_empleo'] = 'monotrib'
@@ -3478,6 +3444,8 @@ def calcular_rating_predictivo(
         or solvency_data.get('clae_actividad')
         or solvency_data.get('actividad_principal')
         or solvency_data.get('categoria_mipyme')
+        or solvency_data.get('estado_clave')
+        or solvency_data.get('n_impuestos_activos') is not None
     ):
         try:
             pts_fiscal, dbg_fiscal = scoring_fiscal.puntaje_perfil_fiscal(
@@ -3488,8 +3456,17 @@ def calcular_rating_predictivo(
                                 or solvency_data.get('actividad_principal') or ''),
                 es_empleador=solvency_data.get('es_empleador') is True,
                 tipo_persona=solvency_data.get('tipo_persona') or '',
+                # ── Padrón A13 (neutros si la fuente fue A5 o un fallback) ──
+                estado_clave=solvency_data.get('estado_clave') or '',
+                domicilios=solvency_data.get('domicilios'),
+                n_impuestos_activos=solvency_data.get('n_impuestos_activos'),
+                tiene_iva=solvency_data.get('tiene_iva') is True,
+                tiene_ganancias=solvency_data.get('tiene_ganancias') is True,
+                tiene_monotributo=solvency_data.get('tiene_monotributo') is True,
             )
             print(f"[cerebro-fiscal] {cuit_limpio} {dbg_fiscal.get('componentes', '')}", flush=True)
+            for _alerta in dbg_fiscal.get('alertas', []):
+                print(f"[cerebro-fiscal][ALERTA] {cuit_limpio} {_alerta}", flush=True)
         except Exception as _e_fisc:
             print(f"[cerebro-fiscal] {cuit_limpio} error: {_e_fisc} — se ignora el perfil fiscal", flush=True)
             pts_fiscal, dbg_fiscal = None, {}
@@ -3754,6 +3731,23 @@ def calcular_rating_predictivo(
     if es_monotrib_bajo:
         puntos = min(puntos, 600)
 
+    # ── Cap preventivo por irregularidad fiscal (Padrón A13) ─────────────────
+    # Clave fiscal dada de baja o CUIT sin ningún impuesto activo: el cliente no
+    # está en condiciones de facturar legalmente. No se rechaza automáticamente
+    # —el dato puede estar desactualizado— pero se fuerza revisión humana
+    # llevando el score a la banda "Revisar".
+    _irregular_fiscal = bool(dbg_fiscal.get('cuit_fantasma')) or (
+        dbg_fiscal.get('factor_estado_clave') is not None
+        and dbg_fiscal.get('factor_estado_clave') <= 0.5
+    )
+    if _irregular_fiscal and puntos > 400:
+        print(
+            f"[score v{_SCORE_VERSION}] {cuit_limpio} irregularidad fiscal ARCA "
+            f"({'; '.join(dbg_fiscal.get('alertas', [])) or 'sin detalle'}) "
+            f"→ cap 400", flush=True
+        )
+        puntos = min(puntos, 400)
+
     # ── Cap v20.0: comunidad negativa → score ≤ 600 (salvo mora técnica) ────
     if comunidad_negativa and not es_mora_tecnica:
         puntos = min(puntos, 600)
@@ -3837,6 +3831,8 @@ def calcular_rating_predictivo(
             'bonus_estructura': _bonus_estructura,
         },
         'perfil_fiscal':            dbg_fiscal or None,
+        'alertas_fiscales':         dbg_fiscal.get('alertas') or [],
+        'cuit_fantasma':            bool(dbg_fiscal.get('cuit_fantasma')),
         'tendencia':                tendencia,
         'es_empleador':             es_empleador,
         'indice_solvencia':         indice_solv,
@@ -7330,7 +7326,7 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
         print("[proceso-integral] FASE 1: sin clientes para BCRA en vivo — todo resuelto por bulk", flush=True)
 
     # ═══════════════════════════════════════════════════════════════════════
-    # FASE 1.5 — Pre-calentar solvencia (AFIP/TangoFactura/ANSES) en paralelo.
+    # FASE 1.5 — Pre-calentar solvencia (ARCA oficial / TangoFactura) en paralelo.
     # Es una cadena de fetch totalmente independiente de BCRA (Fase 0/1 no la
     # cubre): get_solvency_data hace su propio scraping AFIP con proxies
     # Bright Data/ScraperAPI cuando el caché de 24h está vencido. Sin este
@@ -7968,13 +7964,16 @@ def _score_response(score_data: dict, solvency: dict = None, cheq_data: dict = N
     # Razón social para rescatar el nombre cuando AFIP y BCRA estuvieron offline
     _safe["razon_social"]         = (sol.get('razon_social') or sol.get('nombre') or '').strip()
 
-    # ── Campos futuros — se poblan cuando ARCA/ANSES/Juicios estén integrados ──
-    # antiguedad_fiscal: años desde inscripción en ARCA/AFIP (int o None)
-    # estado_empleo: 'activo' | 'monotrib' | 'desocupado' | None  (ANSES)
-    # juicios_comerciales: cantidad de juicios activos (int o None)
+    # ── Perfil fiscal — poblado por el Padrón A13 de ARCA ─────────────────────
+    # antiguedad_fiscal: años desde inscripción en ARCA (int o None)
+    # estado_empleo: 'activo' | 'monotrib' | None (derivado de impuestos activos)
+    # juicios_comerciales: pendiente de integrar (int o None)
     _safe["antiguedad_fiscal"]   = sol.get('antiguedad_fiscal')   or sol.get('antiguedad_anos')
     _safe["estado_empleo"]       = sol.get('estado_empleo')       or None
     _safe["juicios_comerciales"] = sol.get('juicios_comerciales') or None
+    _safe["estado_clave_afip"]   = sol.get('estado_clave')        or None
+    _safe["n_impuestos_activos"] = sol.get('n_impuestos_activos')
+    _safe["tiene_iva"]           = sol.get('tiene_iva')
     _safe["fecha_inscripcion"]   = sol.get('fecha_inicio')        or None
     _safe["categoria_monotrib"]  = sol.get('categoria_monotrib')  or None
     _safe["tipo_persona"]        = sol.get('tipo_persona')        or None
@@ -8532,7 +8531,7 @@ def _calcular_score_handler(cuit: str):
             bcra_fb, _ = consultar_bcra_cached(cuit_limpio)
             sd_fb = calcular_rating_predictivo(
                 cuit=cuit_limpio, bcra_data=bcra_fb or {},
-                solvency_data={},  # evita scraping AFIP/ANSES
+                solvency_data={},  # evita consultas fiscales en el camino de fallback
             )
             resp_fb = _score_response(sd_fb, {})
             resp_fb['_fallback'] = True
