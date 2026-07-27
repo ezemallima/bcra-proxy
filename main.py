@@ -3987,15 +3987,58 @@ def _ident_arca_get(cuit: str) -> dict | None:
 
 
 def _denominacion_local(cuit: str) -> str | None:
-    """Nombre del CUIT: padrón BCRA (Nomdeu) y, si no está, identidad ARCA.
+    """Nombre del CUIT sin tocar la red: padrón BCRA (Nomdeu) → identidad ARCA.
 
-    Cubre al cliente no bancarizado, que nunca aparece en Nomdeu.
+    Cubre al cliente no bancarizado, que nunca aparece en Nomdeu. Pensada para
+    bucles calientes (barrido de cartera): nunca hace llamadas de red.
     """
     nombre = _nomdeu_get_nombre(cuit)
     if nombre:
         return nombre
     ident = _ident_arca_get(cuit)
     return (ident or {}).get('razon_social') or None
+
+
+def _denominacion_arca(cuit: str) -> str | None:
+    """Denominación oficial desde ARCA, dando de alta la identidad al pasar.
+
+    Resuelve el caso que el padrón BCRA no puede cubrir: un CUIT nuevo, o de
+    alguien que nunca operó en el sistema financiero, no figura en Nomdeu — pero
+    sí existe en el padrón fiscal desde el día que se inscribió.
+
+    Consulta el registro local primero (costo cero); solo va al web service si
+    el CUIT nunca se resolvió antes. El resultado queda persistido, así que
+    cada CUIT se consulta una única vez.
+
+    Cubre tanto personas jurídicas (razón social) como físicas (apellido y
+    nombre), que es más de lo que puede aportar cualquiera de los scrapers.
+    """
+    cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
+
+    # 1. Registro local — ya resuelto en una consulta anterior
+    ident = _ident_arca_get(cuit_limpio)
+    if ident and ident.get('razon_social'):
+        return ident['razon_social']
+
+    # 2. Canal oficial
+    if not ARCA_DISPONIBLE:
+        return None
+    try:
+        datos = arca_ws.obtener_datos_fiscales_arca(cuit_limpio)
+    except Exception as e:
+        print(f"[afip] {cuit_limpio} ARCA oficial falló: {e}", flush=True)
+        return None
+    if not datos:
+        return None
+
+    razon = str(datos.get('razon_social') or '').strip()
+    if not razon or razon.isdigit():
+        return None
+
+    # Persistir la identidad completa (nombre, CLAE, estado de clave, etc.)
+    # para que toda la app la aproveche sin volver a consultar el WS.
+    _ident_arca_registrar(cuit_limpio, datos)
+    return razon
 
 
 def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: str = '') -> dict:
@@ -9604,6 +9647,19 @@ def get_afip(cuit):
     except Exception as _e:
         print(f"[afip] {cuit_limpio} padron_local error: {_e}", flush=True)
 
+    # 4.5. ARCA oficial (WSAA + padrón) — fuente autoritativa de la identidad.
+    # Va ANTES de los scrapers de terceros: es el único canal que cubre al CUIT
+    # que no figura en el bulk del BCRA (recién inscripto, o sin actividad
+    # bancaria), y resuelve tanto razón social como apellido y nombre.
+    # Costo cero a partir de la segunda consulta: la identidad queda registrada.
+    try:
+        _arca_nom = _denominacion_arca(cuit_limpio)
+        if _arca_nom:
+            print(f"[afip] {cuit_limpio} ARCA oficial OK: {_arca_nom}", flush=True)
+            return jsonify({"nombre": _arca_nom, "fuente": "arca_oficial"})
+    except Exception as _e:
+        print(f"[afip] {cuit_limpio} ARCA oficial error: {_e}", flush=True)
+
     # 4.6. TangoFactura — razonSocial/apellidoNombre del contribuyente
     try:
         _ua_tf = request.headers.get('User-Agent', 'Mozilla/5.0')
@@ -9746,6 +9802,42 @@ def get_afip(cuit):
     print(f"[afip] Sin nombre para CUIT {cuit_limpio} — devolviendo formato", flush=True)
     return jsonify({"nombre": cuit_fmt, "fuente": "fallback", "afip_offline": True})
 
+def _enriquecer_denominacion(payload: dict, cuit: str) -> dict:
+    """Completa results.denominacion cuando el BCRA no la trae.
+
+    El BCRA solo conoce a quien está bancarizado: para un CUIT nuevo, o de
+    alguien que nunca tomó crédito, devuelve sin_deudas con la denominación en
+    blanco y la UI terminaba mostrando "Sin denominación". El padrón fiscal, en
+    cambio, tiene a todo el mundo desde el día de la inscripción.
+
+    Orden: fuentes locales (cartera, saldos, Nomdeu, identidad ya registrada) y
+    recién después el canal oficial de ARCA. No lanza excepción nunca: si no se
+    puede resolver, el payload vuelve igual que como entró.
+    """
+    if not isinstance(payload, dict):
+        return payload
+    res = payload.get('results')
+    if not isinstance(res, dict):
+        return payload
+    if str(res.get('denominacion') or '').strip():
+        return payload   # el BCRA ya la trajo
+
+    cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
+    try:
+        nombre = _denominacion_local(cuit_limpio)
+        fuente = 'padron_local'
+        if not nombre:
+            nombre = _denominacion_arca(cuit_limpio)
+            fuente = 'arca_oficial'
+        if nombre:
+            res['denominacion'] = nombre
+            payload['denominacion_fuente'] = fuente
+            print(f"[denominacion] {cuit_limpio} completada desde {fuente}: {nombre[:50]}", flush=True)
+    except Exception as e:
+        print(f"[denominacion] {cuit_limpio} no se pudo completar: {e}", flush=True)
+    return payload
+
+
 @app.route("/deudas/<cuit>")
 def get_deudas(cuit):
     cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
@@ -9765,7 +9857,7 @@ def get_deudas(cuit):
     _fresh = request.args.get('fresh') == '1'
     try:
         data, error = consultar_bcra_cached(cuit_limpio, skip_padron=_fresh)
-        return jsonify(data), 200
+        return jsonify(_enriquecer_denominacion(data, cuit_limpio)), 200
     except Exception as e:
         import traceback
         print(f"[deudas] Excepcion {cuit}: {traceback.format_exc()}", flush=True)
@@ -9947,7 +10039,12 @@ def get_historial(cuit):
             _offline_hist_404 = _bulk_to_hist_data(cuit_limpio)
             print(f"[historial] {cuit_limpio} fallback historial_detalle ({_HIST_DETALLE_MESES}m reales, post-404)", flush=True)
             return jsonify(_offline_hist_404), 200
-        return jsonify({"results": {"periodos": []}, "sin_deudas": True, "error_bcra": None}), 200
+        # Sin historial bancario: el CUIT puede ser nuevo o no haber operado nunca
+        # con bancos. La identidad igual se resuelve por el padrón fiscal.
+        return jsonify(_enriquecer_denominacion(
+            {"results": {"denominacion": "", "periodos": []}, "sin_deudas": True, "error_bcra": None},
+            cuit_limpio,
+        )), 200
 
     # Fallback offline: si la API falló por completo (sin 404, ej. ConnectionResetError en
     # ambos endpoints), reconstruir el historial real desde historial_detalle — mismo
