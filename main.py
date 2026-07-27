@@ -3470,6 +3470,36 @@ def calcular_rating_predictivo(
     # ═══ CAPA B: Conducta Interna Odoo (0-400 pts) ═══════════════════════
     pts_c2, es_empleador, es_monotrib_bajo, indice_solv = _layer2_solvencia_federal(solvency_data)
 
+    # ── Cerebro Fiscal Deductivo (0-400) — se calcula SIEMPRE ─────────────
+    # Paridad con BCRA: el perfil fiscal (antigüedad impositiva + escala
+    # impositiva/MiPyME + riesgo sectorial CLAE) participa en todo score, no
+    # solo cuando el BCRA viene vacío. Requiere al menos una señal fiscal real
+    # para no ponderar datos inventados.
+    pts_fiscal: int | None = None
+    dbg_fiscal: dict       = {}
+    _fiscal_es_capa_b      = False   # True si el perfil fiscal reemplaza la Capa B
+                                     # (evita contarlo dos veces en el bonus)
+    if SCORING_FISCAL_OK and solvency_data and (
+        solvency_data.get('antiguedad_anos')
+        or solvency_data.get('clae_actividad')
+        or solvency_data.get('actividad_principal')
+        or solvency_data.get('categoria_mipyme')
+    ):
+        try:
+            pts_fiscal, dbg_fiscal = scoring_fiscal.puntaje_perfil_fiscal(
+                antiguedad_anos=solvency_data.get('antiguedad_anos'),
+                categoria_mipyme=solvency_data.get('categoria_mipyme') or '',
+                categoria_monotrib=solvency_data.get('categoria_monotrib') or '',
+                clae_actividad=(solvency_data.get('clae_actividad')
+                                or solvency_data.get('actividad_principal') or ''),
+                es_empleador=solvency_data.get('es_empleador') is True,
+                tipo_persona=solvency_data.get('tipo_persona') or '',
+            )
+            print(f"[cerebro-fiscal] {cuit_limpio} {dbg_fiscal.get('componentes', '')}", flush=True)
+        except Exception as _e_fisc:
+            print(f"[cerebro-fiscal] {cuit_limpio} error: {_e_fisc} — se ignora el perfil fiscal", flush=True)
+            pts_fiscal, dbg_fiscal = None, {}
+
     (pts_cb, dso_individual, dso_deteriorando,
      sin_historial_interno, promedio_mensual, hard_block_mora,
      deuda_90d_interna, monto_deuda_90d_interna) = \
@@ -3479,32 +3509,13 @@ def calcular_rating_predictivo(
         # Score de Prospección: AFIP solvencia como proxy de Capa B (0-400)
         pts_cb = min(400, round(pts_c2 * 400 / 300))
 
-        # ── Cerebro Fiscal Deductivo — solo cuando BCRA viene totalmente vacío ──
-        # Sin historial interno NI historial bancario estamos "a ciegas": el perfil
-        # fiscal (antigüedad impositiva + estructura + riesgo sectorial CLAE) es la
-        # mejor evidencia disponible. Requiere al menos una señal fiscal real para
-        # no reemplazar el proxy clásico con datos inventados.
-        if (SCORING_FISCAL_OK and solvency_data
-                and n_periodos_h == 0 and not periodos_curr
-                and (solvency_data.get('antiguedad_anos')
-                     or solvency_data.get('clae_actividad')
-                     or solvency_data.get('actividad_principal'))):
-            try:
-                pts_fiscal, _dbg_fiscal = scoring_fiscal.puntaje_perfil_fiscal(
-                    antiguedad_anos=solvency_data.get('antiguedad_anos'),
-                    categoria_mipyme=solvency_data.get('categoria_mipyme') or '',
-                    categoria_monotrib=solvency_data.get('categoria_monotrib') or '',
-                    clae_actividad=(solvency_data.get('clae_actividad')
-                                    or solvency_data.get('actividad_principal') or ''),
-                    es_empleador=solvency_data.get('es_empleador') is True,
-                    tipo_persona=solvency_data.get('tipo_persona') or '',
-                )
-                pts_cb = pts_fiscal
-                print(
-                    f"[cerebro-fiscal] {cuit_limpio} BCRA vacío → Capa B fiscal: "
-                    f"{_dbg_fiscal['componentes']}", flush=True)
-            except Exception as _e_fisc:
-                print(f"[cerebro-fiscal] {cuit_limpio} error: {_e_fisc} — proxy clásico", flush=True)
+        # Sin historial interno NI historial bancario estamos "a ciegas": el
+        # perfil fiscal completo es mejor evidencia que el proxy de categoría
+        # sola, así que pasa a ser la Capa B.
+        if pts_fiscal is not None and n_periodos_h == 0 and not periodos_curr:
+            pts_cb = pts_fiscal
+            _fiscal_es_capa_b = True
+            print(f"[cerebro-fiscal] {cuit_limpio} BCRA vacío → Capa B fiscal = {pts_fiscal}", flush=True)
 
     # ═══ CAPA C: Comunidad Chat Bodegas (0-200 pts) ══════════════════════
     pts_cc, comunidad_negativa, _neg_count, _pos_count = _evaluar_comunidad(
@@ -3545,10 +3556,21 @@ def calcular_rating_predictivo(
             _bonus_estructura = _BONUS_MP[_cat_mp]
         elif _es_empl2:
             _bonus_estructura = 60  # empleador confirmado por AFIP sin registro MiPyME
+
+        # Bonus fiscal unificado: cuando el perfil fiscal NO es ya la Capa B
+        # (es decir, cuando sí hay historial BCRA o interno), entra acá para que
+        # el score combine mora de 24 meses + deducción fiscal. Escala 0-90 pts
+        # sobre 400 del perfil. Nunca por debajo del bonus MiPyME histórico:
+        # ningún cliente pierde puntos respecto de la calibración anterior.
+        if pts_fiscal is not None and not _fiscal_es_capa_b:
+            _bonus_fiscal     = round(pts_fiscal / 400 * 90)
+            _bonus_estructura = max(_bonus_estructura, _bonus_fiscal)
+
         if _bonus_estructura:
             puntos += _bonus_estructura
             _cat_log = _cat_mp if _cat_mp else 'gran_empresa'
-            print(f"[score] {cuit_limpio} bonus_estructura cat={_cat_log} → +{_bonus_estructura}", flush=True)
+            print(f"[score] {cuit_limpio} bonus_estructura cat={_cat_log} "
+                  f"fiscal={pts_fiscal} → +{_bonus_estructura}", flush=True)
 
     # ── Piso v25.1: Sit.1 + deuda BCRA $0 + historial bancario real ──────────
     # Solo aplica si el cliente tiene períodos BCRA reportados (fue cliente de algún banco).
@@ -3796,7 +3818,10 @@ def calcular_rating_predictivo(
         'componentes': {
             'capaA': pts_c1, 'capaB': pts_cb,
             'capaC': pts_cc, 'liquidez': pts_liq,
+            'fiscal': pts_fiscal, 'fiscal_es_capaB': _fiscal_es_capa_b,
+            'bonus_estructura': _bonus_estructura,
         },
+        'perfil_fiscal':            dbg_fiscal or None,
         'tendencia':                tendencia,
         'es_empleador':             es_empleador,
         'indice_solvencia':         indice_solv,
@@ -3847,13 +3872,149 @@ def calcular_rating_predictivo(
 calcular_vende_score_pro = calcular_rating_predictivo
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# PADRÓN LOCAL DE IDENTIDADES ARCA
+# Nomdeu (BCRA) solo conoce a quien está bancarizado. Para el cliente nuevo sin
+# historial bancario, ARCA es la única fuente de identidad real — se persiste
+# acá para que la app pueda nombrarlo sin volver a consultar el WS.
+# ══════════════════════════════════════════════════════════════════════════════
+
+_IDENT_ARCA_FILE   = os.path.join(DATA_DIR, 'identidades_arca.json')
+_IDENT_ARCA_R2_KEY = 'identidades_arca.json'
+_ident_arca_lock   = threading.Lock()
+_ident_arca_cache: dict | None = None   # lazy load, se mantiene en memoria
+_ident_arca_r2_ts  = [0.0]              # último upload a R2 (debounce, mutable p/ closure)
+
+
+def _ident_arca_load() -> dict:
+    """Carga el padrón de identidades ARCA (memoria → disco → R2)."""
+    global _ident_arca_cache
+    if _ident_arca_cache is not None:
+        return _ident_arca_cache
+    try:
+        with open(_IDENT_ARCA_FILE, 'r', encoding='utf-8') as f:
+            _ident_arca_cache = json.load(f)
+    except Exception:
+        _ident_arca_cache = {}
+        raw = _r2_download_bytes(_IDENT_ARCA_R2_KEY)
+        if raw:
+            try:
+                _ident_arca_cache = json.loads(raw.decode('utf-8'))
+                print(f"[ident-arca] Restaurado desde R2: {len(_ident_arca_cache)} identidades", flush=True)
+            except Exception:
+                _ident_arca_cache = {}
+    if not isinstance(_ident_arca_cache, dict):
+        _ident_arca_cache = {}
+    return _ident_arca_cache
+
+
+def _ident_arca_registrar(cuit: str, solvency: dict) -> bool:
+    """Da de alta / actualiza la identidad real de un CUIT desde datos ARCA.
+
+    Solo persiste cuando la fuente es el canal oficial y hay razón social:
+    no queremos ensuciar el padrón con inferencias de scrapers de terceros.
+    Retorna True si escribió (alta o cambio), False si no había nada nuevo.
+    """
+    if not isinstance(solvency, dict):
+        return False
+    if 'arca' not in str(solvency.get('fuente') or '').lower():
+        return False
+    razon = str(solvency.get('razon_social') or '').strip()
+    if not razon:
+        return False
+
+    cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
+    registro = {
+        'razon_social':       razon,
+        'tipo_persona':       solvency.get('tipo_persona') or '',
+        'clae_actividad':     solvency.get('clae_actividad') or solvency.get('actividad_principal') or '',
+        'categoria_monotrib': solvency.get('categoria_monotrib') or '',
+        'es_empleador':       solvency.get('es_empleador') is True,
+        'antiguedad_anos':    solvency.get('antiguedad_anos'),
+        'estado_afip':        solvency.get('estado_afip') or '',
+        'ts':                 time.time(),
+    }
+
+    with _ident_arca_lock:
+        ident = _ident_arca_load()
+        previo = ident.get(cuit_limpio) or {}
+        # Comparar solo campos de negocio: el ts siempre difiere y provocaría
+        # una escritura a disco + upload R2 en cada consulta del mismo CUIT.
+        _campos = ('razon_social', 'tipo_persona', 'clae_actividad',
+                   'categoria_monotrib', 'es_empleador', 'antiguedad_anos', 'estado_afip')
+        if all(previo.get(k) == registro[k] for k in _campos):
+            return False
+        ident[cuit_limpio] = registro
+        try:
+            with open(_IDENT_ARCA_FILE, 'w', encoding='utf-8') as f:
+                json.dump(ident, f, ensure_ascii=False)
+        except Exception as e:
+            print(f"[ident-arca] Error guardando {cuit_limpio}: {e}", flush=True)
+            return False
+
+        # Backup R2 con debounce: en el primer barrido de cartera se dan de alta
+        # cientos de CUITs seguidos; subir el JSON completo en cada uno sería
+        # cuadrático. El disco es la fuente de verdad, R2 solo el respaldo.
+        _snapshot = None
+        if time.time() - _ident_arca_r2_ts[0] > 120:
+            _ident_arca_r2_ts[0] = time.time()
+            _snapshot = json.dumps(ident, ensure_ascii=False).encode('utf-8')
+
+    if _snapshot is not None:
+        def _bg(data=_snapshot):
+            _r2_upload_bytes(_IDENT_ARCA_R2_KEY, data, 'application/json')
+        threading.Thread(target=_bg, daemon=True).start()
+
+    print(f"[ident-arca] {cuit_limpio} alta identidad ARCA: {razon[:50]}", flush=True)
+    return True
+
+
+def _ident_arca_get(cuit: str) -> dict | None:
+    """Identidad ARCA registrada de un CUIT, o None."""
+    cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
+    return _ident_arca_load().get(cuit_limpio)
+
+
+def _denominacion_local(cuit: str) -> str | None:
+    """Nombre del CUIT: padrón BCRA (Nomdeu) y, si no está, identidad ARCA.
+
+    Cubre al cliente no bancarizado, que nunca aparece en Nomdeu.
+    """
+    nombre = _nomdeu_get_nombre(cuit)
+    if nombre:
+        return nombre
+    ident = _ident_arca_get(cuit)
+    return (ident or {}).get('razon_social') or None
+
+
 def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: str = '') -> dict:
     """
     Wrapper de calcular_rating_predictivo v9.0.
     Carga historial y cheques desde caché local (graceful degradation).
     Mantiene compatibilidad con todos los callers existentes.
+
+    Paridad BCRA/ARCA: el historial de 24 meses y la consulta al canal oficial
+    ARCA arrancan en paralelo — ninguna espera a la otra, y el score se calcula
+    combinando ambas.
     """
     cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
+
+    # ── ARCA/solvencia en paralelo con la extracción BCRA ──────────────────
+    # get_solvency_data cachea 24h en disco, así que en consultas repetidas el
+    # thread termina de inmediato. Nunca propaga excepción: el score debe poder
+    # calcularse aunque el canal fiscal esté caído.
+    _solv_box: dict = {}
+
+    def _fetch_solvencia():
+        try:
+            _sv = get_solvency_data(cuit_limpio)
+            if isinstance(_sv, dict):
+                _solv_box['data'] = _sv
+        except Exception as _e_sv:
+            print(f"[score] {cuit_limpio} solvencia paralela falló: {_e_sv}", flush=True)
+
+    _th_solv = threading.Thread(target=_fetch_solvencia, daemon=True)
+    _th_solv.start()
 
     def _cache_load(fname):
         p = os.path.join(DATA_DIR, fname)
@@ -3920,10 +4081,38 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
     if not isinstance(bcra_data, dict):
         bcra_data = _norm_bcra_resp(bcra_data) if bcra_data else {}
     _bcra_disponible = bcra_data.get('bcra_disponible', not bool(bcra_data.get('error_bcra')))
+
+    # ── Reunir la rama fiscal (ya venía corriendo en paralelo) ─────────────
+    # Cota superior generosa pero acotada: si el canal fiscal se cuelga, el
+    # score sale igual con los datos BCRA y el thread termina de poblar la
+    # caché en background para la próxima consulta.
+    _th_solv.join(timeout=25)
+    if _th_solv.is_alive():
+        # Pasar {} y no None: None haría que el motor dispare una SEGUNDA
+        # consulta fiscal sobre la misma cadena colgada y el request se pasaría
+        # del timeout del frontend.
+        solvency_data = {}
+        print(f"[score] {cuit_limpio} solvencia aún en curso a los 25s — score con BCRA solamente", flush=True)
+    else:
+        # None solo si el fetch falló: el motor reintenta (barato, con caché 24h),
+        # que es exactamente el comportamiento previo a la paralelización.
+        solvency_data = _solv_box.get('data')
+
+    # ── Alta de identidad para el cliente no bancarizado ───────────────────
+    # BCRA sin historial pero ARCA respondió: es un cliente real que todavía no
+    # pisó el sistema financiero. Su identidad oficial se registra en el padrón
+    # local para que la app pueda nombrarlo sin volver a consultar el WS.
+    if solvency_data:
+        _res_hist     = (hist_data or {}).get('results')
+        _hay_periodos = bool(_res_hist.get('periodos')) if isinstance(_res_hist, dict) else False
+        if not _hay_periodos:
+            _ident_arca_registrar(cuit_limpio, solvency_data)
+
     resultado = calcular_rating_predictivo(
         cuit=cuit_limpio, bcra_data=bcra_data,
         hist_data=hist_data, cheq_data=cheq_data,
         en_mora=en_mora, ciudad=ciudad,
+        solvency_data=solvency_data,
     )
     resultado['bcra_disponible'] = _bcra_disponible
     return resultado
@@ -4368,7 +4557,7 @@ def _bulk_bcra_from_historial(cuit: str, nombre: str = '') -> dict:
     if not entidades:
         return {}
     periodo = _mes_anterior(_PERIODO_BASE_BULK, 0)
-    denom = _nomdeu_get_nombre(cuit) or nombre or ''
+    denom = _denominacion_local(cuit) or nombre or ''
     return {
         'results': {
             'denominacion': denom,
@@ -4639,7 +4828,7 @@ def ejecutar_verificacion(cartera_data):
             _mipyme0 = _bulk_mipyme.get(_cuit0)
             _cat0    = _clasificar_bulk(_deuda0)
             _cat_count[_cat0] = _cat_count.get(_cat0, 0) + 1
-            _nom0    = str(_c0.get('nombre', '') or '') or (_nomdeu_get_nombre(_cuit0) or _cuit0)
+            _nom0    = str(_c0.get('nombre', '') or '') or (_denominacion_local(_cuit0) or _cuit0)
             bulk_prefetch[_cuit0] = {
                 'deuda':    _deuda0,
                 'cheques':  _cheq0,
@@ -9502,6 +9691,13 @@ def get_afip(cuit):
     if _nomdeu_nom and not _nomdeu_nom.isdigit():
         print(f"[afip] {cuit_limpio} nomdeu_sqlite OK: {_nomdeu_nom}", flush=True)
         return jsonify({"nombre": _nomdeu_nom, "fuente": "nomdeu_bcra"})
+
+    # 7.6. Identidad ARCA registrada — el cliente no bancarizado nunca está en
+    # Nomdeu, pero sí quedó dado de alta en el padrón local desde el WS oficial.
+    _ident_nom = (_ident_arca_get(cuit_limpio) or {}).get('razon_social')
+    if _ident_nom and not _ident_nom.isdigit():
+        print(f"[afip] {cuit_limpio} identidad ARCA local OK: {_ident_nom}", flush=True)
+        return jsonify({"nombre": _ident_nom, "fuente": "arca_oficial"})
 
     # Ninguna fuente devolvió denominación — puede ser padrón temporalmente offline.
     # El frontend trata fuente=fallback como "sin nombre real" y deja que el score decida.
