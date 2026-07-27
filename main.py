@@ -630,6 +630,12 @@ _cheques_db_estado = {
     "fecha_importada": "",
 }
 
+# Backup en R2 del último ZIP de cheques importado con éxito — permite
+# restaurar la DB si BCRA/proxies fallan y el disco local está vacío
+# (ej: redeploy en Render sin volumen persistente).
+_CHEQUES_ZIP_R2_KEY  = 'cheques_bcra_ultimo.zip'
+_CHEQUES_ZIP_R2_META = 'cheques_bcra_ultimo_meta.json'
+
 
 def get_cheques_local(cuit: str):
     """Consulta cheques rechazados del CUIT en la DB local (snapshot diario BCRA).
@@ -762,6 +768,7 @@ def _import_cheques_zip(date_str: str = None) -> bool:
         }
 
         resp = None
+        _status_directos = []   # códigos HTTP de los intentos directos
 
         # Intento 1 y 1b: URLs candidatas directas (sin proxy)
         for _url_c in _URL_CANDIDATAS:
@@ -769,6 +776,7 @@ def _import_cheques_zip(date_str: str = None) -> bool:
             print(f"[cheques_db] Intentando {_url_c}", flush=True)
             try:
                 _r = requests.get(_url_c, headers=_browser_hdrs, timeout=90, verify=False, stream=True)
+                _status_directos.append(_r.status_code)
                 if _r.status_code == 200:
                     resp = _r
                     url  = _url_c
@@ -779,11 +787,16 @@ def _import_cheques_zip(date_str: str = None) -> bool:
             except Exception as e_d:
                 print(f"[cheques_db] Error en {_url_c}: {e_d}", flush=True)
 
-        if resp is None:
+        # Si TODAS las respuestas directas fueron 404, el archivo no existe todavía
+        # (BCRA no publica fines de semana/feriados) — un proxy no cambia un 404,
+        # así que se saltean para no quemar créditos ni demorar el loop.
+        _archivo_inexistente = bool(_status_directos) and all(s == 404 for s in _status_directos)
+
+        if resp is None and not _archivo_inexistente:
             print(f"[cheques_db] Todas las URLs directas fallaron — intentando vía proxy", flush=True)
 
         # Intento 2: Bright Data residencial — prueba todas las URLs candidatas
-        if resp is None and BRIGHTDATA_USER and _BRD_PASSWORD:
+        if resp is None and not _archivo_inexistente and BRIGHTDATA_USER and _BRD_PASSWORD:
             _pu = f"http://{BRIGHTDATA_USER}:{_BRD_PASSWORD}@{BRIGHTDATA_HOST}:{BRIGHTDATA_PORT}"
             print(f"[cheques_db] Descarga vía Bright Data", flush=True)
             for _url_c2 in _URL_CANDIDATAS:
@@ -799,18 +812,77 @@ def _import_cheques_zip(date_str: str = None) -> bool:
                         print(f"[cheques_db] Bright Data HTTP {_r2.status_code} en {_url_c2}", flush=True)
                 except Exception as e_p:
                     print(f"[cheques_db] Bright Data error en {_url_c2}: {e_p}", flush=True)
-            if resp is None:
-                _cheques_db_estado['ultimo_paso'] = "ERROR: todas las URLs fallaron (directo + proxy)"
+
+        # Intento 3: ScraperAPI — proxy rotativo con salida en Argentina.
+        # Cubre el 407 ip_forbidden de Bright Data (IP de Render vetada en la zona).
+        if resp is None and not _archivo_inexistente and SCRAPERAPI_KEY:
+            print(f"[cheques_db] Descarga vía ScraperAPI", flush=True)
+            for _url_c3 in _URL_CANDIDATAS:
+                try:
+                    _r3 = requests.get(
+                        'http://api.scraperapi.com',
+                        params={'api_key': SCRAPERAPI_KEY, 'url': _url_c3,
+                                'country_code': 'ar', 'binary_target': 'binary'},
+                        timeout=180, stream=True)
+                    if _r3.status_code == 200:
+                        resp = _r3
+                        url  = _url_c3
+                        print(f"[cheques_db] ScraperAPI OK en {_url_c3}", flush=True)
+                        break
+                    else:
+                        print(f"[cheques_db] ScraperAPI HTTP {_r3.status_code} en {_url_c3}", flush=True)
+                except Exception as e_s:
+                    print(f"[cheques_db] ScraperAPI error en {_url_c3}: {e_s}", flush=True)
+
+        # Sin descarga posible → resiliencia:
+        #   a) si la DB vigente tiene datos, se mantiene activa tal cual (el
+        #      truncado solo ocurre con un ZIP nuevo validado) y se corta acá;
+        #   b) si está vacía (disco nuevo post-redeploy), se restaura el último
+        #      ZIP válido desde R2 y se importa ese.
+        _desde_r2 = False
+        if resp is None:
+            _regs_actuales = 0
+            try:
+                _c_chk = sqlite3.connect(PADRON_DB_PATH, check_same_thread=False)
+                _regs_actuales = _c_chk.execute("SELECT COUNT(*) FROM cheques_bcra").fetchone()[0]
+                _c_chk.close()
+            except Exception:
+                pass
+
+            if _regs_actuales > 0:
+                _motivo = "aún no publicado (404)" if _archivo_inexistente else "descarga fallida"
+                _cheques_db_estado['ultimo_paso'] = (
+                    f"Sin archivo para {date_str} ({_motivo}) — "
+                    f"DB vigente se mantiene ({_regs_actuales:,} registros)"
+                )
+                print(f"[cheques_db] {date_str} {_motivo} — DB actual sigue activa "
+                      f"({_regs_actuales:,} registros)", flush=True)
                 return False
 
-        if resp is None:
-            _cheques_db_estado['ultimo_paso'] = "ERROR: sin método de descarga disponible"
-            return False
+            _r2_zip = _r2_download_bytes(_CHEQUES_ZIP_R2_KEY)
+            if _r2_zip:
+                # La fecha real del backup viene en el JSON compañero (el ZIP
+                # puede ser de días atrás — no registrar la fecha de hoy)
+                try:
+                    _meta_raw = _r2_download_bytes(_CHEQUES_ZIP_R2_META)
+                    if _meta_raw:
+                        date_str = json.loads(_meta_raw.decode()).get('date') or date_str
+                except Exception:
+                    pass
+                with open(zip_path, 'wb') as zf:
+                    zf.write(_r2_zip)
+                _desde_r2 = True
+                print(f"[cheques_db] DB vacía — restaurando último ZIP válido desde R2 "
+                      f"({len(_r2_zip) // 1048576} MB, fecha {date_str})", flush=True)
+            else:
+                _cheques_db_estado['ultimo_paso'] = "ERROR: descarga imposible y sin backup R2"
+                return False
 
-        with open(zip_path, 'wb') as zf:
-            for chunk in resp.iter_content(chunk_size=65536):
-                if chunk:
-                    zf.write(chunk)
+        if not _desde_r2:
+            with open(zip_path, 'wb') as zf:
+                for chunk in resp.iter_content(chunk_size=65536):
+                    if chunk:
+                        zf.write(chunk)
 
         tam_mb = os.path.getsize(zip_path) / (1024 * 1024)
 
@@ -825,6 +897,27 @@ def _import_cheques_zip(date_str: str = None) -> bool:
             return False
 
         print(f"[cheques_db] ZIP válido descargado: {tam_mb:.1f} MB", flush=True)
+
+        # Backup a R2 del ZIP recién descargado (background) — es la fuente de
+        # restauración si mañana falla la descarga y el disco local está vacío.
+        # No re-subir si este mismo ZIP ya vino de R2 (_desde_r2).
+        if not _desde_r2:
+            with open(zip_path, 'rb') as _f:
+                _zip_bytes_bk = _f.read()
+
+            def _bg_backup_cheques(data=_zip_bytes_bk, fecha=date_str):
+                try:
+                    ok1 = _r2_upload_bytes(_CHEQUES_ZIP_R2_KEY, data, 'application/zip')
+                    ok2 = _r2_upload_bytes(
+                        _CHEQUES_ZIP_R2_META,
+                        json.dumps({'date': fecha, 'ts': time.time()}).encode(),
+                        'application/json',
+                    )
+                    print(f"[cheques_db] Backup R2 {'OK' if ok1 and ok2 else 'FALLÓ'} "
+                          f"({len(data) // 1048576} MB, fecha {fecha})", flush=True)
+                except Exception as _e_bk:
+                    print(f"[cheques_db] Backup R2 error: {_e_bk}", flush=True)
+            threading.Thread(target=_bg_backup_cheques, daemon=True).start()
 
         # 2. Extraer solo el archivo 'al*' (snapshot completo)
         # El archivo puede estar en la raíz o dentro de un subdirectorio del ZIP.
