@@ -15,18 +15,23 @@ import random
 import traceback
 
 # Módulos de scoring fiscal e integración ARCA (guards independientes:
-# scoring_fiscal es Python puro; arca_ws requiere cryptography instalado)
+# scoring_fiscal es Python puro; arca_ws requiere cryptography instalado).
+# Se captura Exception y no solo ImportError: una instalación rota de
+# cryptography (incompatibilidad binaria) puede fallar con otro tipo de error,
+# y el arranque de la app nunca debe depender de estos módulos opcionales.
 try:
     import scoring_fiscal
     SCORING_FISCAL_OK = True
-except ImportError as e:
-    print(f"[init] scoring_fiscal no disponible: {e}", flush=True)
+except Exception as e:
+    print(f"[init] scoring_fiscal no disponible ({type(e).__name__}): {e}", flush=True)
     SCORING_FISCAL_OK = False
 try:
     import arca_ws
+    _ARCA_MODULO_OK = True
     ARCA_DISPONIBLE = True   # se confirma en el init (necesita certificado)
-except ImportError as e:
-    print(f"[init] arca_ws no disponible: {e}", flush=True)
+except Exception as e:
+    print(f"[init] arca_ws no disponible ({type(e).__name__}): {e}", flush=True)
+    _ARCA_MODULO_OK = False
     ARCA_DISPONIBLE = False
 try:
     import boto3
@@ -2502,7 +2507,7 @@ def get_solvency_data(cuit):
 # ║  Prospectos: BCRA+AFIP(80%) / Comunidad(20%) — sin historial Odoo        ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
 
-_SCORE_VERSION          = "12.1"
+_SCORE_VERSION          = "21.0"   # pipeline unificado BCRA(24m) + ARCA oficial en paralelo
 _MOTOR_VERSION_CARTERA  = "v18.1"   # bump aquí cada vez que cambie la lógica del motor
 
 # Keywords para NLP de chat de bodegas (Capa C — Comunidad)
@@ -10118,7 +10123,22 @@ def _fecha_valida(fecha_str, desde):
 
 @app.route("/health")
 def health():
-    return jsonify({"status": "ok", "gemini": bool(GEMINI_KEY), "comercial": len(_cartera_comercial)})
+    """Estado del servicio + build efectivamente desplegado.
+
+    score_version y los flags de módulos permiten distinguir un deploy nuevo
+    de uno viejo sin depender de leer los logs de Render.
+    """
+    return jsonify({
+        "status":         "ok",
+        "gemini":         bool(GEMINI_KEY),
+        "comercial":      len(_cartera_comercial),
+        "score_version":  _SCORE_VERSION,
+        "modulos": {
+            "scoring_fiscal": SCORING_FISCAL_OK,
+            "arca_ws":        _ARCA_MODULO_OK,
+            "arca_activo":    ARCA_DISPONIBLE,   # módulo OK + certificado cargado
+        },
+    })
 
 
 _warm_estado = {"corriendo": False, "progreso": 0, "total": 0, "ultimo": ""}
@@ -13087,6 +13107,17 @@ if ARCA_DISPONIBLE:
     except Exception as e:
         print(f"[init] Error inicializando ARCA: {e}", flush=True)
         ARCA_DISPONIBLE = False
+
+# ── Banner de build: identifica sin ambigüedad qué versión quedó desplegada ──
+print(
+    "[build] " + " | ".join([
+        f"score v{_SCORE_VERSION}",
+        f"scoring_fiscal={'OK' if SCORING_FISCAL_OK else 'NO'}",
+        f"arca_modulo={'OK' if _ARCA_MODULO_OK else 'NO'}",
+        f"arca_activo={'SI' if ARCA_DISPONIBLE else 'NO (sin certificado)'}",
+    ]),
+    flush=True,
+)
 
 
 def _cheques_auto_update_loop():
