@@ -3342,10 +3342,18 @@ def calcular_rating_predictivo(
         _banco_ppal = max(_ents_curr, key=lambda e: float(e.get('monto') or 0))
         banco_principal_limpio = int(_banco_ppal.get('situacion') or 1) == 1
 
-    # Criterio Humano: para mora administrativa, toda la lógica de caps usa
-    # sit_efectivo = round(sit_ponderada) en lugar del max_sit del outlier.
-    # La materialidad ($50k ARS o <5%) también clasifica como administrativa.
-    es_mora_administrativa = (
+    # "Mora administrativa" es una CLASIFICACIÓN DE LA MORA: solo tiene sentido
+    # cuando hay mora que clasificar. banco_principal_limpio y es_mora_tecnica
+    # son atenuantes que se aplican sobre una mora existente, no etiquetas para
+    # un cliente sin mora.
+    #
+    # Sin este guard, un cliente impecable (max_sit=1, pct_mora=0) activaba
+    # banco_principal_limpio —su banco principal está en Sit.1, obviamente— y
+    # quedaba marcado como mora_administrativa=True. Además de ser un flag
+    # incorrecto en la respuesta, forzaba tendencia='estable' en la Capa A y
+    # salteaba el análisis real de tendencia de 12 meses.
+    _hay_mora_bcra = max_sit >= 2 or tipo_mora_bcra != 'limpio'
+    es_mora_administrativa = _hay_mora_bcra and (
         tipo_mora_bcra == 'mora_administrativa' or
         banco_principal_limpio or
         es_mora_tecnica   # materialidad: deuda baja no refleja insolvencia
@@ -3856,7 +3864,12 @@ def calcular_rating_predictivo(
         'tipo_mora_bcra':           tipo_mora_bcra,
         'degradacion_bcra_reciente':hard_block_bcra,
         'aviso_mora':               aviso_mora or None,
-        'limite_dinamico_sugerido': round(monto_sit1_k * 1000 * 0.30) if (es_mora_administrativa and monto_sit1_k > 0) else None,
+        # Límite sugerido: 30% de la deuda que los bancos ya le otorgaron en
+        # Situación 1. Es una referencia válida para cualquier cliente con deuda
+        # bancaria sana, no solo para los de mora administrativa — antes estaba
+        # atado a ese flag y, al corregirlo, los clientes limpios habrían
+        # perdido el prellenado de límite en la app.
+        'limite_dinamico_sugerido': round(monto_sit1_k * 1000 * 0.30) if monto_sit1_k > 0 else None,
         'nota_mora_tecnica': (
             f"Atención: Se detecta una mora técnica por monto menor que no afecta "
             f"la solvencia general. Deuda en mora: ${round(monto_mora_k):,} miles ARS "
