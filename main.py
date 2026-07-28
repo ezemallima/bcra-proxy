@@ -2644,7 +2644,6 @@ def _evaluar_intencionalidad_mora(
 
 def _layer_conducta_interna(
     cuit_limpio: str,
-    saldos_data: list,
     en_mora: bool,
 ) -> tuple:
     """
@@ -2684,35 +2683,36 @@ def _layer_conducta_interna(
                 pass
         return None
 
-    # ── Filtrar facturas: CUIT directo → nombre vía _cartera_comercial ──
-    facturas = [
-        f for f in saldos_data
-        if isinstance(f, dict) and str(f.get('cuit', '')).replace('-', '').replace(' ', '').strip() == cuit_limpio
-    ]
+    # ── Facturas del cliente: MISMA fuente y MISMO matcher que la app comercial ──
+    # El score debe leer exactamente el reporte de saldos con el que el comercial
+    # ve la cuenta corriente. Antes se filtraba a mano sobre la lista recibida,
+    # que podía quedar desactualizada respecto del último upload y usar un
+    # criterio de match distinto al del índice.
+    #
+    # _saldos_gestion_desde_disco() detecta el upload (debounce de 10s) y
+    # _buscar_por_nombre_en_idx aplica el match estricto de 2 niveles del índice,
+    # el mismo que alimenta /saldos-cuit y /api/facturas/<cuit>.
+    _saldos_gestion_desde_disco()
+    facturas = _saldos_idx_cuit.get(cuit_limpio, [])
     if not facturas:
         nombre_cliente = next(
-            (str(c.get('nombre', '')).strip().upper()
+            (str(c.get('nombre', '')).strip()
              for c in _cartera_comercial
              if str(c.get('cuit', '')).replace('-', '').replace(' ', '').strip() == cuit_limpio),
             None
         )
         if nombre_cliente:
-            # Match exacto primero; fallback: nombre_cliente como prefijo completo de palabra
-            # (no substring libre — evita que "WINE BAR" matchee "VINOTECAS ROMA WINE BAR SRL")
-            _nc_norm = _norm_nombre(nombre_cliente)
-            facturas = [
-                f for f in saldos_data
-                if isinstance(f, dict) and _norm_nombre(str(f.get('cliente', ''))) == _nc_norm
-            ]
+            facturas = _buscar_por_nombre_en_idx(nombre_cliente)
 
     if not facturas:
         return (120, 0.0, False, True, 0.0, False, False, 0.0)
 
-    # Fecha de corte = última fechaFactura del cliente (no la fecha del sistema).
-    # Así el score usa el mes del upload, no el día de hoy.
-    _fechas_cliente = [_parse(f.get('fechaFactura')) for f in facturas]
-    _fechas_cliente = [d for d in _fechas_cliente if d]
-    hoy = max(_fechas_cliente) if _fechas_cliente else datetime.now()
+    # Fecha de corte GLOBAL del reporte (factura más reciente de todo el
+    # archivo), no la del cliente evaluado. El score sigue anclado al mes del
+    # upload en vez del día de hoy —para que no se mueva solo entre cargas—
+    # pero un cliente que dejó de comprar ya no congela su propio "hoy" en su
+    # última compra, que era justo lo que ocultaba al peor deudor.
+    hoy = _fecha_corte_saldos()
 
     # ── Aging real de la cuenta corriente ────────────────────────────────
     # fechaPago es la fecha de VENCIMIENTO pactada, no la fecha en que el
@@ -3409,7 +3409,7 @@ def calcular_rating_predictivo(
     (pts_cb, dso_individual, dso_deteriorando,
      sin_historial_interno, promedio_mensual, hard_block_mora,
      deuda_90d_interna, monto_deuda_90d_interna) = \
-        _layer_conducta_interna(cuit_limpio, _saldos_facturas, en_mora)
+        _layer_conducta_interna(cuit_limpio, en_mora)
 
     if sin_historial_interno:
         # Score de Prospección: AFIP solvencia como proxy de Capa B (0-400)
@@ -10730,15 +10730,17 @@ except Exception:
 _dso_global_ponderado_cache: int | None = None
 
 # ── Índices en memoria (O(1) lookup por CUIT y nombre) ──────────────────────
+_saldos_fecha_corte = None      # datetime: factura más reciente de todo el reporte
 _saldos_idx_cuit:   dict = {}   # cuit_limpio   → [facturas]
 _saldos_idx_nombre: dict = {}   # norm_nombre   → [facturas]
 
 def _rebuild_saldos_index():
     """Reconstruye ambos índices desde la fuente vigente. Llamar tras cada carga/upload."""
-    global _saldos_idx_cuit, _saldos_idx_nombre
+    global _saldos_idx_cuit, _saldos_idx_nombre, _saldos_fecha_corte
     fuente = _saldos_gestion if _saldos_gestion else _saldos_facturas
     idx_c: dict = {}
     idx_n: dict = {}
+    _corte = None
     for f in fuente:
         if not isinstance(f, dict):
             continue
@@ -10748,10 +10750,36 @@ def _rebuild_saldos_index():
         n = _norm_nombre(f.get('cliente', ''))
         if n:
             idx_n.setdefault(n, []).append(f)
-    _saldos_idx_cuit   = idx_c
-    _saldos_idx_nombre = idx_n
+        # Fecha de corte GLOBAL del reporte: la factura más reciente de todo el
+        # archivo. Es el "hoy" contra el que se mide el vencimiento.
+        _ffs = str(f.get('fechaFactura') or '').strip()
+        for _fmt in ('%d/%m/%Y', '%Y-%m-%d', '%d-%m-%Y'):
+            try:
+                _d = datetime.strptime(_ffs[:10], _fmt)
+                if _corte is None or _d > _corte:
+                    _corte = _d
+                break
+            except ValueError:
+                continue
+    _saldos_idx_cuit    = idx_c
+    _saldos_idx_nombre  = idx_n
+    _saldos_fecha_corte = _corte
     print(f"[idx] {len(idx_c)} CUITs · {len(idx_n)} nombres indexados "
-          f"({len(fuente)} registros)", flush=True)
+          f"({len(fuente)} registros) · corte={_corte.strftime('%d/%m/%Y') if _corte else 'n/d'}",
+          flush=True)
+
+
+def _fecha_corte_saldos() -> datetime:
+    """Fecha contra la que se mide el vencimiento: la factura más reciente de
+    TODO el reporte de saldos, no la del cliente evaluado.
+
+    Usar el máximo por cliente escondía justamente el peor caso: quien dejó de
+    comprar hace meses y quedó debiendo tenía su propio 'hoy' congelado en su
+    última compra, y ninguna factura le figuraba vencida.
+    """
+    if _saldos_fecha_corte is not None:
+        return _saldos_fecha_corte
+    return datetime.now()
 
 def _saldos_gestion_desde_disco() -> None:
     """Detecta si saldos_gestion_vendedores.json cambió en disco (upload en otro worker)
