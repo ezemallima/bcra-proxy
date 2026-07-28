@@ -2416,7 +2416,7 @@ def get_solvency_data(cuit):
 # ║  Prospectos: BCRA+AFIP(80%) / Comunidad(20%) — sin historial Odoo        ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
 
-_SCORE_VERSION          = "22.1"   # Capa C fiscal + conducta interna por aging real con gracia
+_SCORE_VERSION          = "23.0"   # recalibracion: normal 600-750, sin saturacion de capas
 _MOTOR_VERSION_CARTERA  = "v18.1"   # bump aquí cada vez que cambie la lógica del motor
 
 # Session-level cache — se limpia al inicio de cada verificación
@@ -2774,41 +2774,61 @@ def _layer_conducta_interna(
         elif _pa == 0 and _pr > 0.10:
             dso_deteriorando = True   # antes no debía nada, ahora sí
 
-    # ── 1. Exposición vencida (0-140) ────────────────────────────────────
+    # Calibración: no tener nada vencido es la CONDICIÓN NORMAL de la cartera,
+    # no un mérito excepcional. Si el solo hecho de estar al día otorgara el
+    # máximo, la capa dejaría de discriminar entre el que paga puntual y el que
+    # paga apenas dentro de la tolerancia. Por eso el cliente sin vencidos parte
+    # de una base sólida (~245/400) y los puntos restantes se ganan con
+    # velocidad de cobro y trayectoria.
+
+    # ── 1. Exposición vencida (0-110) ────────────────────────────────────
     # Qué proporción del saldo abierto está fuera de la gracia. Curva suave: un
     # cliente de una sola factura pasa a 100% apenas la cruza, y no puede caer
     # a cero por eso solo — de la gravedad se ocupa el bloque siguiente.
-    if   pct_vencido == 0:    pts_punt = 140
-    elif pct_vencido <= 0.10: pts_punt = 120
-    elif pct_vencido <= 0.25: pts_punt = 95
-    elif pct_vencido <= 0.50: pts_punt = 65
-    elif pct_vencido <= 0.75: pts_punt = 35
-    else:                     pts_punt = 15
+    if   pct_vencido == 0:    pts_punt = 110
+    elif pct_vencido <= 0.10: pts_punt = 92
+    elif pct_vencido <= 0.25: pts_punt = 72
+    elif pct_vencido <= 0.50: pts_punt = 48
+    elif pct_vencido <= 0.75: pts_punt = 25
+    else:                     pts_punt = 10
 
-    # ── 2. Severidad del atraso (0-160) — señal principal ────────────────
+    # ── 2. Severidad del atraso (0-135) — señal principal ────────────────
     # Días vencidos totales sobre el vencimiento pactado (la gracia ya filtró
     # lo que no llega acá). Con plazo de 30 y gracia de 30:
     #   45 días vencidos = cobra a los 75 desde la factura → atraso leve
     #   60 días vencidos = cobra a los 90                  → penalizar
     #   90+                                                 → cobranza en riesgo
-    if   monto_vencido == 0:      pts_sev = 160   # todo dentro del ciclo normal
-    elif dias_atraso_pond <= 45:  pts_sev = 115
-    elif dias_atraso_pond <= 60:  pts_sev = 70
-    elif dias_atraso_pond <= 90:  pts_sev = 35
-    elif dias_atraso_pond <= 120: pts_sev = 12
+    if   monto_vencido == 0:      pts_sev = 135   # todo dentro del ciclo normal
+    elif dias_atraso_pond <= 45:  pts_sev = 95
+    elif dias_atraso_pond <= 60:  pts_sev = 58
+    elif dias_atraso_pond <= 90:  pts_sev = 28
+    elif dias_atraso_pond <= 120: pts_sev = 10
     else:                         pts_sev = 0
 
-    # ── 3. Track record de la relación (0-100) ───────────────────────────
+    # ── 3. Velocidad de cobro (0-85) ─────────────────────────────────────
+    # Discrimina DENTRO del grupo que está al día, que es la mayoría: cobrarle
+    # a los 25 días no es lo mismo que cobrarle a los 58, aunque ninguno de los
+    # dos figure vencido. Es el componente que devuelve poder de separación
+    # entre buenos pagadores.
+    if   dso_individual <= 0:  pts_vel = 45   # sin saldo abierto: neutro
+    elif dso_individual <= 25: pts_vel = 85
+    elif dso_individual <= 40: pts_vel = 70
+    elif dso_individual <= 55: pts_vel = 52
+    elif dso_individual <= 70: pts_vel = 32
+    elif dso_individual <= 90: pts_vel = 15
+    else:                      pts_vel = 0
+
+    # ── 4. Track record de la relación (0-70) ────────────────────────────
     # Antigüedad y volumen valen como historial conocido, pero NO pueden
     # compensar el incumplimiento: comprar mucho y pagar mal es más exposición,
     # no más solvencia. Por eso el bloque se escala por la puntualidad.
     vol_total = sum(float(f.get('totalFactura') or 0) for f in facturas)
-    if   vol_total >= 5_000_000: pts_rel_bruto = 100
-    elif vol_total >= 2_000_000: pts_rel_bruto = 80
-    elif vol_total >= 500_000:   pts_rel_bruto = 60
-    elif vol_total >= 100_000:   pts_rel_bruto = 40
-    elif vol_total > 0:          pts_rel_bruto = 20
-    else:                        pts_rel_bruto = 10
+    if   vol_total >= 5_000_000: pts_rel_bruto = 70
+    elif vol_total >= 2_000_000: pts_rel_bruto = 56
+    elif vol_total >= 500_000:   pts_rel_bruto = 42
+    elif vol_total >= 100_000:   pts_rel_bruto = 28
+    elif vol_total > 0:          pts_rel_bruto = 14
+    else:                        pts_rel_bruto = 7
     factor_cumplimiento = max(0.0, 1.0 - pct_vencido * 1.5)   # 33% vencido → 50%
     pts_rel = round(pts_rel_bruto * factor_cumplimiento)
 
@@ -2826,7 +2846,7 @@ def _layer_conducta_interna(
         meses = max(1, (hoy - min(fechas)).days / 30)
         promedio_mensual = round(vol_total / meses, 2)
 
-    pts = max(0, min(400, pts_punt + pts_sev + pts_rel + pen_dso))
+    pts = max(0, min(400, pts_punt + pts_sev + pts_vel + pts_rel + pen_dso))
     if en_mora:
         pts = min(pts, 120)   # mora declarada con nosotros: la capa no puede sostener el score
 
@@ -2835,8 +2855,8 @@ def _layer_conducta_interna(
         f"(${monto_vencido:,.0f} de ${monto_total_abierto:,.0f}"
         f"{f', ${monto_en_gracia:,.0f} en gracia' if monto_en_gracia else ''}) "
         f"atraso_pond={dias_atraso_pond:.0f}d max={max_dias_vencido}d "
-        f"aging={dso_individual:.0f}d | punt={pts_punt} sev={pts_sev} rel={pts_rel} "
-        f"pen={pen_dso} → capaB={pts}",
+        f"aging={dso_individual:.0f}d | punt={pts_punt} sev={pts_sev} vel={pts_vel} "
+        f"rel={pts_rel} pen={pen_dso} → capaB={pts}",
         flush=True
     )
 
@@ -3405,17 +3425,19 @@ def calcular_rating_predictivo(
 
     if sin_historial_interno:
         # Prospecto: no tenemos ninguna factura abierta suya, así que no hay
-        # conducta comercial que medir. La Capa B pasa a ser el "bin de
-        # desconocido" — deliberadamente conservador (~160/400 = 40%).
+        # conducta comercial que medir. La Capa B es el "bin de desconocido".
         #
         # NO usar acá el perfil fiscal completo aunque esté disponible: ya
         # pondera en la Capa C, y meterlo también en la B contaría dos veces la
-        # misma evidencia e inflaría el score de quien nunca nos compró.
-        # Por eso _layer2_solvencia_federal puede dar 120 para un Responsable
-        # Inscripto que el cerebro fiscal valúa en 220: no es una divergencia a
-        # corregir, son dos preguntas distintas — "¿qué sabemos de su perfil
-        # fiscal?" (Capa C) y "¿cómo nos paga?" (Capa B, sin datos aquí).
-        pts_cb = min(400, round(pts_c2 * 400 / 300))
+        # misma evidencia. Por eso _layer2_solvencia_federal puede dar un valor
+        # distinto al del cerebro fiscal: son dos preguntas separadas — "¿qué
+        # sabemos de su perfil fiscal?" (Capa C) y "¿cómo nos paga?" (Capa B).
+        #
+        # Techo de 200/400: sin una sola factura suya no podemos afirmar que
+        # paga bien. Antes un prospecto empleador escalaba a 400/400 —puntaje
+        # perfecto en conducta de pago sin haberle vendido nunca— y era una de
+        # las causas de la inflación de scores.
+        pts_cb = min(200, round(pts_c2 * 400 / 300))
 
         # Sin historial interno NI historial bancario estamos "a ciegas": el
         # perfil fiscal completo es mejor evidencia que el proxy de categoría
@@ -3605,16 +3627,17 @@ def calcular_rating_predictivo(
     # dso_individual es ahora el aging real ponderado por monto (días promedio
     # desde emisión del saldo abierto), no el plazo pactado. Escalonado en vez
     # de dos escalones secos, para que no haya saltos de rango por un día.
-    # Escala corrida por el plazo de gracia: con plazo de 30 y cobranza normal
-    # a los 60, un aging de 45-70 días es el comportamiento esperado y no debe
-    # penalizar. El castigo arranca pasados los 90.
-    if dso_individual > 0:
-        if   dso_individual <= 45:  _aj_dso = 50    # cobra antes de lo pactado
-        elif dso_individual <= 70:  _aj_dso = 25    # ciclo normal del sector
-        elif dso_individual <= 90:  _aj_dso = 0
-        elif dso_individual <= 120: _aj_dso = -40
+    # Solo penalización, sin bonificación: la velocidad de cobro ya se premia
+    # dentro de la Capa B (componente pts_vel, 0-85). Mantener también un bono
+    # acá contaba dos veces el mismo aging y empujaba a los buenos pagadores
+    # contra el techo de 999. La penalización sí se conserva a nivel score
+    # porque un aging extremo es una señal de cartera, no solo de conducta.
+    if dso_individual > 90:
+        if   dso_individual <= 120: _aj_dso = -40
         elif dso_individual <= 150: _aj_dso = -90
         else:                       _aj_dso = -140
+    else:
+        _aj_dso = 0
         if _aj_dso:
             puntos += _aj_dso
             print(f"[score v{_SCORE_VERSION}] {cuit_limpio} aging={dso_individual:.0f}d "

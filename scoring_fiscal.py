@@ -159,18 +159,23 @@ def _puntaje_antiguedad(anos: float | int | None) -> float:
 
 def _puntaje_estructura(es_empleador: bool, categoria_mipyme: str = '') -> float:
     """
-    Bonus por estructura: empleadores y PyMEs tienen capacidad declarada mayor.
+    Ajuste por escala declarada ante SEPYME.
 
-    Returns: factor 1.0 a 1.3
+    NO bonifica por es_empleador: esa condición ya define el puntaje base (280
+    para empleador o persona jurídica). Multiplicar además por 1.25 contaba dos
+    veces la misma evidencia y era una de las causas de que toda empresa normal
+    saturara el techo de 400.
+
+    La categoría MiPyME sí aporta información propia —tamaño relativo dentro del
+    universo PyME— pero con un efecto acotado.
+
+    Returns: factor 1.0 a 1.12
     """
-    if es_empleador:
-        return 1.25  # empleador = nómina, más robusto
-
     categoria_map = {
-        'Mediana_T2': 1.2,
-        'Mediana_T1': 1.15,
-        'Pequeña': 1.1,
-        'Micro': 1.05,
+        'Mediana_T2': 1.12,
+        'Mediana_T1': 1.08,
+        'Pequeña':    1.05,
+        'Micro':      1.02,
     }
 
     if categoria_mipyme in categoria_map:
@@ -239,8 +244,9 @@ def _puntaje_domicilios(domicilios: list | None) -> tuple:
         return 0.85, 'Sin domicilio fiscal con datos verificables'
     if invalidos > 0:
         return 0.9, f'{invalidos} domicilio(s) marcado(s) como inválido(s) por ARCA'
-    # Domicilio fiscal y legal declarados y vigentes: sustancia registral
-    return (1.05 if validos >= 2 else 1.0), None
+    # Tener domicilio fiscal y legal declarados es lo esperable en cualquier
+    # empresa formal: se reconoce, pero sin premiar la norma.
+    return (1.02 if validos >= 2 else 1.0), None
 
 
 def _puntaje_regimenes(
@@ -266,19 +272,23 @@ def _puntaje_regimenes(
     if n == 0 and not (tiene_iva or tiene_ganancias or tiene_monotributo):
         return 0.5, 'CUIT sin impuestos activos — no puede facturar legalmente', True
 
+    # Estar inscripto en IVA y Ganancias es la norma entre empresas formales, no
+    # una distinción: casi toda la cartera lo cumple, así que aporta poca
+    # información discriminante y se pondera con moderación. El valor real de
+    # este bloque es hacia abajo — detectar al que NO tiene nada activo.
     factor = 1.0
     if tiene_iva:
-        factor += 0.12          # responsable inscripto: mayor exigencia formal
+        factor += 0.05
     if tiene_ganancias:
-        factor += 0.08
+        factor += 0.03
     if tiene_monotributo and not tiene_iva:
-        factor += 0.02          # monotributo: estructura simplificada
+        factor += 0.01
 
     # Amplitud de regímenes: cada inscripción adicional suma sustancia, con tope
     if n:
-        factor += min(0.03 * max(0, n - 2), 0.09)
+        factor += min(0.015 * max(0, n - 2), 0.04)
 
-    return round(min(1.25, factor), 3), None, False
+    return round(min(1.12, factor), 3), None, False
 
 
 def _puntaje_riesgo_sectorial(clae: str | None) -> float:
@@ -387,28 +397,28 @@ def puntaje_perfil_fiscal(
     alertas = [a for a in (alerta_clave, alerta_domic, alerta_regim) if a]
 
     # ── Puntaje base según condición fiscal ───────────────────────────────────
-    # Empleador o persona jurídica → 280
-    # Responsable Inscripto (IVA activo en el padrón) → 220
-    # Monotributo A-K → 120-220 según categoría
-    # Sin información → 120 (neutral degradado)
+    # Calibrado para que el perfil típico de la cartera —empresa formal, activa,
+    # con IVA y algunos años— caiga cerca de 220/400 (Capa C ≈ 110/200), y el
+    # techo de 400 quede reservado a trayectorias realmente excepcionales.
+    # Ser persona jurídica o empleador describe a casi toda la cartera, así que
+    # ubica el piso del perfil formal pero no puede, por sí solo, acercar al máximo.
     if es_empl_bool or tipo_persona.upper() == 'JURIDICA':
-        pts_base = 280
+        pts_base = 210
     elif tiene_iva:
         # IVA activo en el padrón es prueba de responsable inscripto: emite
         # factura A y presenta declaraciones mensuales. Una persona física con
-        # esa condición no puede tratarse como "sin información" — antes caía
-        # al bucket de 120 aunque tuviera décadas de antigüedad impositiva.
-        pts_base = 220
+        # esa condición no puede tratarse como "sin información".
+        pts_base = 170
     elif cat_mono:
         # Categoría monotributo: A es la más baja, K la más alta
         cat_mono_pts = {
-            'A': 120, 'B': 130, 'C': 140, 'D': 150,
-            'E': 160, 'F': 170, 'G': 180, 'H': 190,
-            'I': 200, 'J': 210, 'K': 220,
+            'A':  90, 'B':  98, 'C': 105, 'D': 113,
+            'E': 120, 'F': 128, 'G': 135, 'H': 143,
+            'I': 150, 'J': 158, 'K': 165,
         }
-        pts_base = cat_mono_pts.get(cat_mono, 150)
+        pts_base = cat_mono_pts.get(cat_mono, 113)
     else:
-        pts_base = 120  # conservador, sin información
+        pts_base = 100  # conservador, sin información
 
     # ── Aplicar factores ───────────────────────────────────────────────────────
     # Antigüedad y estructura multiplican (más años / más nómina = mejor).
