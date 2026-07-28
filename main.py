@@ -3404,7 +3404,17 @@ def calcular_rating_predictivo(
         _layer_conducta_interna(cuit_limpio, en_mora)
 
     if sin_historial_interno:
-        # Score de Prospección: AFIP solvencia como proxy de Capa B (0-400)
+        # Prospecto: no tenemos ninguna factura abierta suya, así que no hay
+        # conducta comercial que medir. La Capa B pasa a ser el "bin de
+        # desconocido" — deliberadamente conservador (~160/400 = 40%).
+        #
+        # NO usar acá el perfil fiscal completo aunque esté disponible: ya
+        # pondera en la Capa C, y meterlo también en la B contaría dos veces la
+        # misma evidencia e inflaría el score de quien nunca nos compró.
+        # Por eso _layer2_solvencia_federal puede dar 120 para un Responsable
+        # Inscripto que el cerebro fiscal valúa en 220: no es una divergencia a
+        # corregir, son dos preguntas distintas — "¿qué sabemos de su perfil
+        # fiscal?" (Capa C) y "¿cómo nos paga?" (Capa B, sin datos aquí).
         pts_cb = min(400, round(pts_c2 * 400 / 300))
 
         # Sin historial interno NI historial bancario estamos "a ciegas": el
