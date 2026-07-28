@@ -7247,19 +7247,35 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
             _proceso_integral_estado['mensaje'] = (
                 f'Fase 1.5/2: solvencia AFIP para {len(_para_solvencia_pi)} clientes (8 workers)...'
             )
-        print(f"[proceso-integral] FASE 1.5: solvencia — {len(_para_solvencia_pi)} clientes sin caché vigente", flush=True)
-        with ThreadPoolExecutor(max_workers=8) as _pool_sv:
-            _futs_sv = {_pool_sv.submit(get_solvency_data, _cs): _cs for _cs in _para_solvencia_pi}
-            _done_sv = 0
-            for _fut_sv in as_completed(_futs_sv, timeout=1800):
-                try:
-                    _fut_sv.result(timeout=40)
-                except Exception as _e_sv:
-                    print(f'[proceso-integral] Solvencia fallo {_futs_sv[_fut_sv]}: {_e_sv}', flush=True)
-                _done_sv += 1
-                if _done_sv % 50 == 0:
-                    print(f"[proceso-integral] FASE 1.5: {_done_sv}/{len(_para_solvencia_pi)} solvencia", flush=True)
-        print("[proceso-integral] FASE 1.5 OK", flush=True)
+        # Presupuesto de tiempo proporcional a la cartera. Desde que ARCA es la
+        # Fuente 0, cada cliente sin caché implica dos llamadas SOAP (A13 + A5),
+        # así que un tope fijo de 1800s se quedaba corto con carteras grandes.
+        # 8s por cliente entre 8 workers, con piso de 30 min y techo de 2 h.
+        _tout_sv = max(1800, min(7200, int(len(_para_solvencia_pi) * 8 / 8) + 600))
+        print(f"[proceso-integral] FASE 1.5: solvencia — {len(_para_solvencia_pi)} clientes "
+              f"sin caché vigente (presupuesto {_tout_sv // 60} min)", flush=True)
+        _done_sv = 0
+        try:
+            with ThreadPoolExecutor(max_workers=8) as _pool_sv:
+                _futs_sv = {_pool_sv.submit(get_solvency_data, _cs): _cs for _cs in _para_solvencia_pi}
+                for _fut_sv in as_completed(_futs_sv, timeout=_tout_sv):
+                    try:
+                        _fut_sv.result(timeout=40)
+                    except Exception as _e_sv:
+                        print(f'[proceso-integral] Solvencia fallo {_futs_sv[_fut_sv]}: {_e_sv}', flush=True)
+                    _done_sv += 1
+                    if _done_sv % 50 == 0:
+                        print(f"[proceso-integral] FASE 1.5: {_done_sv}/{len(_para_solvencia_pi)} solvencia", flush=True)
+        except Exception as _e_fase15:
+            # El precalentado es una OPTIMIZACIÓN, no un requisito: si se agota
+            # el presupuesto o falla el pool, el proceso sigue y cada cliente
+            # resuelve su solvencia en el loop. Antes, un TimeoutError acá
+            # abortaba la actualización completa de la cartera.
+            print(f"[proceso-integral] FASE 1.5 interrumpida ({type(_e_fase15).__name__}) — "
+                  f"{_done_sv}/{len(_para_solvencia_pi)} precalentados; "
+                  f"el resto se resuelve durante el scoring", flush=True)
+        else:
+            print(f"[proceso-integral] FASE 1.5 OK — {_done_sv} precalentados", flush=True)
     else:
         print("[proceso-integral] FASE 1.5: toda la solvencia ya estaba cacheada (<24h)", flush=True)
 
