@@ -4430,9 +4430,12 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
       var _empRango = _sv.empleados_rango  || '';
       var _esPyme   = !!_cat;
 
-      // Gran empresa: solo si AFIP/TangoFactura confirmaron explícitamente es_empleador=true.
-      // Una S.R.L. recién constituida con 0 empleados NO activa este bloque.
-      var _esGranEmpresa = !_esPyme && (_sv.es_empleador === true);
+      // Gran empresa: solo si AFIP/TangoFactura confirmaron explícitamente es_empleador=true
+      // Y es persona jurídica. Una persona física que registra empleados (ej: domésticos)
+      // NO es una gran empresa — solo aplica a S.A., S.R.L., S.A.S., etc.
+      var _tipoP = (_sv.tipo_persona || '').toUpperCase();
+      var _esPersonaFisica = _tipoP.indexOf('FISICA') !== -1 || _tipoP === 'F';
+      var _esGranEmpresa = !_esPyme && (_sv.es_empleador === true) && !_esPersonaFisica;
 
       // Sin datos suficientes para mostrar el bloque
       if (!_esPyme && !_esGranEmpresa) { _icCard.style.display = 'none'; return; }
