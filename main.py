@@ -8805,40 +8805,50 @@ def _nomdeu_get_entidad(codigo: str):
 
 
 def _nomdeu_build_deudas_resp(cuit: str):
-    """Respuesta BCRA sintética desde deudas_resumen offline.
-    Primaria para CUITs en el padrón mensual; las APIs en vivo quedan como
-    auxilio solo para CUITs nuevos (ausentes de este padrón)."""
-    deuda = _nomdeu_get_deuda(cuit)
-    if not deuda:
+    """Respuesta BCRA sintética desde historial_detalle offline.
+
+    Usa sit_01/monto_01 (mes más reciente) por entidad — no sit_max (peor
+    histórico). Un CUIT que tuvo Sit 2 hace 8 meses y hoy está en Sit 1 no
+    debe clasificarse como moroso en la posición actual.
+    """
+    filas = _historial_detalle_rows(cuit)
+    if not filas:
         return None
+    deuda = _nomdeu_agregar_filas(filas)
     nombre = _nomdeu_get_nombre(cuit) or ''
-    ent_codigos = [c.strip() for c in (deuda['entidades_cod'] or '').split(',') if c.strip()]
-    if ent_codigos:
-        n_ents = len(ent_codigos)
-        entidades_list = []
-        for cod in ent_codigos:
-            ent_nombre = _nomdeu_get_entidad(cod) or f"Entidad {cod}"
-            entidades_list.append({
-                'entidad': ent_nombre,
-                'situacion': deuda['sit_max'],
-                'monto': round(deuda['monto_total'] / n_ents, 1),
-            })
-    else:
-        # Sin entidades en el mes más reciente (deuda histórica ya cerrada/no reportada
-        # en el snapshot actual): entidad sintética con el sit_max histórico
+
+    # Entidades activas en el mes más reciente (sit_01 != 0), con su situación
+    # y monto reales de ese mes — no el peor histórico, no un promedio.
+    entidades_list = []
+    for fila in filas:
+        sit_01 = fila.get('sit_01')
+        if not sit_01:
+            continue
+        ent_nombre = _nomdeu_get_entidad(str(fila['entidad'])) or f"Entidad {fila['entidad']}"
+        monto_01 = round((fila.get('monto_01') or 0) / 10.0, 1)
+        entidades_list.append({
+            'entidad':   ent_nombre,
+            'situacion': sit_01,
+            'monto':     monto_01,
+        })
+
+    if not entidades_list:
+        # Sin actividad en el mes más reciente — entidad sintética neutral.
         entidades_list = [{
-            'entidad': 'Sistema Financiero',
-            'situacion': deuda['sit_max'],
-            'monto': round(deuda['monto_total'], 1),
+            'entidad':   'Sistema Financiero',
+            'situacion': deuda.get('sit_padron', 1),
+            'monto':     round(deuda['monto_total'], 1),
         }]
+
     periodo_str = str(deuda['periodo'])
     periodo_int = int(periodo_str) if periodo_str.isdigit() else 0
+    sit_curr = deuda.get('sit_padron', 1)
     return {
         'results': {
             'denominacion': nombre,
             'periodos': [{'periodo': periodo_int, 'entidades': entidades_list}],
         },
-        'sin_deudas': False,
+        'sin_deudas': sit_curr <= 1,
         'bcra_disponible': False,
         'fuente_offline': 'bcra_nomdeu_local',
     }
