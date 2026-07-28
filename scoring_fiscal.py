@@ -386,12 +386,19 @@ def puntaje_perfil_fiscal(
     )
     alertas = [a for a in (alerta_clave, alerta_domic, alerta_regim) if a]
 
-    # ── Puntaje base según tipo persona y categoría fiscal ────────────────────
-    # Responsable Inscripto o Empleador → base 280
-    # Monotributo A-K → base 120-220 según categoría
-    # Otro → base 120 (neutral degradado)
+    # ── Puntaje base según condición fiscal ───────────────────────────────────
+    # Empleador o persona jurídica → 280
+    # Responsable Inscripto (IVA activo en el padrón) → 220
+    # Monotributo A-K → 120-220 según categoría
+    # Sin información → 120 (neutral degradado)
     if es_empl_bool or tipo_persona.upper() == 'JURIDICA':
         pts_base = 280
+    elif tiene_iva:
+        # IVA activo en el padrón es prueba de responsable inscripto: emite
+        # factura A y presenta declaraciones mensuales. Una persona física con
+        # esa condición no puede tratarse como "sin información" — antes caía
+        # al bucket de 120 aunque tuviera décadas de antigüedad impositiva.
+        pts_base = 220
     elif cat_mono:
         # Categoría monotributo: A es la más baja, K la más alta
         cat_mono_pts = {

@@ -3518,28 +3518,40 @@ def calcular_rating_predictivo(
             _ing_afip = float(solvency_data.get('ingresos_anuales') or 0)
         except (TypeError, ValueError):
             _ing_afip = 0.0
+        # Unidades: monto_sit1_k viene en MILES de pesos (crudo BCRA) y
+        # monto_total_m es esa suma dividida por 1000. Para expresar el ingreso
+        # presunto en PESOS hay que llevar ambos a la misma escala; hacer
+        # "monto_sit1_k × 3" dejaba el ingreso en miles y lo comparaba contra
+        # una deuda en pesos, produciendo ratios de 300x y alertas falsas de
+        # sobreendeudamiento sobre clientes con Situación 1 impecable.
         if es_mora_administrativa and monto_sit1_k > 0:
             # Criterio Humano: ingreso presunto = deuda Sit.1 × 3 (bancos limpios).
             # Solo evaluar la deuda limpia contra ese ingreso — el outlier no cuenta.
-            _ing     = max(_ing_afip, int(monto_sit1_k * 3))
+            _ing     = max(_ing_afip, int(monto_sit1_k * 1_000 * 3))
             _deu_chk = monto_sit1_k
         else:
             if not _ing_afip and monto_total_m > 0:
                 solvency_data = dict(solvency_data)
-                solvency_data['ingresos_anuales'] = round(monto_total_m * 1_000 * 3)
+                solvency_data['ingresos_anuales'] = round(monto_total_m * 1_000_000 * 3)
                 solvency_data['fuente_ingresos']  = 'bcra_floor_scorer'
             try:
                 _ing = float(solvency_data.get('ingresos_anuales') or 0)
             except (TypeError, ValueError):
                 _ing = 0.0
             _deu_chk = monto_total_m * 1000
-        # Piso de ingreso: si AFIP reporta menos de $100k anuales para alguien
-        # con deuda bancaria real, el dato AFIP es incompleto → usar deuda × 3.
-        if 0 < _ing < 100_000 and monto_total_m > 0:
-            _ing_floor = round(monto_total_m * 1_000 * 3)
+        # Piso de ingreso por plausibilidad, no por un umbral fijo.
+        # El umbral de $100k anuales quedó obsoleto por inflación y dejaba pasar
+        # inferencias absurdas: un cliente con $42.782.000 de deuda bancaria en
+        # Situación 1 salía con "ingreso" de $128.346 y disparaba una alerta de
+        # sobreendeudamiento falsa. Ningún banco presta 300 veces el ingreso
+        # anual: si el dato inferido no llega ni a la mitad de la deuda que los
+        # bancos ya le otorgaron, el dato está mal, no el cliente.
+        _deu_pesos_plaus = monto_total_m * 1_000_000
+        if monto_total_m > 0 and _ing < _deu_pesos_plaus * 0.5:
+            _ing_floor = round(monto_total_m * 1_000_000 * 3)
             print(
-                f"[score v{_SCORE_VERSION}] {cuit_limpio} ingreso_afip={_ing} < 100k → "
-                f"floor a deuda×3={_ing_floor}",
+                f"[score v{_SCORE_VERSION}] {cuit_limpio} ingreso={_ing:,.0f} no plausible "
+                f"frente a deuda bancaria {_deu_pesos_plaus:,.0f} → floor a deuda×3={_ing_floor:,}",
                 flush=True
             )
             _ing = _ing_floor
@@ -4219,6 +4231,13 @@ def _actualizar_score_en_cartera(cuit_limpio: str, score_data: dict, solvency: d
             pass
 
 
+
+
+# ── Consulta bulk sobre las bases locales ────────────────────────────────────
+# Permiten que la verificación masiva consulte primero bcra_nomdeu.db y
+# cheques_bcra antes de ir a BCRA live: 500 clientes en < 2s, con live solo para
+# los ~100-150 que lo necesitan.
+_PERIODO_BASE_BULK = 202605  # Mayo 2026 — último período del archivo histórico
 
 
 def _mes_anterior(yyyymm: int, n: int) -> int:
