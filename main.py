@@ -84,6 +84,14 @@ MORA_TECNICA_UMBRAL_K = float(os.environ.get('MORA_TECNICA_UMBRAL_K', '200.0'))
 #   _APAL_RANGO     : ancho del tramo hasta la penalización máxima (0.5 → 1.5 = tope)
 #   _APAL_PENAL_MAX : penalización nominal plena, en puntos de score
 #   _APAL_FACTOR    : calibración transicional 0..1 — subir a 1.0 aplica el rigor pleno
+# ── Plazo de gracia sobre el vencimiento pactado ─────────────────────────────
+# El plazo comercial otorgado es de 30 días, pero la práctica normal del sector
+# es cobrar alrededor de los 60. Los primeros 30 días de atraso son ciclo de
+# cobranza habitual, no señal de riesgo: recién a los 90 desde la emisión (60
+# de atraso sobre plazo de 30) el comportamiento amerita penalización.
+# Subir o bajar esta variable en Render recalibra el modelo sin redeploy.
+_DIAS_GRACIA_PAGO = int(os.environ.get('DIAS_GRACIA_PAGO', '30'))
+
 _APAL_UMBRAL    = float(os.environ.get('APALANCAMIENTO_UMBRAL', '0.5'))
 _APAL_RANGO     = float(os.environ.get('APALANCAMIENTO_RANGO',  '1.0'))
 _APAL_PENAL_MAX = float(os.environ.get('APALANCAMIENTO_PENAL_MAX', '200'))
@@ -2416,7 +2424,7 @@ def get_solvency_data(cuit):
 # ║  Prospectos: BCRA+AFIP(80%) / Comunidad(20%) — sin historial Odoo        ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
 
-_SCORE_VERSION          = "22.0"   # Capa C = perfil fiscal ARCA (retirada la capa de comunidad)
+_SCORE_VERSION          = "22.1"   # Capa C fiscal + conducta interna por aging real con gracia
 _MOTOR_VERSION_CARTERA  = "v18.1"   # bump aquí cada vez que cambie la lógica del motor
 
 # Session-level cache — se limpia al inicio de cada verificación
@@ -2640,11 +2648,28 @@ def _layer_conducta_interna(
     en_mora: bool,
 ) -> tuple:
     """
-    Capa B: Conducta Interna Odoo — 40% del score (0-400 pts).
-    Regularidad pago (0-200) + Volumen relación (0-100) +
-    Mora interna (0-100) − Penalidad DSO (−80 si DSO↑>15% en 60d).
+    Capa B: Conducta Comercial con nosotros — 40% del score (0-400 pts).
+
+    Es la señal más predictiva del modelo: el incumplimiento con nuestra propia
+    cuenta corriente aparece meses antes de que lo reporte el BCRA.
+
+        Exposición vencida    (0-140): % del saldo abierto fuera de la gracia
+        Severidad del atraso  (0-160): días vencidos ponderados por monto
+        Track record          (0-100): antigüedad y volumen, escalados por
+                                       cumplimiento — comprar mucho y pagar mal
+                                       es más exposición, no más solvencia
+        Deterioro sostenido     (−60): el vencido reciente empeora vs el viejo
+
+    Plazo de gracia (_DIAS_GRACIA_PAGO, 30 días por defecto): se otorgan 30 días
+    de plazo pero el ciclo normal del sector cobra alrededor de los 60, así que
+    los primeros 30 días de atraso no penalizan. A los 90 desde la emisión —60
+    de atraso real— arranca la penalización.
+
+    Mora declarada (en_mora) topea la capa en 120 y activa hard_block_mora.
+
     Returns: (pts, dso_individual, dso_deteriorando, sin_historial,
-              promedio_mensual, hard_block_mora)
+              promedio_mensual, hard_block_mora, deuda_90d, monto_deuda_90d)
+    donde dso_individual es el aging real: Σ(saldo × días desde emisión) / Σ(saldo).
     """
     _FMTS = ('%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y')
 
@@ -2689,72 +2714,119 @@ def _layer_conducta_interna(
     _fechas_cliente = [d for d in _fechas_cliente if d]
     hoy = max(_fechas_cliente) if _fechas_cliente else datetime.now()
 
-    # ── DSO individual: condición de pago vs fecha de corte ──────────────
-    cutoff_rec = hoy - timedelta(days=60)
-    cutoff_ant = hoy - timedelta(days=120)
-    dsos_rec, dsos_ant = [], []
+    # ── Aging real de la cuenta corriente ────────────────────────────────
+    # fechaPago es la fecha de VENCIMIENTO pactada, no la fecha en que el
+    # cliente pagó. Restarle la fecha de factura da el PLAZO acordado, no el
+    # atraso — usarlo como "DSO" premiaba al cliente de plazo corto que no
+    # paga y castigaba al de plazo largo que cumple.
+    #
+    # Con facturas abiertas (saldo > 0) la métrica correcta es el aging: cuánto
+    # dinero está vencido y hace cuántos días, ponderado por monto. Diez
+    # facturas chicas al día no compensan una grande con 120 días de atraso.
+    # Plazo de gracia: se otorgan 30 días de plazo, pero la práctica normal del
+    # sector es cobrar alrededor de los 60. Un atraso dentro de la gracia no es
+    # comportamiento de riesgo, es el ciclo habitual de pago; recién a los 90
+    # días desde la factura (60 de atraso sobre un plazo de 30) hay señal real.
+    # Ajustable por entorno sin redeploy si cambia la política comercial.
+    monto_total_abierto = 0.0
+    monto_vencido       = 0.0   # solo lo que excede la gracia
+    pond_dias_vencido   = 0.0   # Σ(saldo_vencido × días_vencido)
+    pond_dias_abierto   = 0.0   # Σ(saldo × días desde emisión)
+    max_dias_vencido    = 0
+    vencidas            = 0
+    monto_en_gracia     = 0.0   # vencido pero dentro de la tolerancia
+
     for f in facturas:
+        saldo = float(f.get('saldo') or 0)
+        if saldo <= 0:
+            continue
+        monto_total_abierto += saldo
         ff = _parse(f.get('fechaFactura'))
-        fp = _parse(f.get('fechaPago'))
-        if not ff or not fp:
-            continue
-        dso = (fp - ff).days
-        if not (0 <= dso <= 365):
-            continue
-        if ff >= cutoff_rec:
-            dsos_rec.append(dso)
-        elif ff >= cutoff_ant:
-            dsos_ant.append(dso)
+        fv = _parse(f.get('fechaPago'))          # vencimiento pactado
+        if ff:
+            pond_dias_abierto += saldo * max(0, (hoy - ff).days)
+        if fv and fv < hoy:
+            dias_v = (hoy - fv).days
+            if dias_v <= _DIAS_GRACIA_PAGO:
+                monto_en_gracia += saldo         # ritmo de cobranza normal
+                continue
+            vencidas          += 1
+            monto_vencido     += saldo
+            pond_dias_vencido += saldo * dias_v
+            max_dias_vencido   = max(max_dias_vencido, dias_v)
 
-    dso_individual  = round(sum(dsos_rec) / len(dsos_rec), 1) if dsos_rec else 0.0
+    pct_vencido = (monto_vencido / monto_total_abierto) if monto_total_abierto > 0 else 0.0
+    # Atraso medio ponderado por monto: los pesos mandan, no la cantidad de facturas
+    dias_atraso_pond = (pond_dias_vencido / monto_vencido) if monto_vencido > 0 else 0.0
+    # dso_individual pasa a ser el aging real de la cartera (días promedio
+    # ponderados desde emisión), que es lo que mide un analista de crédito.
+    dso_individual = round(pond_dias_abierto / monto_total_abierto, 1) if monto_total_abierto > 0 else 0.0
+
+    # Deterioro: compara el atraso de las facturas recientes contra las viejas
+    cutoff_rec = hoy - timedelta(days=60)
+    _v_rec = [f for f in facturas if (_parse(f.get('fechaFactura')) or hoy) >= cutoff_rec]
+    _v_ant = [f for f in facturas if (_parse(f.get('fechaFactura')) or hoy) <  cutoff_rec]
+
+    def _pct_venc(lote):
+        tot = sum(float(f.get('saldo') or 0) for f in lote if float(f.get('saldo') or 0) > 0)
+        ven = sum(float(f.get('saldo') or 0) for f in lote
+                  if float(f.get('saldo') or 0) > 0
+                  and (_parse(f.get('fechaPago')) or hoy) < hoy)
+        return (ven / tot) if tot > 0 else 0.0
+
     dso_deteriorando = False
-    if dsos_rec and dsos_ant:
-        dso_ant_avg = sum(dsos_ant) / len(dsos_ant)
-        if dso_ant_avg > 0 and dso_individual / dso_ant_avg > 1.15:
+    if _v_rec and _v_ant:
+        _pr, _pa = _pct_venc(_v_rec), _pct_venc(_v_ant)
+        if _pa > 0 and _pr / _pa > 1.15:
             dso_deteriorando = True
+        elif _pa == 0 and _pr > 0.10:
+            dso_deteriorando = True   # antes no debía nada, ahora sí
 
-    # ── Regularidad de pago (0-200 pts) ──────────────────────────────────
-    # Solo tenemos facturas abiertas (saldo>0). Métrica correcta:
-    # % de facturas cuya fecha de vencimiento (fechaPago) NO ha llegado → "al día".
-    total_f = len(facturas)
-    al_dia  = sum(1 for f in facturas if _parse(f.get('fechaPago')) and _parse(f.get('fechaPago')) >= hoy)
-    vencidas = sum(1 for f in facturas
-                   if float(f.get('saldo') or 0) > 0
-                   and _parse(f.get('fechaPago'))
-                   and _parse(f.get('fechaPago')) < hoy)
+    # ── 1. Exposición vencida (0-140) ────────────────────────────────────
+    # Qué proporción del saldo abierto está fuera de la gracia. Curva suave: un
+    # cliente de una sola factura pasa a 100% apenas la cruza, y no puede caer
+    # a cero por eso solo — de la gravedad se ocupa el bloque siguiente.
+    if   pct_vencido == 0:    pts_punt = 140
+    elif pct_vencido <= 0.10: pts_punt = 120
+    elif pct_vencido <= 0.25: pts_punt = 95
+    elif pct_vencido <= 0.50: pts_punt = 65
+    elif pct_vencido <= 0.75: pts_punt = 35
+    else:                     pts_punt = 15
 
-    ratio = al_dia / total_f if total_f > 0 else 0.0
-    if   ratio >= 0.95: pts_reg = 200
-    elif ratio >= 0.85: pts_reg = 160
-    elif ratio >= 0.70: pts_reg = 120
-    elif ratio >= 0.50: pts_reg = 80
-    elif ratio >= 0.30: pts_reg = 40
-    else:               pts_reg = 10
+    # ── 2. Severidad del atraso (0-160) — señal principal ────────────────
+    # Días vencidos totales sobre el vencimiento pactado (la gracia ya filtró
+    # lo que no llega acá). Con plazo de 30 y gracia de 30:
+    #   45 días vencidos = cobra a los 75 desde la factura → atraso leve
+    #   60 días vencidos = cobra a los 90                  → penalizar
+    #   90+                                                 → cobranza en riesgo
+    if   monto_vencido == 0:      pts_sev = 160   # todo dentro del ciclo normal
+    elif dias_atraso_pond <= 45:  pts_sev = 115
+    elif dias_atraso_pond <= 60:  pts_sev = 70
+    elif dias_atraso_pond <= 90:  pts_sev = 35
+    elif dias_atraso_pond <= 120: pts_sev = 12
+    else:                         pts_sev = 0
 
-    if vencidas > 3:
-        pts_reg = max(0, pts_reg - 40)
-
-    # ── Volumen relación (0-100 pts) ──────────────────────────────────────
+    # ── 3. Track record de la relación (0-100) ───────────────────────────
+    # Antigüedad y volumen valen como historial conocido, pero NO pueden
+    # compensar el incumplimiento: comprar mucho y pagar mal es más exposición,
+    # no más solvencia. Por eso el bloque se escala por la puntualidad.
     vol_total = sum(float(f.get('totalFactura') or 0) for f in facturas)
-    if   vol_total >= 5_000_000: pts_vol = 100
-    elif vol_total >= 2_000_000: pts_vol = 80
-    elif vol_total >= 500_000:   pts_vol = 60
-    elif vol_total >= 100_000:   pts_vol = 40
-    elif vol_total > 0:          pts_vol = 20
-    else:                        pts_vol = 10
+    if   vol_total >= 5_000_000: pts_rel_bruto = 100
+    elif vol_total >= 2_000_000: pts_rel_bruto = 80
+    elif vol_total >= 500_000:   pts_rel_bruto = 60
+    elif vol_total >= 100_000:   pts_rel_bruto = 40
+    elif vol_total > 0:          pts_rel_bruto = 20
+    else:                        pts_rel_bruto = 10
+    factor_cumplimiento = max(0.0, 1.0 - pct_vencido * 1.5)   # 33% vencido → 50%
+    pts_rel = round(pts_rel_bruto * factor_cumplimiento)
 
-    # ── Mora interna (0-100 pts) + Hard block ────────────────────────────
-    if en_mora:
-        pts_mora_int    = 0
-        hard_block_mora = True
-    else:
-        pts_mora_int    = 100
-        hard_block_mora = False
+    # ── Mora interna declarada (hard block) ──────────────────────────────
+    hard_block_mora = bool(en_mora)
 
-    # ── Penalidad DSO (−80 si deterioró >15%) ────────────────────────────
-    pen_dso = -80 if dso_deteriorando else 0
+    # ── Penalidad por deterioro sostenido ────────────────────────────────
+    pen_dso = -60 if dso_deteriorando else 0
 
-    # ── Promedio mensual de compras (para límite dinámico — Tarea 2) ─────
+    # ── Promedio mensual de compras (para límite dinámico) ───────────────
     fechas = [_parse(f.get('fechaFactura')) for f in facturas]
     fechas = [d for d in fechas if d]
     promedio_mensual = 0.0
@@ -2762,16 +2834,31 @@ def _layer_conducta_interna(
         meses = max(1, (hoy - min(fechas)).days / 30)
         promedio_mensual = round(vol_total / meses, 2)
 
-    pts = max(0, min(400, pts_reg + pts_vol + pts_mora_int + pen_dso))
+    pts = max(0, min(400, pts_punt + pts_sev + pts_rel + pen_dso))
+    if en_mora:
+        pts = min(pts, 120)   # mora declarada con nosotros: la capa no puede sostener el score
+
+    print(
+        f"[conducta] {cuit_limpio} vencido={pct_vencido*100:.0f}% "
+        f"(${monto_vencido:,.0f} de ${monto_total_abierto:,.0f}"
+        f"{f', ${monto_en_gracia:,.0f} en gracia' if monto_en_gracia else ''}) "
+        f"atraso_pond={dias_atraso_pond:.0f}d max={max_dias_vencido}d "
+        f"aging={dso_individual:.0f}d | punt={pts_punt} sev={pts_sev} rel={pts_rel} "
+        f"pen={pen_dso} → capaB={pts}",
+        flush=True
+    )
 
     # ── Deuda interna +90 días ─────────────────────────────────────────────
+    # Umbral de 90 días desde la emisión: con plazo de 30 y gracia de 30, llegar
+    # acá significa 60 días de atraso real. Es el punto que el negocio define
+    # como "hay que penalizar".
     deuda_90d      = False
     monto_deuda_90d = 0.0
     for f in facturas:
         saldo = float(f.get('saldo') or 0)
         if saldo > 0:
             ff = _parse(f.get('fechaFactura'))
-            if ff and (hoy - ff).days > 90:
+            if ff and (hoy - ff).days >= 90:
                 deuda_90d       = True
                 monto_deuda_90d += saldo
     if deuda_90d:
@@ -3400,15 +3487,23 @@ def calcular_rating_predictivo(
     # Si no hay historial en absoluto (CUIT sin actividad bancaria nunca), el score raw
     # es más honesto: 495 ≠ 650 porque no sabemos nada positivo de él, solo que no es moroso.
     # Diferencia: "limpio con track record" (650+) vs "desconocido sin historial" (raw~495).
+    # El piso NO aplica si el cliente está incumpliendo con nosotros: que los
+    # bancos aún no lo reporten no lo vuelve buen pagador. Nuestra propia
+    # cuenta corriente es evidencia directa y llega meses antes que el BCRA.
     _tiene_historial_bancario = len(periodos_hist) > 0
     _cliente_sin_deuda = (
         max_sit == 1 and monto_real == 0
         and not en_mora and not hard_block_mora
+        and not deuda_90d_interna
         and _tiene_historial_bancario
     )
     if _cliente_sin_deuda:
         puntos = max(puntos, 650)
         print(f"[score v{_SCORE_VERSION}] {cuit_limpio} sin_deuda_sit1 → piso 650", flush=True)
+    elif (max_sit == 1 and monto_real == 0 and deuda_90d_interna
+          and _tiene_historial_bancario):
+        print(f"[score v{_SCORE_VERSION}] {cuit_limpio} BCRA limpio pero con deuda "
+              f"interna +90d — piso 650 NO aplicado", flush=True)
     elif max_sit == 1 and monto_real == 0 and not en_mora and not _tiene_historial_bancario:
         print(f"[score v{_SCORE_VERSION}] {cuit_limpio} sin_historial_bancario → score raw {round(puntos)}", flush=True)
 
@@ -3478,19 +3573,38 @@ def calcular_rating_predictivo(
                     flush=True
                 )
 
-    # ── Deuda interna +90 días: penaliza aunque BCRA no lo vea aún ──────────
+    # ── Deuda interna +90 días: penaliza aunque el BCRA no lo vea aún ───────
+    # El incumplimiento con nosotros es la señal más directa que tenemos: llega
+    # meses antes que el reporte bancario. La penalidad escala con el monto,
+    # porque $20.000 olvidados y $8.000.000 impagos no son el mismo problema.
     if deuda_90d_interna:
-        puntos -= 200
-        print(f"[score v{_SCORE_VERSION}] {cuit_limpio} deuda_90d_interna → -200", flush=True)
+        _m90 = monto_deuda_90d_interna
+        if   _m90 <= 50_000:    _pen_90 = 60      # materialidad: probable trámite
+        elif _m90 <= 500_000:   _pen_90 = 140
+        elif _m90 <= 2_000_000: _pen_90 = 200
+        else:                   _pen_90 = 260
+        puntos -= _pen_90
+        print(f"[score v{_SCORE_VERSION}] {cuit_limpio} deuda_90d_interna "
+              f"${_m90:,.0f} → -{_pen_90}", flush=True)
 
-    # ── DSO v20.0: bono pago rápido / penalidad pago lento ───────────────────
+    # ── Aging de la cuenta corriente: bono pago rápido / penalidad pago lento ──
+    # dso_individual es ahora el aging real ponderado por monto (días promedio
+    # desde emisión del saldo abierto), no el plazo pactado. Escalonado en vez
+    # de dos escalones secos, para que no haya saltos de rango por un día.
+    # Escala corrida por el plazo de gracia: con plazo de 30 y cobranza normal
+    # a los 60, un aging de 45-70 días es el comportamiento esperado y no debe
+    # penalizar. El castigo arranca pasados los 90.
     if dso_individual > 0:
-        if dso_individual < 45:
-            puntos += 50
-            print(f"[score v{_SCORE_VERSION}] {cuit_limpio} DSO={dso_individual:.0f}d<45 → +50", flush=True)
-        elif dso_individual > 90:
-            puntos -= 100
-            print(f"[score v{_SCORE_VERSION}] {cuit_limpio} DSO={dso_individual:.0f}d>90 → -100", flush=True)
+        if   dso_individual <= 45:  _aj_dso = 50    # cobra antes de lo pactado
+        elif dso_individual <= 70:  _aj_dso = 25    # ciclo normal del sector
+        elif dso_individual <= 90:  _aj_dso = 0
+        elif dso_individual <= 120: _aj_dso = -40
+        elif dso_individual <= 150: _aj_dso = -90
+        else:                       _aj_dso = -140
+        if _aj_dso:
+            puntos += _aj_dso
+            print(f"[score v{_SCORE_VERSION}] {cuit_limpio} aging={dso_individual:.0f}d "
+                  f"→ {_aj_dso:+d}", flush=True)
 
     # ── Time Decay BINARIO: si hoy está en Sit.1, penalidad histórica >6m = CERO ──
     # "Un cliente que hoy cumple no puede ser castigado eternamente por el pasado."
@@ -3556,9 +3670,11 @@ def calcular_rating_predictivo(
     # ── Piso estructura empresarial (solo max_sit==1, BCRA limpia) ───────────
     # Un empleador/PyME con BCRA Sit.1 tiene sustancia crediticia mínima verificada.
     # El padrón MiPyME actúa como proxy de nómina declarada ante AFIP/SEPYME.
-    # Los caps posteriores (mora Odoo, comunidad negativa) siguen teniendo prioridad:
-    # la estructura reduce riesgo base pero no protege de incumplimiento real.
-    if max_sit == 1 and not hard_block_bcra and solvency_data:
+    # NO aplica si hay incumplimiento con nosotros: tener nómina y estar
+    # inscripto no vuelve cobrable una factura vencida hace tres meses. La
+    # estructura reduce el riesgo base, no protege del incumplimiento real.
+    if (max_sit == 1 and not hard_block_bcra and solvency_data
+            and not deuda_90d_interna and not hard_block_mora):
         _cat_mp_p  = (solvency_data.get('categoria_mipyme') or '').strip()
         # Requiere confirmación explícita de AFIP/TangoFactura — no asumimos por tipo_persona
         _es_empl3  = solvency_data.get('es_empleador') is True
