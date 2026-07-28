@@ -2804,8 +2804,10 @@ async function consultarCuit() {
     // Normalizar AFIP — null si falló o devolvió error de gateway
     const afipExtra = (afipRaw && !afipRaw._gateway_error) ? afipRaw : null;
 
-    // Usar AFIP como fallback de denominacion si BCRA no la trajo
-    if (!dd?.results?.denominacion?.trim() && afipExtra?.nombre && afipExtra.nombre !== cuit) {
+    // Usar AFIP como fallback de denominacion si BCRA no la trajo o guardó el CUIT como nombre
+    const _denBcra = dd?.results?.denominacion?.trim() || '';
+    const _denEsInvalida = !_denBcra || _denBcra === cuit || /^\d{10,11}$/.test(_denBcra);
+    if (_denEsInvalida && afipExtra?.nombre && afipExtra.nombre !== cuit && !/^\d{10,11}$/.test(afipExtra.nombre)) {
       if (!dd.results) dd.results = {};
       dd.results.denominacion = afipExtra.nombre;
       console.log('[consulta] Razón social desde', afipExtra.fuente + ':', afipExtra.nombre);

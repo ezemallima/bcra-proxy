@@ -8811,7 +8811,7 @@ def _nomdeu_build_deudas_resp(cuit: str):
     deuda = _nomdeu_get_deuda(cuit)
     if not deuda:
         return None
-    nombre = _nomdeu_get_nombre(cuit) or cuit
+    nombre = _nomdeu_get_nombre(cuit) or ''
     ent_codigos = [c.strip() for c in (deuda['entidades_cod'] or '').split(',') if c.strip()]
     if ent_codigos:
         n_ents = len(ent_codigos)
