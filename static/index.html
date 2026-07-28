@@ -1302,7 +1302,6 @@
         </div>
         <div id="pi-log-errores" style="display:none;margin-top:10px;max-height:160px;overflow-y:auto;border:1px solid #fecaca;border-radius:6px;padding:6px 8px;background:#fff5f5;font-size:11px;font-family:monospace;color:#991b1b;"></div>
       </div>
-      <div class="progress-msg" id="verificar-progress"></div>
     </div>
 
     <div id="alertas-counters" class="alr-counters">
@@ -6712,76 +6711,8 @@ function verClienteReciente(cuit) {
   consultarCliente();
 }
 
-async function verificarTodos(forzar) {
-  const btn = document.getElementById('btn-verificar');
-  const prog = document.getElementById('verificar-progress');
-
-  prog.textContent = 'Iniciando verificación desde cartera_comercial.json...';
-
-  // El servidor usa cartera_comercial.json directamente — no enviamos lista
-  try {
-    const r = await fetch('/verificar-cartera', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({})
-    });
-    const data = await r.json();
-    if (data.error) {
-      prog.textContent = '✗ ' + data.error;
-      return;
-    }
-    btn.disabled = true;
-    prog.textContent = data.mensaje || 'Verificación iniciada.';
-  } catch(e) {
-    prog.textContent = 'No se pudo iniciar la verificación.';
-    return;
-  }
-
-  // Polling cada 5 segundos para actualizar progreso
-  var interval = setInterval(async function() {
-    try {
-      // Ping para mantener Render despierto
-      fetch('/ping').catch(()=>{});
-      var r2 = await fetch('/verificar-progreso');
-      var estado = await r2.json();
-      
-      if (estado.corriendo) {
-        prog.textContent = estado.mensaje || 'Verificando...';
-      } else {
-        clearInterval(interval);
-        btn.disabled = false;
-        prog.textContent = estado.mensaje || 'Verificacion completada.';
-        
-        // Cargar resultados del servidor
-        var r3 = await fetch('/alertas');
-        var datos = await r3.json();
-        if (datos && !datos.error) {
-          alertas = datos.alertas || [];
-          localStorage.setItem('piat_alertas', JSON.stringify(alertas));
-          if (datos.ultima_verif) localStorage.setItem('piat_ultima_verif', datos.ultima_verif);
-          if (datos.cartera && datos.cartera.length > 0) {
-            datos.cartera.forEach(function(c) {
-              var idx = cartera.findIndex(function(lc) { return lc.cuit === c.cuit; });
-              if (idx >= 0) {
-                cartera[idx].ultimaSit   = c.ultimaSit;
-                cartera[idx].ultimaVerif = c.ultimaVerif;
-                if (c.scoreCompleto) {
-                  cartera[idx].scoreCompleto = c.scoreCompleto;
-                  cartera[idx].scoreRango    = c.scoreRango;
-                  cartera[idx].scoreColor    = c.scoreColor;
-                  cartera[idx].scoreEmoji    = c.scoreEmoji;
-                }
-              }
-            });
-            localStorage.setItem('piat_cartera', JSON.stringify(cartera));
-          }
-        }
-        renderAlertas();
-        actualizarMetricas();
-      }
-    } catch(e) {}
-  }, 5000);
-}
+// verificarTodos retirada: /verificar-cartera era el proceso legacy.
+// La actualizacion masiva vive en ejecutarProcesoIntegral() -> /proceso-integral.
 
 
 async function resetVerificacion() {
