@@ -843,7 +843,6 @@
     </nav>
     <div class="sb-footer">
       <div class="proxy-status" style="font-size:9px;color:#475569;opacity:0.7;letter-spacing:0.2px;">Datos crediticios: Fuente BCRA</div>
-      <div class="proxy-status"><div class="dot" id="wsp-dot" style="background:#25d366;"></div><span id="wsp-label"></span></div>
       <div class="proxy-status"><div class="dot" id="mora-dot" style="background:#ccc;"></div><span id="mora-label"></span></div>
       <div class="proxy-status"><div class="dot" id="proxy-dot"></div><span id="proxy-label"></span></div>
       <a href="/logout" class="sb-logout-btn" title="Cerrar sesión">
@@ -976,10 +975,6 @@
             <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
             AFIP
           </button>
-          <button class="resource-btn" id="btn-res-wsp" onclick="toggleResource('panel-wsp','btn-res-wsp')">
-            <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            Historial Bodegas
-          </button>
           <button class="resource-btn" id="btn-res-veraz" onclick="toggleResource('panel-veraz','btn-res-veraz')">
             <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
             Veraz / Nosis
@@ -991,9 +986,6 @@
         </div>
         <div id="panel-afip" class="resource-panel">
           <div id="afip-container"></div>
-        </div>
-        <div id="panel-wsp" class="resource-panel">
-          <div id="wsp-data"><div class="wsp-no-data">Buscando en historial...</div></div>
         </div>
         <div id="panel-veraz" class="resource-panel">
           <div class="upload-area" id="veraz-area" onclick="document.getElementById('veraz-pdf').click()">
@@ -1491,16 +1483,6 @@
       <div id="nombre-bodega-status" style="font-size:12px;color:#166534;margin-top:6px;display:none;">✓ Nombre guardado</div>
     </div>
 
-    <div class="card-title">Actualizar historial de bodegas (WhatsApp)</div>
-      <p style="font-size:13px;color:#666;line-height:1.6;margin-bottom:12px;">
-        Exportá el chat desde WhatsApp (sin archivos multimedia) y subí el archivo .txt. Solo se agregan los mensajes nuevos.
-      </p>
-      <div class="upload-area" id="wsp-area" onclick="document.getElementById('wsp-file').click()">
-        <div style="font-size:13px;color:#888;">Hacé clic para subir el chat exportado (.txt)</div>
-        <div style="font-size:12px;color:#aaa;margin-top:4px;">Se procesan solo los mensajes nuevos</div>
-      </div>
-      <input type="file" id="wsp-file" accept=".txt" style="display:none;" onchange="actualizarWSP(this)" />
-      <div id="wsp-update-status" style="font-size:13px;color:#888;margin-top:8px;"></div>
     </div>
 
     <div class="card" style="margin-top:1rem;">
@@ -1613,7 +1595,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"
   onerror="window._chartJSUnavailable=true; console.warn('[VS] Chart.js no cargó — gráficos no disponibles')"></script>
 <script>
-let wspIndex = null;
+// wspIndex retirado en v22.0 — la capa de menciones ya no forma parte del modelo
 let morasIndex = null;
 let verazData = null;
 let ultimoAnalisis = null;
@@ -2852,43 +2834,9 @@ function calcularVendeScore(cuit, bcraData, mora, wspThreads, historialBCRA, che
   puntos += pMora;
   detalle.push({ label:'Historial Piattelli', valor:moraLabel, puntos:pMora, max:100 });
 
-  // 6. RED DE BODEGAS (Max 60)
-  var pBodegas = 30; // neutral sin datos
-  var bodegasLabel = 'Sin datos';
-  if (!enCartActiva) {
-    pBodegas = 0; bodegasLabel = 'Cliente nuevo — aún no en red de bodegas';
-  } else if (wspThreads && wspThreads.length > 0) {
-    var textos = [];
-    wspThreads.forEach(function(t){
-      (t.mensajes||[]).forEach(function(m){ textos.push((m.texto||'').toLowerCase()); });
-    });
-    var negativas = textos.filter(function(t){
-      // Solo negativo si hay riesgo REAL — no incluir "no es cliente" ni "no opera"
-      return /no paga|rechaz|mora activa|deuda impaga|cuidado|estafa|problema grave|ojo con|judicial|incobrable|desapareci|fuga/.test(t)
-        && !/no es cliente|no opera|sin operaciones|cuenta abierta|no trabaja/.test(t);
-    }).length;
-    var positivas = textos.filter(function(t){
-      return /paga bien|buen cliente|cumple|recomend|contado anticipado|sin problemas|lc |limite de credito|plazo \d|mm plazo|usd/.test(t);
-    }).length;
-    // Chat > 6 meses = neutro (situaciones cambian mes a mes)
-    var hoyB = new Date();
-    var hace6meses = new Date(hoyB.getFullYear(), hoyB.getMonth()-6, hoyB.getDate());
-    var chatReciente = false;
-    wspThreads.forEach(function(t){
-      var fechaT = t.fecha || (t.mensajes && t.mensajes[0] && t.mensajes[0].fecha);
-      if (fechaT && new Date(fechaT) > hace6meses) chatReciente = true;
-    });
-
-    if (!chatReciente) {
-      // Info vieja — neutro
-      pBodegas = 30; bodegasLabel = 'Info desactualizada (+6 meses)';
-    } else if (negativas > 0 && positivas > 0) { pBodegas=30; bodegasLabel='Inconsistente'; }
-    else if (negativas > 0)             { pBodegas=0;  bodegasLabel=negativas+' menciones negativas'; }
-    else if (positivas > 0)             { pBodegas=60; bodegasLabel=positivas+' referencias positivas'; }
-    else                                { pBodegas=30; bodegasLabel='Sin menciones'; }
-  }
-  puntos += pBodegas;
-  detalle.push({ label:'Red de Bodegas', valor:bodegasLabel, puntos:pBodegas, max:60 });
+  // 6. (retirado en v22.0) La capa de menciones del chat de bodegas se eliminó
+  //    del modelo: ponderaba opiniones de terceros no verificables. El peso pasó
+  //    al perfil fiscal de ARCA, que calcula el servidor.
 
   // 7. CONCENTRACIÓN DE DEUDA BCRA (Max 39)
   // Cuántas entidades financieras le prestaron + monto total
@@ -3565,7 +3513,7 @@ async function init() {
   cargarDSOActual();  // indicador DSO siempre visible
   cargarMesesDSO();   // panel de meses acumulados
   poblarVendedoresNuevo(); // no-await: carga en background
-  await Promise.all([cargarWSP(), cargarMoras(), cargarCarteraServidor()]);
+  await Promise.all([cargarMoras(), cargarCarteraServidor()]);
   actualizarMetricas();
   // DSO autoritativo desde saldos_facturas.json (SSoT del servidor)
   fetch('/dso-global-saldos').then(function(r){ return r.ok ? r.json() : null; }).then(function(d) {
@@ -3716,16 +3664,6 @@ async function checkProxy() {
   }
 }
 
-async function cargarWSP() {
-  try {
-    const r = await fetch('/whatsapp_index.json');
-    wspIndex = await r.json();
-    const total = Object.keys(wspIndex).length;
-    document.getElementById('wsp-dot').style.background = '#22c55e';
-    document.getElementById('wsp-label').textContent = 'Red activa · ' + total + ' bodegas';
-  } catch { document.getElementById('wsp-dot').style.background = '#ef4444'; document.getElementById('wsp-label').textContent = 'Bodegas no disponible'; }
-}
-
 async function cargarMoras() {
   try {
     const r = await fetch('/moras.json');
@@ -3736,7 +3674,10 @@ async function cargarMoras() {
   } catch { document.getElementById('mora-label').textContent = 'Moras no disponible'; }
 }
 
-function buscarEnWSP(cuit) { return wspIndex ? wspIndex[cuit.replace(/-/g,'')] || null : null; }
+// Retirado en v22.0: el índice de menciones del chat de bodegas ya no se carga
+// ni se pondera. Se conserva el stub para que los consumidores degraden a
+// "sin datos" en lugar de romper.
+function buscarEnWSP(cuit) { return null; }
 
 function filtrarWSPReciente(threads) {
   // Solo mantener mensajes de los últimos 6 meses.
@@ -4730,24 +4671,7 @@ function mostrarAFIP(cuit) {
 }
 
 function mostrarWSP(cuit) {
-  const el = document.getElementById('wsp-data');
-  const threads = filtrarWSPReciente(buscarEnWSP(cuit));
-  var threadsAll = buscarEnWSP(cuit);
-  if (!threads || !threads.length) {
-    if (threadsAll && threadsAll.length > 0) {
-      el.innerHTML = `<div class="wsp-no-data">⚠ Hay ${threadsAll.length} mención(es) pero tienen más de 6 meses — no se consideran en el análisis.</div>`;
-    } else {
-      el.innerHTML = `<div class="wsp-no-data">Este cliente no aparece en el historial del grupo de bodegas.</div>`;
-    }
-    return;
-  }
-  let html = `<div style="margin-bottom:8px;"><span class="badge badge-wsp">${threads.length} mención(es) en el grupo</span></div>`;
-  threads.forEach(t => {
-    html += `<div class="wsp-thread"><div class="wsp-thread-fecha">${t.fecha} — CUIT: ${t.cuit_mencionado}</div>`;
-    t.mensajes.slice(0,8).forEach(m => { html += `<div class="wsp-msg"><span class="wsp-autor">${m.autor}:</span> ${m.texto}</div>`; });
-    html += `</div>`;
-  });
-  el.innerHTML = html;
+  // Panel de menciones retirado en v22.0 — no queda nada que mostrar.
 }
 
 function fmtBCRA(miles) {
@@ -5776,13 +5700,13 @@ function generarResumenEjecutivo() {
   var metTotal = _kpiCache.total || '—';
   var metCriticos = _kpiCache.criticos || '0';
   var metMora = _kpiCache.mora || '0';
-  var metBodegas = document.getElementById('met-bodegas').textContent || '0';
-
+  // 'Con menciones en red' retirada en v22.0. El getElementById apuntaba a un
+  // id inexistente y tiraba TypeError al exportar el PDF — bug preexistente
+  // que desaparece junto con la métrica.
   var metricas = [
     ['Clientes en cartera', metTotal],
     ['Alertas BCRA activas', metCriticos],
-    ['Con mora registrada', metMora],
-    ['Con menciones en red', metBodegas]
+    ['Con mora registrada', metMora]
   ];
 
   doc.setFontSize(11);
@@ -6045,38 +5969,7 @@ async function confirmarUploadCartera() {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function actualizarWSP(input) {
-  const file = input.files[0];
-  if (!file) return;
-  const statusEl = document.getElementById('wsp-update-status');
-  statusEl.textContent = 'Procesando chat...';
-  const text = await file.text();
-  const msgPattern = /(\d{1,2}\/\d{1,2}\/\d{4}), (\d{1,2}:\d{2}) - ([^:]+): (.+?)(?=\n\d{1,2}\/\d{1,2}\/\d{4}|$)/gs;
-  const cuitPattern = /\b(\d{2}[-\s]?\d{8}[-\s]?\d{1})\b/g;
-  const messages = [];
-  for (const m of text.matchAll(msgPattern)) {
-    messages.push({ fecha: m[1], autor: m[3].trim(), texto: m[4].trim().replace(/\n/g,' ') });
-  }
-  const newIndex = wspIndex ? {...wspIndex} : {};
-  let nuevos = 0;
-  messages.forEach((msg, i) => {
-    for (const match of msg.texto.matchAll(new RegExp(cuitPattern.source, 'g'))) {
-      const cuit = match[1].replace(/[-\s]/g,'');
-      if (cuit.length === 11) {
-        if (!newIndex[cuit]) { newIndex[cuit] = []; nuevos++; }
-        const contexto = messages.slice(i, Math.min(i+11, messages.length));
-        newIndex[cuit].push({ fecha: msg.fecha, cuit_mencionado: match[1], mensajes: contexto.map(c => ({fecha:c.fecha,autor:c.autor,texto:c.texto})) });
-      }
-    }
-  });
-  wspIndex = newIndex;
-  const total = Object.keys(wspIndex).length;
-  document.getElementById('wsp-area').className = 'upload-area success';
-  document.getElementById('wsp-area').innerHTML = `<div style="font-size:13px;color:#166534;font-weight:600;">✓ Chat actualizado</div>`;
-  document.getElementById('wsp-dot').style.background = '#22c55e';
-  document.getElementById('wsp-label').textContent = 'Red activa · ' + total + ' bodegas';
-  statusEl.textContent = `Listo. ${nuevos} CUITs nuevos. Total: ${total} clientes indexados.`;
-}
+// actualizarWSP retirada en v22.0 junto con el resto de la capa de menciones.
 
 async function idxSubirZipDirecto(input) {
   const file = input.files[0];
@@ -6361,7 +6254,7 @@ function renderCartera(filtro) {
     if (c.ciudad)   meta += '<span class="cli-meta-tag">' + c.ciudad + '</span>';
     if (c.plazoDias) meta += '<span class="cli-meta-tag">Plazo ' + c.plazoDias + 'd</span>';
     if (mora)       meta += '<span class="badge badge-mora" style="font-size:11px;">Mora</span>';
-    if (buscarEnWSP(c.cuit)) meta += '<span class="badge badge-wsp" style="font-size:11px;">En bodegas</span>';
+
 
     html += '<div class="cli-card">';
 
@@ -7503,7 +7396,7 @@ function renderBuscador(filtro) {
     var barClass = pct > 80 ? 'danger' : '';
     var sitBadge = c.ultimaSit ? getBadge(c.ultimaSit) : '<span class="ficha-trend flat">Sin verificar</span>';
     var moraTag = mora ? '<span class="badge badge-mora">Mora</span>' : '';
-    var wspTag = buscarEnWSP(c.cuit) ? '<span class="badge badge-wsp">En bodegas</span>' : '';
+    var wspTag = '';
     var cardId = 'ficha-' + c.cuit.replace(/-/g,'');
     var html = '<div class="ficha-card" id="' + cardId + '">';
     html += '<div class="ficha-header" onclick="toggleFicha(\'' + cardId + '\')">';
@@ -7866,21 +7759,11 @@ async function consultarCheque() {
     }
   }
 
-  // Bodegas
-  var bodegasHtml = '';
-  var threads = wspIndex[raw] || [];
+  // Capa de menciones del chat retirada en v22.0 — el veredicto se apoya
+  // solo en cheques rechazados y situación BCRA.
   var tieneNegativo = false;
-  if (threads.length) {
-    var mensajes = [];
-    threads.forEach(function(t) { (t.mensajes||[]).forEach(function(m) { mensajes.push(m.autor + ': ' + m.texto); }); });
-    bodegasHtml = '<div style="font-size:13px;color:#64748b;margin-bottom:8px;">' + mensajes.slice(0,5).map(function(m){return '<div style="padding:4px 0;border-bottom:1px solid #f1f5f9;">'+m+'</div>';}).join('') + '</div>';
-    tieneNegativo = mensajes.some(function(m) {
-      return ['rechaz','no paga','cuidado','mora','deuda','estafa','sin fondos'].some(function(p){ return m.toLowerCase().includes(p); });
-    });
-  } else {
-    bodegasHtml = '<div class="empty-state">Sin menciones en el grupo de bodegas.</div>';
-  }
-  document.getElementById('cheque-bodegas-data').innerHTML = bodegasHtml;
+  var _bodegasEl = document.getElementById('cheque-bodegas-data');
+  if (_bodegasEl) _bodegasEl.innerHTML = '';
 
   mostrarVeredicto(sinLevantar.length, cheques.length, tieneNegativo, maxSitBCRA);
 }

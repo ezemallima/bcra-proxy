@@ -322,11 +322,11 @@ CREDIT_ANALYSIS_SYSTEM_PROMPT = (
     "en el sistema financiero. No inventes cifras. "
     "El rango oficial del sistema ya contempla esta condición.\n\n"
 
-    "REGLA 5 — OBSERVACIONES DE MERCADO:\n"
-    "El prompt puede incluir mensajes bajo 'Menciones grupo bodegas'. "
-    "Integrá los hallazgos relevantes como una nota breve bajo el título "
-    "'OBSERVACIONES DE MERCADO', sin revelar la fuente ni el mecanismo de análisis. "
-    "Si no hay alertas, escribí: 'Sin observaciones de mercado en los últimos 6 meses.'\n\n"
+    "REGLA 5 — PERFIL FISCAL:\n"
+    "El prompt puede incluir datos del padrón oficial de ARCA: antigüedad impositiva, "
+    "estado de la clave fiscal, impuestos y regímenes activos, actividad principal. "
+    "Integralos bajo el título 'PERFIL FISCAL' como evidencia de sustancia operativa. "
+    "Si no hay datos, escribí: 'Sin datos fiscales disponibles.'\n\n"
 
     "REGLA 6 — CLÁUSULA DE SUSPENSIÓN (OBLIGATORIA):\n"
     "Toda recomendación DEBE cerrar con: 'Ante cualquier nueva degradación bancaria "
@@ -345,8 +345,8 @@ CREDIT_ANALYSIS_SYSTEM_PROMPT = (
     "Estructura de salida OBLIGATORIA (respetar exactamente estos títulos y orden):\n"
     "ANÁLISIS DE RIESGO CREDITICIO: "
     "[comportamiento 24m por entidad + situaciones observadas + pagos internos + tendencia]\n"
-    "OBSERVACIONES DE MERCADO: "
-    "[hallazgos en red de bodegas o 'Sin observaciones de mercado en los últimos 6 meses.']\n"
+    "PERFIL FISCAL: "
+    "[antigüedad impositiva, estado de clave, impuestos activos o 'Sin datos fiscales disponibles.']\n"
     "DIAGNÓSTICO FINANCIERO: "
     "[evaluación de salud crediticia consolidada del cliente]\n"
     "RECOMENDACIÓN ESTRATÉGICA: "
@@ -386,7 +386,6 @@ print(
     f"[init] ScraperAPI: {'ACTIVO — proxy rotativo habilitado' if SCRAPERAPI_KEY else 'no configurado — modo directo legacy'}",
     flush=True,
 )
-WSP_FILE = os.path.join(os.getcwd(), 'whatsapp_index.json')
 
 # ── Estado local de facturas: pendiente_validacion + enviado_whatsapp ─────────
 _FACTURAS_ESTADO_FILE = os.path.join(DATA_DIR, 'facturas_estado.json')
@@ -1930,52 +1929,7 @@ def consultar_bcra(cuit, reintentos=3):
     print(f"[bcra] {cuit} sin respuesta en todos los endpoints", flush=True)
     return None, "sin_respuesta"
 
-def analizar_bodegas_server(cuit, nombre, mensajes):
-    if not mensajes:
-        return False, ""
-    try:
-        mensajes_texto = "\n".join(["- " + m for m in mensajes[:20]])
-        prompt = (
-            "Sos un Analista de Riesgo Crediticio experto en el sector vitinicola argentino.\n"
-            "Analiza estos mensajes del grupo de bodegas sobre " + nombre + " (CUIT: " + cuit + ").\n\n"
-            "DICCIONARIO DE TERMINOS (OBLIGATORIO USAR):\n"
-            "- LC: Limite de Credito\n- MM: Millones de pesos\n- s/ CP: Segun condiciones de pago pactadas\n"
-            "- fct: Facturas\n- opera con...: Relacion comercial activa\n"
-            "- contado anticipado: Paga antes de recibir mercaderia (mejor escenario)\n"
-            "- pagar con +X dias: Cliente se financia con la bodega (riesgo de flujo)\n"
-            "- cheque reemplazado / repuesto: Problema resuelto, NO es negativo\n\n"
-            "REGLAS:\n"
-            "- Priorizá el chat sobre el reporte financiero. El chat es la realidad operativa.\n"
-            "- Solo negativo si hay deudas impagas NO resueltas, estafas o desaparicion.\n"
-            "- Si distintas bodegas dicen cosas contradictorias, marcalo como comportamiento_inconsistente=true.\n"
-            "- Cheques rechazados pero reemplazados = NO negativo.\n"
-            "- Mensaje sobre OTRO CUIT diferente = NO negativo para este cliente.\n"
-            "- NUNCA digas que no hay antecedentes si el chat tiene mensajes.\n\n"
-            "MENSAJES:\n" + mensajes_texto + "\n\n"
-            'Responde SOLO con este JSON sin markdown: {"es_negativo": false, "motivo": "texto descriptivo", "comportamiento_inconsistente": false}'
-        )
-        payload = {"contents": [{"parts": [{"text": prompt}]}]}
-        texto, error = gemini_request(payload, timeout=45)
-        if error or not texto:
-            return False, ""
-        import re as _re_mod
-        # Limpiar delimitadores markdown y extraer primer objeto JSON
-        texto_limpio = texto.strip()
-        texto_limpio = texto_limpio.replace("```json", "").replace("```", "").strip()
-        _match = _re_mod.search(r'\{[\s\S]+\}', texto_limpio)
-        if _match:
-            texto_limpio = _match.group(0)
-        try:
-            resultado = json.loads(texto_limpio)
-        except json.JSONDecodeError as _je:
-            print(f"[bodegas] JSONDecodeError ({_je}) — raw: {texto_limpio[:200]}", flush=True)
-            return False, ""
-        motivo = resultado.get("motivo", "")
-        if resultado.get("comportamiento_inconsistente"):
-            motivo = "⚠ Comportamiento Inconsistente: " + motivo
-        return resultado.get("es_negativo", False), motivo
-    except Exception:
-        return False, ""
+
 
 def _clean_text(s):
     """Limpia texto: decodifica HTML entities, normaliza unicode, elimina chars raros."""
@@ -2462,22 +2416,8 @@ def get_solvency_data(cuit):
 # ║  Prospectos: BCRA+AFIP(80%) / Comunidad(20%) — sin historial Odoo        ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
 
-_SCORE_VERSION          = "21.0"   # pipeline unificado BCRA(24m) + ARCA oficial en paralelo
+_SCORE_VERSION          = "22.0"   # Capa C = perfil fiscal ARCA (retirada la capa de comunidad)
 _MOTOR_VERSION_CARTERA  = "v18.1"   # bump aquí cada vez que cambie la lógica del motor
-
-# Keywords para NLP de chat de bodegas (Capa C — Comunidad)
-_KW_NEG = [
-    "atraso", "atrasado", "atrasada", "moroso", "morosa",
-    "cheque rechazado", "cheque rebotado", "reboto", "rebotó",
-    "devolvio", "devolvió", "deuda", "impago", "no paga",
-    "mal pagador", "incobrable", "incobrable", "pésimo", "pesimo",
-    "problema", "cuidado", "precaucion", "precaución",
-]
-_KW_POS = [
-    "contado", "paga bien", "cumple", "buen cliente", "puntual",
-    "sin problemas", "recomendado", "excelente", "confiable",
-    "siempre paga", "buen pagador", "cliente confiable",
-]
 
 # Session-level cache — se limpia al inicio de cada verificación
 _score_session_cache: dict = {}
@@ -2627,37 +2567,6 @@ def _layer2_solvencia_federal(solvency_data: dict) -> tuple:
 
     indice = round(pts_base / 300, 3)
     return (min(300, pts_base), es_empleador, es_monotrib_bajo, indice)
-
-
-def _layer3_comportamiento_interno(
-    cuit_limpio: str,
-    en_mora: bool,
-    wsp_index: dict,
-    en_cartera: bool,
-) -> tuple:
-    """
-    Capa 3: Comportamiento Interno — 30% del score (0-300 pts).
-    Mora Piattelli (Hard Block, 0-150) + Chat Bodegas (0-100) + Relación (0-50).
-    hard_block=True → score final no puede superar 400 pts.
-    Returns (pts: int, hard_block: bool)
-    """
-    if en_mora:
-        pts_mora   = 0
-        hard_block = True
-    else:
-        pts_mora   = 150
-        hard_block = False
-
-    wsp_entry = wsp_index.get(cuit_limpio, {})
-    if not wsp_entry:
-        pts_wsp = 50
-    elif wsp_entry.get('es_negativo'):
-        pts_wsp = 0
-    else:
-        pts_wsp = 100
-
-    pts_rel = 50 if en_cartera else 0
-    return (pts_mora + pts_wsp + pts_rel, hard_block)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2870,68 +2779,6 @@ def _layer_conducta_interna(
 
     return (pts, dso_individual, dso_deteriorando, False, promedio_mensual, hard_block_mora,
             deuda_90d, monto_deuda_90d)
-
-
-def _evaluar_comunidad(cuit_limpio: str, wsp_index: dict) -> tuple:
-    """
-    Capa C: Comunidad Chat Bodegas — 20% del score (0-200 pts).
-    NLP sobre menciones en WhatsApp indexadas por CUIT — últimos 6 meses.
-    Soporta formato array [{fecha, mensajes:[{texto}]}] y formato legacy dict.
-    Returns: (pts, es_negativo, menciones_neg, menciones_pos)
-    """
-    if not isinstance(wsp_index, dict):
-        return (100, False, 0, 0)
-    raw = wsp_index.get(cuit_limpio)
-    if not raw:
-        return (100, False, 0, 0)
-
-    hace_6m = datetime.now() - timedelta(days=180)
-
-    def _parse_fecha_wsp(s):
-        if not s: return None
-        try:
-            partes = str(s).strip().split('/')
-            if len(partes) == 3:
-                return datetime(int(partes[2]), int(partes[1]), int(partes[0]))
-        except: pass
-        return None
-
-    if isinstance(raw, list):
-        # Formato actual: [{fecha, cuit_mencionado, mensajes:[{autor, texto}]}]
-        # Aplicar filtro 6 meses sobre la fecha del thread
-        partes_texto = []
-        for t in raw:
-            if not isinstance(t, dict): continue
-            fecha_t = _parse_fecha_wsp(t.get('fecha') or
-                       (t.get('mensajes') or [{}])[0].get('fecha'))
-            if fecha_t and fecha_t < hace_6m:
-                continue  # thread fuera de ventana
-            for msg in (t.get('mensajes') or []):
-                if isinstance(msg, dict):
-                    partes_texto.append(str(msg.get('texto', '')))
-        texto = ' '.join(partes_texto).lower()
-    elif isinstance(raw, dict):
-        # Formato legacy: {texto: "...", mensajes: [...]}
-        texto = str(raw.get('texto') or raw.get('mensajes') or '').lower()
-    else:
-        return (100, False, 0, 0)
-
-    if not texto.strip():
-        return (100, False, 0, 0)
-
-    neg = sum(1 for kw in _KW_NEG if kw in texto)
-    pos = sum(1 for kw in _KW_POS if kw in texto)
-    es_negativo = neg > pos or (neg > 0 and pos == 0)
-
-    if   neg == 0 and pos == 0: pts = 100
-    elif neg > 0  and pos == 0: pts = max(0,   100 - neg * 25)
-    elif pos > 0  and neg == 0: pts = min(200, 100 + pos * 25)
-    else:
-        balance = pos - neg
-        pts = max(0, min(200, 100 + balance * 20))
-
-    print(f"[wsp] {cuit_limpio} neg={neg} pos={pos} pts={pts}", flush=True)
-    return (pts, es_negativo, neg, pos)
 
 
 def _detectar_degradacion(score_history: list) -> tuple:
@@ -3171,14 +3018,24 @@ def calcular_rating_predictivo(
     ciudad: str         = '',
 ) -> dict:
     """
-    Modelo Nacional de Riesgo Vende Seguro v20.0 (Anti-Videla)
+    Modelo Nacional de Riesgo Vende Seguro v22.0
 
-    Capa A — Estabilidad Bancaria   40%  (0-400 pts): BCRA + Tendencia 24m
-    Capa B — Conducta Interna       40%  (0-400 pts): Odoo DSO/regularidad/volumen
-    Capa C — Comunidad              20%  (0-200 pts): NLP Chat Bodegas
-    Liquidez                              (0-100 pts): Cheques bonus
+    Score 1-999 sobre tres dimensiones ponderadas más un bonus de liquidez.
+    Toda la evidencia proviene de registros oficiales o de la propia relación
+    comercial: no se pondera información de terceros no verificable.
 
-    Prospectos (sin historial Odoo): AFIP proxy llena Capa B (80% BCRA+AFIP / 20% Com.)
+    Capa A — Comportamiento Bancario 40%  (0-400): BCRA Central de Deudores, 24m
+    Capa B — Conducta Comercial      40%  (0-400): Odoo DSO / regularidad / mora
+    Capa C — Perfil Fiscal           20%  (0-200): ARCA Padrón A13+A5, MiPyME
+    Liquidez                    (bonus)  (0-100): cheques rechazados BCRA
+
+    Capa C reemplaza desde v22.0 a la antigua capa de menciones en el chat de
+    bodegas. Aquella ponderaba opiniones de terceros: no verificables por el
+    evaluado, no rectificables y sin fuente oficial. La actual usa el padrón de
+    ARCA — estado de clave fiscal, domicilios, impuestos activos, antigüedad y
+    riesgo sectorial por CLAE — que es dato registral objetivo y auditable.
+
+    Prospectos (sin historial Odoo): la Capa B usa el proxy de solvencia AFIP.
     Intencionalidad: mora administrativa (nunca Sit.1 previo) → −15%, sin Hard Block.
     Default real (≥3m en Sit.1 luego Sit.2+) → Hard Block D2 ($0).
     Anti-Videla: scoreHistory[] 12 meses; degradación ≥15% → alerta.
@@ -3366,15 +3223,6 @@ def calcular_rating_predictivo(
     if en_mora is None:
         en_mora = cuit_limpio in moras_norm
 
-    # ── WhatsApp Bodegas ──────────────────────────────────────────────────
-    wsp_index: dict = {}
-    try:
-        with open(WSP_FILE, 'r', encoding='utf-8') as _wf:
-            wsp_index = json.load(_wf)
-    except: pass
-    if not isinstance(wsp_index, dict):
-        wsp_index = {}
-
     # ── Solvencia AFIP (graceful degradation) ────────────────────────────
     if solvency_data is None:
         solvency_data = get_solvency_data(cuit_limpio)
@@ -3488,10 +3336,21 @@ def calcular_rating_predictivo(
             _fiscal_es_capa_b = True
             print(f"[cerebro-fiscal] {cuit_limpio} BCRA vacío → Capa B fiscal = {pts_fiscal}", flush=True)
 
-    # ═══ CAPA C: Comunidad Chat Bodegas (0-200 pts) ══════════════════════
-    pts_cc, comunidad_negativa, _neg_count, _pos_count = _evaluar_comunidad(
-        cuit_limpio, wsp_index
-    )
+    # ═══ CAPA C: Perfil Fiscal ARCA (0-200 pts) ══════════════════════════
+    # Sustituye a la antigua capa de menciones en el chat de bodegas. Aquella
+    # ponderaba opiniones de terceros sobre el cliente: no verificables, no
+    # rectificables y sin trazabilidad a una fuente oficial. Esta capa usa el
+    # padrón de ARCA — estado de clave fiscal, domicilios, impuestos activos,
+    # antigüedad y riesgo sectorial por CLAE — que es dato registral objetivo.
+    #
+    # Escala 0-400 del perfil fiscal → 0-200 de la capa. Sin datos fiscales se
+    # aplica el neutral 100, exactamente el mismo valor que devolvía la capa
+    # anterior ante un cliente sin menciones: los scores no se mueven para
+    # quienes no tengan perfil fiscal resuelto.
+    if pts_fiscal is not None:
+        pts_cc = round(pts_fiscal / 400 * 200)
+    else:
+        pts_cc = 100
 
     # ═══ LIQUIDEZ: Cheques (0-100 pts) ═══════════════════════════════════
     # Para mora administrativa: sit_efectivo (no max_sit) para no zerear el bonus
@@ -3513,35 +3372,28 @@ def calcular_rating_predictivo(
     # ── Suma bruta (A + B + C + Liquidez) ────────────────────────────────
     puntos = pts_c1 + pts_cb + pts_cc + pts_liq
 
-    # ── Bonus estructura MiPyME — proxy empleados (padrón Min. Producción) ───
-    # Fuente: categoria_mipyme enriquecida por get_solvency_data → mipyme_padron.db.
-    # Refleja sustancia operativa declarada ante SEPYME/AFIP: nómina real implícita.
-    # Gran empresa (jurídica sin registro MiPyME): escala corporativa, bonus fijo.
+    # ── Bonus estructura — solo cuando NO hay perfil fiscal resuelto ─────────
+    # La estructura (categoría MiPyME, condición de empleador) ya pondera dentro
+    # del perfil fiscal que alimenta la Capa C. Sumarla otra vez acá sería contar
+    # dos veces la misma evidencia. Se conserva únicamente como respaldo para el
+    # cliente cuyo perfil fiscal no se pudo resolver, de modo que no pierda los
+    # puntos que tenía con la calibración anterior.
     _bonus_estructura = 0
-    if solvency_data:
+    if solvency_data and pts_fiscal is None:
         _cat_mp   = (solvency_data.get('categoria_mipyme') or '').strip()
-        # Requiere confirmación explícita de AFIP/TangoFactura — no asumimos por tipo_persona
+        # Requiere confirmación explícita de AFIP/ARCA — no asumimos por tipo_persona
         _es_empl2 = solvency_data.get('es_empleador') is True
         _BONUS_MP = {'Micro': 10, 'Pequeña': 25, 'Mediana_T1': 45, 'Mediana_T2': 45}
         if _cat_mp in _BONUS_MP:
             _bonus_estructura = _BONUS_MP[_cat_mp]
         elif _es_empl2:
-            _bonus_estructura = 60  # empleador confirmado por AFIP sin registro MiPyME
-
-        # Bonus fiscal unificado: cuando el perfil fiscal NO es ya la Capa B
-        # (es decir, cuando sí hay historial BCRA o interno), entra acá para que
-        # el score combine mora de 24 meses + deducción fiscal. Escala 0-90 pts
-        # sobre 400 del perfil. Nunca por debajo del bonus MiPyME histórico:
-        # ningún cliente pierde puntos respecto de la calibración anterior.
-        if pts_fiscal is not None and not _fiscal_es_capa_b:
-            _bonus_fiscal     = round(pts_fiscal / 400 * 90)
-            _bonus_estructura = max(_bonus_estructura, _bonus_fiscal)
+            _bonus_estructura = 60  # empleador confirmado sin registro MiPyME
 
         if _bonus_estructura:
             puntos += _bonus_estructura
             _cat_log = _cat_mp if _cat_mp else 'gran_empresa'
-            print(f"[score] {cuit_limpio} bonus_estructura cat={_cat_log} "
-                  f"fiscal={pts_fiscal} → +{_bonus_estructura}", flush=True)
+            print(f"[score] {cuit_limpio} bonus_estructura (sin perfil fiscal) "
+                  f"cat={_cat_log} → +{_bonus_estructura}", flush=True)
 
     # ── Piso v25.1: Sit.1 + deuda BCRA $0 + historial bancario real ──────────
     # Solo aplica si el cliente tiene períodos BCRA reportados (fue cliente de algún banco).
@@ -3748,11 +3600,6 @@ def calcular_rating_predictivo(
         )
         puntos = min(puntos, 400)
 
-    # ── Cap v20.0: comunidad negativa → score ≤ 600 (salvo mora técnica) ────
-    if comunidad_negativa and not es_mora_tecnica:
-        puntos = min(puntos, 600)
-        print(f"[score v{_SCORE_VERSION}] {cuit_limpio} comunidad_negativa → cap 600", flush=True)
-
     # ── Piso mora técnica (no aplica si hay Default Real) ────────────────
     if es_mora_tecnica and not hard_block_bcra:
         puntos = max(puntos, 700)
@@ -3850,7 +3697,7 @@ def calcular_rating_predictivo(
         'dso_individual':           dso_individual,
         'dso_deteriorando':         dso_deteriorando,
         'promedio_mensual':         promedio_mensual,
-        'comunidad_negativa':       comunidad_negativa,
+        'comunidad_negativa':       False,   # capa retirada — se mantiene el campo por compatibilidad de UI
         'deuda_90d_interna':        deuda_90d_interna,
         'monto_deuda_90d':          round(monto_deuda_90d_interna, 2),
         'tipo_mora_bcra':           tipo_mora_bcra,
@@ -4256,66 +4103,6 @@ def _actualizar_score_en_cartera(cuit_limpio: str, score_data: dict, solvency: d
             pass
 
 
-def _analizar_bodegas_batch(clientes_batch):
-    """Analiza mensajes de bodegas para un lote de clientes en UNA sola llamada a Gemini.
-    Reduce llamadas IA de N (una por cliente) a N/8 (una por lote).
-    Args: clientes_batch — lista de {cuit, nombre, mensajes: [str]}
-    Returns: {cuit: (es_negativo: bool, motivo: str)}
-    """
-    if not clientes_batch:
-        return {}
-    secciones = []
-    for cli in clientes_batch:
-        msgs_txt = "\n".join(f"- {m}" for m in cli.get('mensajes', [])[:10])
-        secciones.append(f"CUIT: {cli['cuit']} | {cli['nombre']}\n{msgs_txt}")
-    bloque = "\n\n---\n\n".join(secciones)
-    prompt = (
-        "Sos un Analista de Riesgo Crediticio experto en el sector vitivinícola argentino.\n"
-        "Analizá los mensajes de grupo de bodegas para CADA cliente listado.\n\n"
-        "REGLAS:\n"
-        "- Solo negativo si hay deudas impagas NO resueltas, estafas o desaparición del deudor.\n"
-        "- Cheques rechazados pero reemplazados = NO negativo.\n"
-        "- Si distintas bodegas dicen cosas contradictorias → comportamiento_inconsistente: true.\n"
-        "- NUNCA respondas 'sin antecedentes' si el chat tiene mensajes.\n\n"
-        "CLIENTES A ANALIZAR:\n\n" + bloque + "\n\n"
-        "Respondé SOLO con JSON sin markdown. Una clave por CUIT exacto:\n"
-        '{"CUIT1": {"es_negativo": false, "motivo": "...", "comportamiento_inconsistente": false}, '
-        '"CUIT2": {"es_negativo": false, "motivo": "...", "comportamiento_inconsistente": false}}'
-    )
-    payload = {"contents": [{"parts": [{"text": prompt}]}]}
-    fallback = {cli['cuit']: (False, "") for cli in clientes_batch}
-    texto, error = gemini_request(payload, timeout=90)
-    if error or not texto:
-        print(f"[bodegas-batch] Sin respuesta IA — fallback no-negativo para {len(clientes_batch)} clientes", flush=True)
-        return fallback
-    try:
-        import re as _re
-        texto_limpio = texto.strip().replace("```json", "").replace("```", "").strip()
-        _m = _re.search(r'\{[\s\S]+\}', texto_limpio)
-        if not _m:
-            return fallback
-        data = json.loads(_m.group(0))
-        result = {}
-        for cli in clientes_batch:
-            cuit = cli['cuit']
-            entrada = data.get(cuit, {})
-            motivo = entrada.get("motivo", "")
-            if entrada.get("comportamiento_inconsistente"):
-                motivo = "⚠ Comportamiento Inconsistente: " + motivo
-            result[cuit] = (entrada.get("es_negativo", False), motivo)
-        print(f"[bodegas-batch] Lote OK — {len(result)} clientes analizados", flush=True)
-        return result
-    except Exception as _e:
-        print(f"[bodegas-batch] Parse error: {_e} — raw: {texto[:200]}", flush=True)
-        return fallback
-
-
-# ─── HELPERS DE VERIFICACIÓN BULK ────────────────────────────────────────────
-# Estas funciones permiten que la verificación masiva consulte primero las bases
-# locales (bcra_nomdeu.db + cheques_bcra) antes de ir a BCRA live.
-# Resultado: 500 clientes → consulta bulk < 2s, live BCRA solo para ~100-150.
-
-_PERIODO_BASE_BULK = 202605  # Mayo 2026 — último período del archivo histórico
 
 
 def _mes_anterior(yyyymm: int, n: int) -> int:
@@ -4738,22 +4525,7 @@ def ejecutar_verificacion(cartera_data):
     # NO se invalida bcra_cache — misma razón que proceso_integral:
     # la invalidación masiva provoca rate-limiting en BCRA desde el cliente 4.
 
-    palabras_riesgo = [
-        'rechaz', 'no paga', 'cuidado', 'mora', 'deuda', 'incobrable',
-        'estafa', 'desapareci', 'fuga', 'impago', 'quiebra', 'concurso',
-        'sin fondos', 'rebotado', 'mal pagador', 'no responde', 'no contesta',
-        'bloqueado', 'vencid', 'no cancel', 'no liquido', 'no abono',
-        'atencion', 'ojo', 'problema', 'judicial', 'cobrar', 'nos debe', 'debia'
-    ]
 
-    wsp_index = {}
-    try:
-        with open(WSP_FILE, 'r', encoding='utf-8') as f:
-            wsp_index = json.load(f)
-    except Exception:
-        pass
-    if not isinstance(wsp_index, dict):
-        wsp_index = {}
 
     nuevas_alertas = []
     cartera_actualizada = []
@@ -4853,7 +4625,6 @@ def ejecutar_verificacion(cartera_data):
         }
         with open(ALERTAS_FILE, 'w', encoding='utf-8') as _f:
             json.dump(datos, _f, ensure_ascii=False, indent=None if parcial else 2)
-
     total = len(cartera_data)
     try:
         # ═══════════════════════════════════════════════════════════════════
@@ -5007,54 +4778,6 @@ def ejecutar_verificacion(cartera_data):
             print(f"[verif] FASE 1 OK — {_con_live}/{_n_live} con BCRA live · {_con_cheq_l} con cheques live", flush=True)
         else:
             print("[verif] FASE 1: Sin clientes para live BCRA — todo resuelto por bulk", flush=True)
-
-        # ═══════════════════════════════════════════════════════════════════
-        # FASE 2 — Análisis bodegas en LOTES (8 clientes por llamada Gemini)
-        # Reduce llamadas IA de N individuales a ceil(N/8) lotes
-        # ═══════════════════════════════════════════════════════════════════
-        verificacion_estado["mensaje"] = "Fase 2/3: Analizando bodegas en lotes..."
-        _BATCH = 8
-        bodegas_prefetch = {}  # {cuit: (es_negativo, motivo)}
-        clientes_para_bodegas = []
-        hace_6m = datetime.now() - timedelta(days=180)
-        for _cli in cartera_data:
-            _cuit_b  = str(_cli.get('cuit', '') or '').strip()
-            _nom_b   = str(_cli.get('nombre', '') or '').strip()
-            _threads = wsp_index.get(_cuit_b, [])
-            _trec = []
-            for _t in _threads:
-                _fs = _t.get('fecha') or (_t.get('mensajes', [{}])[0].get('fecha') if _t.get('mensajes') else None)
-                if _fs:
-                    try:
-                        if datetime.fromisoformat(str(_fs)[:10]) >= hace_6m:
-                            _trec.append(_t)
-                    except Exception:
-                        pass
-            if _trec:
-                _tmsgs, _sosp = [], False
-                for _t in _trec:
-                    for _m in _t.get('mensajes', []):
-                        _txt = _m.get('texto', '')
-                        _tmsgs.append(_m.get('autor', '') + ': ' + _txt)
-                        if any(_p in _txt.lower() for _p in palabras_riesgo):
-                            _sosp = True
-                if _sosp:
-                    clientes_para_bodegas.append({'cuit': _cuit_b, 'nombre': _nom_b, 'mensajes': _tmsgs})
-        if clientes_para_bodegas:
-            _n_lotes = (len(clientes_para_bodegas) + _BATCH - 1) // _BATCH
-            print(f"[verif] FASE 2: {len(clientes_para_bodegas)} clientes sospechosos → {_n_lotes} lote(s) de {_BATCH}", flush=True)
-            for _idx_l in range(0, len(clientes_para_bodegas), _BATCH):
-                _lote = clientes_para_bodegas[_idx_l:_idx_l + _BATCH]
-                try:
-                    bodegas_prefetch.update(_analizar_bodegas_batch(_lote))
-                    print(f"[verif-p2] Lote {_idx_l // _BATCH + 1}/{_n_lotes} OK", flush=True)
-                except Exception as _e_lote:
-                    print(f"[verif-p2] Error lote: {_e_lote}", flush=True)
-                    for _cl in _lote:
-                        bodegas_prefetch[_cl['cuit']] = (False, "")
-        else:
-            print("[verif] FASE 2: Sin mensajes sospechosos — skip", flush=True)
-        print(f"[verif] FASE 2 OK — {len(bodegas_prefetch)} resultados bodegas pre-cacheados", flush=True)
 
         # ═══════════════════════════════════════════════════════════════════
         # FASE 3 — Calcular scores con datos pre-fetched (sin I/O BCRA bloqueante)
@@ -5272,12 +4995,6 @@ def ejecutar_verificacion(cartera_data):
             except Exception as _cheq_v_e:
                 print(f"{tag} Cheques alert parse fallo: {_cheq_v_e}", flush=True)
 
-            # Bodegas: resultado pre-fetched en Fase 2 (sin llamada IA individual por cliente)
-            _es_neg, _motivo = bodegas_prefetch.get(cuit, (False, ""))
-            if _es_neg and not any(a['cuit'] == cuit and a['tipo'] == 'bodegas' for a in nuevas_alertas):
-                nuevas_alertas.append({"nombre": nombre, "cuit": cuit,
-                    "fecha": time.strftime('%d/%m/%Y'), "tipo": "bodegas", "mensajes": [_motivo]})
-
             cartera_actualizada.append(cliente_actualizado)
 
             # Guardado parcial cada 10 clientes
@@ -5296,15 +5013,14 @@ def ejecutar_verificacion(cartera_data):
         err_count   = sum(1 for c in cartera_actualizada if c.get('verificacion_fallida'))
         _n_bcra_v   = sum(1 for a in nuevas_alertas if a.get('tipo') == 'bcra')
         _n_cheq_v   = sum(1 for a in nuevas_alertas if a.get('tipo') == 'cheque')
-        _n_bodeg_v  = sum(1 for a in nuevas_alertas if a.get('tipo') == 'bodegas')
         print(
             f"[verif] FIN: {ok_count}/{total} con score, {err_count} fallidos"
-            f" | {_n_bcra_v} BCRA · {_n_cheq_v} cheques · {_n_bodeg_v} bodegas",
+            f" | {_n_bcra_v} BCRA · {_n_cheq_v} cheques",
             flush=True,
         )
         verificacion_estado["mensaje"] = (
             f"Completado: {ok_count}/{total} verificados, {err_count} fallidos"
-            f" | {_n_bcra_v} alerta(s) BCRA · {_n_cheq_v} cheques · {_n_bodeg_v} bodegas."
+            f" | {_n_bcra_v} alerta(s) BCRA · {_n_cheq_v} cheques."
         )
         verificacion_estado["progreso"] = total
 
@@ -6877,10 +6593,6 @@ def debug_scores():
     return resp
 
 
-@app.route("/whatsapp_index.json")
-def wsp_index_route():
-    return send_from_directory(os.getcwd(), 'whatsapp_index.json')
-
 @app.route("/moras.json")
 def moras():
     moras_path = os.path.join(DATA_DIR, 'moras_piattelli.json')
@@ -7729,7 +7441,7 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
         # bulk + paralelo). Lo único que corre acá es CPU (scoring) y disco local.
 
     # ── Merge atómico de alertas BCRA en db_v17_final.json ───────────────────────
-    # Preserva alertas tipo 'bodegas' (WhatsApp) del run anterior; reemplaza las 'bcra'
+    # Preserva alertas de otros tipos del run anterior; regenera 'bcra' y 'cheque'
     try:
         with _alertas_file_lock:
             try:
@@ -7737,7 +7449,7 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
                     _af_data = json.load(_af)
             except Exception:
                 _af_data = {}
-            # Preservar solo alertas de tipo 'bodegas' (WhatsApp) — regenerar bcra y cheque
+            # Regenerar bcra y cheque; conservar cualquier otro tipo
             _alertas_prev_otros = [
                 a for a in _af_data.get('alertas', [])
                 if a.get('tipo') not in ('bcra', 'cheque')
@@ -7752,7 +7464,7 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
         _n_cheq_a = sum(1 for a in _pi_alertas if a.get('tipo') == 'cheque')
         print(
             f'[proceso-integral] Alertas guardadas: {_n_bcra_a} BCRA, {_n_cheq_a} cheques '
-            f'({len(_alertas_prev_otros)} bodegas preservadas)',
+            f'({len(_alertas_prev_otros)} de otros tipos preservadas)',
             flush=True,
         )
     except Exception as _ae:
@@ -8676,20 +8388,6 @@ def recalcular_scores():
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
-
-@app.route("/analizar-bodegas", methods=["POST"])
-def analizar_bodegas():
-    if not GEMINI_KEY:
-        return jsonify({"es_negativo": False, "motivo": ""})
-    try:
-        body = request.get_json(force=True)
-        cuit = body.get('cuit', '')
-        nombre = body.get('nombre', '')
-        mensajes = body.get('mensajes', [])
-        es_neg, motivo = analizar_bodegas_server(cuit, nombre, mensajes)
-        return jsonify({"es_negativo": es_neg, "motivo": motivo})
-    except Exception as e:
-        return jsonify({"es_negativo": False, "motivo": str(e)})
 
 # ── PADRÓN OFICIAL BCRA LOCAL (bcra_nomdeu.db) ───────────────────────────────
 # Descargado al arrancar: R2 autenticado (prioridad, bucket privado) si están
