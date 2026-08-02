@@ -1325,7 +1325,7 @@ def _guardar_en_padron_local(cuit: str, data: dict):
         print(f"[padron] Error al guardar {cuit}: {e}", flush=True)
 
 
-def consultar_bcra_cached(cuit, skip_padron=False):
+def consultar_bcra_cached(cuit, skip_padron=False, live_primero=False):
     # 1. Padrón local indexado — respuesta instantánea sin red
     # Se omite cuando skip_padron=True (fresh=1) para forzar consulta en vivo y
     # actualizar el padrón local con datos frescos del BCRA.
@@ -1342,45 +1342,61 @@ def consultar_bcra_cached(cuit, skip_padron=False):
         print(f"[bcra] {cuit} desde {origen}", flush=True)
         return _norm_bcra_resp(cached_data), cached_error
 
-    # 3. PRIORIDAD 1 — Bulk local (historial_detalle, ~25M CUITs) — <100ms, sin red.
-    # Se consulta SIEMPRE, incluso con fresh=1. La API del BCRA bloquea nuestra
-    # IP al segundo intento consecutivo (503), así que no puede ser la primera
-    # opción: el bulk cubre a todo CUIT con actividad bancaria reciente y la API
-    # queda reservada para los que no figuran acá.
-    #
-    # skip_padron (fresh=1) sigue saltando el padrón local y el caché de disco
-    # —que son instantáneas de consultas previas— pero ya no el bulk, que es el
-    # dato oficial del BCRA descargado por lote.
-    _nomdeu_bulk = _nomdeu_build_deudas_resp(cuit)
-    if _nomdeu_bulk:
-        print(f"[bcra_source] {cuit} Datos obtenidos del bulk local de "
-              f"{_HIST_DETALLE_MESES} meses", flush=True)
-        _guardar_en_padron_local(cuit, _nomdeu_bulk)
-        return _nomdeu_bulk, None
-
-    # 4. PRIORIDAD 2 — Consulta en vivo, solo para CUITs ausentes del bulk.
-    print(f"[bcra_source] {cuit} sin datos en bulk local — consultando API externa", flush=True)
-    data, error = consultar_bcra(cuit)
-    if error or not data:
-        # Sin bulk (ya se descartó arriba) y sin API: no hay dato disponible.
-        # No es evidencia de que el cliente no exista ni de que sea riesgoso —
-        # es una falla de acceso. El motor lo trata con tope neutral, no con
-        # castigo (ver _dato_bcra_no_disponible en calcular_rating_predictivo).
+    if live_primero:
+        # CONSULTA INDIVIDUAL: BCRA en vivo primero (retorna 24 meses completos),
+        # bulk local como fallback si la API no responde.
+        print(f"[bcra_source] {cuit} consulta individual — BCRA en vivo primero", flush=True)
+        data, error = consultar_bcra(cuit)
+        if data and not error:
+            data['bcra_disponible'] = True
+            cache_set(cuit, data)
+            _guardar_en_padron_local(cuit, data)
+            print(f"[bcra] {cuit} OK en vivo → guardado en padrón local", flush=True)
+            return data, None
+        # Fallback: bulk local si la API falló
+        print(f"[bcra_source] {cuit} live falló — fallback a bulk local", flush=True)
+        _nomdeu_bulk = _nomdeu_build_deudas_resp(cuit)
+        if _nomdeu_bulk:
+            print(f"[bcra_source] {cuit} bulk local (fallback de live individual)", flush=True)
+            _guardar_en_padron_local(cuit, _nomdeu_bulk)
+            return _nomdeu_bulk, None
         data_cache = {
             "results": None, "sin_deudas": None,
-            "error_bcra": "bcra_saturado",
+            "error_bcra": "bcra_sin_dato",
             "bcra_disponible": False,
         }
         cache_set(cuit, data_cache, error)
-        print(f"[bcra_source] {cuit} API externa sin respuesta y sin bulk local "
-              f"— dato no disponible", flush=True)
+        print(f"[bcra_source] {cuit} sin datos en vivo ni en bulk local — dato no disponible", flush=True)
         return data_cache, error
-    data['bcra_disponible'] = True
-    cache_set(cuit, data)
-    # 5. Auto-guardar en padrón local para servir sin red la próxima vez
-    _guardar_en_padron_local(cuit, data)
-    print(f"[bcra] {cuit} OK en vivo → guardado en padrón local", flush=True)
-    return data, None
+    else:
+        # CONSULTA MASIVA (default): bulk primero para no saturar la API del BCRA.
+        # La API bloquea la IP al segundo intento consecutivo (503); el bulk cubre
+        # a todo CUIT con actividad bancaria reciente sin tocar la red.
+        _nomdeu_bulk = _nomdeu_build_deudas_resp(cuit)
+        if _nomdeu_bulk:
+            print(f"[bcra_source] {cuit} Datos obtenidos del bulk local de "
+                  f"{_HIST_DETALLE_MESES} meses", flush=True)
+            _guardar_en_padron_local(cuit, _nomdeu_bulk)
+            return _nomdeu_bulk, None
+
+        # Prioridad 2 (masiva): API externa, solo para CUITs ausentes del bulk.
+        print(f"[bcra_source] {cuit} sin datos en bulk local — consultando API externa", flush=True)
+        data, error = consultar_bcra(cuit)
+        if error or not data:
+            data_cache = {
+                "results": None, "sin_deudas": None,
+                "error_bcra": "bcra_saturado",
+                "bcra_disponible": False,
+            }
+            cache_set(cuit, data_cache, error)
+            print(f"[bcra_source] {cuit} API externa sin respuesta y sin bulk local "
+                  f"— dato no disponible", flush=True)
+            return data_cache, error
+        data['bcra_disponible'] = True
+        cache_set(cuit, data)
+        _guardar_en_padron_local(cuit, data)
+        print(f"[bcra] {cuit} OK en vivo → guardado en padrón local", flush=True)
+        return data, None
 
 _proceso_integral_estado: dict = {
     "corriendo": False, "total": 0, "procesados": 0,
@@ -4075,15 +4091,15 @@ def _denominacion_arca(cuit: str) -> str | None:
     return razon
 
 
-def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: str = '') -> dict:
+def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: str = '',
+                             live_primero: bool = False, sin_arca: bool = False) -> dict:
     """
     Wrapper de calcular_rating_predictivo v9.0.
     Carga historial y cheques desde caché local (graceful degradation).
-    Mantiene compatibilidad con todos los callers existentes.
 
-    Paridad BCRA/ARCA: el historial de 24 meses y la consulta al canal oficial
-    ARCA arrancan en paralelo — ninguna espera a la otra, y el score se calcula
-    combinando ambas.
+    live_primero=True  → consulta individual: BCRA en vivo primero, bulk como fallback.
+    live_primero=False → consulta masiva: bulk primero, API solo si el CUIT no figura.
+    sin_arca=True      → omite el thread ARCA/solvencia (modo masivo, evita bloqueos).
     """
     cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
 
@@ -4091,6 +4107,7 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
     # get_solvency_data cachea 24h en disco, así que en consultas repetidas el
     # thread termina de inmediato. Nunca propaga excepción: el score debe poder
     # calcularse aunque el canal fiscal esté caído.
+    # sin_arca=True omite el fetch completamente (modo masivo: ARCA bloquea en masa).
     _solv_box: dict = {}
 
     def _fetch_solvencia():
@@ -4101,8 +4118,12 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
         except Exception as _e_sv:
             print(f"[score] {cuit_limpio} solvencia paralela falló: {_e_sv}", flush=True)
 
-    _th_solv = threading.Thread(target=_fetch_solvencia, daemon=True)
-    _th_solv.start()
+    if sin_arca:
+        _th_solv = None
+        print(f"[score] {cuit_limpio} sin_arca=True — solvencia ARCA omitida (modo masivo)", flush=True)
+    else:
+        _th_solv = threading.Thread(target=_fetch_solvencia, daemon=True)
+        _th_solv.start()
 
     def _cache_load(fname):
         p = os.path.join(DATA_DIR, fname)
@@ -4120,33 +4141,49 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
     if hist_data and not (hist_data.get('results') or {}).get('periodos'):
         hist_data = None
 
-    # ── PRIORIDAD 1: bulk local ──────────────────────────────────────────
-    # Antes de tocar la API externa. El BCRA bloquea la IP al segundo intento
-    # consecutivo, así que la fuente por defecto tiene que ser la base local.
     if not hist_data:
-        try:
-            if _nomdeu_get_deuda(cuit_limpio):
-                hist_data = _bulk_to_hist_data(cuit_limpio)
-                print(f"[bcra_source] {cuit_limpio} Datos obtenidos del bulk local de "
-                      f"{_HIST_DETALLE_MESES} meses (historial)", flush=True)
-        except Exception as _e_bulk:
-            print(f"[bcra_source] {cuit_limpio} error leyendo bulk local: {_e_bulk}", flush=True)
-
-    # ── PRIORIDAD 2: API externa, solo si el CUIT no está en el bulk ──────
-    if not hist_data:
-        print(f"[bcra_source] {cuit_limpio} sin historial en bulk local — "
-              f"consultando API externa", flush=True)
-        # Timeout corto (8s × 1 intento por endpoint = 16s máx) para que el endpoint
-        # /fetch-score responda siempre dentro del timeout de 40s del frontend.
-        _hd, _ = _consultar_bcra_directo(cuit_limpio, 'historial', timeout_per_req=8, max_intentos=1)
-        if _hd:
-            hist_data = _hd
-            # Solo escribir a disco si hay periodos reales — evita cachear resultados vacíos
-            if (_hd.get('results') or {}).get('periodos'):
+        if live_primero:
+            # INDIVIDUAL: BCRA en vivo primero (retorna 24 meses completos),
+            # bulk como fallback si la API no responde.
+            print(f"[bcra_source] {cuit_limpio} historial individual — BCRA en vivo primero", flush=True)
+            _hd, _ = _consultar_bcra_directo(cuit_limpio, 'historial', timeout_per_req=8, max_intentos=1)
+            if _hd:
+                hist_data = _hd
+                if (_hd.get('results') or {}).get('periodos'):
+                    try:
+                        with open(os.path.join(DATA_DIR, f'historial_{cuit_limpio}.json'), 'w') as f:
+                            json.dump({'payload': hist_data, 'ts': time.time()}, f)
+                    except: pass
+            if not hist_data:
+                print(f"[bcra_source] {cuit_limpio} historial live falló — fallback a bulk local", flush=True)
                 try:
-                    with open(os.path.join(DATA_DIR, f'historial_{cuit_limpio}.json'), 'w') as f:
-                        json.dump({'payload': hist_data, 'ts': time.time()}, f)
-                except: pass
+                    if _nomdeu_get_deuda(cuit_limpio):
+                        hist_data = _bulk_to_hist_data(cuit_limpio)
+                        print(f"[bcra_source] {cuit_limpio} historial bulk (fallback de live individual)", flush=True)
+                except Exception as _e_bulk:
+                    print(f"[bcra_source] {cuit_limpio} error leyendo bulk local: {_e_bulk}", flush=True)
+        else:
+            # MASIVA (default): bulk primero para no saturar la API del BCRA.
+            try:
+                if _nomdeu_get_deuda(cuit_limpio):
+                    hist_data = _bulk_to_hist_data(cuit_limpio)
+                    print(f"[bcra_source] {cuit_limpio} Datos obtenidos del bulk local de "
+                          f"{_HIST_DETALLE_MESES} meses (historial)", flush=True)
+            except Exception as _e_bulk:
+                print(f"[bcra_source] {cuit_limpio} error leyendo bulk local: {_e_bulk}", flush=True)
+
+            # API externa solo si el CUIT no está en el bulk
+            if not hist_data:
+                print(f"[bcra_source] {cuit_limpio} sin historial en bulk local — "
+                      f"consultando API externa", flush=True)
+                _hd, _ = _consultar_bcra_directo(cuit_limpio, 'historial', timeout_per_req=8, max_intentos=1)
+                if _hd:
+                    hist_data = _hd
+                    if (_hd.get('results') or {}).get('periodos'):
+                        try:
+                            with open(os.path.join(DATA_DIR, f'historial_{cuit_limpio}.json'), 'w') as f:
+                                json.dump({'payload': hist_data, 'ts': time.time()}, f)
+                        except: pass
 
     # Módulo cheques — aislado con fallback absoluto.
     # Un timeout o error en este módulo NO debe abortar el cálculo del score.
@@ -4175,20 +4212,20 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
     _bcra_disponible = bcra_data.get('bcra_disponible', not bool(bcra_data.get('error_bcra')))
 
     # ── Reunir la rama fiscal (ya venía corriendo en paralelo) ─────────────
-    # Cota superior generosa pero acotada: si el canal fiscal se cuelga, el
-    # score sale igual con los datos BCRA y el thread termina de poblar la
-    # caché en background para la próxima consulta.
-    _th_solv.join(timeout=25)
-    if _th_solv.is_alive():
-        # Pasar {} y no None: None haría que el motor dispare una SEGUNDA
-        # consulta fiscal sobre la misma cadena colgada y el request se pasaría
-        # del timeout del frontend.
+    if _th_solv is None:
+        # sin_arca=True: no se lanzó thread — solvencia vacía, degrada gracefully.
         solvency_data = {}
-        print(f"[score] {cuit_limpio} solvencia aún en curso a los 25s — score con BCRA solamente", flush=True)
     else:
-        # None solo si el fetch falló: el motor reintenta (barato, con caché 24h),
-        # que es exactamente el comportamiento previo a la paralelización.
-        solvency_data = _solv_box.get('data')
+        _th_solv.join(timeout=25)
+        if _th_solv.is_alive():
+            # Pasar {} y no None: None haría que el motor dispare una SEGUNDA
+            # consulta fiscal sobre la misma cadena colgada y el request se pasaría
+            # del timeout del frontend.
+            solvency_data = {}
+            print(f"[score] {cuit_limpio} solvencia aún en curso a los 25s — score con BCRA solamente", flush=True)
+        else:
+            # None solo si el fetch falló: el motor reintenta (barato, con caché 24h).
+            solvency_data = _solv_box.get('data')
 
     # ── Alta de identidad para el cliente no bancarizado ───────────────────
     # BCRA sin historial pero ARCA respondió: es un cliente real que todavía no
@@ -6588,173 +6625,12 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
         _categoria_pi[cuit] = _cat
         _cat_count_pi[_cat] = _cat_count_pi.get(_cat, 0) + 1
 
-    if modo_rapido:
-        # Modo rápido: sin BCRA en vivo. Usa datos cacheados tal cual.
-        _para_live_pi = []
-    else:
-        # Modo completo: zona_gris + nuevo + alto_riesgo van a BCRA en vivo.
-        # limpio_bulk usa historial_detalle (datos reales per-entidad del bulk mensual BCRA).
-        # No se llama BCRA vivo para limpio_bulk: la API bloquea tras pocas consultas.
-        _para_live_pi = [
-            cuit for cuit in _cuits_lista_pi
-            if _categoria_pi.get(cuit) in ('zona_gris', 'nuevo', 'alto_riesgo')
-        ]
     print(
         f"[proceso-integral] FASE 0 OK — alto_riesgo={_cat_count_pi['alto_riesgo']} | "
         f"zona_gris={_cat_count_pi['zona_gris']} | limpio_bulk={_cat_count_pi['limpio_bulk']} | "
-        f"nuevo={_cat_count_pi['nuevo']} → {len(_para_live_pi)} van a BCRA en vivo"
-        + (" (modo rápido: BCRA live omitido)" if modo_rapido else ""),
+        f"nuevo={_cat_count_pi['nuevo']} — scoring con bulk + cheques (sin BCRA en vivo ni ARCA)",
         flush=True,
     )
-
-    # ═══════════════════════════════════════════════════════════════════════
-    # FASE 1 — BCRA en vivo EN PARALELO, solo zona_gris + nuevo + alto_riesgo.
-    # ═══════════════════════════════════════════════════════════════════════
-    _live_resultados_pi: dict = {}  # {cuit: (bcra_data, cheq_cdi_data, hist_data)}
-    if _para_live_pi:
-        _N_WORKERS_PI = 8
-        with _proceso_lock:
-            _proceso_integral_estado['mensaje'] = (
-                f'Fase 2/2: BCRA en vivo para {len(_para_live_pi)} clientes ({_N_WORKERS_PI} workers)...'
-            )
-        print(f"[proceso-integral] FASE 1: BCRA en vivo — {len(_para_live_pi)} clientes", flush=True)
-
-        def _fetch_live_pi(cuit_f):
-            try:
-                bd, _ = consultar_bcra_cached(cuit_f)
-            except Exception as _be:
-                print(f'[proceso-integral] BCRA cache fallo {cuit_f}: {_be}', flush=True)
-                bd = None
-            _sin_datos = (
-                not bd or not isinstance(bd, dict) or bd.get('error_bcra') or
-                (not (bd.get('results') or {}).get('periodos') and not bd.get('sin_deudas'))
-            )
-            if _sin_datos:
-                _rb, _ = _consultar_respaldo(cuit_f)
-                if _rb:
-                    bd = _rb
-                else:
-                    _nomdeu_pi2 = _nomdeu_build_deudas_resp(cuit_f)
-                    bd = _nomdeu_pi2 or {}
-            try:
-                cheq_d, _ = _consultar_bcra_directo(cuit_f, 'cheques')
-            except Exception as _ce:
-                print(f'[proceso-integral] Cheques CDI fallo {cuit_f}: {_ce}', flush=True)
-                cheq_d = None
-            if cheq_d and isinstance(cheq_d, dict):
-                try:
-                    _cheq_path = os.path.join(DATA_DIR, f'cheques_{cuit_f}.json')
-                    _tmp_cheq  = _cheq_path + '.tmp'
-                    with open(_tmp_cheq, 'w', encoding='utf-8') as _cf:
-                        json.dump({'payload': cheq_d, 'ts': time.time()}, _cf, ensure_ascii=False)
-                        _cf.flush(); os.fsync(_cf.fileno())
-                    os.replace(_tmp_cheq, _cheq_path)
-                except Exception:
-                    pass
-            # Historial 24m en vivo — se busca acá (en paralelo) y NO en el motor de
-            # scoring (Paso 2), que de otro modo haría un fetch en vivo SECUENCIAL por
-            # cliente y anularía toda la ganancia de la Fase 0/1 (causa real del "se
-            # cuelga procesando 1/1283" reportado).
-            try:
-                hist_d, _ = _consultar_bcra_directo(cuit_f, 'historial', timeout_per_req=8, max_intentos=1)
-            except Exception as _he:
-                print(f'[proceso-integral] Historial fallo {cuit_f}: {_he}', flush=True)
-                hist_d = None
-            if hist_d and isinstance(hist_d, dict) and (hist_d.get('results') or {}).get('periodos'):
-                try:
-                    _hist_path = os.path.join(DATA_DIR, f'historial_{cuit_f}.json')
-                    _tmp_hist  = _hist_path + '.tmp'
-                    with open(_tmp_hist, 'w', encoding='utf-8') as _hf:
-                        json.dump({'payload': hist_d, 'ts': time.time()}, _hf, ensure_ascii=False)
-                        _hf.flush(); os.fsync(_hf.fileno())
-                    os.replace(_tmp_hist, _hist_path)
-                except Exception:
-                    pass
-            else:
-                hist_d = None
-            return cuit_f, bd, cheq_d, hist_d
-
-        with ThreadPoolExecutor(max_workers=_N_WORKERS_PI) as _pool_pi:
-            _futs_pi = {_pool_pi.submit(_fetch_live_pi, cuit): cuit for cuit in _para_live_pi}
-            _done_pi = 0
-            for _fut_pi in as_completed(_futs_pi, timeout=1800):
-                try:
-                    _cuit_r, _bd_r, _cheq_r, _hist_r = _fut_pi.result(timeout=40)
-                    _live_resultados_pi[_cuit_r] = (_bd_r, _cheq_r, _hist_r)
-                except Exception as _fe_pi:
-                    _cuit_r = _futs_pi[_fut_pi]
-                    print(f'[proceso-integral] Live fetch fallo {_cuit_r}: {_fe_pi}', flush=True)
-                    _live_resultados_pi[_cuit_r] = ({}, None, None)
-                _done_pi += 1
-                if _done_pi % 20 == 0:
-                    print(f"[proceso-integral] FASE 1: {_done_pi}/{len(_para_live_pi)} live", flush=True)
-        print(f"[proceso-integral] FASE 1 OK — {len(_live_resultados_pi)} clientes resueltos en vivo", flush=True)
-    else:
-        print("[proceso-integral] FASE 1: sin clientes para BCRA en vivo — todo resuelto por bulk", flush=True)
-
-    # ═══════════════════════════════════════════════════════════════════════
-    # FASE 1.5 — Pre-calentar solvencia (ARCA oficial / TangoFactura) en paralelo.
-    # Es una cadena de fetch totalmente independiente de BCRA (Fase 0/1 no la
-    # cubre): get_solvency_data hace su propio scraping AFIP con proxies
-    # Bright Data/ScraperAPI cuando el caché de 24h está vencido. Sin este
-    # pre-calentado, el Paso 3 de la Fase 2 termina haciendo ese fetch en
-    # vivo SECUENCIAL por cliente — el motivo real por el que el proceso
-    # seguía lento incluso con la cartera ya triada por bulk en Fase 0.
-    # get_solvency_data ya valida su propio caché de 24h, así que llamarla
-    # para un cliente ya cacheado es gratis (solo lectura de disco).
-    # ═══════════════════════════════════════════════════════════════════════
-    _para_solvencia_pi = []
-    if modo_rapido:
-        print("[proceso-integral] FASE 1.5: omitida (modo rápido)", flush=True)
-    else:
-        for _cuit_sv in _cuits_lista_pi:
-            _sv_path_pi = os.path.join(DATA_DIR, f'solvency_{_cuit_sv}.json')
-            try:
-                if os.path.exists(_sv_path_pi):
-                    with open(_sv_path_pi, 'r') as _svf_pi:
-                        _sv_cached_pi = json.load(_svf_pi)
-                    if time.time() - _sv_cached_pi.get('ts', 0) < 86400:
-                        continue
-            except Exception:
-                pass
-            _para_solvencia_pi.append(_cuit_sv)
-
-    if _para_solvencia_pi:
-        with _proceso_lock:
-            _proceso_integral_estado['mensaje'] = (
-                f'Fase 1.5/2: solvencia AFIP para {len(_para_solvencia_pi)} clientes (8 workers)...'
-            )
-        # Presupuesto de tiempo proporcional a la cartera. Desde que ARCA es la
-        # Fuente 0, cada cliente sin caché implica dos llamadas SOAP (A13 + A5),
-        # así que un tope fijo de 1800s se quedaba corto con carteras grandes.
-        # 8s por cliente entre 8 workers, con piso de 30 min y techo de 2 h.
-        _tout_sv = max(1800, min(7200, int(len(_para_solvencia_pi) * 8 / 8) + 600))
-        print(f"[proceso-integral] FASE 1.5: solvencia — {len(_para_solvencia_pi)} clientes "
-              f"sin caché vigente (presupuesto {_tout_sv // 60} min)", flush=True)
-        _done_sv = 0
-        try:
-            with ThreadPoolExecutor(max_workers=8) as _pool_sv:
-                _futs_sv = {_pool_sv.submit(get_solvency_data, _cs): _cs for _cs in _para_solvencia_pi}
-                for _fut_sv in as_completed(_futs_sv, timeout=_tout_sv):
-                    try:
-                        _fut_sv.result(timeout=40)
-                    except Exception as _e_sv:
-                        print(f'[proceso-integral] Solvencia fallo {_futs_sv[_fut_sv]}: {_e_sv}', flush=True)
-                    _done_sv += 1
-                    if _done_sv % 50 == 0:
-                        print(f"[proceso-integral] FASE 1.5: {_done_sv}/{len(_para_solvencia_pi)} solvencia", flush=True)
-        except Exception as _e_fase15:
-            # El precalentado es una OPTIMIZACIÓN, no un requisito: si se agota
-            # el presupuesto o falla el pool, el proceso sigue y cada cliente
-            # resuelve su solvencia en el loop. Antes, un TimeoutError acá
-            # abortaba la actualización completa de la cartera.
-            print(f"[proceso-integral] FASE 1.5 interrumpida ({type(_e_fase15).__name__}) — "
-                  f"{_done_sv}/{len(_para_solvencia_pi)} precalentados; "
-                  f"el resto se resuelve durante el scoring", flush=True)
-        else:
-            print(f"[proceso-integral] FASE 1.5 OK — {_done_sv} precalentados", flush=True)
-    else:
-        print("[proceso-integral] FASE 1.5: toda la solvencia ya estaba cacheada (<24h)", flush=True)
 
     # ═══════════════════════════════════════════════════════════════════════
     # FASE 1.8 — Cargar bcra_cache.json una sola vez antes del loop.
@@ -6826,7 +6702,7 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
                     isinstance(_score_cached_pi, dict) and
                     _score_cached_pi.get('score')):
                 score_data = _score_cached_pi
-                solvency   = get_solvency_data(cuit) or {}
+                solvency   = {}  # ARCA omitido en modo masivo
                 print(
                     f"[proceso-integral] {nombre or cuit} score reutilizado "
                     f"(consulta individual reciente: {_score_cached_pi.get('score')} {_score_cached_pi.get('rango')})",
@@ -6842,63 +6718,49 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
                     _proceso_integral_estado['procesados'] = i + 1
                 continue
 
-            # ── Paso 1: BCRA — resuelto por vivo (FASE 1) > caché disco > bulk sintético ──
+            # ── Paso 1: BCRA — solo bulk y caché (sin BCRA en vivo en modo masivo) ──
             # Orden de prioridad:
-            #   1. BCRA en vivo (FASE 1)  — datos frescos de la API, 24m de periodos
-            #   2. bcra_cache.json        — datos reales de consultas individuales previas
-            #   3. _bulk_to_bcra_data()   — sintético, solo 1 periodo; puede divergir del real
-            # Usar (2) cuando está disponible elimina la divergencia entre "proceso integral"
-            # y "consulta individual": ambos paths terminan usando los mismos datos BCRA.
-            if cuit in _live_resultados_pi:
-                bcra_data, _cheq_cdi_pi, _hist_live_pi = _live_resultados_pi[cuit]
-            else:
-                _cheq_cdi_pi  = None
-                _hist_live_pi = None
-                _deuda_bulk_pi = _bulk_deudas_pi.get(cuit)
-                bcra_data = None
+            #   1. bcra_cache.json        — datos reales de consultas individuales previas
+            #   2. historial_detalle      — bulk mensual BCRA per-entidad, sit_01/monto_01
+            #   3. Padrón local SQLite    — fallback para CUITs consultados individualmente
+            #   4. _bulk_to_bcra_data()   — sintético, sit_max; último recurso
+            _cheq_cdi_pi   = None
+            _deuda_bulk_pi = _bulk_deudas_pi.get(cuit)
+            bcra_data      = None
 
-                # 1. bcra_cache.json — datos reales de consultas anteriores
-                _entry_cache_pi = _bcra_cache_pi.get(cuit)
-                if isinstance(_entry_cache_pi, dict):
-                    if 'data' in _entry_cache_pi and 'ts' in _entry_cache_pi:
-                        _entry_cache_pi = _entry_cache_pi.get('data') or {}
-                    if (_entry_cache_pi and
-                            isinstance(_entry_cache_pi.get('results'), dict) and
-                            not _entry_cache_pi.get('error_bcra')):
-                        bcra_data = _entry_cache_pi
+            # 1. bcra_cache.json — datos reales de consultas anteriores
+            _entry_cache_pi = _bcra_cache_pi.get(cuit)
+            if isinstance(_entry_cache_pi, dict):
+                if 'data' in _entry_cache_pi and 'ts' in _entry_cache_pi:
+                    _entry_cache_pi = _entry_cache_pi.get('data') or {}
+                if (_entry_cache_pi and
+                        isinstance(_entry_cache_pi.get('results'), dict) and
+                        not _entry_cache_pi.get('error_bcra')):
+                    bcra_data = _entry_cache_pi
 
-                # 2. historial_detalle (bulk real per-entidad) — sit_01/monto_01 por entidad.
-                # Datos reales del archivo mensual BCRA: cada entidad tiene su situación
-                # y monto real, sin distribución sintética. Misma fuente que _bulk_to_hist_data().
-                if bcra_data is None:
-                    _hd_bcra_pi = _bulk_bcra_from_historial(cuit, nombre)
-                    if _hd_bcra_pi:
-                        bcra_data = _hd_bcra_pi
+            # 2. historial_detalle (bulk real per-entidad) — sit_01/monto_01 por entidad
+            if bcra_data is None:
+                _hd_bcra_pi = _bulk_bcra_from_historial(cuit, nombre)
+                if _hd_bcra_pi:
+                    bcra_data = _hd_bcra_pi
 
-                # 3. Padrón local SQLite — fallback si el CUIT no está en historial_detalle
-                if bcra_data is None:
-                    _pl_pi = consultar_padron_local(cuit)
-                    if (_pl_pi and
-                            isinstance((_pl_pi.get('results') or {}).get('periodos'), list) and
-                            len((_pl_pi.get('results') or {}).get('periodos') or []) > 0):
-                        bcra_data = _pl_pi
+            # 3. Padrón local SQLite — fallback si el CUIT no está en historial_detalle
+            if bcra_data is None:
+                _pl_pi = consultar_padron_local(cuit)
+                if (_pl_pi and
+                        isinstance((_pl_pi.get('results') or {}).get('periodos'), list) and
+                        len((_pl_pi.get('results') or {}).get('periodos') or []) > 0):
+                    bcra_data = _pl_pi
 
-                # 4. Bulk sintético — último recurso (agregado, sit_max a todas las entidades)
-                if bcra_data is None:
-                    bcra_data = _bulk_to_bcra_data(nombre, _deuda_bulk_pi) if _deuda_bulk_pi else {}
+            # 4. Bulk sintético — último recurso
+            if bcra_data is None:
+                bcra_data = _bulk_to_bcra_data(nombre, _deuda_bulk_pi) if _deuda_bulk_pi else {}
 
             # ── Paso 1.5b: Detectar cheques rechazados activos para alertas ──────────
             _cheq_activos_pi = 0
             _cheq_para_score_pi = _bulk_cheques_pi.get(cuit)  # default seguro si el try de abajo falla
             try:
-                _cheq_raw_pi = _cheq_cdi_pi or {}
-                # Fallback: caché en disco del CUIT (solo si hubo intento en vivo y falló)
-                if not _cheq_raw_pi and cuit in _live_resultados_pi:
-                    _cheq_path_pi = os.path.join(DATA_DIR, f'cheques_{cuit}.json')
-                    if os.path.exists(_cheq_path_pi):
-                        with open(_cheq_path_pi, 'r', encoding='utf-8') as _cpf:
-                            _cheq_raw_pi = json.load(_cpf).get('payload') or {}
-
+                _cheq_raw_pi = {}  # solo bulk en modo masivo, sin consulta CDI en vivo
                 _act_live_pi, _, _det_live_pi = _cheques_activos_de(_cheq_raw_pi)
                 # Cruzar SIEMPRE contra el bulk local (snapshot diario BCRA, importado
                 # por /update-cheques-db) — un "sin_deudas=True" en vivo puede ser un
@@ -6944,6 +6806,7 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
                 score_data = calcular_score_servidor(
                     cuit=cuit, bcra_data=bcra_data or {},
                     ciudad=str(c.get('ciudad', '') or ''),
+                    sin_arca=True,
                 )
                 if score_data:
                     score_data['bcra_disponible'] = bool(bcra_data) and not bool((bcra_data or {}).get('error_bcra'))
@@ -6969,14 +6832,8 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
                     '_error_paso2': _err_msg,
                 }
 
-            # ── Paso 3: Solvencia — try separado; normalizar si retorna lista ──────────
-            try:
-                solvency = get_solvency_data(cuit)
-                if not isinstance(solvency, dict):
-                    solvency = {}
-            except Exception as _se:
-                print(f'[proceso-integral] Solvencia fallo {cuit}: {_se} — continuando sin AFIP', flush=True)
-                solvency = {}
+            # ── Paso 3: Solvencia — omitida en modo masivo (evita bloqueos ARCA) ──────
+            solvency = {}
 
             # ── Contingencia: garantizar score numérico en todos los casos ──────────
             if not score_data.get('score'):
@@ -7791,7 +7648,7 @@ def _calcular_score_handler(cuit: str):
             print(f"[fetch-score] {cuit_limpio} → score_cache.json hit ({_cached['score']})", flush=True)
             return jsonify(_cached)
     try:
-        bcra_data, _ = consultar_bcra_cached(cuit_limpio)
+        bcra_data, _ = consultar_bcra_cached(cuit_limpio, live_primero=True)
         _bcra_denom  = (bcra_data.get('results') or {}).get('denominacion', '').strip()
         _bcra_error  = bool(bcra_data.get('error_bcra')) or bcra_data.get('bcra_disponible') is False
 
@@ -7829,7 +7686,7 @@ def _calcular_score_handler(cuit: str):
         if bcra_data.get('sin_deudas') and not _bcra_denom and not _bcra_error:
             print(f"[fetch-score] {cuit_limpio} cliente nuevo sin historial BCRA — score base 650", flush=True)
 
-        score_data   = calcular_score_servidor(cuit_limpio, bcra_data or {})
+        score_data   = calcular_score_servidor(cuit_limpio, bcra_data or {}, live_primero=True)
         solvency     = get_solvency_data(cuit_limpio)
         if not isinstance(solvency, dict): solvency = {}
         _actualizar_score_en_cartera(cuit_limpio, score_data, solvency)
@@ -7849,7 +7706,7 @@ def _calcular_score_handler(cuit: str):
         # Fallback: intentar score solo con datos BCRA (sin solvencia/AFIP) para no
         # devolver null al frontend — un score parcial es mejor que un error en blanco.
         try:
-            bcra_fb, _ = consultar_bcra_cached(cuit_limpio)
+            bcra_fb, _ = consultar_bcra_cached(cuit_limpio, live_primero=True)
             sd_fb = calcular_rating_predictivo(
                 cuit=cuit_limpio, bcra_data=bcra_fb or {},
                 solvency_data={},  # evita consultas fiscales en el camino de fallback
@@ -9130,7 +8987,7 @@ def get_deudas(cuit):
             pass
     _fresh = request.args.get('fresh') == '1'
     try:
-        data, error = consultar_bcra_cached(cuit_limpio, skip_padron=_fresh)
+        data, error = consultar_bcra_cached(cuit_limpio, skip_padron=_fresh, live_primero=True)
         return jsonify(_enriquecer_denominacion(data, cuit_limpio)), 200
     except Exception as e:
         import traceback
