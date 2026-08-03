@@ -4337,7 +4337,7 @@ def _actualizar_score_en_cartera(cuit_limpio: str, score_data: dict, solvency: d
 # Permiten que la verificación masiva consulte primero bcra_nomdeu.db y
 # cheques_bcra antes de ir a BCRA live: 500 clientes en < 2s, con live solo para
 # los ~100-150 que lo necesitan.
-_PERIODO_BASE_BULK = 202605  # Mayo 2026 — último período del archivo histórico
+_PERIODO_BASE_BULK = 202606  # Junio 2026 — último período del archivo histórico
 
 
 def _mes_anterior(yyyymm: int, n: int) -> int:
