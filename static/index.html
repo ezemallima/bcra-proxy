@@ -5107,10 +5107,18 @@ async function analizarCliente() {
     + 'Redacción en español corporativo y directo. Sin markdown, sin asteriscos.';
 
   try {
-    const r = await fetch('/analizar', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ prompt, rangoMin: rangoCredito.min, rangoMax: rangoCredito.max, rangoDecision: rangoCredito.decision })
-    });
+    const _ctrl = new AbortController();
+    const _toutId = setTimeout(() => _ctrl.abort(), 55000); // 55s — antes del timeout de Render
+    let r;
+    try {
+      r = await fetch('/analizar', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ prompt, rangoMin: rangoCredito.min, rangoMax: rangoCredito.max, rangoDecision: rangoCredito.decision }),
+        signal: _ctrl.signal
+      });
+    } finally {
+      clearTimeout(_toutId);
+    }
     const data = await r.json();
     if (data.error) throw new Error(data.error);
     var _sv = window._ultimoScoreVende;
@@ -5122,10 +5130,13 @@ async function analizarCliente() {
       + '<div style="font-size:13px;line-height:1.75;white-space:pre-wrap;color:#1e293b;">' + data.texto + '</div>';
     document.getElementById('btn-export').style.display = 'inline-block';
   } catch(e) {
+    const _esTimeout = e.name === 'AbortError';
     resEl.style.display = 'block';
     resEl.innerHTML = _renderCreditoHeader(rangoCredito)
       + _renderExclusionBadge()
-      + '<div style="font-size:13px;color:#64748b;margin-top:8px;">Análisis no disponible — verificá la conexión e intentá de nuevo.</div>';
+      + '<div style="font-size:13px;color:#64748b;margin-top:8px;">'
+      + (_esTimeout ? 'El motor de análisis tardó demasiado. Volvé a intentar en un momento.' : 'Análisis no disponible — verificá la conexión e intentá de nuevo.')
+      + '</div>';
   }
   btn.disabled = false; btn.textContent = 'Analizar riesgo crediticio →';
 }

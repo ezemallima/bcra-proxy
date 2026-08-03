@@ -1701,7 +1701,7 @@ def gemini_request(payload, timeout=250, system_prompt=None):
                         print(f"[gemini] Error: {msg[:80]}", flush=True)
                         if 'demand' in msg.lower() or 'demanda' in msg.lower():
                             if intento < 1:
-                                time.sleep(20)
+                                time.sleep(5)
                                 continue
                         break
                 else:
@@ -9259,7 +9259,7 @@ def analizar():
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {"temperature": 0.15, "maxOutputTokens": 1024}
         }
-        texto, error = gemini_request(payload, timeout=90, system_prompt=CREDIT_ANALYSIS_SYSTEM_PROMPT)
+        texto, error = gemini_request(payload, timeout=40, system_prompt=CREDIT_ANALYSIS_SYSTEM_PROMPT)
         if error:
             return jsonify({"error": error}), 500
 
