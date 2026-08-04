@@ -4773,6 +4773,16 @@ async function analizarCliente() {
   const btn = document.getElementById('btn-analizar');
   const resEl = document.getElementById('analisis-resultado');
   btn.disabled = true; btn.textContent = 'Analizando...'; resEl.style.display = 'none';
+  try { await _analizarClienteInner(cuit, piat, wspThreads, mora, scorePreAnalisis, _fdExcluidas, _fdRazones, btn, resEl); }
+  catch(e) {
+    console.error('[analizarCliente] error inesperado:', e);
+    resEl.style.display = 'block';
+    resEl.innerHTML = '<div style="font-size:13px;color:#64748b;">Error interno: ' + String(e) + '<br>Revisá la consola del navegador (F12) para más detalles.</div>';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Analizar riesgo crediticio →';
+  }
+}
+async function _analizarClienteInner(cuit, piat, wspThreads, mora, scorePreAnalisis, _fdExcluidas, _fdRazones, btn, resEl) {
 
   // ── Lookup por label (robusto: no depende del orden del array detalle) ───────
   function _dv(label) {
@@ -5138,7 +5148,6 @@ async function analizarCliente() {
       + (_esTimeout ? 'El motor de análisis tardó demasiado. Volvé a intentar en un momento.' : 'Análisis no disponible — verificá la conexión e intentá de nuevo.')
       + '</div>';
   }
-  btn.disabled = false; btn.textContent = 'Analizar riesgo crediticio →';
 }
 
 function _extraerMesesCheques() {
