@@ -3324,12 +3324,20 @@ ${datosHistorial}
 3. Mora interna activa con Bodega Piattelli tiene prioridad absoluta — si existe, mencionarla.
 4. Terminá SIEMPRE con la frase exacta del sistema: "${rangoLabel}"`;
 
+  const _ctrl = new AbortController();
+  const _toutId = setTimeout(() => _ctrl.abort(), 55000);
   try {
-    const resp = await fetch(API + '/analizar', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ prompt, rangoMin, rangoMax, rangoDecision })
-    });
+    let resp;
+    try {
+      resp = await fetch(API + '/analizar', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ prompt, rangoMin, rangoMax, rangoDecision }),
+        signal:  _ctrl.signal
+      });
+    } finally {
+      clearTimeout(_toutId);
+    }
     const data = await resp.json();
     const iaEl = document.getElementById('ia-texto'), loadEl = document.getElementById('ia-loading');
     if (iaEl && loadEl) {
@@ -3339,8 +3347,12 @@ ${datosHistorial}
       if (!data.texto) iaEl.style.color = 'var(--text2)';
     }
   } catch(e) {
+    clearTimeout(_toutId);
     const l = document.getElementById('ia-loading');
-    if (l) l.innerHTML = '<span style="color:var(--text2);font-size:12px">Error generando análisis</span>';
+    const msg = (e.name === 'AbortError')
+      ? 'El análisis tardó demasiado. Intentá de nuevo.'
+      : 'Error generando análisis';
+    if (l) l.innerHTML = '<span style="color:var(--text2);font-size:12px">' + msg + '</span>';
   }
 }
 
