@@ -2236,14 +2236,15 @@ def _inferir_desde_bcra(cuit):
     return None
 
 
-def get_solvency_data(cuit):
+def get_solvency_data(cuit, cache_only=False):
     """
-    Solvencia multi-fuente con cadena de fallback activo. Caché 24h.
+    Solvencia multi-fuente con cadena de fallback activo. Caché 7 días.
       0. ARCA oficial (WSAA + Padrón A13, con A5 de respaldo) — canal autorizado
       1. API configurada (env var)
       2. TangoFactura AFIP JSON — extrae cat, actividad, empleador, antigüedad
       3. AFIP HTML scraper — endpoints públicos con UA rotativo
       4. Inferencia desde deuda BCRA — si el banco prestó $X, el cliente tiene ingresos
+    cache_only=True: retorna solo desde disco, sin llamadas de red (para modo masivo).
     """
     cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
     cache_path  = os.path.join(DATA_DIR, f'solvency_{cuit_limpio}.json')
@@ -2251,7 +2252,7 @@ def get_solvency_data(cuit):
         if os.path.exists(cache_path):
             with open(cache_path, 'r') as f:
                 cached = json.load(f)
-            if time.time() - cached.get('ts', 0) < 86400:
+            if time.time() - cached.get('ts', 0) < 86400 * 7:  # 7 días — dato fiscal es estable
                 cached_data = cached.get('data') or {}
                 # Normalizar: caché antiguo pudo guardar lista en lugar de dict
                 if isinstance(cached_data, list):
@@ -2286,6 +2287,9 @@ def get_solvency_data(cuit):
                         except: pass
                 return cached_data or None
     except: pass
+
+    if cache_only:
+        return None  # no hacer llamada de red en modo masivo
 
     ua   = random.choice(_USER_AGENTS)
     data = None
@@ -4213,8 +4217,26 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
 
     # ── Reunir la rama fiscal (ya venía corriendo en paralelo) ─────────────
     if _th_solv is None:
-        # sin_arca=True: no se lanzó thread — solvencia vacía, degrada gracefully.
-        solvency_data = {}
+        # sin_arca=True: no hace llamadas de red.
+        # Prioridad 1: caché en disco (datos de consultas individuales previas, TTL 7d).
+        #   → score idéntico al individual para clientes ya consultados esta semana.
+        # Prioridad 2: inferir tipo_persona desde prefijo CUIT (determinístico).
+        #   → cierra el gap Layer 2 (120 neutro → 300 JURIDICA / 120 FISICA)
+        #     sin necesidad de ARCA, porque el tipo de persona no requiere validación externa.
+        _cached_solv = get_solvency_data(cuit_limpio, cache_only=True)
+        if isinstance(_cached_solv, dict) and _cached_solv:
+            solvency_data = _cached_solv
+            print(f"[score] {cuit_limpio} sin_arca=True — solvencia desde caché disco", flush=True)
+        else:
+            _pref = cuit_limpio[:2]
+            if _pref in ('30', '33', '34'):
+                solvency_data = {'tipo_persona': 'JURIDICA', 'fuente': 'cuit_prefix'}
+            elif _pref in ('20', '23', '24', '27'):
+                solvency_data = {'tipo_persona': 'FISICA', 'fuente': 'cuit_prefix'}
+            else:
+                solvency_data = {}
+            print(f"[score] {cuit_limpio} sin_arca=True — solvencia inferida desde prefijo CUIT "
+                  f"(tipo={solvency_data.get('tipo_persona','desconocido')})", flush=True)
     else:
         _th_solv.join(timeout=25)
         if _th_solv.is_alive():
