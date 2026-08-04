@@ -4604,11 +4604,9 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
     }).catch(function(){});
   });
   var _bcraInd = '';
-  // max_sit autoritativo: preferir scoreObjFinal (tiene datos frescos de score)
-  // sobre maxSit del closure (que viene del fetch inicial que puede haber fallado)
-  var _sitReal = (scoreObjFinal && scoreObjFinal.max_sit != null)
-    ? scoreObjFinal.max_sit
-    : maxSit;
+  // maxSit viene del fetch inicial de BCRA — es el dato disponible en este punto
+  // sincrónico (el score todavía no resolvió su Promise cuando este código corre).
+  var _sitReal = maxSit;
   if (esTimeout) {
     _bcraInd = '<div class="bcra-indicator warn"><span class="bcra-ind-icon">⚠️</span><div><div class="bcra-ind-text">BCRA sin respuesta</div><div class="bcra-ind-sub">El servicio no respondió. Puede no tener deudas registradas. Intentá de nuevo.</div></div></div>';
     document.getElementById('bcra-data').innerHTML = _bcraInd;
@@ -4903,7 +4901,7 @@ async function _analizarClienteInner(cuit, piat, wspThreads, mora, scorePreAnali
       historialBCRATexto += '\nMONTO VIGENTE POR ENTIDAD (citar SOLO estos valores en el informe):\n';
       _ents.forEach(function(ent) {
         var _cur = _mapaEnt[ent][0]; // primer elemento = más reciente (array desc)
-        var _ms = _cur.periodo.slice(4,6) + '/' + _cur.periodo.slice(0,4);
+        var _ms = String(_cur.periodo).slice(4,6) + '/' + String(_cur.periodo).slice(0,4);
         historialBCRATexto += '  ' + ent + ': ' + '$' + (_cur.monto * 1000).toLocaleString('es-AR') + ' — Sit.' + _cur.sit + ' (' + _ms + ')\n';
       });
       // Detalle cronológico: montos solo en período más reciente y en Sit>=2 (para REGLA 2B)
@@ -4911,7 +4909,7 @@ async function _analizarClienteInner(cuit, piat, wspThreads, mora, scorePreAnali
       _ents.forEach(function(ent) {
         historialBCRATexto += '\n' + ent + ':\n';
         _mapaEnt[ent].forEach(function(r, ri) {
-          var _ms2 = r.periodo.slice(4,6) + '/' + r.periodo.slice(0,4);
+          var _ms2 = String(r.periodo).slice(4,6) + '/' + String(r.periodo).slice(0,4);
           var _showMonto = ri === 0 || r.sit >= 2;
           var _montoStr = _showMonto ? ' | ' + '$' + (r.monto * 1000).toLocaleString('es-AR') : '';
           var _diasStr  = r.dias > 0 ? ' | ' + r.dias + 'd atraso' : '';
