@@ -4558,11 +4558,22 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
       // Cargar solvencia de forma asíncrona (no bloquea el score)
       renderExposicionSistema();
       // Renderizar gráfico BCRA histórico
-      var _periHist = [];
-      if (historial && historial.results && Array.isArray(historial.results.periodos) && historial.results.periodos.length)
-        _periHist = historial.results.periodos;
-      else if (window._ultimoBcraData && window._ultimoBcraData.results && Array.isArray(window._ultimoBcraData.results.periodos) && window._ultimoBcraData.results.periodos.length)
-        _periHist = window._ultimoBcraData.results.periodos;
+      // Estrategia: live BCRA pisa al bulk para períodos coincidentes (el banco puede
+      // actualizar su situación después de que el BCRA publica el archivo bulk mensual).
+      // Resultado: el timeline siempre refleja la situación real más reciente.
+      var _livePer  = (window._ultimoBcraData && window._ultimoBcraData.results && window._ultimoBcraData.results.periodos) || [];
+      var _bulkPer  = (historial && historial.results && historial.results.periodos) || [];
+      var _periMergeMap = {};
+      _bulkPer.forEach(function(p) {
+        var k = String(p.periodo || '').trim();
+        if (/^\d{6}$/.test(k)) _periMergeMap[k] = p;
+      });
+      _livePer.forEach(function(p) {  // live BCRA es autoridad — pisa bulk en períodos iguales
+        var k = String(p.periodo || '').trim();
+        if (/^\d{6}$/.test(k)) _periMergeMap[k] = p;
+      });
+      var _periHist = Object.values(_periMergeMap);
+      if (!_periHist.length) _periHist = _livePer.length ? _livePer : _bulkPer;
       renderBcraHistoryChart(_periHist);
       renderBcraHeatmap(_periHist);
       // Si cheques llegaron con el score, re-renderizar el gráfico para mostrar
