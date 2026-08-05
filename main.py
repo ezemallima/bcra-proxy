@@ -9060,13 +9060,21 @@ def get_cheques(cuit):
     if cached:
         print(f"[cheques] {cuit_limpio} desde caché", flush=True)
         return jsonify(cached), 200
-    # DB local (snapshot diario BCRA) — fuente autoritativa sin latencia de red
+    # DB local (snapshot diario BCRA) — fuente autoritativa para cheques activos (sin pagar).
+    # IMPORTANTE: el snapshot diario solo contiene cheques que están actualmente impagos.
+    # Si el cheque fue pagado recientemente, ya no aparece en el bulk aunque exista historial.
+    # Por eso: si encontramos causales activos → usar bulk (sin latencia de red).
+    # Si el bulk devuelve 0 → igualmente caer a la API en vivo para capturar historial completo.
     local_db = get_cheques_local(cuit_limpio)
     if local_db is not None:
-        _cheques_cache_set(cuit_limpio, local_db)
         n_ch = len((local_db.get('results') or {}).get('causales') or [])
-        print(f"[cheques] {cuit_limpio} desde DB local (causales={n_ch})", flush=True)
-        return jsonify(local_db), 200
+        if n_ch > 0:
+            _cheques_cache_set(cuit_limpio, local_db)
+            print(f"[cheques] {cuit_limpio} desde DB local (causales={n_ch})", flush=True)
+            return jsonify(local_db), 200
+        # causales=0: el snapshot diario no lo tiene activo. Puede que el cheque haya sido
+        # pagado ayer y ya salió del bulk. Verificar BCRA en vivo para historial completo.
+        print(f"[cheques] {cuit_limpio} DB local sin cheques activos — verificando historial BCRA en vivo", flush=True)
     # Workers + BCRA en paralelo — el primero que responda gana
     def _fetch_chq(url, tmt, via):
         try:
