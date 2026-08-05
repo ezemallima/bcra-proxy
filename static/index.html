@@ -4325,6 +4325,21 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
     var historial     = resultados[0];
     var scoreServidor = resultados[1];
     if (historial) window._ultimoHistorial = historial;
+    // Corregir banner "Sin actividad bancaria" si el historial sí tiene períodos activos.
+    // mostrarResultado corrió antes con solo el período actual (sin deudas → sin entidades)
+    // y puso el banner amarillo. Si el historial de 24m tiene deuda real en algún mes,
+    // el cliente NO es un fantasma crediticio — tiene historial, solo está al día hoy.
+    if (_sinActividad && historial && historial.results && historial.results.periodos) {
+      var _tieneActH = historial.results.periodos.some(function(p) {
+        return (p.entidades||[]).some(function(e){ return (e.monto||0) > 0; });
+      });
+      if (_tieneActH) {
+        var _vrdEl = document.getElementById('verdict-container');
+        if (_vrdEl && _vrdEl.innerHTML.indexOf('Sin actividad bancaria') >= 0) {
+          _vrdEl.innerHTML = '<div class="verdict-compact aprobar"><span class="vc-icon">✅</span><span class="vc-text">Situación Normal — Sin deudas activas registradas</span></div>';
+        }
+      }
+    }
     // CUIT inexistente detectado por el backend — solo bloquear si además
     // el cliente NO está en la cartera local (clientes propios sin historial
     // BCRA son válidos aunque AFIP no los devuelva)
