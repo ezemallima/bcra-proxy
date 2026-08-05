@@ -10443,8 +10443,10 @@ def get_saldos_cuit(cuit):
         cn = _norm_nombre(nombre_en_cartera)
         result = [f for f in fuente_g if _norm_nombre(f.get('cliente', '')) == cn]
         if not result:
-            # Fuzzy: match ≥2 palabras significativas
-            palabras = [p for p in cn.split() if len(p) > 2]
+            # Fuzzy: match ≥2 palabras significativas (excluyendo sufijos societarios).
+            # "WINE BAR SRL" → ["WINE","BAR"] — "SRL" no discrimina porque aparece en
+            # miles de razones sociales y genera falsos positivos con clientes sin relación.
+            palabras = [p for p in cn.split() if len(p) > 2 and p not in _DSO_SUFIJOS]
             if palabras:
                 result = [f for f in fuente_g
                           if sum(1 for p in palabras
