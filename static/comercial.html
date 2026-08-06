@@ -1042,6 +1042,11 @@ async function cargarZipFacturasStatus() {
                 style="background:none;border:1px solid var(--border);border-radius:8px;padding:7px 11px;font-size:12px;color:var(--text2);cursor:pointer;font-family:'Inter',sans-serif;">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg> Scores
         </button>
+        <button id="btn-descarga-cc" onclick="descargarCuentaCorriente(this)"
+                title="Descargar cuenta corriente en Excel"
+                style="background:none;border:1px solid var(--border);border-radius:8px;padding:7px 11px;font-size:12px;color:var(--text2);cursor:pointer;font-family:'Inter',sans-serif;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Excel
+        </button>
       </div>
 
       <!-- Filtro por vendedor — visible solo para supervisores (JS lo muestra/construye) -->
@@ -1591,6 +1596,21 @@ async function actualizarScores(btn) {
     }
   } catch(e) { btn.textContent = '!'; }
   setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 3000);
+}
+
+// Descarga la cuenta corriente (facturas con saldo pendiente) en Excel.
+// Fuente: mismo Excel de saldos ya subido — el backend solo lo reformatea, sin
+// volver a pedir ningún archivo. Supervisores descargan la cartera de su equipo.
+function descargarCuentaCorriente(btn) {
+  if (!SESSION || !SESSION.nombre) return;
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '⏳…';
+  const url = (SESSION.rol === 'supervisor' && SESSION.cuit)
+    ? API + '/api/cuenta-corriente-excel-equipo/' + encodeURIComponent(SESSION.cuit)
+    : API + '/api/cuenta-corriente-excel/' + encodeURIComponent(SESSION.nombre);
+  window.location.href = url;
+  setTimeout(() => { btn.disabled = false; btn.innerHTML = orig; }, 1500);
 }
 
 async function forzarRecalculo(cuit, btn) {

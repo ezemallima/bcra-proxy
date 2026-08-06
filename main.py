@@ -5830,6 +5830,76 @@ def get_cartera_por_vendedor(vendedor):
     resp.headers['Cache-Control'] = 'no-store'
     return resp
 
+
+@app.route("/api/cuenta-corriente-excel/<vendedor>")
+def cuenta_corriente_excel(vendedor):
+    """Exporta a Excel la cuenta corriente (facturas con saldo pendiente) de un vendedor.
+
+    Misma fuente que /cartera-por-vendedor: _saldos_gestion (fallback _saldos_facturas),
+    el resultado ya parseado del último Excel de saldos subido — no se vuelve a leer
+    ningún archivo, solo se reformatea lo que ya está en memoria.
+    """
+    _saldos_gestion_desde_disco()   # sincroniza si otro worker subió datos
+    from urllib.parse import unquote
+    import io, re, openpyxl
+    from openpyxl.styles import Font
+    from flask import send_file
+
+    v = unquote(vendedor).strip()
+    v_norm = _norm_nombre(v)
+    if not v_norm:
+        return jsonify({"ok": False, "error": "Vendedor vacío"}), 400
+
+    fuente = _saldos_gestion if _saldos_gestion else _saldos_facturas
+    filas = [
+        f for f in fuente
+        if isinstance(f, dict) and _norm_nombre(f.get('vendedor') or '') == v_norm
+    ]
+    filas.sort(key=lambda f: (str(f.get('cliente') or ''), str(f.get('fechaFactura') or '')))
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Cuenta corriente"
+    ws.append(['Cliente', 'N° Factura', 'Fecha Emisión', 'Fecha Vencimiento', 'Total Factura', 'Saldo Pendiente'])
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+
+    total_general = 0.0
+    for f in filas:
+        saldo = float(f.get('saldo') or 0)
+        total_general += saldo
+        ws.append([
+            f.get('cliente') or '',
+            f.get('nroFactura') or '',
+            f.get('fechaFactura') or '',
+            f.get('fechaPago') or '',
+            float(f.get('totalFactura') or 0),
+            saldo,
+        ])
+
+    ws.append([])
+    ws.append(['', '', '', '', 'TOTAL', round(total_general, 2)])
+    ws.cell(row=ws.max_row, column=5).font = Font(bold=True)
+    ws.cell(row=ws.max_row, column=6).font = Font(bold=True)
+
+    for i, ancho in enumerate([32, 18, 14, 16, 16, 16], start=1):
+        ws.column_dimensions[chr(64 + i)].width = ancho
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    slug = re.sub(r'[^A-Za-z0-9]+', '_', v).strip('_') or 'vendedor'
+    nombre_archivo = f"cuenta_corriente_{slug}_{time.strftime('%Y%m%d')}.xlsx"
+
+    return send_file(
+        buf,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=nombre_archivo,
+    )
+
+
 @app.route("/cartera-comercial/<vendedor>")
 def get_cartera_comercial(vendedor):
     from urllib.parse import unquote
@@ -6163,6 +6233,81 @@ def api_supervisor_cartera(cuit_supervisor):
     })
     resp.headers['Cache-Control'] = 'no-store'
     return resp
+
+
+@app.route("/api/cuenta-corriente-excel-equipo/<cuit_supervisor>")
+def cuenta_corriente_excel_equipo(cuit_supervisor):
+    """Exporta a Excel la cuenta corriente de todo el equipo de un supervisor.
+
+    Mismo criterio de autorización y misma fuente de datos que /api/supervisor-cartera:
+    _SUPERVISOR_MAP para resolver el equipo, _saldos_gestion (fallback _saldos_facturas)
+    para las facturas con saldo pendiente.
+    """
+    _saldos_gestion_desde_disco()
+    import io, openpyxl
+    from openpyxl.styles import Font
+    from flask import send_file
+
+    cuit_n = str(cuit_supervisor).replace('-', '').replace(' ', '').strip()
+    sup_info = _SUPERVISOR_MAP.get(cuit_n)
+    if not sup_info:
+        return jsonify({"ok": False, "error": "CUIT no autorizado como supervisor"}), 403
+
+    nombres_equipo = [sup_info['nombre']] + sup_info['supervisa']
+    nombres_norm = {_norm_nombre(n) for n in nombres_equipo}
+
+    fuente = _saldos_gestion if _saldos_gestion else _saldos_facturas
+    filas = [
+        f for f in fuente
+        if isinstance(f, dict) and _norm_nombre(f.get('vendedor') or '') in nombres_norm
+    ]
+    filas.sort(key=lambda f: (
+        _norm_nombre(f.get('vendedor') or ''),
+        str(f.get('cliente') or ''),
+        str(f.get('fechaFactura') or ''),
+    ))
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Cuenta corriente equipo"
+    ws.append(['Vendedor', 'Cliente', 'N° Factura', 'Fecha Emisión', 'Fecha Vencimiento', 'Total Factura', 'Saldo Pendiente'])
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+
+    total_general = 0.0
+    for f in filas:
+        saldo = float(f.get('saldo') or 0)
+        total_general += saldo
+        ws.append([
+            f.get('vendedor') or '',
+            f.get('cliente') or '',
+            f.get('nroFactura') or '',
+            f.get('fechaFactura') or '',
+            f.get('fechaPago') or '',
+            float(f.get('totalFactura') or 0),
+            saldo,
+        ])
+
+    ws.append([])
+    ws.append(['', '', '', '', '', 'TOTAL', round(total_general, 2)])
+    ws.cell(row=ws.max_row, column=6).font = Font(bold=True)
+    ws.cell(row=ws.max_row, column=7).font = Font(bold=True)
+
+    for i, ancho in enumerate([22, 32, 18, 14, 16, 16, 16], start=1):
+        ws.column_dimensions[chr(64 + i)].width = ancho
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    nombre_archivo = f"cuenta_corriente_equipo_{time.strftime('%Y%m%d')}.xlsx"
+
+    return send_file(
+        buf,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=nombre_archivo,
+    )
 
 
 @app.route("/api-v17-scores", methods=["GET"])
