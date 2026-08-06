@@ -4197,14 +4197,22 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
                 _cheques_cache_set(cuit_limpio, cheq_data)
                 print(f"[score] cheq {cuit_limpio} desde DB local", flush=True)
         if not cheq_data:
-            # Timeout corto para no bloquear el endpoint
-            _cd, _ = _consultar_bcra_directo(cuit_limpio, 'cheques', timeout_per_req=8, max_intentos=1)
-            if _cd:
-                cheq_data = _cd
-                try:
-                    with open(os.path.join(DATA_DIR, f'cheques_{cuit_limpio}.json'), 'w') as f:
-                        json.dump({'payload': cheq_data, 'ts': time.time()}, f)
-                except: pass
+            if sin_arca:
+                # MASIVA: nunca golpear la API en vivo del BCRA acá — mismo motivo
+                # que el historial (comparte el semáforo global de 2 permisos con
+                # las consultas individuales; un BCRA lento trabaría todo el batch).
+                # Si la DB local de cheques no tiene al CUIT, sigue sin antecedentes.
+                print(f"[score] cheq {cuit_limpio} sin datos en DB local — "
+                      f"se omite en modo masivo (evita bloqueo en API en vivo)", flush=True)
+            else:
+                # INDIVIDUAL: timeout corto para no bloquear el endpoint
+                _cd, _ = _consultar_bcra_directo(cuit_limpio, 'cheques', timeout_per_req=8, max_intentos=1)
+                if _cd:
+                    cheq_data = _cd
+                    try:
+                        with open(os.path.join(DATA_DIR, f'cheques_{cuit_limpio}.json'), 'w') as f:
+                            json.dump({'payload': cheq_data, 'ts': time.time()}, f)
+                    except: pass
     except Exception as _cheq_err:
         print(f"[cheques][FALLBACK] {cuit_limpio}: error en módulo cheques ({_cheq_err}) — score continúa sin antecedentes", flush=True)
         cheq_data = None
@@ -6672,10 +6680,11 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
 
     # ═══════════════════════════════════════════════════════════════════════
     # FASE 1.9 — Cargar score_cache.json para reutilizar scores de consultas
-    # individuales recientes. Si un cliente fue consultado en vivo en los últimos
-    # 7 días (bcra_cache tiene su entrada con ts fresco), su score ya fue calculado
-    # con datos reales del BCRA — el proceso integral lo usa directamente en vez
-    # de recalcular con bulk y producir un score diferente.
+    # individuales MUY recientes (ventana corta — ver _SCORE_CACHE_TTL_PI).
+    # La verificación masiva tiene que recorrer bulk+cheques+saldos 1x1 para
+    # todos los clientes en cada corrida; este reuso es solo para no duplicar
+    # trabajo si alguien consultó a un cliente segundos/minutos antes de lanzar
+    # la masiva (doble click, o revisar uno y correr todo enseguida).
     # ═══════════════════════════════════════════════════════════════════════
     _score_cache_pi: dict = {}
     try:
@@ -6685,7 +6694,7 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
     except Exception as _sc_load_e:
         print(f"[proceso-integral] FASE 1.9: score_cache.json no disponible: {_sc_load_e}", flush=True)
 
-    _SCORE_CACHE_TTL_PI = 7 * 86400  # 7 días: score de consulta individual es válido
+    _SCORE_CACHE_TTL_PI = 2 * 3600  # 2 horas: solo evita duplicar trabajo inmediato
 
     # ═══════════════════════════════════════════════════════════════════════
     # FASE 2 — Scoring secuencial usando datos ya resueltos (sin I/O BCRA aquí).
