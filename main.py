@@ -4176,18 +4176,16 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
             except Exception as _e_bulk:
                 print(f"[bcra_source] {cuit_limpio} error leyendo bulk local: {_e_bulk}", flush=True)
 
-            # API externa solo si el CUIT no está en el bulk
+            # Sin historial en bulk ni caché: NO golpear la API en vivo del BCRA
+            # acá. Este branch corre secuencial para toda la cartera (miles de
+            # CUITs) y una consulta en vivo comparte el semáforo global de 2
+            # permisos (_bcra_api_sem) con las consultas individuales de otros
+            # usuarios — si el BCRA está lento, el proceso masivo entero queda
+            # esperando sin timeout. El cliente sigue sin historial fresco en
+            # esta corrida; se resuelve al consultarlo individualmente.
             if not hist_data:
                 print(f"[bcra_source] {cuit_limpio} sin historial en bulk local — "
-                      f"consultando API externa", flush=True)
-                _hd, _ = _consultar_bcra_directo(cuit_limpio, 'historial', timeout_per_req=8, max_intentos=1)
-                if _hd:
-                    hist_data = _hd
-                    if (_hd.get('results') or {}).get('periodos'):
-                        try:
-                            with open(os.path.join(DATA_DIR, f'historial_{cuit_limpio}.json'), 'w') as f:
-                                json.dump({'payload': hist_data, 'ts': time.time()}, f)
-                        except: pass
+                      f"se omite en modo masivo (evita bloqueo en API en vivo)", flush=True)
 
     # Módulo cheques — aislado con fallback absoluto.
     # Un timeout o error en este módulo NO debe abortar el cálculo del score.
