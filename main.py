@@ -6675,7 +6675,7 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
     # ═══════════════════════════════════════════════════════════════════════
     # FASE 1.9 — Cargar score_cache.json para reutilizar scores de consultas
     # individuales recientes. Si un cliente fue consultado en vivo en los últimos
-    # 7 días (bcra_cache tiene su entrada con ts fresco), su score ya fue calculado
+    # 30 días (bcra_cache tiene su entrada con ts fresco), su score ya fue calculado
     # con datos reales del BCRA — el proceso integral lo usa directamente en vez
     # de recalcular con bulk y producir un score diferente.
     # ═══════════════════════════════════════════════════════════════════════
@@ -6687,7 +6687,7 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
     except Exception as _sc_load_e:
         print(f"[proceso-integral] FASE 1.9: score_cache.json no disponible: {_sc_load_e}", flush=True)
 
-    _SCORE_CACHE_TTL_PI = 7 * 86400  # 7 días: score de consulta individual es válido
+    _SCORE_CACHE_TTL_PI = 30 * 86400  # 30 días: score de consulta individual es válido
 
     # ═══════════════════════════════════════════════════════════════════════
     # FASE 2 — Scoring secuencial usando datos ya resueltos (sin I/O BCRA aquí).
