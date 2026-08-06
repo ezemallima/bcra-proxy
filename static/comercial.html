@@ -997,6 +997,9 @@ async function cargarZipFacturasStatus() {
       <div class="section-title" id="cartera-title">Mi Cartera</div>
       <div class="section-sub" id="cartera-subtitle">Clientes activos</div>
 
+      <!-- Vigencia de la cuenta corriente: fecha de la última carga de saldos -->
+      <div id="saldos-fecha-info" style="display:none;font-size:11px;color:var(--text3);margin:-10px 0 12px;"></div>
+
       <!-- Banner DSO global de cartera -->
       <div id="cartera-dso-banner" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:10px;"></div>
 
@@ -1136,6 +1139,7 @@ let CARTERA_LOCAL = [];
 let ALERTAS = [];
 let SALDOS_MAP = {};
 let SALDOS_TIMESTAMP = 0;
+let SALDOS_FECHA = null;      // 'DD/MM/YYYY HH:MM' de la última carga de saldos (vigencia de la cuenta corriente)
 let _filtroVendedor = null;   // null = todos; string = nombre.toLowerCase() del vendedor filtrado
 
 // ── LOGIN (reemplazado por login.html + Supabase) ──
@@ -1463,6 +1467,18 @@ async function cargarSaldosCartera(forzar = false) {
     const tsR = await fetch(API + '/saldos-timestamp?v=' + Date.now());
     if (tsR.ok) {
       const tsData = await tsR.json();
+      SALDOS_FECHA = tsData.fecha || null;
+      _actualizarInfoFechaSaldos(SALDOS_FECHA);
+      // Notificar si esta carga es más nueva que la última que este dispositivo vio
+      // (localStorage persiste entre sesiones/pestañas — el vendedor se entera aunque
+      // la actualización haya ocurrido con la app cerrada).
+      if (tsData.ts > 0) {
+        const ultimoVisto = parseFloat(localStorage.getItem('vs_ultimo_saldos_ts') || '0');
+        if (ultimoVisto > 0 && tsData.ts > ultimoVisto) {
+          _mostrarNotifSaldosActualizados(SALDOS_FECHA);
+        }
+        localStorage.setItem('vs_ultimo_saldos_ts', String(tsData.ts));
+      }
       if (!forzar && tsData.ts > 0 && tsData.ts <= SALDOS_TIMESTAMP) return;
       SALDOS_TIMESTAMP = tsData.ts || 0;
     }
@@ -1723,6 +1739,46 @@ function _mostrarAlertaDegradacion(nombres) {
   document.body.appendChild(banner);
   // Auto-cerrar en 30 segundos
   setTimeout(function(){ if (banner.parentNode) banner.remove(); }, 30000);
+}
+
+// Actualiza el texto de vigencia de la cuenta corriente en el tab Cartera.
+// fechaStr viene de /saldos-timestamp como 'DD/MM/YYYY HH:MM'.
+function _actualizarInfoFechaSaldos(fechaStr) {
+  const el = document.getElementById('saldos-fecha-info');
+  if (!el) return;
+  if (!fechaStr) { el.style.display = 'none'; return; }
+  const soloFecha = fechaStr.split(' ')[0] || fechaStr;
+  el.textContent = 'Cuenta corriente al ' + soloFecha;
+  el.style.display = 'block';
+}
+
+// Banner no-modal que avisa cuando se detecta una carga de saldos más nueva
+// que la última vista por este dispositivo (mismo patrón que _mostrarAlertaDegradacion).
+function _mostrarNotifSaldosActualizados(fechaStr) {
+  const existente = document.getElementById('saldos-update-toast');
+  if (existente) existente.remove();
+  const soloFecha = (fechaStr || '').split(' ')[0] || '';
+  const toast = document.createElement('div');
+  toast.id = 'saldos-update-toast';
+  toast.style.cssText = [
+    'position:fixed','top:70px','left:50%','transform:translateX(-50%)',
+    'z-index:9999','max-width:420px','width:90%',
+    'background:#1d4ed8','color:#eff6ff',
+    'border:2px solid #3b82f6','border-radius:12px',
+    'padding:12px 16px','box-shadow:0 8px 32px rgba(0,0,0,0.35)',
+    'font-family:Inter,sans-serif','font-size:13px','line-height:1.5',
+    'cursor:pointer'
+  ].join(';');
+  toast.innerHTML =
+    '<div style="display:flex;align-items:flex-start;gap:10px">' +
+    '<span style="font-size:18px;flex-shrink:0">&#128228;</span>' +
+    '<div><div style="font-weight:700;font-size:13px;margin-bottom:2px">Cuenta corriente actualizada</div>' +
+    '<div>Saldos vigentes al <b>' + esc(soloFecha) + '</b></div>' +
+    '<div style="margin-top:6px;font-size:11px;opacity:.7">Toca para cerrar</div></div></div>';
+  toast.addEventListener('click', function(){ toast.remove(); });
+  document.body.appendChild(toast);
+  // Auto-cerrar en 10 segundos — es informativo, no requiere acción
+  setTimeout(function(){ if (toast.parentNode) toast.remove(); }, 10000);
 }
 
 // ── CARTERA ──
