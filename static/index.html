@@ -6283,7 +6283,11 @@ var _vendedoresCache = null;
 async function _cargarVendedores() {
   if (_vendedoresCache) return _vendedoresCache;
   try {
-    var r = await fetch('/vendedores');
+    // Timeout explícito: sin esto, una red lenta o un cold start del server
+    // deja este fetch colgado para siempre y editarCliente() nunca llega a
+    // abrir el modal — el botón "Editar" parece no hacer nada, sin ningún
+    // error en consola.
+    var r = await fetch('/vendedores', {signal: AbortSignal.timeout(8000)});
     if (r.ok) { _vendedoresCache = await r.json(); return _vendedoresCache; }
   } catch(e) {}
   _vendedoresCache = [...new Set(cartera.map(c => c.vendedor).filter(Boolean))].sort();
