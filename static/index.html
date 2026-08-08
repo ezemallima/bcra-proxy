@@ -6295,26 +6295,33 @@ async function _cargarVendedores() {
 }
 
 async function editarCliente(cuit) {
-  var c = cartera.find(function(x){ return x.cuit === String(cuit); });
-  if (!c) { alert('Cliente no encontrado en cartera local'); return; }
-  var vendedores = await _cargarVendedores();
-  var sel = document.getElementById('editar-vendedor');
-  sel.innerHTML = '<option value="">-- Sin asignar --</option>' +
-    vendedores.map(function(vn) {
-      return '<option value="' + vn + '"' + (vn === (c.vendedor||'') ? ' selected' : '') + '>' + vn + '</option>';
-    }).join('');
-  if (c.vendedor && !vendedores.includes(c.vendedor)) {
-    sel.innerHTML += '<option value="' + c.vendedor + '" selected>' + c.vendedor + '</option>';
+  try {
+    var c = cartera.find(function(x){ return x.cuit === String(cuit); });
+    if (!c) { alert('Cliente no encontrado en cartera local'); return; }
+    var vendedores = await _cargarVendedores();
+    var sel = document.getElementById('editar-vendedor');
+    sel.innerHTML = '<option value="">-- Sin asignar --</option>' +
+      vendedores.map(function(vn) {
+        return '<option value="' + vn + '"' + (vn === (c.vendedor||'') ? ' selected' : '') + '>' + vn + '</option>';
+      }).join('');
+    if (c.vendedor && !vendedores.includes(c.vendedor)) {
+      sel.innerHTML += '<option value="' + c.vendedor + '" selected>' + c.vendedor + '</option>';
+    }
+    document.getElementById('editar-cuit-original').value = cuit;
+    document.getElementById('editar-nombre').value = c.nombre || '';
+    document.getElementById('editar-cuit').value = c.cuit || '';
+    document.getElementById('editar-ciudad').value = c.ciudad || '';
+    document.getElementById('editar-limite').value = c.limiteCredito || c.limiteCreditoARS || '';
+    document.getElementById('editar-plazo').value = c.plazoDias || c.plazo || '';
+    document.getElementById('editar-error').style.display = 'none';
+    document.getElementById('modal-editar-titulo').textContent = 'Editar: ' + c.nombre;
+    document.getElementById('modal-editar-cliente').style.display = 'flex';
+  } catch (e) {
+    // Sin este catch, cualquier excepción acá deja el boton "Editar" sin
+    // ningún efecto visible y sin pista en pantalla de qué pasó.
+    console.error('[editarCliente] error:', e);
+    alert('No se pudo abrir el editor de cliente.\n\nError: ' + e.message);
   }
-  document.getElementById('editar-cuit-original').value = cuit;
-  document.getElementById('editar-nombre').value = c.nombre || '';
-  document.getElementById('editar-cuit').value = c.cuit || '';
-  document.getElementById('editar-ciudad').value = c.ciudad || '';
-  document.getElementById('editar-limite').value = c.limiteCredito || c.limiteCreditoARS || '';
-  document.getElementById('editar-plazo').value = c.plazoDias || c.plazo || '';
-  document.getElementById('editar-error').style.display = 'none';
-  document.getElementById('modal-editar-titulo').textContent = 'Editar: ' + c.nombre;
-  document.getElementById('modal-editar-cliente').style.display = 'flex';
 }
 
 function cerrarModalEditar() {
