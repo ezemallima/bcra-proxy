@@ -1031,37 +1031,6 @@
       </div>
     </div>
 
-    <!-- Modal editar cliente -->
-    <div id="modal-editar-cliente" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;align-items:center;justify-content:center;">
-      <div style="background:#fff;border-radius:14px;padding:24px;width:92%;max-width:480px;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-          <h3 style="margin:0;font-size:16px;font-weight:700;" id="modal-editar-titulo">Editar Cliente</h3>
-          <button onclick="cerrarModalEditar()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#64748b;line-height:1;">×</button>
-        </div>
-        <input type="hidden" id="editar-cuit-original" />
-        <div style="display:flex;flex-direction:column;gap:12px;">
-          <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Razón Social *</label>
-            <input id="editar-nombre" type="text" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" /></div>
-          <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">CUIT *</label>
-            <input id="editar-cuit" type="text" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" /></div>
-          <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Ciudad</label>
-            <input id="editar-ciudad" type="text" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" /></div>
-          <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Vendedor Asignado *</label>
-            <select id="editar-vendedor" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;background:#fff;color:#1e293b;"></select></div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-            <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Límite de Crédito ($)</label>
-              <input id="editar-limite" type="number" min="0" placeholder="ej: 500000" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" /></div>
-            <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Plazo de Crédito (días)</label>
-              <input id="editar-plazo" type="number" min="0" placeholder="ej: 30" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" /></div>
-          </div>
-        </div>
-        <div id="editar-error" style="display:none;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 12px;font-size:13px;color:#991b1b;margin-top:12px;"></div>
-        <div style="display:flex;gap:10px;margin-top:20px;">
-          <button onclick="guardarEdicionCliente()" class="primary" style="flex:1;padding:11px;" id="btn-guardar-edicion">Guardar cambios</button>
-          <button onclick="cerrarModalEditar()" style="flex:1;padding:11px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;cursor:pointer;font-size:14px;font-weight:600;">Cancelar</button>
-        </div>
-      </div>
-    </div>
     <div class="buscador-wrap">
       <svg class="buscador-ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       <input type="text" id="buscar-cartera-admin" class="buscador-input" placeholder="Buscar cliente por nombre o CUIT..." oninput="filtrarListaCartera(this.value)" translate="no" autocomplete="off" spellcheck="false" />
@@ -8087,6 +8056,42 @@ document.addEventListener('DOMContentLoaded', function() {
     <div style="display:flex;gap:10px;margin-top:20px;">
       <button onclick="confirmarAgregarCliente()" class="primary" style="flex:1;padding:11px;" id="btn-confirmar-agregar">Confirmar alta</button>
       <button onclick="cerrarModalAgregar()" style="flex:1;padding:11px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;cursor:pointer;font-size:14px;font-weight:600;">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal editar cliente: vive fuera de cualquier .section porque switchTab('cartera')
+     redirige siempre a 'buscador' (linea ~3706), asi que la vieja seccion #cartera
+     nunca recibe la clase .active y queda en display:none para siempre. Si este modal
+     sigue anidado ahi adentro, editarCliente() marca su display:flex correctamente pero
+     el elemento nunca se pinta (rect 0x0) porque el ancestro esta oculto. -->
+<div id="modal-editar-cliente" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:14px;padding:24px;width:92%;max-width:480px;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+      <h3 style="margin:0;font-size:16px;font-weight:700;" id="modal-editar-titulo">Editar Cliente</h3>
+      <button onclick="cerrarModalEditar()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#64748b;line-height:1;">×</button>
+    </div>
+    <input type="hidden" id="editar-cuit-original" />
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Razón Social *</label>
+        <input id="editar-nombre" type="text" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" /></div>
+      <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">CUIT *</label>
+        <input id="editar-cuit" type="text" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" /></div>
+      <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Ciudad</label>
+        <input id="editar-ciudad" type="text" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" /></div>
+      <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Vendedor Asignado *</label>
+        <select id="editar-vendedor" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;background:#fff;color:#1e293b;"></select></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Límite de Crédito ($)</label>
+          <input id="editar-limite" type="number" min="0" placeholder="ej: 500000" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" /></div>
+        <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Plazo de Crédito (días)</label>
+          <input id="editar-plazo" type="number" min="0" placeholder="ej: 30" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" /></div>
+      </div>
+    </div>
+    <div id="editar-error" style="display:none;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 12px;font-size:13px;color:#991b1b;margin-top:12px;"></div>
+    <div style="display:flex;gap:10px;margin-top:20px;">
+      <button onclick="guardarEdicionCliente()" class="primary" style="flex:1;padding:11px;" id="btn-guardar-edicion">Guardar cambios</button>
+      <button onclick="cerrarModalEditar()" style="flex:1;padding:11px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;cursor:pointer;font-size:14px;font-weight:600;">Cancelar</button>
     </div>
   </div>
 </div>
