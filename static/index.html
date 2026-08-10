@@ -1005,7 +1005,8 @@
 
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="primary" onclick="analizarCliente()" id="btn-analizar" style="flex:1;">Analizar riesgo crediticio →</button>
-        <button onclick="exportarReporte()" id="btn-export" style="display:none;">Exportar PDF</button>
+        <button onclick="exportarReporte(false)" id="btn-export-basico" style="display:none;">Exportar PDF</button>
+        <button onclick="exportarReporte(true)" id="btn-export" style="display:none;">Exportar PDF con análisis IA</button>
       </div>
     </div>
   </div>
@@ -3743,6 +3744,7 @@ async function consultarCliente() {
   if (_btnNC) _btnNC.style.display = '';
   document.getElementById('analisis-resultado').style.display = 'none';
   document.getElementById('btn-export').style.display = 'none';
+  document.getElementById('btn-export-basico').style.display = 'none';
   // Limpiar todos los contenedores de resultados
   var resetIds = [
     'cliente-header','verdict-container','bcra-data',
@@ -4444,6 +4446,9 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
       // Restaurar botón de análisis IA (se ocultó al iniciar la búsqueda)
       var _btnAn = document.getElementById('btn-analizar');
       if (_btnAn) _btnAn.style.display = '';
+      // El PDF básico (sin IA) está disponible apenas hay score, sin esperar el análisis
+      var _btnExpBasico = document.getElementById('btn-export-basico');
+      if (_btnExpBasico) _btnExpBasico.style.display = 'inline-block';
       // Cargar solvencia de forma asíncrona (no bloquea el score)
       renderExposicionSistema();
       // Renderizar gráfico BCRA histórico
@@ -5151,12 +5156,43 @@ async function buildBcraChartImage() {
   });
 }
 
-async function exportarReporte() {
-  if (!ultimoAnalisis) return;
-  const btn = document.getElementById('btn-export');
+// Rasteriza el isotipo VS (SVG) a PNG una sola vez, para poder incrustarlo en el PDF con jsPDF.addImage
+// (jsPDF no rasteriza SVG directamente — se dibuja en un canvas oculto y se toma el PNG resultante).
+let _vsLogoPDFDataUrl = null;
+function _cargarLogoPDF() {
+  if (_vsLogoPDFDataUrl) return Promise.resolve(_vsLogoPDFDataUrl);
+  return new Promise(function(resolve) {
+    var img = new Image();
+    img.onload = function() {
+      try {
+        var c = document.createElement('canvas');
+        c.width = 256; c.height = 256;
+        var ctx = c.getContext('2d');
+        ctx.drawImage(img, 0, 0, 256, 256);
+        _vsLogoPDFDataUrl = c.toDataURL('image/png');
+      } catch (e) {
+        console.warn('[VS] No se pudo rasterizar el logo para el PDF:', e);
+        _vsLogoPDFDataUrl = null;
+      }
+      resolve(_vsLogoPDFDataUrl);
+    };
+    img.onerror = function() { resolve(null); };
+    img.src = '/static/logo.svg';
+  });
+}
+
+async function exportarReporte(conIA) {
+  if (conIA === undefined) conIA = true;
+  if (conIA && !ultimoAnalisis) {
+    alert('Corré el análisis de riesgo con IA primero, o usá "Exportar PDF" para el informe sin análisis.');
+    return;
+  }
+  const btn = document.getElementById(conIA ? 'btn-export' : 'btn-export-basico');
+  const btnLabel = conIA ? 'Exportar PDF con análisis IA' : 'Exportar PDF';
   if (btn) { btn.disabled = true; btn.textContent = 'Generando…'; }
 
   const { jsPDF } = window.jspdf;
+  const logoUrl = await _cargarLogoPDF();
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const W = 210, H = 297;
 
@@ -5164,6 +5200,7 @@ async function exportarReporte() {
   const cuitFmt = raw.length === 11 ? raw.slice(0,2)+'-'+raw.slice(2,10)+'-'+raw.slice(10) : raw;
   const mora = buscarEnMoras ? buscarEnMoras(raw) : null;
   const bodega = getNombreBodega();
+  const fecha = (conIA && ultimoAnalisis && ultimoAnalisis.fecha) || new Date().toLocaleDateString('es-AR');
 
   var nombre = '';
   if (verazData && verazData.nombre) nombre = verazData.nombre;
@@ -5171,9 +5208,9 @@ async function exportarReporte() {
   if (!nombre) { var enCar = cartera.find(function(c){ return c.cuit.replace(/-/g,'') === raw; }); if (enCar) nombre = enCar.nombre; }
   if (!nombre) nombre = raw;
 
-  var scoreVal = ultimoAnalisis.score || 0;
+  var scoreVal = (ultimoAnalisis && ultimoAnalisis.score) || 0;
   if (!scoreVal && window._ultimoScoreVende) scoreVal = window._ultimoScoreVende.score || 0;
-  var scoreRango = ultimoAnalisis.rango || '';
+  var scoreRango = (ultimoAnalisis && ultimoAnalisis.rango) || '';
   var scoreRGB = [100,116,139];
   if (!scoreRango) {
     if      (scoreVal >= 750) { scoreRango = 'Excelente';   scoreRGB = [22,101,52]; }
@@ -5189,29 +5226,38 @@ async function exportarReporte() {
     else if (scoreRango === 'Rechazar')    scoreRGB = [127,29,29];
   }
 
-  // ── HEADER ────────────────────────────────────────────────────────────────
-  doc.setFillColor(10, 34, 64);
-  doc.rect(0, 0, W, 30, 'F');
+  // ── HEADER / MEMBRETE ────────────────────────────────────────────────────────
+  doc.setFillColor(11, 29, 58);
+  doc.rect(0, 0, W, 34, 'F');
   doc.setFillColor(...scoreRGB);
-  doc.rect(0, 0, 4, 30, 'F');
+  doc.rect(0, 0, 4, 34, 'F');
 
-  doc.setFontSize(13); doc.setFont('helvetica','bold'); doc.setTextColor(255,255,255);
-  doc.text('Informe de Riesgo Financiero', 10, 11);
-  doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(147,197,253);
-  doc.text(bodega, 10, 19);
+  if (logoUrl) {
+    try { doc.addImage(logoUrl, 'PNG', 10, 8, 16, 16); } catch (e) { console.warn('[VS] addImage logo falló:', e); }
+  }
+  var _lx = logoUrl ? 30 : 10;
+  doc.setFontSize(14); doc.setFont('helvetica','bold'); doc.setTextColor(255,255,255);
+  doc.text('VENDE SEGURO', _lx, 14);
+  doc.setFontSize(7.5); doc.setFont('helvetica','italic'); doc.setTextColor(147,197,253);
+  doc.text('vende sin riesgo.', _lx, 20);
+
+  doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(255,255,255);
+  doc.text('Informe de Riesgo Financiero', W-10, 12, {align:'right'});
+  doc.setFontSize(8.5); doc.setFont('helvetica','normal'); doc.setTextColor(147,197,253);
+  doc.text(bodega, W-10, 18, {align:'right'});
   doc.setFontSize(7.5); doc.setFont('helvetica','italic'); doc.setTextColor(180,200,240);
-  doc.text('Vende Seguro · ' + ultimoAnalisis.fecha, 10, 27);
-  doc.setFontSize(7.5); doc.setFont('helvetica','bold'); doc.setTextColor(220,60,60);
-  doc.text('CONFIDENCIAL — USO INTERNO', W-10, 27, {align:'right'});
+  doc.text(fecha + (conIA ? ' · con análisis IA' : ''), W-10, 24, {align:'right'});
+  doc.setFontSize(7); doc.setFont('helvetica','bold'); doc.setTextColor(255,140,140);
+  doc.text('CONFIDENCIAL — USO INTERNO', W-10, 30, {align:'right'});
 
   // ── NOMBRE CLIENTE + SCORE HERO ───────────────────────────────────────────
-  var y = 40;
+  var y = 44;
   doc.setFontSize(15); doc.setFont('helvetica','bold'); doc.setTextColor(10,34,64);
   doc.text(nombre.substring(0, 38), 10, y);
   doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(100,116,139);
   doc.text('CUIT ' + cuitFmt, 10, y+7);
 
-  var sbX = 144, sbY = 33, sbW = 56, sbH = 26, sbR = 4;
+  var sbX = 144, sbY = 37, sbW = 56, sbH = 26, sbR = 4;
   doc.setFillColor(scoreRGB[0]*0.6, scoreRGB[1]*0.6, scoreRGB[2]*0.6);
   doc.roundedRect(sbX+1, sbY+1.5, sbW, sbH, sbR, sbR, 'F');
   doc.setFillColor(...scoreRGB);
@@ -5227,7 +5273,7 @@ async function exportarReporte() {
   doc.setFontSize(6.5); doc.setFont('helvetica','normal'); doc.setTextColor(220,235,255);
   doc.text('escala 1–999', sbX + sbW/2, sbY + 27, {align:'center'});
 
-  y = 63;
+  y = 67;
   doc.setDrawColor(210,220,240); doc.setLineWidth(0.4); doc.line(10, y, W-10, y);
   y += 6;
 
@@ -5533,27 +5579,29 @@ async function exportarReporte() {
     }
   }
 
-  // ── ANÁLISIS DE RIESGO ────────────────────────────────────────────────────
-  if (y > 240) { doc.addPage(); y = 15; }
-  doc.setDrawColor(210,220,240); doc.line(10, y, W-10, y); y += 7;
-  doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(11,29,58);
-  doc.text('Analisis de Riesgo Crediticio', 10, y); y += 7;
-  doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(51,65,85);
+  // ── ANÁLISIS DE RIESGO — solo si se pidió el informe con IA ─────────────────
+  if (conIA && ultimoAnalisis) {
+    if (y > 240) { doc.addPage(); y = 15; }
+    doc.setDrawColor(210,220,240); doc.line(10, y, W-10, y); y += 7;
+    doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(11,29,58);
+    doc.text('Analisis de Riesgo Crediticio (IA)', 10, y); y += 7;
+    doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(51,65,85);
 
-  var textoLimpio = (ultimoAnalisis.texto || '')
-    .replace(/\bsolicitar\s+Veraz\s+completo\b/gi, 'analizar el historial completo del sistema financiero')
-    .replace(/\bpedir\s+Veraz\b/gi, 'consultar el historial del sistema financiero')
-    .replace(/\bVeraz\s*(\/\s*Nosis)?\b/gi, 'informe del sistema financiero')
-    .replace(/\bseguimiento\s+especial\b/gi, 'monitoreo del riesgo')
-    .replace(/\bSeguimiento\s+Especial\b/g, 'Monitoreo de Riesgo')
-    .replace(/Ubicaci[oó]n no disponible[^.]*\./gi, '')
-    .replace(/\bUBICACION\b.*?\n/gi, '');
+    var textoLimpio = (ultimoAnalisis.texto || '')
+      .replace(/\bsolicitar\s+Veraz\s+completo\b/gi, 'analizar el historial completo del sistema financiero')
+      .replace(/\bpedir\s+Veraz\b/gi, 'consultar el historial del sistema financiero')
+      .replace(/\bVeraz\s*(\/\s*Nosis)?\b/gi, 'informe del sistema financiero')
+      .replace(/\bseguimiento\s+especial\b/gi, 'monitoreo del riesgo')
+      .replace(/\bSeguimiento\s+Especial\b/g, 'Monitoreo de Riesgo')
+      .replace(/Ubicaci[oó]n no disponible[^.]*\./gi, '')
+      .replace(/\bUBICACION\b.*?\n/gi, '');
 
-  var lines = doc.splitTextToSize(textoLimpio, W-20);
-  lines.forEach(function(l) {
-    if (y > 275) { doc.addPage(); y = 15; }
-    doc.text(l, 10, y); y += 5;
-  });
+    var lines = doc.splitTextToSize(textoLimpio, W-20);
+    lines.forEach(function(l) {
+      if (y > 275) { doc.addPage(); y = 15; }
+      doc.text(l, 10, y); y += 5;
+    });
+  }
 
   // ── PIE ────────────────────────────────────────────────────────────────────
   var totalPages = doc.internal.getNumberOfPages();
@@ -5561,11 +5609,11 @@ async function exportarReporte() {
     doc.setPage(pg);
     doc.setDrawColor(210,220,240); doc.line(10, H-13, W-10, H-13);
     doc.setFontSize(7); doc.setFont('helvetica','italic'); doc.setTextColor(148,163,184);
-    doc.text(bodega + ' · Vende Seguro · ' + ultimoAnalisis.fecha + ' · Confidencial — Uso interno · Pagina ' + pg + ' de ' + totalPages, W/2, H-7, {align:'center'});
+    doc.text(bodega + ' · Vende Seguro · ' + fecha + ' · Confidencial — Uso interno · Pagina ' + pg + ' de ' + totalPages, W/2, H-7, {align:'center'});
   }
 
-  doc.save('VendeSeguro_' + bodega.replace(/\s+/g,'_') + '_' + raw + '_' + ultimoAnalisis.fecha.replace(/\//g,'-') + '.pdf');
-  if (btn) { btn.disabled = false; btn.textContent = 'Exportar PDF'; }
+  doc.save('VendeSeguro_' + bodega.replace(/\s+/g,'_') + '_' + raw + (conIA ? '_ConIA' : '') + '_' + fecha.replace(/\//g,'-') + '.pdf');
+  if (btn) { btn.disabled = false; btn.textContent = btnLabel; }
 }
 
 
@@ -6509,6 +6557,7 @@ function mostrarErrorCuitInexistente(raw) {
   if (verdEl) verdEl.innerHTML = '';
   document.getElementById('btn-analizar').style.display = 'none';
   document.getElementById('btn-export').style.display = 'none';
+  document.getElementById('btn-export-basico').style.display = 'none';
 
   // Limpiar globals para que no queden datos de la consulta anterior
   ultimoAnalisis = null;
