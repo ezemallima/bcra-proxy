@@ -9956,95 +9956,20 @@ def save_dso_saldos():
             json.dump({"saldos": nuevos, "ultima_actualizacion": hoy.strftime('%d/%m/%Y %H:%M'),
                        "fecha_corte": corte_d.strftime('%Y-%m-%d')}, f, ensure_ascii=False)
 
-        # ── Calcular DSO = (Saldo + Cheques) / Ventas × días_período ──────────
-        # Fórmula balance-sheet: relaciona el stock de deuda (AR + cheques) con
-        # el flujo de ventas de los últimos 3 meses. No usa antigüedad de facturas.
-
-        # 1. Cheques pendientes por cliente (solo positivos = pendientes de cobro)
-        _cheques_map: dict = {}   # _norm_dso_match → total_cheques
-        _cp = os.path.join(DATA_DIR, 'dso_cheques_actual.json')
-        if os.path.exists(_cp):
-            try:
-                for c in json.load(open(_cp, 'r', encoding='utf-8')).get('cheques', []):
-                    tot = float(c.get('total') or 0)
-                    if tot > 0:
-                        ck = _norm_dso_match(str(c.get('cliente') or ''))
-                        if ck:
-                            _cheques_map[ck] = _cheques_map.get(ck, 0.0) + tot
-            except Exception as _ce:
-                print(f"[dso-saldos] Error cargando cheques: {_ce}", flush=True)
-
-        # 2. Ventas por cliente: últimos 3 meses ≤ fecha_corte
-        _ventas_nom:   dict = {}   # _norm_nombre(cli) → total_ventas_3m
-        _ventas_dso:   dict = {}   # _norm_dso_match(cli) → total_ventas_3m
-        _dias_periodo  = 91        # default si no hay datos de ventas
-        _corte_ym      = f"{corte_d.year}-{corte_d.month:02d}"
-        _vp = os.path.join(DATA_DIR, 'dso_ventas_historico.json')
-        if os.path.exists(_vp):
-            try:
-                _vdata = json.load(open(_vp, 'r', encoding='utf-8'))
-                _meses_disp = sorted(
-                    [ym for ym in _vdata.get('meses', {}) if ym <= _corte_ym],
-                    reverse=True
-                )
-                _meses_usar = set(_meses_disp[:3])   # máximo 3 meses hacia atrás
-                if _meses_usar:
-                    _oldest = min(_meses_usar)
-                    _oy, _om = int(_oldest[:4]), int(_oldest[5:7])
-                    _dias_periodo = (_date(_date.today().year, corte_d.month, corte_d.day)
-                                     - _date(_oy, _om, 1)).days + 1
-                    # Más simple y correcto:
-                    _dias_periodo = (corte_d - _date(_oy, _om, 1)).days + 1
-                    for _cli_k, _meses_cli in _vdata.get('por_cliente', {}).items():
-                        _vt = sum(float(v) for ym, v in _meses_cli.items() if ym in _meses_usar)
-                        if _vt > 0:
-                            _ventas_nom[_cli_k] = _ventas_nom.get(_cli_k, 0.0) + _vt
-                            _dk = _norm_dso_match(_cli_k)
-                            if _dk:
-                                _ventas_dso[_dk] = _ventas_dso.get(_dk, 0.0) + _vt
-                print(f"[dso-saldos] Ventas: {len(_meses_usar)} meses {sorted(_meses_usar)}, "
-                      f"{len(_ventas_nom)} clientes, {_dias_periodo} días", flush=True)
-            except Exception as _ve:
-                print(f"[dso-saldos] Error cargando ventas: {_ve}", flush=True)
-
-        # 3. Agregar saldo por cliente
-        _acc: dict = {}   # _norm_dso_match → {ss: float, nom_original: str}
-        for s in nuevos:
-            saldo = float(s.get('saldo') or 0)
-            if saldo <= 0:
-                continue
-            _nom_orig = str(s.get('cliente') or '').strip()
-            _nk = _norm_dso_match(_nom_orig)
-            if _nk:
-                if _nk not in _acc:
-                    _acc[_nk] = {'ss': 0.0, 'nom_original': _nom_orig}
-                _acc[_nk]['ss'] += saldo
-
-        # 4. DSO por cliente
-        dso_por_nombre: dict = {}
-        _n_con_ventas = 0
-        for _nk, _info in _acc.items():
-            _saldo_cli   = _info['ss']
-            _cheques_cli = _cheques_map.get(_nk, 0.0)
-            _nom_n       = _norm_nombre(_info['nom_original'])
-            _ventas_cli  = (_ventas_nom.get(_nom_n)
-                            or _ventas_dso.get(_nk)
-                            or 0.0)
-            if _ventas_cli > 0 and _dias_periodo > 0:
-                dso_por_nombre[_nk] = round((_saldo_cli + _cheques_cli) / _ventas_cli * _dias_periodo)
-                _n_con_ventas += 1
-            # Sin ventas: omitir → el cliente aparece con DSO=0 en el portfolio
+        # ── Calcular DSO por antigüedad: Σ(saldo × días_desde_fecha_factura) / Σ(saldo) ──
+        # No depende de Ventas ni Cheques — solo necesita fecha_factura por fila del
+        # reporte de Saldos. Ver _dso_aging_por_cliente.
+        _dso_cli = _dso_aging_por_cliente(nuevos)
+        dso_por_nombre = {k: v['dso'] for k, v in _dso_cli.items()}
 
         f_ind = os.path.join(DATA_DIR, 'dso_individual_actual.json')
         with open(f_ind, 'w', encoding='utf-8') as f:
             json.dump({"por_cuit": {}, "por_nombre": dso_por_nombre,
-                       "fecha_corte": corte_d.strftime('%Y-%m-%d'),
-                       "dias_periodo": _dias_periodo}, f, ensure_ascii=False)
+                       "fecha_corte": corte_d.strftime('%Y-%m-%d')}, f, ensure_ascii=False)
 
         total = sum(s.get('saldo', 0) for s in nuevos)
         print(f"[dso-saldos] {len(nuevos)} saldos ${total:,.0f} | corte={corte_d} | "
-              f"DSO calculado: {_n_con_ventas}/{len(_acc)} clientes | "
-              f"cheques={len(_cheques_map)} | días={_dias_periodo}", flush=True)
+              f"DSO por antigüedad: {len(dso_por_nombre)} clientes", flush=True)
         return jsonify({"ok": True, "agregados": len(nuevos), "total": len(nuevos)})
     except Exception as e:
         import traceback
@@ -10630,6 +10555,88 @@ def _calc_dso_aging(facturas: list) -> int | None:
     if suma_saldo <= 0:
         return None
     return round(suma_pond / suma_saldo)
+
+
+def _dias_desde_fecha_dso(fecha_str) -> int:
+    """Días transcurridos desde una fecha DD/MM/YYYY o YYYY-MM-DD. 0 si no parsea o está vacía."""
+    from datetime import date
+    s = str(fecha_str or '').strip()
+    if not s:
+        return 0
+    try:
+        if '/' in s:
+            d, m, y = s.split('/')
+            f = date(int(y), int(m), int(d))
+        elif '-' in s and len(s) >= 10:
+            y, m, d = s[:10].split('-')
+            f = date(int(y), int(m), int(d))
+        else:
+            return 0
+        return max(0, (date.today() - f).days)
+    except Exception:
+        return 0
+
+
+def _bucket_dso(dias: int) -> str:
+    if dias <= 30:  return 'd30'
+    if dias <= 60:  return 'd60'
+    if dias <= 90:  return 'd90'
+    if dias <= 120: return 'd120'
+    return 'd120plus'
+
+
+def _dso_aging_por_cliente(saldos_lista: list) -> dict:
+    """DSO por antigüedad, agrupado por cliente — Σ(saldo×días)/Σ(saldo) por cliente.
+    No requiere Ventas ni Cheques: solo saldo + fecha_factura por fila.
+    Retorna {cliente_norm: {dso, saldo, nombre, vendedor}}."""
+    acc: dict = {}
+    for s in saldos_lista:
+        saldo = float(s.get('saldo') or 0)
+        if saldo <= 0:
+            continue
+        nombre = str(s.get('cliente') or '').strip()
+        key = _norm_dso_match(nombre)
+        if not key:
+            continue
+        dias = _dias_desde_fecha_dso(s.get('fecha_factura') or s.get('fechaFactura'))
+        if key not in acc:
+            acc[key] = {'sp': 0.0, 'ss': 0.0, 'nombre': nombre, 'vendedor': ''}
+        acc[key]['sp'] += saldo * dias
+        acc[key]['ss'] += saldo
+        _vend = str(s.get('vendedor') or '').strip()
+        if _vend and not acc[key]['vendedor']:
+            acc[key]['vendedor'] = _vend
+    return {
+        k: {'dso': round(v['sp'] / v['ss']), 'saldo': v['ss'],
+            'nombre': v['nombre'], 'vendedor': v['vendedor']}
+        for k, v in acc.items() if v['ss'] > 0
+    }
+
+
+def _dso_aging_global(saldos_lista: list) -> dict:
+    """DSO global por antigüedad ponderado por saldo, con desglose por tramo de mora.
+    Método: Σ(saldo×días_desde_fecha_factura) / Σ(saldo). No depende de Ventas ni Cheques."""
+    suma_pond, suma_saldo = 0.0, 0.0
+    buckets = {'d30': 0.0, 'd60': 0.0, 'd90': 0.0, 'd120': 0.0, 'd120plus': 0.0}
+    clientes = set()
+    for s in saldos_lista:
+        saldo = float(s.get('saldo') or 0)
+        if saldo <= 0:
+            continue
+        dias = _dias_desde_fecha_dso(s.get('fecha_factura') or s.get('fechaFactura'))
+        suma_pond  += saldo * dias
+        suma_saldo += saldo
+        buckets[_bucket_dso(dias)] += saldo
+        cli = str(s.get('cliente') or '').strip()
+        if cli:
+            clientes.add(cli.upper())
+    dso = round(suma_pond / suma_saldo) if suma_saldo > 0 else None
+    return {
+        "dso":            dso,
+        "saldo_total":    suma_saldo,
+        "clientes_count": len(clientes),
+        "buckets":        {k: round(v) for k, v in buckets.items()},
+    }
 
 
 @app.route("/saldos-cuit/<cuit>")
@@ -12116,9 +12123,9 @@ def _dso_exhaustion(ar: float, ventas_por_mes: dict, fecha_corte_dt) -> dict:
 
 @app.route("/api/dso-todos")
 def get_dso_todos():
-    """DSO por vendedor y por cliente usando el método de agotamiento.
-    Fuentes: dso_saldos_actual, dso_cheques_actual, dso_ventas_historico."""
-    import calendar
+    """DSO por vendedor y por cliente — método de antigüedad de saldos (aging).
+    Fuente única: dso_saldos_actual.json → Σ(saldo×días_desde_fecha_factura)/Σ(saldo).
+    No depende de Ventas ni Cheques (ver _dso_aging_global / CLAUDE.md DSO módulo)."""
     from datetime import datetime
 
     # ── Leer saldos ──────────────────────────────────────────────────────────
@@ -12130,57 +12137,23 @@ def get_dso_todos():
         except Exception:
             pass
 
-    # ── Leer cheques ─────────────────────────────────────────────────────────
-    cheques_por_cliente: dict = {}
-    c_path = os.path.join(DATA_DIR, 'dso_cheques_actual.json')
-    if os.path.exists(c_path):
-        try:
-            for ch in json.load(open(c_path, 'r', encoding='utf-8')).get('cheques', []):
-                tot = float(ch.get('total', 0) or 0)
-                if tot <= 0:
-                    continue
-                cli = _norm_nombre(ch.get('cliente') or '')
-                if cli:
-                    cheques_por_cliente[cli] = cheques_por_cliente.get(cli, 0.0) + tot
-        except Exception:
-            pass
-
-    # ── Leer ventas por cliente ───────────────────────────────────────────────
-    ventas_globales: dict = {}   # (year, month) → total
-    ventas_por_cli: dict  = {}   # cli_norm → {(year, month) → total}
-    v_path = os.path.join(DATA_DIR, 'dso_ventas_historico.json')
-    if os.path.exists(v_path):
-        try:
-            vh = json.load(open(v_path, 'r', encoding='utf-8'))
-            for ym, tot in vh.get('meses', {}).items():
-                try:
-                    ventas_globales[(int(ym[:4]), int(ym[5:7]))] = float(tot)
-                except Exception:
-                    pass
-            for cli, meses_cli in vh.get('por_cliente', {}).items():
-                cli_norm = _norm_nombre(cli)  # normalizar igual que saldo_por_cli
-                ventas_por_cli[cli_norm] = {}
-                for ym, tot in meses_cli.items():
-                    try:
-                        ventas_por_cli[cli_norm][(int(ym[:4]), int(ym[5:7]))] = float(tot)
-                    except Exception:
-                        pass
-        except Exception:
-            pass
-
     # ── Fecha de corte ────────────────────────────────────────────────────────
     fechas = [_parsear_fecha_dso(s.get('fecha_factura')) for s in saldos_lista]
     fechas = [f for f in fechas if f]
     fecha_corte = max(fechas) if fechas else datetime.now()
 
-    # ── Saldo y vendedor por cliente ──────────────────────────────────────────
-    saldo_por_cli: dict    = {}
+    # ── Saldo, antigüedad ponderada y vendedor por cliente ─────────────────────
+    saldo_por_cli:    dict = {}   # cli_norm → Σ saldo
+    pond_por_cli:     dict = {}   # cli_norm → Σ (saldo × días)
     vendedor_por_cli: dict = {}
     for s in saldos_lista:
         cli = _norm_nombre(s.get('cliente') or '')
         if not cli:
             continue
-        saldo_por_cli[cli] = saldo_por_cli.get(cli, 0.0) + float(s.get('saldo', 0) or 0)
+        saldo = float(s.get('saldo', 0) or 0)
+        saldo_por_cli[cli] = saldo_por_cli.get(cli, 0.0) + saldo
+        dias = _dias_desde_fecha_dso(s.get('fecha_factura') or s.get('fechaFactura'))
+        pond_por_cli[cli]  = pond_por_cli.get(cli, 0.0) + saldo * dias
         vend = (s.get('vendedor') or '').strip()
         if vend:
             vendedor_por_cli[cli] = vend
@@ -12194,89 +12167,41 @@ def get_dso_todos():
         if cli and vend and cli not in vendedor_por_cli:
             vendedor_por_cli[cli] = vend
 
-    # Total saldo para asignación proporcional de ventas a clientes sin datos propios
-    total_saldo_global = sum(v for v in saldo_por_cli.values() if v > 0)
-
-    def _ventas_proporcional(cli_saldo: float) -> dict:
-        """Asigna ventas proporcionales al saldo del cliente cuando no hay datos per-cliente."""
-        if total_saldo_global <= 0 or cli_saldo <= 0:
-            return {}
-        ratio = cli_saldo / total_saldo_global
-        return {ym: tot * ratio for ym, tot in ventas_globales.items()}
-
     # ── DSO por cliente ───────────────────────────────────────────────────────
-    dso_por_cliente: dict = {}
-    for cli, saldo in saldo_por_cli.items():
-        cheques = cheques_por_cliente.get(cli, 0.0)
-        ar      = saldo + cheques
-        if ar <= 0:
-            dso_por_cliente[cli] = 0
-            continue
-        # Usar ventas propias si existen, si no asignar proporcionalmente
-        ventas_cli = ventas_por_cli.get(cli) or _ventas_proporcional(saldo)
-        res = _dso_exhaustion(ar, ventas_cli, fecha_corte)
-        dso_por_cliente[cli] = res["dso"]
+    dso_por_cliente: dict = {
+        cli: (round(pond_por_cli.get(cli, 0.0) / saldo) if saldo > 0 else 0)
+        for cli, saldo in saldo_por_cli.items()
+    }
 
-    # ── DSO por vendedor ──────────────────────────────────────────────────────
-    vend_saldo:   dict = {}
-    vend_cheques: dict = {}
-    vend_ventas:  dict = {}
+    # ── Saldo y DSO por vendedor ─────────────────────────────────────────────
+    vend_saldo: dict = {}
+    vend_pond:  dict = {}
     for cli, saldo in saldo_por_cli.items():
         vend = vendedor_por_cli.get(cli, '')
         if not vend:
             continue
-        vend_saldo[vend]   = vend_saldo.get(vend, 0.0) + saldo
-        vend_cheques[vend] = vend_cheques.get(vend, 0.0) + cheques_por_cliente.get(cli, 0.0)
-        # Sumar ventas propias del cliente al vendedor
-        v_cli = ventas_por_cli.get(cli) or _ventas_proporcional(saldo)
-        if vend not in vend_ventas:
-            vend_ventas[vend] = {}
-        for ym_key, tot in v_cli.items():
-            vend_ventas[vend][ym_key] = vend_ventas[vend].get(ym_key, 0.0) + tot
+        vend_saldo[vend] = vend_saldo.get(vend, 0.0) + saldo
+        vend_pond[vend]  = vend_pond.get(vend, 0.0) + pond_por_cli.get(cli, 0.0)
 
-    dso_por_vendedor: dict = {}
-    for vend in vend_saldo:
-        ar     = vend_saldo[vend] + vend_cheques.get(vend, 0.0)
-        ventas = vend_ventas.get(vend, {})
-        res    = _dso_exhaustion(ar, ventas, fecha_corte)
-        dso_por_vendedor[vend] = {
-            "dso":      res["dso"],
-            "ar":       round(ar),
-            "saldo":    round(vend_saldo[vend]),
-            "cheques":  round(vend_cheques.get(vend, 0.0)),
-            "breakdown": res["breakdown"],
+    dso_por_vendedor: dict = {
+        vend: {
+            "dso":   round(vend_pond[vend] / vend_saldo[vend]) if vend_saldo[vend] > 0 else 0,
+            "saldo": round(vend_saldo[vend]),
         }
+        for vend in vend_saldo
+    }
+    dso_vendedor_ponderado = {vend: info["dso"] for vend, info in dso_por_vendedor.items()}
 
-    # ── DSO ponderado global y por vendedor (promedio ponderado de DSO por cliente) ──
-    # Mismo método que usa el panel Director: Σ(dso_i × saldo_i) / Σ(saldo_i)
-    # Más preciso que el agotamiento agregado porque usa datos reales de cada cliente.
-    _sp_g: float = 0.0
-    _ss_g: float = 0.0
-    _vend_pond: dict = {}   # vendedor → {sum_pond, sum_saldo}
-    for cli, saldo in saldo_por_cli.items():
-        dso_cli = dso_por_cliente.get(cli)
-        if not dso_cli or saldo <= 0:
-            continue
-        _sp_g += dso_cli * saldo
-        _ss_g += saldo
-        vend = vendedor_por_cli.get(cli, '')
-        if vend:
-            if vend not in _vend_pond:
-                _vend_pond[vend] = {'sp': 0.0, 'ss': 0.0}
-            _vend_pond[vend]['sp'] += dso_cli * saldo
-            _vend_pond[vend]['ss'] += saldo
-
-    dso_global_ponderado = round(_sp_g / _ss_g) if _ss_g > 0 else None
+    # ── DSO global ponderado (mismo agregado: Σ(saldo×días) / Σ(saldo) total) ──
+    total_saldo = sum(saldo_por_cli.values())
+    total_pond  = sum(pond_por_cli.values())
+    dso_global_ponderado = round(total_pond / total_saldo) if total_saldo > 0 else None
     global _dso_global_ponderado_cache
     if dso_global_ponderado is not None:
         _dso_global_ponderado_cache = dso_global_ponderado
-    dso_vendedor_ponderado = {
-        v: round(d['sp'] / d['ss'])
-        for v, d in _vend_pond.items() if d['ss'] > 0
-    }
 
     print(f"[dso-todos] {len(dso_por_cliente)} clientes | {len(dso_por_vendedor)} vendedores | "
-          f"DSO global ponderado={dso_global_ponderado}d | "
+          f"DSO global ponderado (aging)={dso_global_ponderado}d | "
           f"fecha_corte={fecha_corte.strftime('%d/%m/%Y')}", flush=True)
     return jsonify({
         "fecha_corte":            fecha_corte.strftime('%d/%m/%Y'),
@@ -12303,14 +12228,13 @@ def _parsear_fecha_dso(s):
 
 @app.route("/dso-global-saldos")
 def get_dso_global_saldos():
-    """DSO global — método de agotamiento (exhaustion method) sobre 3 meses.
-    AR = saldos pendientes + cheques (dso_saldos_actual + dso_cheques_actual).
-    Ventas = historial mensual agrupado desde dso_ventas_historico.json.
-    Algoritmo: restar mes a mes (más reciente primero) hasta agotar el AR."""
-    import calendar
+    """DSO global — método de antigüedad de saldos (aging), ponderado por saldo.
+    DSO = Σ(saldo × días_desde_fecha_factura) / Σ(saldo). No depende de Ventas ni
+    Cheques — solo del reporte de Saldos con fecha de factura por fila (ver
+    _dso_aging_global). Reemplaza el método de agotamiento (AR/Ventas×días), que
+    quedaba desactualizado en cuanto dejaba de subirse el reporte de Ventas."""
     from datetime import datetime
 
-    # ── 1. AR: saldos + cheques del último upload DSO ─────────────────────────
     saldos_lista = []
     s_path = os.path.join(DATA_DIR, 'dso_saldos_actual.json')
     if os.path.exists(s_path):
@@ -12322,106 +12246,35 @@ def get_dso_global_saldos():
 
     if not saldos_lista:
         return jsonify({"dso": None, "saldo_total": 0, "clientes_count": 0,
-                        "ventas_3m": 0, "formula": "sin_datos", "breakdown": []})
+                        "formula": "sin_datos", "breakdown": []})
 
-    saldo_base = sum(float(s.get('saldo', 0) or 0) for s in saldos_lista)
-    total_cheques = 0.0
-    c_path = os.path.join(DATA_DIR, 'dso_cheques_actual.json')
-    if os.path.exists(c_path):
-        try:
-            with open(c_path, 'r', encoding='utf-8') as _fc:
-                # Solo cheques positivos (pendientes de cobro)
-                total_cheques = sum(float(ch.get('total', 0) or 0)
-                                    for ch in json.load(_fc).get('cheques', [])
-                                    if float(ch.get('total', 0) or 0) > 0)
-        except Exception as _ce:
-            print(f"[dso-global] error cheques: {_ce}", flush=True)
-    # AR = Saldos + Cheques (según fórmula del usuario: Deuda Total a Agotar)
-    ar_total = saldo_base + total_cheques
-
-    # ── 2. Fecha de corte — último día del período de los saldos ─────────────
     fechas = [_parsear_fecha_dso(s.get('fecha_factura')) for s in saldos_lista]
     fechas = [f for f in fechas if f]
     fecha_corte = max(fechas) if fechas else datetime.now()
 
-    # ── 3. Ventas por mes desde historico mensual ─────────────────────────────
-    ventas_por_mes = {}  # {(year, month): total}
-    n_filas_ventas = 0
-    try:
-        v_path = os.path.join(DATA_DIR, 'dso_ventas_historico.json')
-        if os.path.exists(v_path):
-            with open(v_path, 'r', encoding='utf-8') as _fv:
-                vh = json.load(_fv)
-            meses_data = vh.get('meses', {})
-            n_filas_ventas = len(meses_data)
-            for ym, total in meses_data.items():
-                try:
-                    y2, m2 = int(ym[:4]), int(ym[5:7])
-                    ventas_por_mes[(y2, m2)] = float(total)
-                except Exception:
-                    pass
-    except Exception as _ve:
-        print(f"[dso-global] error ventas: {_ve}", flush=True)
+    res = _dso_aging_global(saldos_lista)
+    dso = res["dso"]
+    buckets = res["buckets"]
+    saldo_base = res["saldo_total"]
 
-    # ── 4. 3 meses hacia atrás desde fecha_corte (mes más reciente primero) ──
-    meses = []
-    y, m = fecha_corte.year, fecha_corte.month
-    for _ in range(3):
-        dias = calendar.monthrange(y, m)[1]
-        ventas = ventas_por_mes.get((y, m), 0.0)
-        meses.append({"mes": f"{m:02d}/{y}", "dias": dias, "ventas": ventas})
-        m -= 1
-        if m == 0:
-            m, y = 12, y - 1
+    _labels = {'d30': '0-30d', 'd60': '31-60d', 'd90': '61-90d',
+               'd120': '91-120d', 'd120plus': '+120d'}
+    breakdown = [{"tramo": _labels[k], "saldo": buckets[k]} for k in _labels]
 
-    ventas_3m = sum(x['ventas'] for x in meses)
-
-    # ── 5. Método de agotamiento ──────────────────────────────────────────────
-    ar_restante = ar_total
-    dso_acum    = 0.0
-    breakdown   = []
-    for mes_info in meses:
-        if ar_restante <= 0:
-            break
-        v = mes_info['ventas']
-        d = mes_info['dias']
-        if v <= 0:
-            breakdown.append({**mes_info, "dias_dso": 0, "ar_restante": round(ar_restante), "nota": "sin ventas"})
-            continue
-        if ar_restante >= v:
-            dso_acum   += d
-            ar_restante -= v
-            breakdown.append({**mes_info, "dias_dso": d, "ar_restante": round(ar_restante)})
-        else:
-            dias_parcial = (ar_restante / v) * d
-            dso_acum    += dias_parcial
-            breakdown.append({**mes_info, "dias_dso": round(dias_parcial, 1), "ar_restante": 0})
-            ar_restante  = 0
-
-    dso = round(dso_acum) if ar_total > 0 else None
-
-    clientes_unicos = len({s.get('cliente', '') for s in saldos_lista if s.get('cliente')})
     print(
         f"[dso-global] corte={fecha_corte.strftime('%d/%m/%Y')} "
-        f"AR={ar_total:.0f} (saldos={saldo_base:.0f} cheques={total_cheques:.0f}) "
-        f"filas_ventas={n_filas_ventas} ventas_3m={ventas_3m:.0f} DSO={dso}d",
+        f"saldo_total={saldo_base:.0f} clientes={res['clientes_count']} DSO(aging)={dso}d",
         flush=True
     )
-    for b in breakdown:
-        print(f"  → {b['mes']}: ventas={b['ventas']:.0f} dias_dso={b['dias_dso']} "
-              f"ar_restante={b.get('ar_restante',0):.0f}", flush=True)
 
     return jsonify({
-        "dso":           dso,
-        "saldo_total":   saldo_base,        # AR para el cálculo = solo saldos
-        "saldo_base":    saldo_base,
-        "total_cheques": total_cheques,
-        "ar_con_cheques": saldo_base + total_cheques,
-        "clientes_count": clientes_unicos,
-        "ventas_3m":     ventas_3m,
-        "fecha_corte":   fecha_corte.strftime('%d/%m/%Y'),
-        "formula":       "agotamiento_3m_solo_saldos",
-        "breakdown":     breakdown,
+        "dso":            dso,
+        "saldo_total":    saldo_base,
+        "saldo_base":     saldo_base,
+        "clientes_count": res["clientes_count"],
+        "fecha_corte":    fecha_corte.strftime('%d/%m/%Y'),
+        "formula":        "antiguedad_saldos",
+        "breakdown":      breakdown,
         "ultima_actualizacion": time.strftime('%d/%m/%Y')
     })
 

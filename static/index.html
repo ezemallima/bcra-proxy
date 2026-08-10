@@ -1070,13 +1070,17 @@
 
       <!-- Panel de meses acumulados -->
       <div id="dso-meses-panel" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;margin-bottom:12px;display:none;">
-        <div style="font-size:11px;font-weight:600;color:var(--azul-claro);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Ventas acumuladas en servidor (últimos 3 meses necesarios)</div>
+        <div style="font-size:11px;font-weight:600;color:var(--azul-claro);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Ventas acumuladas en servidor (opcional — ya no es necesario para calcular el DSO)</div>
         <div id="dso-meses-lista" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+      </div>
+
+      <div style="background:#eff6ff;border:1px solid var(--azul-borde);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--azul-oscuro);">
+        <strong>El DSO se calcula por antigüedad de saldo</strong> (Σ saldo × días desde la fecha de factura). Con subir <strong>Saldos</strong> (incluyendo la columna Fecha de factura) alcanza — Ventas y Cheques son opcionales.
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
         <div>
-          <div style="font-size:11px;font-weight:600;color:var(--azul-claro);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Ventas del mes</div>
+          <div style="font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Ventas del mes (opcional)</div>
           <div style="font-size:10px;color:#94a3b8;margin-bottom:6px;">Reporte mensual (1 al 31) · Columnas: Contacto · Fecha de factura · Total</div>
           <div class="upload-area" id="dso-upload-ventas" onclick="document.getElementById('dso-file-ventas').click()" style="padding:12px;margin-bottom:0;cursor:pointer;">
             <div style="font-size:12px;color:#64748b;">Subir reporte mensual de ventas</div>
@@ -1085,14 +1089,14 @@
         </div>
         <div>
           <div style="font-size:11px;font-weight:600;color:var(--azul-claro);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Saldos</div>
-          <div style="font-size:10px;color:#94a3b8;margin-bottom:6px;">Columnas: Contacto · SALDO PENDIENTE DE PAGO</div>
+          <div style="font-size:10px;color:#94a3b8;margin-bottom:6px;">Columnas: Contacto · Fecha de factura · SALDO PENDIENTE DE PAGO</div>
           <div class="upload-area" id="dso-upload-saldos" onclick="document.getElementById('dso-file-saldos').click()" style="padding:12px;margin-bottom:0;cursor:pointer;">
             <div style="font-size:12px;color:#64748b;">Subir reporte de saldos</div>
           </div>
           <input type="file" id="dso-file-saldos" accept=".xlsx,.xls,.csv" style="display:none;" onchange="cargarArchivoDSO(this,'saldos')" />
         </div>
         <div>
-          <div style="font-size:11px;font-weight:600;color:var(--azul-claro);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Cheques en cartera</div>
+          <div style="font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Cheques en cartera (opcional)</div>
           <div style="font-size:10px;color:#94a3b8;margin-bottom:6px;">Columnas: Cliente/Proveedor · Fecha de Pago · Importe</div>
           <div class="upload-area" id="dso-upload-cheques" onclick="document.getElementById('dso-file-cheques').click()" style="padding:12px;margin-bottom:0;cursor:pointer;">
             <div style="font-size:12px;color:#64748b;">Subir cheques en cartera</div>
@@ -1860,32 +1864,11 @@ async function procesarDSO() {
       if (v.fechaMs) fechas.push(new Date(v.fechaMs));
     });
 
-    // Período
-    // diasPeriodo = días entre primera venta y fecha del saldo (más reciente)
-    // Esto da el período real de cobro
-    var diasPeriodo = 90;
-    if (fechas.length >= 2) {
-      fechas.sort(function(a,b){return a-b;});
-      var primerVenta = fechas[0];
-      // Usar fecha de saldo más reciente como cierre del período
-      var fechaCierre = fechas[fechas.length-1];
-      if (rowsSaldos && rowsSaldos.length > 0) {
-        var hFecha = Object.keys(rowsSaldos[0]);
-        var colFecha = mapearColumna(hFecha, ['Fecha de pago', 'fecha_pago', 'Fecha de factura', 'fecha_factura']);
-        if (colFecha) {
-          var fechasSaldo = rowsSaldos.map(function(r){
-            return parseFecha ? parseFecha(r[colFecha]) : new Date(r[colFecha]);
-          }).filter(function(f){ return f && !isNaN(f); });
-          if (fechasSaldo.length > 0) {
-            fechaCierre = new Date(Math.max.apply(null, fechasSaldo));
-          }
-        }
-      }
-      diasPeriodo = Math.max(30, Math.round((fechaCierre - primerVenta)/(1000*60*60*24)));
-    }
-
-    // ── SALDOS ──
+    // ── SALDOS — también acumulamos antigüedad ponderada (Σ saldo×días) ──────
     var saldosPorCliente = {};
+    var pondPorCliente   = {};   // contacto → Σ(saldo × días desde fecha de factura)
+    var saldosTieneFecha = false;
+    var sumaPondGlobal   = 0;
     if (rowsSaldos.length) {
       var hS = Object.keys(rowsSaldos[0]);
       var cS = mapearColumna(hS, DSO_ALIASES.saldos.contacto);
@@ -1895,21 +1878,25 @@ async function procesarDSO() {
       var hoy120 = new Date();
       var corte120 = new Date(hoy120.getTime() - 120 * 24 * 60 * 60 * 1000);
       var colFechaS = mapearColumna(hS, ['Fecha de factura','fecha_factura','fecha']);
-      // Activo = suma directa del servidor (ya limpio y guardado)
-      window._saldoTotalDirecto = 0; // se carga async abajo
+      saldosTieneFecha = !!colFechaS;
+      var hoyMsAging = Date.now();
       rowsSaldos.forEach(function(r) {
         var contacto = normalizarNombre(r[cS] || '');
         var saldo = parseMonto(r[mS]);
         if (!contacto || saldo === 0) return;
+        var dias = 0;
         if (colFechaS && r[colFechaS]) {
           var fSaldo = parseFecha(r[colFechaS]);
           if (fSaldo && fSaldo < corte120) return;
+          if (fSaldo && !isNaN(fSaldo)) dias = Math.max(0, Math.round((hoyMsAging - fSaldo.getTime()) / 86400000));
         }
         saldosPorCliente[contacto] = (saldosPorCliente[contacto] || 0) + saldo;
+        pondPorCliente[contacto]   = (pondPorCliente[contacto] || 0) + saldo * dias;
+        sumaPondGlobal += saldo * dias;
       });
     }
 
-    // ── CHEQUES ──
+    // ── CHEQUES (opcional — se guardan pero no entran en el cálculo de DSO) ──
     var chequesPorCliente = {};
     if (rowsCheques.length) {
       var hC = Object.keys(rowsCheques[0]);
@@ -1925,66 +1912,33 @@ async function procesarDSO() {
       });
     }
 
-    // ── CONSOLIDAR POR CLIENTE ──
-    var todosClientes = new Set(
-      Object.keys(ventasPorCliente)
-        .concat(Object.keys(saldosPorCliente))
-        .concat(Object.keys(chequesPorCliente))
-    );
-
-    // ── KPI saldo: suma directa del diccionario de saldos (sin pasar por todosClientes)
+    // ── KPI saldo: suma directa del diccionario de saldos ─────────────────────
     var saldoTotalKPI = Object.values(saldosPorCliente).reduce(function(s, v) { return s + v; }, 0);
 
     // ── Limpieza localStorage: eliminar datos viejos antes de calcular ──────
     localStorage.removeItem('piat_dso_saldos_cache');
     localStorage.removeItem('piat_dso_cheques_cache');
 
-    // ── DSO GLOBAL — Fórmula clásica: (AR / Ventas) × Días ──────────────
-    // AR = saldo total real del archivo de saldos subido (sin roundtrip a server)
-    var activoObjetivo = saldoTotalKPI;
-    // Sumar cheques como parte del activo si los hay
-    var totalCheques = Object.values(chequesPorCliente).reduce(function(s,v){ return s+v; }, 0);
-    activoObjetivo += totalCheques;
+    // ── DSO GLOBAL — Antigüedad de saldo: Σ(saldo×días) / Σ(saldo) ──────────
+    // No depende de Ventas ni Cheques. Requiere que el archivo de Saldos
+    // incluya la columna "Fecha de factura" (si falta, dso queda en 0).
+    var dsoGlobal = saldoTotalKPI > 0 ? Math.round(sumaPondGlobal / saldoTotalKPI) : 0;
 
-    // Ventas = historial acumulado (4 meses) del servidor + archivo nuevo
-    var ventasBrutas = Object.values(ventasPorCliente).reduce(function(s,v){ return s+(v>0?v:0); }, 0);
-
-    // Período: rango real de fechas de ventas; si no hay fechas, usar 4 meses = 120 días
-    var diasPeriodo = 120;
-    if (fechas.length >= 2) {
-      fechas.sort(function(a,b){ return a-b; });
-      var spanDias = Math.round((fechas[fechas.length-1] - fechas[0]) / (1000*60*60*24));
-      if (spanDias >= 30) diasPeriodo = Math.min(120, spanDias);
-    }
-
-    // DSO = (Activo / Ventas) × Período
-    var dsoGlobal = (ventasBrutas > 0 && activoObjetivo > 0)
-      ? Math.round((activoObjetivo / ventasBrutas) * diasPeriodo)
-      : 0;
-
-    var ventasNetasTotal = ventasBrutas;
-    var activoTotalDSO = activoObjetivo;
-
-    console.log('[DSO] AR=$' + (activoObjetivo/1e6).toFixed(1) + 'M ventas=$' + (ventasBrutas/1e6).toFixed(1) + 'M días=' + diasPeriodo + ' DSO=' + dsoGlobal + 'd');
+    console.log('[DSO] Saldo=$' + (saldoTotalKPI/1e6).toFixed(1) + 'M DSO(antigüedad)=' + dsoGlobal + 'd');
     // Notificar a la App Comercial para que actualice saldos
     localStorage.setItem('piat_saldos_ts', Date.now().toString());
 
-    // DSO individual por cliente
+    // DSO individual por cliente (antigüedad ponderada, mismo método que el global)
     dsoDatos = [];
-    var todosClientesDSO = new Set(
-      Object.keys(saldosPorCliente).concat(Object.keys(chequesPorCliente))
-    );
-    todosClientesDSO.forEach(function(contacto) {
+    Object.keys(saldosPorCliente).forEach(function(contacto) {
       if (!contacto) return;
-      var saldo = (saldosPorCliente[contacto]||0) + (chequesPorCliente[contacto]||0);
-      var ventas = ventasPorCliente[contacto] || 0;
-      if (saldo > 0 && ventas > 0) {
-        dsoDatos.push({nombre: contacto, saldo: saldo, dso: Math.round((saldo/ventas)*diasPeriodo)});
+      var saldo = saldosPorCliente[contacto];
+      if (saldo > 0) {
+        dsoDatos.push({nombre: contacto, saldo: saldo, dso: Math.round(pondPorCliente[contacto] / saldo)});
       }
     });
 
-
-    var estaCompleto = !!(dsoArchivos.ventas && dsoArchivos.saldos);
+    var estaCompleto = !!(dsoArchivos.saldos && saldosTieneFecha);
     dsoDatos = dsoDatos.filter(function(c){return c.dso > 0;}).sort(function(a,b){return b.dso-a.dso;});
 
     document.getElementById('dso-loading').style.display = 'none';
@@ -2031,9 +1985,9 @@ async function procesarDSO() {
       } catch(e) { console.warn('[DSO] Error preparando ventas:', e); }
     }
 
-    // ── PREPARAR SALDOS Y CHEQUES (el upload se hace en orden: cheques → saldos) ──
-    // El servidor calcula DSO = (Saldo + Cheques) / Ventas × días al recibir saldos.
-    // Es crítico que cheques ya esté guardado cuando llega saldos.
+    // ── PREPARAR SALDOS Y CHEQUES (cheques es opcional, ya no afecta el DSO) ──
+    // El servidor calcula DSO por antigüedad (Σ saldo×días / Σ saldo) al recibir
+    // saldos — ver _dso_aging_por_cliente en main.py.
 
     var saldosParaGuardar = [];
     var _fcISO = null;
@@ -2117,7 +2071,7 @@ async function procesarDSO() {
       ? '<span style="font-size:11px;padding:3px 10px;background:#dcfce7;color:#166534;border-radius:20px;font-weight:600;">✓ Cálculo completo</span>'
       : '<span style="font-size:11px;padding:3px 10px;background:#fefce8;color:#854d0e;border-radius:20px;font-weight:600;">⚠ Cálculo aproximado</span>';
     var bHtml = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">' + badge;
-    bHtml += '<span style="font-size:11px;color:#64748b;">Período analizado: ' + diasPeriodo + ' días</span></div>';
+    bHtml += '<span style="font-size:11px;color:#64748b;">Método: antigüedad de saldo ponderada</span></div>';
     bHtml += '<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">';
     bHtml += '<div style="font-size:13px;color:#64748b;"><strong style="color:var(--azul-oscuro);">Referencia del sector:</strong> 45–55 días es normal · Más de 65 días es alerta</div>';
     bHtml += '<div style="display:flex;gap:8px;">';
@@ -2148,19 +2102,13 @@ async function procesarDSO() {
       }).catch(function(){});
     }, 2000);
 
-    // DSO verificado por servidor — usa historial 4m acumulado de ventas
+    // DSO verificado por servidor — antigüedad de saldo (no depende de Ventas)
     document.getElementById('dso-servidor-wrap').style.display = 'none';
     fetch('/dso-global-saldos')
       .then(function(r) { return r.json(); })
       .then(function(srv) {
         if (!srv || srv.dso === null || srv.dso === undefined) return;
         var colSrv = colorDSO(srv.dso);
-        var formula = srv.formula === 'estandar'
-          ? '(Saldo / Ventas 4m) × 120'
-          : 'Promedio ponderado de días';
-        var ventasStr = srv.ventas_4m > 0
-          ? '$' + Math.round(srv.ventas_4m).toLocaleString('es-AR')
-          : 'sin datos';
         var html = '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px;">';
         html += '<div style="font-size:11px;color:var(--azul-claro);font-weight:600;text-transform:uppercase;letter-spacing:0.8px;">DSO Oficial — Servidor</div>';
         html += '<span style="font-family:Syne,sans-serif;font-size:36px;font-weight:800;color:' + colSrv.color + ';line-height:1;">' + srv.dso + '</span>';
@@ -2169,9 +2117,9 @@ async function procesarDSO() {
         html += '</div>';
         html += '<div style="font-size:12px;color:#64748b;display:flex;gap:20px;flex-wrap:wrap;">';
         html += '<span>Corte: <strong style="color:var(--azul-oscuro);">' + (srv.fecha_corte || '—') + '</strong></span>';
-        html += '<span>Ventas 4m: <strong style="color:var(--azul-oscuro);">' + ventasStr + '</strong></span>';
+        html += '<span>Clientes: <strong style="color:var(--azul-oscuro);">' + (srv.clientes_count || 0) + '</strong></span>';
         html += '<span>Saldo pendiente: <strong style="color:var(--azul-oscuro);">$' + Math.round(srv.saldo_total || 0).toLocaleString('es-AR') + '</strong></span>';
-        html += '<span>Fórmula: <strong style="color:var(--azul-oscuro);">' + formula + '</strong></span>';
+        html += '<span>Fórmula: <strong style="color:var(--azul-oscuro);">antigüedad de saldo</strong></span>';
         html += '</div>';
         document.getElementById('dso-servidor-wrap').innerHTML = html;
         document.getElementById('dso-servidor-wrap').style.display = 'block';
@@ -2297,6 +2245,10 @@ async function cargarMesesDSO() {
     var listaEl = document.getElementById('dso-meses-lista');
     if (!panel || !listaEl) return;
 
+    // Ventas es opcional (no afecta el cálculo de DSO): si nunca se subió nada,
+    // no tiene sentido mostrar el panel.
+    if (!porMes || !Object.keys(porMes).length) { panel.style.display = 'none'; return; }
+
     // Los 3 meses se calculan desde la fecha_corte del saldo (no desde hoy)
     // fecha_corte viene como "DD/MM/YYYY"
     var fechaCorte = new Date();  // fallback = hoy
@@ -2319,10 +2271,10 @@ async function cargarMesesDSO() {
         .toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
       var tiene = porMes[ym] != null && porMes[ym] > 0;
       var monto = tiene ? '$' + Math.round(porMes[ym]).toLocaleString('es-AR') : '';
-      var color = tiene ? '#16a34a' : '#dc2626';
-      var bg    = tiene ? '#dcfce7' : '#fee2e2';
+      var color = tiene ? '#16a34a' : '#94a3b8';
+      var bg    = tiene ? '#dcfce7' : '#f1f5f9';
       return '<div style="font-size:11px;padding:4px 10px;border-radius:8px;background:' + bg + ';color:' + color + ';font-weight:600;">'
-        + (tiene ? '✓ ' : '✗ ') + label + (monto ? ' · ' + monto : ' — falta subir') + '</div>';
+        + (tiene ? '✓ ' : '') + label + (monto ? ' · ' + monto : ' — sin datos') + '</div>';
     }).join('');
 
     panel.style.display = 'block';
@@ -2345,19 +2297,19 @@ async function cargarDSOActual() {
     document.getElementById('dso-actual-num').style.color = color;
     document.getElementById('dso-actual-label').innerHTML =
       'días · <span style="padding:2px 10px;border-radius:12px;font-size:11px;font-weight:700;background:' + color + '22;color:' + color + ';">' + label + '</span>';
-    // Línea de datos + breakdown mensual
+    // Línea de datos + breakdown por tramo de antigüedad
     var saldoBase = Math.round(d.saldo_base || d.saldo_total || 0);
-    var cheques   = Math.round(d.total_cheques || 0);
     var detalleHtml =
       'Corte: <strong>' + (d.fecha_corte || '—') + '</strong> &nbsp;·&nbsp; '
-      + 'AR (saldos): <strong>$' + saldoBase.toLocaleString('es-AR') + '</strong>'
-      + (cheques > 0 ? ' &nbsp;·&nbsp; Cheques: $' + cheques.toLocaleString('es-AR') : '');
-    if (d.breakdown && d.breakdown.length) {
+      + 'Saldo pendiente: <strong>$' + saldoBase.toLocaleString('es-AR') + '</strong> &nbsp;·&nbsp; '
+      + 'Clientes: <strong>' + (d.clientes_count || 0) + '</strong>';
+    if (d.breakdown && d.breakdown.length && saldoBase > 0) {
       detalleHtml += '<div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;">';
       d.breakdown.forEach(function(b) {
-        var v = b.ventas > 0 ? '$' + Math.round(b.ventas).toLocaleString('es-AR') : 'sin datos';
+        if (!b.saldo) return;
+        var pct = Math.round(b.saldo / saldoBase * 100);
         detalleHtml += '<span style="font-size:10px;padding:2px 8px;border-radius:8px;background:#f1f5f9;color:#475569;">'
-          + b.mes + ': ' + v + (b.dias_dso > 0 ? ' → <strong>' + b.dias_dso + 'd</strong>' : '') + '</span>';
+          + b.tramo + ': <strong>$' + Math.round(b.saldo).toLocaleString('es-AR') + '</strong> (' + pct + '%)</span>';
       });
       detalleHtml += '</div>';
     }
