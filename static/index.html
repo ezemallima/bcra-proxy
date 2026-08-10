@@ -2816,29 +2816,37 @@ function calcularScore(datos) {
   return {score:score, rango:rango, veredict:rango, color:color, emoji:emoji, detalle:detalle};
 }
 
+// Tarjeta chica reutilizable para las filas de métricas (stat cards) —
+// usada por renderExposicionSistema(). label/valueHtml son texto ya escapado
+// por el caller; stripeColor puede ser un hex o una var(--...) de marca.
+function _statCardHtml(label, valueHtml, stripeColor) {
+  return '<div style="background:#fff;border:1px solid #e2e8f0;border-left:3px solid ' + stripeColor + ';border-radius:10px;padding:10px 12px;">' +
+    '<div style="font-size:9.5px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;">' + label + '</div>' +
+    '<div style="font-size:15px;font-weight:800;color:#0f172a;margin-top:4px;line-height:1.3;">' + valueHtml + '</div>' +
+  '</div>';
+}
+
 function renderVendeScore(scoreObj) {
   if (!scoreObj) return '';
-  var barWidth = Math.round(scoreObj.score / 999 * 100);
-
   var desglose = '';
 
   return (
-    '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;margin-bottom:8px;">' +
-      '<div style="font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:6px;">Score Vende Seguro</div>' +
-      '<div style="display:flex;align-items:flex-end;gap:14px;margin-bottom:10px;">' +
-        '<div style="font-size:52px;font-weight:800;line-height:1;color:' + scoreObj.color + ';font-family:\'Syne\',sans-serif;">' + scoreObj.score + '</div>' +
-        '<div style="padding-bottom:6px;">' +
-          '<div style="font-size:15px;font-weight:700;color:' + scoreObj.color + ';">' + scoreObj.emoji + ' ' + scoreObj.rango + '</div>' +
-          '<div style="font-size:11px;color:#94a3b8;">escala 1–999</div>' +
-        '</div>' +
+    '<div style="background:linear-gradient(120deg,var(--azul-medio),var(--azul-claro));border-radius:16px;padding:20px 22px 16px;color:#fff;box-shadow:0 10px 28px rgba(29,78,216,0.25);margin-bottom:8px;">' +
+      '<div style="font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,0.78);">Score Vende Seguro</div>' +
+      '<div style="display:flex;align-items:baseline;gap:12px;margin-top:6px;flex-wrap:wrap;">' +
+        '<div style="font-size:48px;font-weight:800;line-height:1;font-family:\'Syne\',sans-serif;">' + scoreObj.score + '</div>' +
+        '<div style="font-size:14px;color:rgba(255,255,255,0.65);font-weight:600;">/ 999</div>' +
+        '<span style="background:#fff;color:' + scoreObj.color + ';padding:4px 12px;border-radius:999px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.4px;">' + scoreObj.emoji + ' ' + scoreObj.rango + '</span>' +
       '</div>' +
       desglose +
-      '<div style="font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:0.6px;text-transform:uppercase;margin:14px 0 6px;">Historial BCRA — 24 meses</div>' +
+    '</div>' +
+    '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;margin-bottom:8px;">' +
+      '<div style="font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:0.6px;text-transform:uppercase;margin-bottom:8px;">Historial BCRA — 24 meses</div>' +
       '<canvas id="bcra-history-chart" style="width:100%;max-height:110px;display:block;"></canvas>' +
       '<div id="bcra-history-nodata" style="display:none;text-align:center;padding:14px 0 6px;font-size:12px;color:#94a3b8;border:1px dashed #e2e8f0;border-radius:8px;">Sin períodos BCRA disponibles — historial no reportado</div>' +
     '</div>' +
-    '<div id="solvencia-card" style="background:#F5F7FA;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;margin-bottom:8px;">' +
-      '<div style="font-size:12px;font-weight:700;color:#334155;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px;">Exposición en Sistema Financiero</div>' +
+    '<div id="solvencia-card" style="margin-bottom:8px;">' +
+      '<div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">Exposición en Sistema Financiero</div>' +
       '<div id="solvencia-body" style="font-size:13px;color:#64748b;">Consultando solvencia...</div>' +
     '</div>'
   );
@@ -3216,16 +3224,14 @@ function renderExposicionSistema() {
     el.innerHTML = '<span style="color:#94a3b8;">Sin datos de exposición disponibles</span>';
     return;
   }
+  var sitPill = '<span style="display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;background:' + ex.sitBg + ';color:' + ex.sitColor + ';">Sit. ' + ex.worstSit + ' — ' + ex.sitLabel + '</span>';
+  var trendHtml = '<span style="color:' + ex.trendColor + ';">' + ex.trendArrow + ' ' + ex.trend + '</span>';
   el.innerHTML =
-    '<div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start;">' +
-    '<div><span style="font-size:11px;color:#94a3b8;display:block;margin-bottom:2px;">Deuda en sistema</span>' +
-      '<span style="font-size:16px;font-weight:700;color:#0B1D3A;">' + ex.deudaFmt + '</span></div>' +
-    '<div><span style="font-size:11px;color:#94a3b8;display:block;margin-bottom:2px;">Entidades acreedoras</span>' +
-      '<span style="font-size:16px;font-weight:700;color:#0B1D3A;">' + (ex.numEnt||'—') + '</span></div>' +
-    '<div><span style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Situación actual</span>' +
-      '<span style="font-size:12px;font-weight:700;padding:2px 9px;border-radius:20px;background:' + ex.sitBg + ';color:' + ex.sitColor + ';">Sit. ' + ex.worstSit + ' — ' + ex.sitLabel + '</span></div>' +
-    '<div><span style="font-size:11px;color:#94a3b8;display:block;margin-bottom:2px;">Tendencia 6m</span>' +
-      '<span style="font-size:14px;font-weight:700;color:' + ex.trendColor + ';">' + ex.trendArrow + ' ' + ex.trend + '</span></div>' +
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;">' +
+      _statCardHtml('Deuda en sistema', ex.deudaFmt, 'var(--azul-claro)') +
+      _statCardHtml('Entidades acreedoras', String(ex.numEnt||'—'), 'var(--azul-claro)') +
+      _statCardHtml('Situación actual', sitPill, ex.sitColor) +
+      _statCardHtml('Tendencia 6m', trendHtml, ex.trendColor) +
     '</div>';
 }
 
