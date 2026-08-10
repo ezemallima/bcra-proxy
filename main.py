@@ -9861,6 +9861,11 @@ def save_dso_saldos():
             json.dump({"saldos": nuevos, "ultima_actualizacion": hoy.strftime('%d/%m/%Y %H:%M'),
                        "fecha_corte": corte_d.strftime('%Y-%m-%d')}, f, ensure_ascii=False)
 
+        # Archiva este reporte bajo su fecha_corte para poder reconstruir la evolución
+        # mensual de cada cliente más adelante (ver /dso-historico/<cliente>). Subir el
+        # mismo mes dos veces pisa esa entrada — no acumula duplicados.
+        _guardar_snapshot_historico(nuevos, corte_d)
+
         # ── Calcular DSO por antigüedad: Σ(saldo × días_desde_fecha_factura) / Σ(saldo) ──
         # No depende de Ventas ni Cheques — solo necesita fecha_factura por fila del
         # reporte de Saldos. Ver _dso_aging_por_cliente.
@@ -10462,12 +10467,17 @@ def _calc_dso_aging(facturas: list) -> int | None:
     return round(suma_pond / suma_saldo)
 
 
-def _dias_desde_fecha_dso(fecha_str) -> int:
-    """Días transcurridos desde una fecha DD/MM/YYYY o YYYY-MM-DD. 0 si no parsea o está vacía."""
+def _dias_desde_fecha_dso(fecha_str, ref_date=None) -> int:
+    """Días transcurridos desde una fecha DD/MM/YYYY o YYYY-MM-DD, respecto a ref_date
+    (por defecto hoy). 0 si no parsea o está vacía.
+    Pasar ref_date explícito al reconstruir un snapshot histórico — nunca calcular
+    la antigüedad de un reporte viejo contra la fecha real de hoy."""
     from datetime import date
     s = str(fecha_str or '').strip()
     if not s:
         return 0
+    if ref_date is None:
+        ref_date = date.today()
     try:
         if '/' in s:
             d, m, y = s.split('/')
@@ -10477,7 +10487,7 @@ def _dias_desde_fecha_dso(fecha_str) -> int:
             f = date(int(y), int(m), int(d))
         else:
             return 0
-        return max(0, (date.today() - f).days)
+        return max(0, (ref_date - f).days)
     except Exception:
         return 0
 
@@ -10488,6 +10498,80 @@ def _bucket_dso(dias: int) -> str:
     if dias <= 90:  return 'd90'
     if dias <= 120: return 'd120'
     return 'd120plus'
+
+
+def _guardar_snapshot_historico(saldos: list, corte_d) -> None:
+    """Archiva un reporte de Saldos (Módulo DSO) bajo su fecha_corte, en
+    dso_saldos_historico.json — dict {'YYYY-MM': {fecha_corte, saldos}}.
+    Permite reconstruir la evolución mensual de saldo/DSO/antigüedad de un
+    cliente sin inventar datos: cada punto es un reporte real que se subió.
+    Volver a subir el mismo mes pisa esa entrada (no acumula duplicados)."""
+    _path = os.path.join(DATA_DIR, 'dso_saldos_historico.json')
+    historico = {}
+    if os.path.exists(_path):
+        try:
+            with open(_path, 'r', encoding='utf-8') as f:
+                historico = json.load(f)
+        except Exception:
+            historico = {}
+    periodo = corte_d.strftime('%Y-%m')
+    historico[periodo] = {"fecha_corte": corte_d.strftime('%Y-%m-%d'), "saldos": saldos}
+    _tmp = _path + '.tmp'
+    with open(_tmp, 'w', encoding='utf-8') as f:
+        json.dump(historico, f, ensure_ascii=False)
+    os.replace(_tmp, _path)
+
+
+@app.route("/dso-historico/<cliente>")
+def dso_historico_cliente(cliente):
+    """Evolución mensual de saldo/DSO/antigüedad de un cliente, reconstruida a
+    partir de los snapshots reales archivados por _guardar_snapshot_historico
+    (uno por fecha_corte subida en el Módulo DSO). Cada punto usa SU PROPIA
+    fecha_corte como referencia para calcular antigüedad — nunca la fecha de
+    hoy — para no falsear el histórico de reportes viejos. Sin snapshots para
+    ese cliente todavía → periodos: [] (el frontend no debe inventar nada)."""
+    from urllib.parse import unquote
+    from datetime import date
+    nombre = unquote(cliente)
+    key = _norm_dso_match(nombre)
+    _path = os.path.join(DATA_DIR, 'dso_saldos_historico.json')
+    if not key or not os.path.exists(_path):
+        return jsonify({"periodos": []})
+    try:
+        with open(_path, 'r', encoding='utf-8') as f:
+            historico = json.load(f)
+    except Exception:
+        return jsonify({"periodos": []})
+
+    periodos = []
+    for periodo_key in sorted(historico.keys()):
+        snap = historico.get(periodo_key) or {}
+        corte_str = str(snap.get('fecha_corte') or '')
+        try:
+            y, m, d = corte_str.split('-')
+            corte_d = date(int(y), int(m), int(d))
+        except Exception:
+            continue
+        filas = [s for s in snap.get('saldos', [])
+                 if _norm_dso_match(str(s.get('cliente') or '')) == key and (s.get('saldo') or 0) > 0]
+        if not filas:
+            continue
+        suma_pond, suma_saldo = 0.0, 0.0
+        buckets = {'d30': 0.0, 'd60': 0.0, 'd90': 0.0, 'd120': 0.0, 'd120plus': 0.0}
+        for s in filas:
+            saldo = float(s.get('saldo') or 0)
+            dias = _dias_desde_fecha_dso(s.get('fecha_factura') or s.get('fechaFactura'), corte_d)
+            suma_pond  += saldo * dias
+            suma_saldo += saldo
+            buckets[_bucket_dso(dias)] += saldo
+        periodos.append({
+            "periodo":     periodo_key,
+            "fecha_corte": corte_str,
+            "total_saldo": round(suma_saldo),
+            "dso":         round(suma_pond / suma_saldo) if suma_saldo > 0 else None,
+            "buckets":     {k: round(v) for k, v in buckets.items()},
+        })
+    return jsonify({"periodos": periodos})
 
 
 def _dso_aging_por_cliente(saldos_lista: list) -> dict:

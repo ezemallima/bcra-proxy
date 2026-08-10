@@ -4040,7 +4040,73 @@ function buildCtaCteHtml(data) {
     });
     html += '</div>';
   }
+
+  // Evolución histórica del saldo — solo si ya hay ≥2 reportes mensuales reales
+  // archivados para este cliente (ver /dso-historico/<cliente>). Con 0 o 1 no hay
+  // tendencia real que mostrar, así que renderSaldoHistoricoChart no dibuja nada:
+  // nunca se inventa un punto de dato.
+  var _histId = 'saldo-hist-' + Date.now();
+  var _nombreCliente = (facturas[0] && facturas[0].cliente) || data.nombre_match || '';
+  html += '<div id="' + _histId + '"></div>';
+  if (_nombreCliente) {
+    setTimeout(function() { renderSaldoHistoricoChart(_nombreCliente, _histId); }, 30);
+  }
   return html;
+}
+
+// ── Evolución mensual de saldo por antigüedad + DSO — a partir de reportes
+// reales archivados (ver _guardar_snapshot_historico en main.py). No dibuja
+// nada si hay menos de 2 puntos: una tendencia necesita al menos dos reportes.
+var _SALDO_BUCKET_COLORS = { d30:'#16a34a', d60:'#ca8a04', d90:'#ea580c', d120:'#dc2626', d120plus:'#7f1d1d' };
+var _SALDO_BUCKET_LABELS = { d30:'0–30d', d60:'31–60d', d90:'61–90d', d120:'91–120d', d120plus:'+120d' };
+async function renderSaldoHistoricoChart(nombre, containerId) {
+  var el = document.getElementById(containerId);
+  if (!el || !nombre) return;
+  try {
+    var r = await fetch('/dso-historico/' + encodeURIComponent(nombre), { signal: AbortSignal.timeout(8000) });
+    if (!r.ok) return;
+    var data = await r.json();
+    var periodos = data.periodos || [];
+    if (periodos.length < 2 || typeof Chart === 'undefined') return;
+
+    var mesesLbl = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    var labels = periodos.map(function(p) {
+      var ym = String(p.periodo || '').split('-');
+      return ym.length === 2 ? (mesesLbl[parseInt(ym[1], 10)] || ym[1]) + '/' + ym[0].slice(2) : p.periodo;
+    });
+    var bucketKeys = ['d30', 'd60', 'd90', 'd120', 'd120plus'];
+    var datasets = bucketKeys.map(function(bk) {
+      return {
+        type: 'bar', label: _SALDO_BUCKET_LABELS[bk], stack: 'saldo',
+        data: periodos.map(function(p) { return (p.buckets && p.buckets[bk]) || 0; }),
+        backgroundColor: _SALDO_BUCKET_COLORS[bk], borderRadius: 3, borderSkipped: false
+      };
+    });
+    datasets.push({
+      type: 'line', label: 'DSO (días)', yAxisID: 'y1',
+      data: periodos.map(function(p) { return p.dso; }),
+      borderColor: '#1D4ED8', backgroundColor: '#1D4ED8',
+      pointBackgroundColor: '#1D4ED8', pointRadius: 3, tension: 0.3
+    });
+
+    el.innerHTML = '<div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.6px;margin:14px 0 8px;">Evolución del saldo — por antigüedad</div>'
+      + '<canvas id="' + containerId + '-cv" style="width:100%;max-height:170px;"></canvas>';
+    var canvas = document.getElementById(containerId + '-cv');
+    if (!canvas) return;
+    var existing = Chart.getChart(canvas);
+    if (existing) existing.destroy();
+    new Chart(canvas, {
+      data: { labels: labels, datasets: datasets },
+      options: {
+        plugins: { legend: { display: true, position: 'bottom', labels: { font: { size: 9 }, usePointStyle: true, boxWidth: 8, color: '#64748b' } } },
+        scales: {
+          x: { stacked: true, ticks: { font: { size: 9 } }, grid: { display: false } },
+          y: { stacked: true, ticks: { font: { size: 9 }, callback: function(v) { return v >= 1000 ? '$' + (v / 1000).toFixed(0) + 'k' : v; } }, grid: { color: '#f1f5f9' } },
+          y1: { position: 'right', grid: { display: false }, ticks: { font: { size: 9 }, callback: function(v) { return v + 'd'; } } }
+        }
+      }
+    });
+  } catch (e) { console.warn('[VS] renderSaldoHistoricoChart falló:', e); }
 }
 
 // ── renderSaldosInterno — usa buildCtaCteHtml, actualiza #saldos-interno-card ─
