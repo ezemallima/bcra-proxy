@@ -10572,32 +10572,39 @@ def dso_historico_cliente(cliente):
 
         periodos = []
         for periodo_key in sorted(historico.keys()):
-            snap = historico.get(periodo_key) or {}
-            corte_str = str(snap.get('fecha_corte') or '')
+            # Cada período se procesa aislado: un snapshot con forma vieja/rota
+            # (ej. legado de otro uso del mismo nombre de archivo) no debe tirar
+            # abajo los períodos válidos de los demás meses — solo se lo salta.
             try:
+                snap = historico.get(periodo_key)
+                if not isinstance(snap, dict):
+                    continue
+                corte_str = str(snap.get('fecha_corte') or '')
                 y, m, d = corte_str.split('-')
                 corte_d = date(int(y), int(m), int(d))
+                filas = [s for s in snap.get('saldos', [])
+                         if isinstance(s, dict)
+                         and _norm_dso_match(str(s.get('cliente') or '')) == key
+                         and (s.get('saldo') or 0) > 0]
+                if not filas:
+                    continue
+                suma_pond, suma_saldo = 0.0, 0.0
+                buckets = {'d30': 0.0, 'd60': 0.0, 'd90': 0.0, 'd120': 0.0, 'd120plus': 0.0}
+                for s in filas:
+                    saldo = float(s.get('saldo') or 0)
+                    dias = _dias_desde_fecha_dso(s.get('fecha_factura') or s.get('fechaFactura'), corte_d)
+                    suma_pond  += saldo * dias
+                    suma_saldo += saldo
+                    buckets[_bucket_dso(dias)] += saldo
+                periodos.append({
+                    "periodo":     periodo_key,
+                    "fecha_corte": corte_str,
+                    "total_saldo": round(suma_saldo),
+                    "dso":         round(suma_pond / suma_saldo) if suma_saldo > 0 else None,
+                    "buckets":     {k: round(v) for k, v in buckets.items()},
+                })
             except Exception:
                 continue
-            filas = [s for s in snap.get('saldos', [])
-                     if _norm_dso_match(str(s.get('cliente') or '')) == key and (s.get('saldo') or 0) > 0]
-            if not filas:
-                continue
-            suma_pond, suma_saldo = 0.0, 0.0
-            buckets = {'d30': 0.0, 'd60': 0.0, 'd90': 0.0, 'd120': 0.0, 'd120plus': 0.0}
-            for s in filas:
-                saldo = float(s.get('saldo') or 0)
-                dias = _dias_desde_fecha_dso(s.get('fecha_factura') or s.get('fechaFactura'), corte_d)
-                suma_pond  += saldo * dias
-                suma_saldo += saldo
-                buckets[_bucket_dso(dias)] += saldo
-            periodos.append({
-                "periodo":     periodo_key,
-                "fecha_corte": corte_str,
-                "total_saldo": round(suma_saldo),
-                "dso":         round(suma_pond / suma_saldo) if suma_saldo > 0 else None,
-                "buckets":     {k: round(v) for k, v in buckets.items()},
-            })
         return jsonify({"periodos": periodos})
     except Exception as e:
         import traceback
