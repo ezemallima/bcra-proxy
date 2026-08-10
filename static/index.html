@@ -7663,7 +7663,7 @@ init()
   function _pfRenderClientRow(c, idx) {
     var sc      = c.score;
     var scColor = _pfColorScore(sc);
-    // c.dso viene enriquecido desde dso_saldos_actual.json en el backend (misma fuente que Director)
+    // c.dso: antigüedad ponderada por saldo, calculada en vivo en el backend (misma fuente que Director)
     var dsoVal  = c.dso || 0;
     var dsoColor = _pfColorDSO(dsoVal);
     var total   = c.saldo_total || 1;

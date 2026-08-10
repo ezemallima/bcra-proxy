@@ -5156,10 +5156,12 @@ def api_director_data():
     for key, c in clientes_map.items():
         sc = scores_map.get(c['cuit']) if c['cuit'] else None
         saldo_total = c['saldo_total']
-        # DSO individual viene EXCLUSIVAMENTE del módulo DSO (dso_individual_actual.json).
-        # El reporte de "Actualizar Saldos Comerciales" no debe afectar este valor.
-        # El enriquecimiento post-loop lo setea; si no hay dato DSO, queda en 0.
-        dso = 0
+        # DSO individual: antigüedad ponderada por saldo — Σ(saldo×días)/Σ(saldo) —
+        # calculada en vivo desde las mismas facturas de "Actualizar Saldos
+        # Comerciales" que arman buckets/aging arriba. Mismo método que el DSO
+        # global (ver más abajo). Ya no depende del snapshot congelado del
+        # Módulo DSO (dso_individual_actual.json).
+        dso = round(sum(f['saldo'] * f['dias'] for f in c['facturas']) / saldo_total) if saldo_total > 0 else 0
         _ci = cc_info_map.get(c['cuit'], {})
         clientes_list.append({
             'nombre':          c['nombre'],
@@ -5178,20 +5180,6 @@ def api_director_data():
             'buckets':         {k: round(v) for k, v in c['buckets'].items()},
             'facturas':        sorted(c['facturas'], key=lambda x: x['dias'], reverse=True),
         })
-
-    # ── Reemplazar DSO con valor congelado del reporte mensual (dso_individual_actual.json) ──
-    # _get_dso_individual devuelve el DSO calculado una sola vez al momento del upload mensual.
-    # No varía día a día. Si no hay dato estático, conserva el DSO calculado desde saldos de gestión.
-    _enriq_count = 0
-    for _cl in clientes_list:
-        _dso_m = _get_dso_individual(
-            str(_cl.get('cuit') or '').replace('-', '').replace(' ', '').strip(),
-            str(_cl.get('nombre') or '')
-        )
-        if _dso_m is not None:
-            _cl['dso'] = _dso_m
-            _enriq_count += 1
-    print(f"[director-dso] DSO estático: {_enriq_count}/{len(clientes_list)} via dso_individual_actual.json", flush=True)
 
     clientes_list.sort(key=lambda x: x['saldo_total'], reverse=True)
 
@@ -5214,49 +5202,11 @@ def api_director_data():
                       if c['buckets'].get('d90', 0) + c['buckets'].get('d120', 0)
                          + c['buckets'].get('d120plus', 0) > 0)
 
-    # ── DSO global ponderado: agotamiento real por cliente (= app comercial) ────
-    # Se calcula aquí mismo para no depender de caché ni de una llamada paralela.
-    _dso_g_pond = None
-    try:
-        _vp = os.path.join(DATA_DIR, 'dso_ventas_historico.json')
-        _vgl: dict = {}   # (year,month) → total empresa
-        _vpc: dict = {}   # cliente_norm → {(year,month) → total}
-        if os.path.exists(_vp):
-            with open(_vp, 'r', encoding='utf-8') as _fv:
-                _vh = json.load(_fv)
-            for _ym, _t in _vh.get('meses', {}).items():
-                try: _vgl[(int(_ym[:4]), int(_ym[5:7]))] = float(_t)
-                except: pass
-            for _cli_v, _mc in _vh.get('por_cliente', {}).items():
-                _cn = _norm_nombre(_cli_v)
-                _vpc[_cn] = {}
-                for _ym, _t in _mc.items():
-                    try: _vpc[_cn][(int(_ym[:4]), int(_ym[5:7]))] = float(_t)
-                    except: pass
-        _ts = total_saldo if total_saldo > 0 else 1
-        _sp = 0.0; _ss = 0.0
-        for _c in clientes_list:
-            _s = float(_c['saldo_total'])
-            if _s <= 0:
-                continue
-            _cn = _norm_nombre(_c['nombre'])
-            # Ventas propias del cliente; si no hay, distribución proporcional al saldo
-            _vc = _vpc.get(_cn) or {_k: _v * _s / _ts for _k, _v in _vgl.items()}
-            _r = _dso_exhaustion(_s, _vc, hoy)
-            if _r.get('dso'):
-                _sp += _r['dso'] * _s
-                _ss += _s
-        if _ss > 0:
-            _dso_g_pond = round(_sp / _ss)
-    except Exception as _ex:
-        print(f"[director-data] DSO ponderado error: {_ex}", flush=True)
-
     return jsonify({
         'fecha_hoy':            hoy.strftime('%d/%m/%Y'),
         'total_saldo':          round(total_saldo),
         'total_buckets':        total_b,
         'dso_global':           dso_global,
-        'dso_global_ponderado': _dso_g_pond,
         'n_clientes':           len(clientes_list),
         'n_con_score':          n_con_score,
         'n_riesgo':             n_riesgo,
@@ -12099,45 +12049,6 @@ def get_saldos_timestamp():
         return resp
     except:
         return jsonify({"ts": 0, "fecha": None})
-
-def _dso_exhaustion(ar: float, ventas_por_mes: dict, fecha_corte_dt) -> dict:
-    """Aplica el método de agotamiento sobre 3 meses hacia atrás desde fecha_corte_dt.
-    ventas_por_mes: {(year, month): total}
-    Devuelve {dso, breakdown} o {dso: None} si no hay ventas."""
-    import calendar
-    if ar <= 0:
-        return {"dso": 0, "breakdown": []}
-    meses = []
-    y, m = fecha_corte_dt.year, fecha_corte_dt.month
-    for _ in range(3):
-        dias  = calendar.monthrange(y, m)[1]
-        ventas = ventas_por_mes.get((y, m), 0.0)
-        meses.append({"mes": f"{m:02d}/{y}", "dias": dias, "ventas": ventas})
-        m -= 1
-        if m == 0:
-            m, y = 12, y - 1
-    ar_rest = ar
-    dso_acum = 0.0
-    breakdown = []
-    for mi in meses:
-        if ar_rest <= 0:
-            break
-        v = mi["ventas"]
-        d = mi["dias"]
-        if v <= 0:
-            breakdown.append({**mi, "dias_dso": 0, "nota": "sin ventas"})
-            continue
-        if ar_rest >= v:
-            dso_acum += d
-            ar_rest  -= v
-            breakdown.append({**mi, "dias_dso": d, "ar_restante": round(ar_rest)})
-        else:
-            dp = (ar_rest / v) * d
-            dso_acum += dp
-            breakdown.append({**mi, "dias_dso": round(dp, 1), "ar_restante": 0})
-            ar_rest = 0
-    return {"dso": round(dso_acum) if ar > 0 else None, "breakdown": breakdown}
-
 
 @app.route("/api/dso-todos")
 def get_dso_todos():
