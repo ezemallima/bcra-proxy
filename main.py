@@ -10639,6 +10639,24 @@ def _dso_aging_global(saldos_lista: list) -> dict:
     }
 
 
+def _dso_fuente_saldos() -> list:
+    """Fuente de saldos para el cálculo de DSO global (/api/dso-todos, /dso-global-saldos).
+    Prioriza 'Actualizar Saldos Comerciales' (_saldos_gestion / _saldos_facturas —
+    reporte semanal, siempre fresco) y cae a la carga mensual del Módulo DSO
+    (dso_saldos_actual.json) solo si todavía no se subió ningún reporte de gestión."""
+    _saldos_gestion_desde_disco()
+    fuente = _saldos_gestion if _saldos_gestion else _saldos_facturas
+    if fuente:
+        return fuente
+    s_path = os.path.join(DATA_DIR, 'dso_saldos_actual.json')
+    if os.path.exists(s_path):
+        try:
+            return json.load(open(s_path, 'r', encoding='utf-8')).get('saldos', [])
+        except Exception:
+            pass
+    return []
+
+
 @app.route("/saldos-cuit/<cuit>")
 def get_saldos_cuit(cuit):
     """Busca facturas por CUIT (prioridad absoluta). Si no hay CUIT en registros, cae a nombre + fuzzy."""
@@ -12124,21 +12142,16 @@ def _dso_exhaustion(ar: float, ventas_por_mes: dict, fecha_corte_dt) -> dict:
 @app.route("/api/dso-todos")
 def get_dso_todos():
     """DSO por vendedor y por cliente — método de antigüedad de saldos (aging).
-    Fuente única: dso_saldos_actual.json → Σ(saldo×días_desde_fecha_factura)/Σ(saldo).
-    No depende de Ventas ni Cheques (ver _dso_aging_global / CLAUDE.md DSO módulo)."""
+    Fuente: _saldos_gestion/_saldos_facturas ('Actualizar Saldos Comerciales',
+    siempre fresco) con fallback a dso_saldos_actual.json (Módulo DSO) si todavía
+    no se subió ningún reporte de gestión. Σ(saldo×días_desde_fecha_factura)/Σ(saldo).
+    No depende de Ventas ni Cheques (ver _dso_aging_global / _dso_fuente_saldos)."""
     from datetime import datetime
 
-    # ── Leer saldos ──────────────────────────────────────────────────────────
-    saldos_lista = []
-    s_path = os.path.join(DATA_DIR, 'dso_saldos_actual.json')
-    if os.path.exists(s_path):
-        try:
-            saldos_lista = json.load(open(s_path, 'r', encoding='utf-8')).get('saldos', [])
-        except Exception:
-            pass
+    saldos_lista = _dso_fuente_saldos()
 
     # ── Fecha de corte ────────────────────────────────────────────────────────
-    fechas = [_parsear_fecha_dso(s.get('fecha_factura')) for s in saldos_lista]
+    fechas = [_parsear_fecha_dso(s.get('fecha_factura') or s.get('fechaFactura')) for s in saldos_lista]
     fechas = [f for f in fechas if f]
     fecha_corte = max(fechas) if fechas else datetime.now()
 
@@ -12230,25 +12243,20 @@ def _parsear_fecha_dso(s):
 def get_dso_global_saldos():
     """DSO global — método de antigüedad de saldos (aging), ponderado por saldo.
     DSO = Σ(saldo × días_desde_fecha_factura) / Σ(saldo). No depende de Ventas ni
-    Cheques — solo del reporte de Saldos con fecha de factura por fila (ver
-    _dso_aging_global). Reemplaza el método de agotamiento (AR/Ventas×días), que
-    quedaba desactualizado en cuanto dejaba de subirse el reporte de Ventas."""
+    Cheques. Fuente: _saldos_gestion/_saldos_facturas ('Actualizar Saldos
+    Comerciales', siempre fresco) con fallback a dso_saldos_actual.json (Módulo
+    DSO) — ver _dso_fuente_saldos. Reemplaza el método de agotamiento
+    (AR/Ventas×días), que quedaba desactualizado en cuanto dejaba de subirse el
+    reporte de Ventas."""
     from datetime import datetime
 
-    saldos_lista = []
-    s_path = os.path.join(DATA_DIR, 'dso_saldos_actual.json')
-    if os.path.exists(s_path):
-        try:
-            with open(s_path, 'r', encoding='utf-8') as _fs:
-                saldos_lista = json.load(_fs).get('saldos', [])
-        except Exception as _se:
-            print(f"[dso-global] error saldos: {_se}", flush=True)
+    saldos_lista = _dso_fuente_saldos()
 
     if not saldos_lista:
         return jsonify({"dso": None, "saldo_total": 0, "clientes_count": 0,
                         "formula": "sin_datos", "breakdown": []})
 
-    fechas = [_parsear_fecha_dso(s.get('fecha_factura')) for s in saldos_lista]
+    fechas = [_parsear_fecha_dso(s.get('fecha_factura') or s.get('fechaFactura')) for s in saldos_lista]
     fechas = [f for f in fechas if f]
     fecha_corte = max(fechas) if fechas else datetime.now()
 

@@ -1075,7 +1075,7 @@
       </div>
 
       <div style="background:#eff6ff;border:1px solid var(--azul-borde);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--azul-oscuro);">
-        <strong>El DSO se calcula por antigüedad de saldo</strong> (Σ saldo × días desde la fecha de factura). Con subir <strong>Saldos</strong> (incluyendo la columna Fecha de factura) alcanza — Ventas y Cheques son opcionales.
+        <strong>El DSO se calcula solo (por antigüedad de saldo)</strong> a partir de lo que subís en <strong>"⚡ Actualizar Saldos Comerciales"</strong> más abajo. No hace falta usar las cajas de acá abajo — son un respaldo manual, opcional, por si todavía no subiste ningún reporte de gestión.
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
@@ -1088,7 +1088,7 @@
           <input type="file" id="dso-file-ventas" accept=".xlsx,.xls,.csv" style="display:none;" onchange="cargarArchivoDSO(this,'ventas')" />
         </div>
         <div>
-          <div style="font-size:11px;font-weight:600;color:var(--azul-claro);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Saldos</div>
+          <div style="font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Saldos (respaldo — opcional)</div>
           <div style="font-size:10px;color:#94a3b8;margin-bottom:6px;">Columnas: Contacto · Fecha de factura · SALDO PENDIENTE DE PAGO</div>
           <div class="upload-area" id="dso-upload-saldos" onclick="document.getElementById('dso-file-saldos').click()" style="padding:12px;margin-bottom:0;cursor:pointer;">
             <div style="font-size:12px;color:#64748b;">Subir reporte de saldos</div>
@@ -1123,8 +1123,8 @@
     <div class="card" style="border:2px solid #10b981;background:linear-gradient(135deg,#f0fdf4 0%,#fff 100%);margin-bottom:1rem;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px;">
         <div>
-          <div class="card-title" style="color:#059669;margin-bottom:4px;">⚡ Actualizar Saldos Comerciales (Solo Gestión)</div>
-          <p style="font-size:13px;color:#64748b;margin:0;">Sube el reporte semanal de cuentas corrientes. Los vendedores lo ven al instante en <strong>/comercial</strong>. <strong style="color:#059669;">No afecta el DSO.</strong></p>
+          <div class="card-title" style="color:#059669;margin-bottom:4px;">⚡ Actualizar Saldos Comerciales</div>
+          <p style="font-size:13px;color:#64748b;margin:0;">Sube el reporte semanal de cuentas corrientes. Los vendedores lo ven al instante en <strong>/comercial</strong>. <strong style="color:#059669;">Esta es la fuente principal del DSO</strong> (antigüedad de saldo) — no hace falta subir nada aparte en el Módulo DSO.</p>
         </div>
       </div>
       <div style="font-size:11px;font-weight:600;color:#059669;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Formato Odoo: Vendedor · Cliente · Nro Factura · Fecha · Monto · Saldo</div>
