@@ -10501,12 +10501,19 @@ def _bucket_dso(dias: int) -> str:
 
 
 def _fecha_corte_desde_saldos(saldos: list):
-    """Deriva la fecha de corte de un reporte de saldos como el máximo
-    fechaFactura del archivo — nunca la fecha de hoy. Así, re-subir un
-    reporte viejo (backfill) archiva ese reporte bajo SU período real,
-    no bajo la fecha en la que se lo volvió a subir."""
+    """Deriva la fecha de corte de un reporte de saldos: el mes MÁS RECIENTE
+    que tenga una porción significativa de las facturas (≥3% del archivo, o
+    al menos 3 filas), usando el máximo fechaFactura dentro de ese mes.
+
+    Un reporte "al cierre de julio" suele traer un puñado de facturas de los
+    primeros días de agosto (el export de Odoo no es instantáneo) — esas no
+    deben desplazar el reporte entero a agosto. Pero un reporte genuinamente
+    "al 7 de agosto" sí debe quedar en agosto, porque ya trae una porción
+    real de facturas de ese mes, no solo un puñado suelto.
+    Nunca usa la fecha de hoy salvo que el archivo no tenga fechas válidas."""
     from datetime import date
-    mx = None
+    from collections import Counter
+    fechas = []
     for s in saldos:
         fs = str(s.get('fechaFactura') or s.get('fecha_factura') or '').strip()
         f = None
@@ -10519,9 +10526,18 @@ def _fecha_corte_desde_saldos(saldos: list):
                 f = date(int(y), int(m), int(d))
         except Exception:
             f = None
-        if f and (mx is None or f > mx):
-            mx = f
-    return mx or date.today()
+        if f:
+            fechas.append(f)
+    if not fechas:
+        return date.today()
+    total = len(fechas)
+    umbral = max(3, round(total * 0.03))
+    meses = Counter((f.year, f.month) for f in fechas)
+    for (anio, mes) in sorted(meses.keys(), reverse=True):
+        if meses[(anio, mes)] >= umbral:
+            del_mes = [f for f in fechas if (f.year, f.month) == (anio, mes)]
+            return max(del_mes)
+    return max(fechas)  # fallback improbable: ningún mes supera el umbral
 
 
 def _guardar_snapshot_historico(saldos: list, corte_d) -> None:
