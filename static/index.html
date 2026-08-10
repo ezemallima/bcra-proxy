@@ -655,10 +655,10 @@
   .pf-sort-btn.pf-active { border-color:#2563eb; color:#2563eb; background:#eff6ff; }
   .pf-results-count { font-size:12px; color:#94a3b8; margin-left:auto; }
   .pf-table-card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; }
-  .pf-table-head { display:grid; grid-template-columns:2fr 1fr 1fr 1fr 2.2fr 52px; gap:8px; padding:10px 18px; background:#1e40af; color:#e0e7ff; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; }
+  .pf-table-head { display:grid; grid-template-columns:2fr 1fr 1fr 2.2fr 52px; gap:8px; padding:10px 18px; background:#1e40af; color:#e0e7ff; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; }
   .pf-client-row { border-bottom:1px solid #f1f5f9; }
   .pf-client-row:last-child { border-bottom:none; }
-  .pf-client-row-main { display:grid; grid-template-columns:2fr 1fr 1fr 1fr 2.2fr 52px; gap:8px; padding:13px 18px; align-items:center; cursor:pointer; transition:background 0.12s; }
+  .pf-client-row-main { display:grid; grid-template-columns:2fr 1fr 1fr 2.2fr 52px; gap:8px; padding:13px 18px; align-items:center; cursor:pointer; transition:background 0.12s; }
   .pf-client-row-main:hover { background:#f8faff; }
   .pf-client-row.pf-expanded .pf-client-row-main { background:#eff6ff; }
   .pf-client-name { font-size:14px; font-weight:700; color:#0f172a; }
@@ -691,10 +691,10 @@
   @media (max-width:768px) {
     .pf-kpi-grid { grid-template-columns:repeat(2,1fr); }
     .pf-table-head, .pf-client-row-main { grid-template-columns:1fr 1fr 52px; }
-    .pf-table-head>*:nth-child(n+2):nth-child(-n+5),
-    .pf-client-row-main>*:nth-child(n+2):nth-child(-n+5) { display:none; }
-    .pf-table-head>*:nth-child(5), .pf-table-head>*:nth-child(6),
-    .pf-client-row-main>*:nth-child(5), .pf-client-row-main>*:nth-child(6) { display:block; }
+    .pf-table-head>*:nth-child(n+2):nth-child(-n+3),
+    .pf-client-row-main>*:nth-child(n+2):nth-child(-n+3) { display:none; }
+    .pf-table-head>*:nth-child(4), .pf-table-head>*:nth-child(5),
+    .pf-client-row-main>*:nth-child(4), .pf-client-row-main>*:nth-child(5) { display:block; }
   }
 
   @media (max-width:768px) {
@@ -1051,7 +1051,7 @@
       <div id="pf-controls"></div>
       <div class="pf-table-card">
         <div class="pf-table-head">
-          <div>Cliente</div><div>Score</div><div>DSO</div><div>Saldo Total</div><div>Aging</div><div></div>
+          <div>Cliente</div><div>Score</div><div>Saldo Total</div><div>Aging</div><div></div>
         </div>
         <div id="pf-clientes-body"></div>
       </div>
@@ -1059,7 +1059,12 @@
   </div>
 
   <div id="dso" class="section">
-    <div class="card">
+    <!-- ⏸ DSO deshabilitado hasta nuevo aviso (pedido explícito: "no podemos inventar
+         números"). Esta tarjeta completa queda oculta con display:none — el HTML/JS
+         sigue intacto para reactivarla más adelante sacando ese estilo. No afecta
+         "⚡ Actualizar Saldos Comerciales" más abajo (sigue activo, es lo que
+         alimenta Mi Cartera y el DSO/conducta interno del motor de scoring). -->
+    <div class="card" style="display:none;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
         <div>
           <div class="card-title" style="margin-bottom:4px;">Módulo DSO — Días de Venta Pendiente de Cobro</div>
@@ -2231,6 +2236,7 @@ async function sincronizarServidor() {
 }
 
 async function cargarMesesDSO() {
+  return; // ⏸ DSO deshabilitado hasta nuevo aviso — ver comentario en <div id="dso">
   try {
     // Obtener fecha_corte del último saldo subido y ventas acumuladas en paralelo
     var [rDso, rVentas] = await Promise.all([
@@ -2285,6 +2291,7 @@ async function cargarMesesDSO() {
 }
 
 async function cargarDSOActual() {
+  return; // ⏸ DSO deshabilitado hasta nuevo aviso — ver comentario en <div id="dso">
   try {
     var r = await fetch('/dso-global-saldos');
     var d = await r.json();
@@ -7536,7 +7543,6 @@ init()
   var _pfFilterVend      = '';
   var _pfSearch          = '';
   var _pfFilterBucket    = '';
-  var _pfDsoGlobal       = null;
   var _pfLoaded          = false;
 
   // ── Utilidades ───────────────────────────────────────────────────────────
@@ -7600,20 +7606,25 @@ init()
     var total = stats.total_saldo || 1;
     var tb = stats.total_buckets || {};
     var critico = (tb.d120||0) + (tb.d120plus||0);
-    var dsoVal   = stats.dso_es_atraso ? stats.dso_global : (_pfDsoGlobal || stats.dso_global);
-    var dsoLabel = stats.dso_es_atraso ? 'Atraso Prom.' : 'DSO Promedio';
-    var dsoSub   = stats.dso_es_atraso ? 'días mora en tramo' : 'días ponderado';
 
     var kpis = [
       { label:'Saldo Total',   value:'$'+_pfFmt(stats.total_saldo),  sub:_pfFmtFull(stats.total_saldo)+' ARS',    color:'#2563eb',  bucket:'' },
       { label:'0–30 días',     value:'$'+_pfFmt(tb.d30||0),          sub:_pfPct(tb.d30,total)+'% del total',      color:'#16a34a',  bucket:'d30' },
       { label:'31–60 días',    value:'$'+_pfFmt(tb.d60||0),          sub:_pfPct(tb.d60,total)+'% del total',      color:'#ca8a04',  bucket:'d60' },
       { label:'61–90 días',    value:'$'+_pfFmt(tb.d90||0),          sub:_pfPct(tb.d90,total)+'% del total',      color:'#ea580c',  bucket:'d90' },
-      { label:'Crítico +90d',  value:'$'+_pfFmt(critico),            sub:_pfPct(critico,total)+'% del total',     color:'#dc2626',  bucket:'d120plus' },
-      { label:dsoLabel,        value:dsoVal+'d',                     sub:dsoSub,                                  color:_pfColorDSO(dsoVal), bucket:'' },
+      { label:'Crítico +90d',  value:'$'+_pfFmt(critico),            sub:_pfPct(critico,total)+'% del total',     color:'#dc2626',  bucket:'d120plus' }
+    ];
+    // "Atraso Prom." es antigüedad real (días de mora dentro del tramo filtrado),
+    // no una estimación de DSO — se muestra solo al filtrar por tramo. El KPI
+    // "DSO Promedio" (sin filtro) está deshabilitado hasta nuevo aviso.
+    if (stats.dso_es_atraso) {
+      kpis.push({ label:'Atraso Prom.', value:stats.dso_global+'d', sub:'días mora en tramo',
+                  color:_pfColorDSO(stats.dso_global), bucket:'' });
+    }
+    kpis.push(
       { label:'Clientes',      value:stats.n_clientes,               sub:stats.n_vencido+' con vto >30d',         color:'#7c3aed',  bucket:'' },
       { label:'Críticos +90d', value:stats.n_critico,                sub:stats.n_riesgo+' score < 400',           color:'#dc2626',  bucket:'d120plus' }
-    ];
+    );
 
     var kpiHtml = '<div class="pf-kpi-grid" id="pf-kpi-grid-inner">';
     kpis.forEach(function(k) {
@@ -7657,7 +7668,6 @@ init()
       +vendedores.map(function(v){ return '<option value="'+_pfEsc(v)+'"'+(_pfEsc(v)===_pfFilterVend?' selected':'')+'>'+_pfEsc(v)+'</option>'; }).join('')
       +'</select>'
       +'<button class="pf-sort-btn'+(_pfSortKey==='saldo_total'?' pf-active':'')+'" onclick="_pfSetSort(\'saldo_total\')">Saldo ↕</button>'
-      +'<button class="pf-sort-btn'+(_pfSortKey==='dso'?' pf-active':'')+'" onclick="_pfSetSort(\'dso\')">DSO ↕</button>'
       +'<button class="pf-sort-btn'+(_pfSortKey==='score'?' pf-active':'')+'" onclick="_pfSetSort(\'score\')">Score ↕</button>'
       +'<span class="pf-results-count" id="pf-results-count"></span>'
       +'</div>';
@@ -7667,9 +7677,6 @@ init()
   function _pfRenderClientRow(c, idx) {
     var sc      = c.score;
     var scColor = _pfColorScore(sc);
-    // c.dso: antigüedad ponderada por saldo, calculada en vivo en el backend (misma fuente que Director)
-    var dsoVal  = c.dso || 0;
-    var dsoColor = _pfColorDSO(dsoVal);
     var total   = c.saldo_total || 1;
     var tb      = c.buckets || {};
 
@@ -7677,8 +7684,8 @@ init()
       ? '<div class="pf-score-badge" style="color:'+scColor+';border-color:'+scColor+'44;background:'+scColor+'18">'+sc+'</div>'
         +'<div class="pf-score-rango" style="color:'+scColor+'">'+_pfEsc(c.rango||'')+'</div>'
       : '<div style="font-size:11px;color:#64748b;">Sin score</div>';
-
-    var dsoBadge = '<div class="pf-dso-val" style="color:'+dsoColor+'">'+dsoVal+'</div><div class="pf-dso-label">días</div>';
+    // ⏸ DSO por cliente deshabilitado hasta nuevo aviso (columna removida del grid;
+    // c.dso sigue viniendo del backend por si se reactiva).
 
     var miniBar = '<div class="pf-mini-aging"><div class="pf-mini-bar-wrap">';
     PF_BUCKETS.forEach(function(bk) {
@@ -7714,7 +7721,6 @@ init()
       +'<div><div class="pf-client-name">'+_pfEsc(c.nombre||'—')+'</div>'
       +'<div class="pf-client-cuit">'+cuitFmt+' · <span class="pf-client-vend">'+_pfEsc(c.vendedor||'—')+'</span></div></div>'
       +'<div>'+scoreBadge+'</div>'
-      +'<div>'+dsoBadge+'</div>'
       +'<div><div class="pf-saldo-total">$'+_pfFmt(c.saldo_total||0)+'</div></div>'
       +'<div>'+miniBar+'</div>'
       +'<div><button class="pf-expand-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button></div>'
@@ -7842,16 +7848,10 @@ init()
     contentEl.style.display = 'none';
 
     try {
-      var [rCartera, rDso] = await Promise.all([
-        fetch('/api/cartera-saldos'),
-        fetch('/dso-global-saldos').catch(function(){ return {ok:false}; })
-      ]);
+      // ⏸ DSO deshabilitado hasta nuevo aviso: ya no se pide /dso-global-saldos acá.
+      var rCartera = await fetch('/api/cartera-saldos');
       if (!rCartera.ok) throw new Error('HTTP ' + rCartera.status + ' al cargar cartera-saldos');
       _pfData = await rCartera.json();
-      if (rDso && rDso.ok) {
-        var dsoData = await rDso.json();
-        if (dsoData && dsoData.dso != null) _pfDsoGlobal = dsoData.dso;
-      }
       _pfLoaded = true;
       loadEl.style.display = 'none';
       contentEl.style.display = 'block';

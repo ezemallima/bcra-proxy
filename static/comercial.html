@@ -1396,6 +1396,7 @@ function calcDSOPonderado(todos, vendedorNorm) {
 }
 
 async function cargarDSOHeader() {
+  return; // ⏸ DSO deshabilitado hasta nuevo aviso (oculta badge de header y banner "DSO Mi Cartera")
   try {
     const r = await fetch('/api/dso-todos');
     const todos = await r.json();

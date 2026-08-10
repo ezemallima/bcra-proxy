@@ -270,7 +270,7 @@ body {
 }
 .table-head {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr 2.2fr 52px;
+  grid-template-columns: 2fr 1fr 1fr 2.2fr 52px;
   padding: 10px 18px;
   background: var(--blue);
   font-size: 10px;
@@ -285,7 +285,7 @@ body {
 .client-row:last-child { border-bottom: none; }
 .client-row-main {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr 2.2fr 52px;
+  grid-template-columns: 2fr 1fr 1fr 2.2fr 52px;
   padding: 13px 18px;
   align-items: center;
   gap: 8px;
@@ -523,10 +523,10 @@ body {
 @media (max-width: 768px) {
   .kpi-grid { grid-template-columns: repeat(2,1fr); }
   .table-head, .client-row-main { grid-template-columns: 1fr 1fr 42px; }
-  .table-head>*:nth-child(n+2):nth-child(-n+5),
-  .client-row-main>*:nth-child(n+2):nth-child(-n+5) { display:none; }
-  .table-head>*:nth-child(5), .table-head>*:nth-child(6),
-  .client-row-main>*:nth-child(5), .client-row-main>*:nth-child(6) { display:block; }
+  .table-head>*:nth-child(n+2):nth-child(-n+3),
+  .client-row-main>*:nth-child(n+2):nth-child(-n+3) { display:none; }
+  .table-head>*:nth-child(4), .table-head>*:nth-child(5),
+  .client-row-main>*:nth-child(4), .client-row-main>*:nth-child(5) { display:block; }
   .main { padding: 14px 12px 40px; }
   .header, .tabs-bar { padding: 0 14px; }
   .search-box { width: 100%; }
@@ -686,16 +686,10 @@ async function cargarDatos() {
   document.getElementById('main-content').innerHTML =
     '<div class="loading-wrap"><div class="spinner"></div><div>Cargando datos...</div></div>';
   try {
-    const [rDir, rTodos] = await Promise.all([
-      fetch('/api/director-data'),
-      fetch('/api/dso-todos').catch(function(){ return {ok:false}; }),
-    ]);
+    // ⏸ DSO deshabilitado hasta nuevo aviso: ya no se pide /api/dso-todos acá.
+    const rDir = await fetch('/api/director-data');
     if (!rDir.ok) throw new Error('HTTP ' + rDir.status);
     _data = await rDir.json();
-    if (rTodos && rTodos.ok) {
-      var todos = await rTodos.json();
-      _dsoPorCliente = todos.por_cliente || {};
-    }
     document.getElementById('header-fecha').textContent = 'Al ' + _data.fecha_hoy;
 
     // Tab counters
@@ -706,7 +700,6 @@ async function cargarDatos() {
     document.getElementById('tab-count-vendedores').textContent = vendedores.length;
 
     renderActiveTab();
-    actualizarKPIDSOGlobal();
   } catch(e) {
     document.getElementById('main-content').innerHTML =
       '<div class="loading-wrap"><div style="color:var(--red);font-weight:600;">Error: ' + e.message + '</div></div>';
@@ -714,6 +707,7 @@ async function cargarDatos() {
 }
 
 async function actualizarKPIDSOGlobal() {
+  return; // ⏸ DSO deshabilitado hasta nuevo aviso (ya no se llama desde cargarDatos)
   try {
     const r = await fetch('/dso-global-saldos');
     if (!r.ok) return;
@@ -780,7 +774,7 @@ function renderResumen(el) {
   el.innerHTML = renderKPIsAndAging(stats)
     + renderControls(vendedores)
     + '<div class="table-card">'
-    + '<div class="table-head"><div>Cliente</div><div>Score</div><div>DSO</div><div>Saldo Total</div><div>Aging</div><div></div></div>'
+    + '<div class="table-head"><div>Cliente</div><div>Score</div><div>Saldo Total</div><div>Aging</div><div></div></div>'
     + '<div id="clientes-body"></div></div>';
   renderTabla();
 }
@@ -794,12 +788,9 @@ function renderKPIsAndAging(stats) {
   // Verificación de integridad: la suma d30+d60+d90+critico debe = total_saldo
   // (si hay diferencia indica que la fuente de datos tiene facturas no clasificadas)
 
-  // DSO: cuando hay filtro de bucket activo mostramos "Atraso Prom." del tramo
-  // (siempre >90d para el filtro Crítico). El DSO Oficial global del header
-  // viene del endpoint /dso-global-saldos y no se altera por este recalculo.
-  var dsoVal   = stats.dso_es_atraso ? stats.dso_global : (_dsoGlobal || stats.dso_global);
-  var dsoLabel = stats.dso_es_atraso ? 'Atraso Prom.' : 'DSO Promedio';
-  var dsoSub   = stats.dso_es_atraso ? 'días mora en tramo' : 'días ponderado';
+  // "Atraso Prom." es antigüedad real (días de mora en el tramo filtrado), no
+  // una estimación de DSO — se muestra solo al filtrar por tramo. El KPI
+  // "DSO Promedio" (sin filtro) está deshabilitado hasta nuevo aviso.
 
   var kpis = [
     { label:'Saldo Total',   value:fmt(stats.total_saldo),      sub:fmtFull(stats.total_saldo)+' ARS', color:'#2563eb', bucket:'' },
@@ -807,10 +798,15 @@ function renderKPIsAndAging(stats) {
     { label:'31–60 días',    value:fmt(tb.d60||0),              sub:pct(tb.d60,total)+'% del total',   color:'#ca8a04', bucket:'d60' },
     { label:'61–90 días',    value:fmt(tb.d90||0),              sub:pct(tb.d90,total)+'% del total',   color:'#ea580c', bucket:'d90' },
     { label:'Crítico +90d',  value:fmt(critico),                sub:pct(critico,total)+'% del total',  color:'#dc2626', bucket:'d120plus' },
-    { label:dsoLabel,        value:dsoVal+'d',                  sub:dsoSub,                            color:colorDSO(dsoVal), bucket:'' },
-    { label:'Clientes',      value:stats.n_clientes,            sub:stats.n_vencido+' con vto >30d',   color:'#7c3aed', bucket:'' },
-    { label:'Críticos +90d', value:stats.n_critico,             sub:stats.n_riesgo+' score < 400',     color:'#dc2626', bucket:'d120plus' },
   ];
+  if (stats.dso_es_atraso) {
+    kpis.push({ label:'Atraso Prom.', value:stats.dso_global+'d', sub:'días mora en tramo',
+                color:colorDSO(stats.dso_global), bucket:'' });
+  }
+  kpis.push(
+    { label:'Clientes',      value:stats.n_clientes,            sub:stats.n_vencido+' con vto >30d',   color:'#7c3aed', bucket:'' },
+    { label:'Críticos +90d', value:stats.n_critico,             sub:stats.n_riesgo+' score < 400',     color:'#dc2626', bucket:'d120plus' }
+  );
   var kpiHtml = '<div class="kpi-grid" id="kpi-grid">';
   kpis.forEach(function(k) {
     var isActive = k.bucket && k.bucket === _filterBucket;
@@ -856,7 +852,6 @@ function renderControls(vendedores) {
     +vendedores.map(function(v){ return '<option value="'+esc(v)+'"'+(v===_filterVend?' selected':'')+'>'+esc(v)+'</option>'; }).join('')
     +'</select>'
     +'<button class="sort-btn'+(_sortKey==='saldo_total'?' active':'')+'" onclick="setSort(\'saldo_total\')">Saldo ↕</button>'
-    +'<button class="sort-btn'+(_sortKey==='dso'?' active':'')+'" onclick="setSort(\'dso\')">DSO ↕</button>'
     +'<button class="sort-btn'+(_sortKey==='score'?' active':'')+'" onclick="setSort(\'score\')">Score ↕</button>'
     +'<span class="results-count" id="results-count"></span>'
     +'</div>';
@@ -913,10 +908,6 @@ function renderTabla() {
 function renderClientRow(c, idx) {
   var sc = c.score;
   var scColor = colorScore(sc);
-  var _dsoNorm = normNombreDir(c.nombre||'');
-  var _dsoExh  = _dsoPorCliente[_dsoNorm];
-  var dsoVal   = (c.dso && c.dso > 0) ? c.dso : ((typeof _dsoExh==='number' && _dsoExh>0) ? _dsoExh : 0);
-  var dsoColor = colorDSO(dsoVal);
   var total    = c.saldo_total || 1;
   var tb       = c.buckets || {};
 
@@ -924,8 +915,7 @@ function renderClientRow(c, idx) {
     ? '<div class="score-badge" style="color:'+scColor+';border-color:'+scColor+'44;background:'+scColor+'18">'+sc+'</div>'
       +'<div class="score-rango" style="color:'+scColor+'">'+esc(c.rango||'')+'</div>'
     : '<div style="font-size:11px;color:var(--text3);">Sin score</div>';
-
-  var dsoBadge = '<div class="dso-val" style="color:'+dsoColor+'">'+dsoVal+'</div><div class="dso-label">días</div>';
+  // ⏸ DSO por cliente deshabilitado hasta nuevo aviso (columna removida del grid).
 
   var miniBar = '<div class="mini-aging"><div class="mini-bar-wrap">';
   BUCKETS.forEach(function(bk) {
@@ -958,7 +948,6 @@ function renderClientRow(c, idx) {
     +'<div class="client-row-main" onclick="toggleRow('+idx+')">'
     +'<div><div class="client-name">'+esc(c.nombre||'—')+'</div><div class="client-cuit">'+cuitFmt+' · <span class="client-vend">'+esc(c.vendedor||'—')+'</span></div></div>'
     +'<div>'+scoreBadge+'</div>'
-    +'<div>'+dsoBadge+'</div>'
     +'<div><div class="saldo-total">'+fmt(c.saldo_total)+'</div></div>'
     +'<div>'+miniBar+'</div>'
     +'<div><button class="expand-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button></div>'
