@@ -10500,6 +10500,30 @@ def _bucket_dso(dias: int) -> str:
     return 'd120plus'
 
 
+def _fecha_corte_desde_saldos(saldos: list):
+    """Deriva la fecha de corte de un reporte de saldos como el máximo
+    fechaFactura del archivo — nunca la fecha de hoy. Así, re-subir un
+    reporte viejo (backfill) archiva ese reporte bajo SU período real,
+    no bajo la fecha en la que se lo volvió a subir."""
+    from datetime import date
+    mx = None
+    for s in saldos:
+        fs = str(s.get('fechaFactura') or s.get('fecha_factura') or '').strip()
+        f = None
+        try:
+            if '/' in fs:
+                d, m, y = fs.split('/')
+                f = date(int(y), int(m), int(d))
+            elif '-' in fs and len(fs) >= 10:
+                y, m, d = fs[:10].split('-')
+                f = date(int(y), int(m), int(d))
+        except Exception:
+            f = None
+        if f and (mx is None or f > mx):
+            mx = f
+    return mx or date.today()
+
+
 def _guardar_snapshot_historico(saldos: list, corte_d) -> None:
     """Archiva un reporte de Saldos (Módulo DSO) bajo su fecha_corte, en
     dso_saldos_historico.json — dict {'YYYY-MM': {fecha_corte, saldos}}.
@@ -10530,48 +10554,55 @@ def dso_historico_cliente(cliente):
     fecha_corte como referencia para calcular antigüedad — nunca la fecha de
     hoy — para no falsear el histórico de reportes viejos. Sin snapshots para
     ese cliente todavía → periodos: [] (el frontend no debe inventar nada)."""
-    from urllib.parse import unquote
-    from datetime import date
-    nombre = unquote(cliente)
-    key = _norm_dso_match(nombre)
-    _path = os.path.join(DATA_DIR, 'dso_saldos_historico.json')
-    if not key or not os.path.exists(_path):
-        return jsonify({"periodos": []})
+    # Todo el cuerpo va en un único try/except: esto es contexto histórico
+    # opcional para un gráfico — si algo falla, el cliente debe ver "sin
+    # datos todavía", nunca un 500. El detalle del error queda en el log.
     try:
+        from urllib.parse import unquote
+        from datetime import date
+        nombre = unquote(cliente)
+        key = _norm_dso_match(nombre)
+        _path = os.path.join(DATA_DIR, 'dso_saldos_historico.json')
+        if not key or not os.path.exists(_path):
+            return jsonify({"periodos": []})
         with open(_path, 'r', encoding='utf-8') as f:
             historico = json.load(f)
-    except Exception:
-        return jsonify({"periodos": []})
+        if not isinstance(historico, dict):
+            return jsonify({"periodos": []})
 
-    periodos = []
-    for periodo_key in sorted(historico.keys()):
-        snap = historico.get(periodo_key) or {}
-        corte_str = str(snap.get('fecha_corte') or '')
-        try:
-            y, m, d = corte_str.split('-')
-            corte_d = date(int(y), int(m), int(d))
-        except Exception:
-            continue
-        filas = [s for s in snap.get('saldos', [])
-                 if _norm_dso_match(str(s.get('cliente') or '')) == key and (s.get('saldo') or 0) > 0]
-        if not filas:
-            continue
-        suma_pond, suma_saldo = 0.0, 0.0
-        buckets = {'d30': 0.0, 'd60': 0.0, 'd90': 0.0, 'd120': 0.0, 'd120plus': 0.0}
-        for s in filas:
-            saldo = float(s.get('saldo') or 0)
-            dias = _dias_desde_fecha_dso(s.get('fecha_factura') or s.get('fechaFactura'), corte_d)
-            suma_pond  += saldo * dias
-            suma_saldo += saldo
-            buckets[_bucket_dso(dias)] += saldo
-        periodos.append({
-            "periodo":     periodo_key,
-            "fecha_corte": corte_str,
-            "total_saldo": round(suma_saldo),
-            "dso":         round(suma_pond / suma_saldo) if suma_saldo > 0 else None,
-            "buckets":     {k: round(v) for k, v in buckets.items()},
-        })
-    return jsonify({"periodos": periodos})
+        periodos = []
+        for periodo_key in sorted(historico.keys()):
+            snap = historico.get(periodo_key) or {}
+            corte_str = str(snap.get('fecha_corte') or '')
+            try:
+                y, m, d = corte_str.split('-')
+                corte_d = date(int(y), int(m), int(d))
+            except Exception:
+                continue
+            filas = [s for s in snap.get('saldos', [])
+                     if _norm_dso_match(str(s.get('cliente') or '')) == key and (s.get('saldo') or 0) > 0]
+            if not filas:
+                continue
+            suma_pond, suma_saldo = 0.0, 0.0
+            buckets = {'d30': 0.0, 'd60': 0.0, 'd90': 0.0, 'd120': 0.0, 'd120plus': 0.0}
+            for s in filas:
+                saldo = float(s.get('saldo') or 0)
+                dias = _dias_desde_fecha_dso(s.get('fecha_factura') or s.get('fechaFactura'), corte_d)
+                suma_pond  += saldo * dias
+                suma_saldo += saldo
+                buckets[_bucket_dso(dias)] += saldo
+            periodos.append({
+                "periodo":     periodo_key,
+                "fecha_corte": corte_str,
+                "total_saldo": round(suma_saldo),
+                "dso":         round(suma_pond / suma_saldo) if suma_saldo > 0 else None,
+                "buckets":     {k: round(v) for k, v in buckets.items()},
+            })
+        return jsonify({"periodos": periodos})
+    except Exception as e:
+        import traceback
+        print(f"[dso-historico] Error: {traceback.format_exc()}", flush=True)
+        return jsonify({"periodos": [], "error": str(e)})
 
 
 def _dso_aging_por_cliente(saldos_lista: list) -> dict:
@@ -11814,6 +11845,16 @@ def upload_saldos_gestion():
         vendedores_unicos = len(set(s['vendedor'] for s in saldos))
         print(f"[upload-gestion] Parseados: {len(saldos)} registros | "
               f"{clientes_unicos} clientes únicos | {vendedores_unicos} vendedores únicos", flush=True)
+
+        # Archivar este reporte bajo su fecha de corte real (máximo fechaFactura del
+        # archivo) para poder reconstruir la evolución mensual de cada cliente — ver
+        # /dso-historico/<cliente>. No debe poder romper el upload principal.
+        try:
+            _corte_gestion = _fecha_corte_desde_saldos(saldos)
+            _guardar_snapshot_historico(saldos, _corte_gestion)
+            print(f"[upload-gestion] Archivado histórico bajo corte={_corte_gestion}", flush=True)
+        except Exception as _he:
+            print(f"[upload-gestion] historico error (no crítico): {_he}", flush=True)
         if saldos:
             print(f"[upload-gestion] Primeras 3 filas: {saldos[:3]}", flush=True)
         sg_path = os.path.join(DATA_DIR, 'saldos_gestion_vendedores.json')
