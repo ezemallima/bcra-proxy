@@ -3161,17 +3161,16 @@ function hideBcraHmTip() {
   if (tip) tip.style.display = 'none';
 }
 
-function renderExposicionSistema() {
-  var el = document.getElementById('solvencia-body');
-  if (!el) return;
+// Calcula la exposición del cliente en el sistema financiero (deuda, entidades,
+// situación actual, tendencia 6m). Fuente única — la usan tanto la tarjeta en
+// pantalla (renderExposicionSistema) como el PDF (exportarReporte), para que
+// nunca muestren números distintos del mismo cliente.
+function _calcularExposicionSistema() {
   var hist = window._ultimoHistorial;
   var periSrc = [];
   if (hist && hist.results && hist.results.periodos) periSrc = hist.results.periodos;
   else if (window._ultimoBcraData && window._ultimoBcraData.results && window._ultimoBcraData.results.periodos) periSrc = window._ultimoBcraData.results.periodos;
-  if (!periSrc.length) {
-    el.innerHTML = '<span style="color:#94a3b8;">Sin datos de exposición disponibles</span>';
-    return;
-  }
+  if (!periSrc.length) return null;
   // Padrón local: misma normalización que renderBcraHeatmap — inyectar mes actual si falta periodo.
   var _hoyE = new Date();
   var _curPerE = String(_hoyE.getFullYear()) + String(_hoyE.getMonth() + 1).padStart(2, '0');
@@ -3183,7 +3182,7 @@ function renderExposicionSistema() {
     .filter(function(p){ return /^\d{6}$/.test(String(p.periodo||'').trim()); })
     .sort(function(a,b){ return (parseInt(b.periodo,10)||0)-(parseInt(a.periodo,10)||0); })
     .slice(0,24);
-  if (!data24.length) { el.innerHTML = '<span style="color:#94a3b8;">Sin historial BCRA disponible</span>'; return; }
+  if (!data24.length) return null;
   // Métricas del período más reciente
   var entLatest = (data24[0].entidades||[]).filter(function(e){ return (e.monto||0) > 0; });
   var numEnt = entLatest.length;
@@ -3194,24 +3193,39 @@ function renderExposicionSistema() {
   var per6 = data24[Math.min(5, data24.length-1)];
   var ent6 = (per6.entidades||[]).filter(function(e){ return (e.monto||0) > 0; });
   var sit6 = ent6.length ? Math.max.apply(null, ent6.map(function(e){ return e.situacion||1; })) : 1;
-  var trend, trendColor;
-  if (worstSit < sit6)      { trend = '↑ Mejorando';     trendColor = '#166534'; }
-  else if (worstSit > sit6) { trend = '↓ Deteriorando';  trendColor = '#991b1b'; }
-  else                      { trend = '→ Estable';        trendColor = '#334155'; }
+  var trend, trendArrow, trendColor;
+  if (worstSit < sit6)      { trend = 'Mejorando';    trendArrow = '↑'; trendColor = '#166534'; }
+  else if (worstSit > sit6) { trend = 'Deteriorando'; trendArrow = '↓'; trendColor = '#991b1b'; }
+  else                      { trend = 'Estable';      trendArrow = '→'; trendColor = '#334155'; }
   // Situación badge
-  var sitLabel = ['','Normal','Atraso >90d','Irregular','Dudoso','Irrecuperable'];
-  var sitColor = ['','#166534','#854d0e','#9a3412','#991b1b','#7f1d1d'];
-  var sitBg    = ['','#dcfce7','#fef9c3','#ffedd5','#fee2e2','#fee2e2'];
+  var sitLabelArr = ['','Normal','Atraso >90d','Irregular','Dudoso','Irrecuperable'];
+  var sitColorArr = ['','#166534','#854d0e','#9a3412','#991b1b','#7f1d1d'];
+  var sitBgArr    = ['','#dcfce7','#fef9c3','#ffedd5','#fee2e2','#fee2e2'];
+  return {
+    deudaFmt: deudaFmt, totalDeuda: totalDeuda, numEnt: numEnt, worstSit: worstSit,
+    sitLabel: sitLabelArr[worstSit] || '', sitColor: sitColorArr[worstSit], sitBg: sitBgArr[worstSit],
+    trend: trend, trendArrow: trendArrow, trendColor: trendColor
+  };
+}
+
+function renderExposicionSistema() {
+  var el = document.getElementById('solvencia-body');
+  if (!el) return;
+  var ex = _calcularExposicionSistema();
+  if (!ex) {
+    el.innerHTML = '<span style="color:#94a3b8;">Sin datos de exposición disponibles</span>';
+    return;
+  }
   el.innerHTML =
     '<div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start;">' +
     '<div><span style="font-size:11px;color:#94a3b8;display:block;margin-bottom:2px;">Deuda en sistema</span>' +
-      '<span style="font-size:16px;font-weight:700;color:#0B1D3A;">' + deudaFmt + '</span></div>' +
+      '<span style="font-size:16px;font-weight:700;color:#0B1D3A;">' + ex.deudaFmt + '</span></div>' +
     '<div><span style="font-size:11px;color:#94a3b8;display:block;margin-bottom:2px;">Entidades acreedoras</span>' +
-      '<span style="font-size:16px;font-weight:700;color:#0B1D3A;">' + (numEnt||'—') + '</span></div>' +
+      '<span style="font-size:16px;font-weight:700;color:#0B1D3A;">' + (ex.numEnt||'—') + '</span></div>' +
     '<div><span style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Situación actual</span>' +
-      '<span style="font-size:12px;font-weight:700;padding:2px 9px;border-radius:20px;background:' + sitBg[worstSit] + ';color:' + sitColor[worstSit] + ';">Sit. ' + worstSit + ' — ' + (sitLabel[worstSit]||'') + '</span></div>' +
+      '<span style="font-size:12px;font-weight:700;padding:2px 9px;border-radius:20px;background:' + ex.sitBg + ';color:' + ex.sitColor + ';">Sit. ' + ex.worstSit + ' — ' + ex.sitLabel + '</span></div>' +
     '<div><span style="font-size:11px;color:#94a3b8;display:block;margin-bottom:2px;">Tendencia 6m</span>' +
-      '<span style="font-size:14px;font-weight:700;color:' + trendColor + ';">' + trend + '</span></div>' +
+      '<span style="font-size:14px;font-weight:700;color:' + ex.trendColor + ';">' + ex.trendArrow + ' ' + ex.trend + '</span></div>' +
     '</div>';
 }
 
@@ -5181,6 +5195,12 @@ function _cargarLogoPDF() {
   });
 }
 
+function _hex2rgb(hex) {
+  var h = String(hex||'').replace('#','');
+  if (h.length !== 6) return [100,116,139];
+  return [parseInt(h.substr(0,2),16), parseInt(h.substr(2,2),16), parseInt(h.substr(4,2),16)];
+}
+
 async function exportarReporte(conIA) {
   if (conIA === undefined) conIA = true;
   if (conIA && !ultimoAnalisis) {
@@ -5192,7 +5212,7 @@ async function exportarReporte(conIA) {
   if (btn) { btn.disabled = true; btn.textContent = 'Generando…'; }
 
   const { jsPDF } = window.jspdf;
-  const logoUrl = await _cargarLogoPDF();
+  const [logoUrl, chartImg] = await Promise.all([_cargarLogoPDF(), buildBcraChartImage()]);
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const W = 210, H = 297;
 
@@ -5276,6 +5296,48 @@ async function exportarReporte(conIA) {
   y = 67;
   doc.setDrawColor(210,220,240); doc.setLineWidth(0.4); doc.line(10, y, W-10, y);
   y += 6;
+
+  // ── EXPOSICIÓN EN SISTEMA FINANCIERO — mismos números que la tarjeta en pantalla ──
+  var ex = _calcularExposicionSistema();
+  if (ex) {
+    var exCols = [
+      { x: 10,  label: 'DEUDA EN SISTEMA' },
+      { x: 65,  label: 'ENTIDADES ACREEDORAS' },
+      { x: 120, label: 'SITUACIÓN ACTUAL' },
+      { x: 165, label: 'TENDENCIA 6M' }
+    ];
+    doc.setFontSize(7.5); doc.setFont('helvetica','bold'); doc.setTextColor(148,163,184);
+    exCols.forEach(function(c){ doc.text(c.label, c.x, y); });
+    y += 6;
+    doc.setFontSize(13); doc.setFont('helvetica','bold'); doc.setTextColor(11,29,58);
+    doc.text(ex.deudaFmt, exCols[0].x, y);
+    doc.text(String(ex.numEnt || '—'), exCols[1].x, y);
+    var _sitRgbBg = _hex2rgb(ex.sitBg), _sitRgbTxt = _hex2rgb(ex.sitColor);
+    var _sitTxt = 'Sit. ' + ex.worstSit + ' — ' + ex.sitLabel;
+    doc.setFontSize(8.5); doc.setFont('helvetica','bold');
+    var _sitW = doc.getTextWidth(_sitTxt) + 6;
+    doc.setFillColor(_sitRgbBg[0], _sitRgbBg[1], _sitRgbBg[2]);
+    doc.roundedRect(exCols[2].x, y - 4.2, _sitW, 6, 2, 2, 'F');
+    doc.setTextColor(_sitRgbTxt[0], _sitRgbTxt[1], _sitRgbTxt[2]);
+    doc.text(_sitTxt, exCols[2].x + 3, y);
+    var _trendRgb = _hex2rgb(ex.trendColor);
+    doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(_trendRgb[0], _trendRgb[1], _trendRgb[2]);
+    doc.text(ex.trendArrow + ' ' + ex.trend, exCols[3].x, y);
+    y += 10;
+    doc.setDrawColor(230,235,245); doc.setLineWidth(0.3); doc.line(10, y, W-10, y);
+    y += 8;
+  }
+
+  // ── GRÁFICO — EVOLUCIÓN DE SITUACIÓN BCRA (24 MESES) ─────────────────────────
+  if (chartImg) {
+    if (y > 245) { doc.addPage(); y = 15; }
+    doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(100,116,139);
+    doc.text('EVOLUCIÓN DE SITUACIÓN BCRA — 24 MESES', 10, y);
+    y += 4;
+    var chW = W - 20, chH = chW * (230 / 820);
+    try { doc.addImage(chartImg, 'PNG', 10, y, chW, chH); } catch (e) { console.warn('[VS] addImage gráfico falló:', e); }
+    y += chH + 8;
+  }
 
   // ── MORA — BLOQUE ROJO CRÍTICO ───────────────────────────────────────────
   if (mora) {
