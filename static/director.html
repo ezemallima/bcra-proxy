@@ -3,13 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="apple-touch-icon" href="/static/logo.png">
+<link rel="icon" type="image/svg+xml" href="/static/logo.svg">
+<link rel="icon" type="image/png" href="/static/logo.png">
 <title>Vende Seguro · Panel Dirección Comercial</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Roboto+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=Roboto+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
-  --blue:       #2563eb;
+  --blue:       #3B82F6;
   --blue-dark:  #1d4ed8;
   --blue-light: #dbeafe;
   --blue-mid:   #bfdbfe;
@@ -35,7 +38,7 @@
 }
 html,body { height:100%; }
 body {
-  font-family: 'Inter', sans-serif;
+  font-family: 'Sora', sans-serif;
   background: var(--bg);
   color: var(--text);
   min-height: 100vh;
@@ -224,7 +227,7 @@ body {
   padding: 8px 12px 8px 34px;
   color: var(--text);
   font-size: 13px;
-  font-family: 'Inter', sans-serif;
+  font-family: 'Sora', sans-serif;
   outline: none;
   transition: border-color 0.15s;
 }
@@ -238,7 +241,7 @@ body {
   padding: 8px 12px;
   color: var(--text);
   font-size: 13px;
-  font-family: 'Inter', sans-serif;
+  font-family: 'Sora', sans-serif;
   cursor: pointer;
   outline: none;
 }
@@ -484,7 +487,7 @@ body {
 
 /* ── Sub-tabla de comprobantes en modal ── */
 .inv-row > td { padding: 0; }
-.inv-inner { padding: 0 0 0 32px; background: #f8fafc; border-bottom: 2px solid var(--blue-mid); }
+.inv-inner { padding: 0 0 0 32px; background: #F5F7FA; border-bottom: 2px solid var(--blue-mid); }
 .inv-fac-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .inv-fac-table thead tr { background: var(--blue-light); }
 .inv-fac-table th { padding: 7px 14px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--blue-text); white-space: nowrap; border-bottom: 1px solid var(--blue-mid); }
@@ -638,14 +641,14 @@ function colorScore(s) {
 }
 function colorDSO(d) {
   if (d <= 15) return '#16a34a';
-  if (d <= 30) return '#2563eb';
+  if (d <= 30) return '#3B82F6';
   if (d <= 60) return '#ca8a04';
   if (d <= 90) return '#ea580c';
   return '#dc2626';
 }
 function colorDias(d) {
   if (d === 0) return { bg:'#dcfce7', color:'#16a34a' };
-  if (d <= 30)  return { bg:'#dbeafe', color:'#2563eb' };
+  if (d <= 30)  return { bg:'#dbeafe', color:'#3B82F6' };
   if (d <= 60)  return { bg:'#fef9c3', color:'#ca8a04' };
   if (d <= 90)  return { bg:'#ffedd5', color:'#ea580c' };
   return { bg:'#fee2e2', color:'#dc2626' };
@@ -793,7 +796,7 @@ function renderKPIsAndAging(stats) {
   // "DSO Promedio" (sin filtro) está deshabilitado hasta nuevo aviso.
 
   var kpis = [
-    { label:'Saldo Total',   value:fmt(stats.total_saldo),      sub:fmtFull(stats.total_saldo)+' ARS', color:'#2563eb', bucket:'' },
+    { label:'Saldo Total',   value:fmt(stats.total_saldo),      sub:fmtFull(stats.total_saldo)+' ARS', color:'#3B82F6', bucket:'' },
     { label:'0–30 días',     value:fmt(tb.d30||0),              sub:pct(tb.d30,total)+'% del total',   color:'#16a34a', bucket:'d30' },
     { label:'31–60 días',    value:fmt(tb.d60||0),              sub:pct(tb.d60,total)+'% del total',   color:'#ca8a04', bucket:'d60' },
     { label:'61–90 días',    value:fmt(tb.d90||0),              sub:pct(tb.d90,total)+'% del total',   color:'#ea580c', bucket:'d90' },

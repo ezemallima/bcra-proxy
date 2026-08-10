@@ -206,17 +206,27 @@ def _fetch_macro_data() -> dict:
     return result or (_macro_cache.get('data') or {})
 
 # ── Startup: genera static/logo.png usando solo stdlib (sin PIL) ─────────────
+# Isotipo "VS" en grilla de bloques (7x9 por letra) sobre fondo navy de marca.
 def _generar_logo_png():
-    import struct as _s, zlib as _z, math as _m
-    W = H = 180; CX = CY = 90.0
+    import struct as _s, zlib as _z
+    W = H = 180
+    NAVY = (0x0B, 0x1D, 0x3A)
+    WHITE = (0xFF, 0xFF, 0xFF)
+    V = [
+        "1000001", "1000001", "1000001", "0100010", "0100010",
+        "0100010", "0010100", "0010100", "0001000",
+    ]
+    S = [
+        "0111110", "1100000", "1100000", "0111100", "0011100",
+        "0011110", "0000011", "0000011", "0111110",
+    ]
+    CELL = 10
+    GX0, GY0, GAP = 13, 45, 14
+    SX0 = GX0 + 7 * CELL + GAP
 
-    def _dseg(px, py, ax, ay, bx, by):
-        dx, dy = bx - ax, by - ay
-        l2 = dx*dx + dy*dy
-        if l2 == 0:
-            return _m.hypot(px - ax, py - ay)
-        t = max(0.0, min(1.0, ((px - ax)*dx + (py - ay)*dy) / l2))
-        return _m.hypot(px - ax - t*dx, py - ay - t*dy)
+    def _cell_on(grid, x0, y0, x, y):
+        col, row = (x - x0) // CELL, (y - y0) // CELL
+        return 0 <= row < len(grid) and 0 <= col < len(grid[0]) and grid[row][col] == '1'
 
     def _chunk(tp, d):
         c = tp.encode('ascii') + d
@@ -226,20 +236,12 @@ def _generar_logo_png():
     for y in range(H):
         row = bytearray(1 + W * 3)
         for x in range(W):
-            d = _m.hypot(x - CX, y - CY)
-            r, g, b = 0x0b, 0x16, 0x28
-            if d <= 76:  r, g, b = 0x25, 0x63, 0xeb
-            if d <= 62:  r, g, b = 0x0b, 0x16, 0x28
-            _e = min(
-                _dseg(x, y,  54, 58, 126, 58),
-                _dseg(x, y,  54, 58,  54, 96),
-                _dseg(x, y, 126, 58, 126, 96),
-                _dseg(x, y,  54, 96,  90, 133),
-                _dseg(x, y, 126, 96,  90, 133),
-            )
-            if _e < 4.5: r, g, b = 0x60, 0xa5, 0xfa
-            _v = min(_dseg(x, y, 72, 68, 90, 106), _dseg(x, y, 108, 68, 90, 106))
-            if _v < 4.0: r, g, b = 0xff, 0xff, 0xff
+            r, g, b = NAVY
+            if GY0 <= y < GY0 + 9 * CELL:
+                if GX0 <= x < GX0 + 7 * CELL and _cell_on(V, GX0, GY0, x, y):
+                    r, g, b = WHITE
+                elif SX0 <= x < SX0 + 7 * CELL and _cell_on(S, SX0, GY0, x, y):
+                    r, g, b = WHITE
             row[1 + x*3], row[1 + x*3+1], row[1 + x*3+2] = r, g, b
         rows.append(bytes(row))
 

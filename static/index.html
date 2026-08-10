@@ -12,16 +12,16 @@
 <link rel="icon" type="image/png" href="/static/logo.png">
 <title>Vende Seguro v22.0 - Motor de Scoring Inteligente</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Syne:wght@700;800&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&display=swap');
 
   :root {
-    --azul-oscuro: #0f2d52;
-    --azul-medio: #1a56a0;
-    --azul-claro: #2563eb;
+    --azul-oscuro: #0B1D3A;
+    --azul-medio: #1D4ED8;
+    --azul-claro: #3B82F6;
     --azul-suave: #eff6ff;
     --azul-borde: #bfdbfe;
     --blanco: #ffffff;
-    --fondo: #f8fafc;
+    --fondo: #F5F7FA;
     --texto: #0f172a;
     --texto-suave: #64748b;
     --rojo: #991b1b;
@@ -30,9 +30,9 @@
     --verde-bg: #dcfce7;
     --naranja: #9a3412;
     --naranja-bg: #ffedd5;
-    --bg2: #f8fafc;
+    --bg2: #F5F7FA;
     --border: #e2e8f0;
-    --sidebar-bg: #0b1628;
+    --sidebar-bg: #0B1D3A;
     --sidebar-width: 220px;
     --card-shadow: 0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -1px rgba(0,0,0,0.04);
     --card-shadow-hover: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);
@@ -40,7 +40,7 @@
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; overflow: hidden; }
-  body { font-family: 'Inter', -apple-system, sans-serif; background: var(--fondo); color: var(--texto); font-size: 14px; -webkit-font-smoothing: antialiased; }
+  body { font-family: 'Sora', -apple-system, sans-serif; background: var(--fondo); color: var(--texto); font-size: 14px; -webkit-font-smoothing: antialiased; }
 
   /* ── APP SHELL ── */
   #app-shell { display: flex; height: 100vh; overflow: hidden; }
@@ -48,15 +48,15 @@
   /* ── SIDEBAR ── */
   #sidebar { width: var(--sidebar-width); background: var(--sidebar-bg); display: flex; flex-direction: column; flex-shrink: 0; overflow-y: auto; border-right: 1px solid rgba(255,255,255,0.05); z-index: 20; }
   .sb-brand { padding: 18px 16px 16px; border-bottom: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
-  .sb-logo-icon { width: 34px; height: 34px; background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); border-radius: 9px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 4px 12px rgba(37,99,235,0.4); }
+  .sb-logo-icon { width: 34px; height: 34px; border-radius: 9px; overflow: hidden; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 4px 12px rgba(11,29,58,0.5); }
   .sb-brand-text { flex: 1; min-width: 0; }
   .sb-name { font-size: 14px; font-weight: 700; color: #f1f5f9; letter-spacing: -0.3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sb-ver { font-size: 10px; color: #475569; font-weight: 500; margin-top: 2px; }
   .sb-nav { flex: 1; padding: 8px 8px; display: flex; flex-direction: column; gap: 1px; }
   .sb-section-label { font-size: 9px; font-weight: 700; color: #334155; letter-spacing: 1.4px; text-transform: uppercase; padding: 8px 12px 3px; margin-top: 4px; }
-  .sb-nav .tab { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 12px; border-radius: 8px; border: none; background: transparent; color: #64748b; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s; text-align: left; font-family: 'Inter', sans-serif; white-space: nowrap; }
+  .sb-nav .tab { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 12px; border-radius: 8px; border: none; background: transparent; color: #64748b; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s; text-align: left; font-family: 'Sora', sans-serif; white-space: nowrap; }
   .sb-nav .tab:hover { background: rgba(255,255,255,0.07); color: #cbd5e1; box-shadow: none; border-color: transparent; }
-  .sb-nav .tab.active { background: rgba(37,99,235,0.2); color: #93c5fd; box-shadow: none; }
+  .sb-nav .tab.active { background: rgba(59,130,246,0.2); color: #93c5fd; box-shadow: none; }
   .sb-nav .tab.active .sb-ico svg { stroke: #60a5fa; }
   .sb-nav .tab:hover .sb-ico svg { stroke: #94a3b8; }
   .sb-ico { width: 16px; height: 16px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
@@ -122,16 +122,16 @@
 
   /* ── INPUTS ── */
   .input-row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
-  input, select, textarea { font-family: 'Inter', inherit; font-size: 14px; padding: 10px 14px; border: 1.5px solid #e2e8f0; border-radius: 10px; background: #f8fafc; color: var(--texto); outline: none; transition: border-color 0.15s, box-shadow 0.15s, background 0.15s; }
-  input:focus, select:focus, textarea:focus { border-color: var(--azul-claro); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); background: var(--blanco); }
+  input, select, textarea { font-family: 'Sora', inherit; font-size: 14px; padding: 10px 14px; border: 1.5px solid #e2e8f0; border-radius: 10px; background: #F5F7FA; color: var(--texto); outline: none; transition: border-color 0.15s, box-shadow 0.15s, background 0.15s; }
+  input:focus, select:focus, textarea:focus { border-color: var(--azul-claro); box-shadow: 0 0 0 3px rgba(59,130,246,0.1); background: var(--blanco); }
   input { flex: 1; min-width: 120px; }
   textarea { width: 100%; resize: vertical; }
 
   /* ── BUTTONS ── */
-  button { font-family: 'Inter', inherit; font-size: 13px; padding: 9px 18px; border: 1.5px solid #e2e8f0; border-radius: 10px; background: var(--blanco); color: var(--texto); cursor: pointer; font-weight: 500; transition: all 0.15s; white-space: nowrap; }
+  button { font-family: 'Sora', inherit; font-size: 13px; padding: 9px 18px; border: 1.5px solid #e2e8f0; border-radius: 10px; background: var(--blanco); color: var(--texto); cursor: pointer; font-weight: 500; transition: all 0.15s; white-space: nowrap; }
   button:hover { background: var(--azul-suave); border-color: var(--azul-claro); color: var(--azul-claro); }
-  button.primary { background: var(--azul-claro); color: var(--blanco); border-color: var(--azul-claro); box-shadow: 0 4px 12px rgba(37,99,235,0.25); }
-  button.primary:hover { background: #1d4ed8; border-color: #1d4ed8; box-shadow: 0 6px 16px rgba(37,99,235,0.35); }
+  button.primary { background: var(--azul-claro); color: var(--blanco); border-color: var(--azul-claro); box-shadow: 0 4px 12px rgba(59,130,246,0.25); }
+  button.primary:hover { background: #1d4ed8; border-color: #1d4ed8; box-shadow: 0 6px 16px rgba(59,130,246,0.35); }
   button:disabled { opacity: 0.5; cursor: not-allowed; }
 
   /* ── BADGES (full-pill) ── */
@@ -147,8 +147,8 @@
   .score-bar-fill { height: 100%; border-radius: 9999px; background: linear-gradient(to right, #ef4444 0%, #f59e0b 35%, #22c55e 65%, #0ea5e9 100%); transition: width 0.5s ease; }
 
   /* ── SCORE GLASS CARD ── */
-  .score-glass { background: linear-gradient(135deg, rgba(37,99,235,0.05) 0%, rgba(99,102,241,0.03) 100%); border: 1px solid rgba(37,99,235,0.14); border-radius: 16px; padding: 1.25rem; position: relative; overflow: hidden; }
-  .score-glass::before { content: ''; position: absolute; top: -20px; right: -20px; width: 90px; height: 90px; border-radius: 50%; background: radial-gradient(circle, rgba(37,99,235,0.07) 0%, transparent 70%); pointer-events: none; }
+  .score-glass { background: linear-gradient(135deg, rgba(59,130,246,0.05) 0%, rgba(99,102,241,0.03) 100%); border: 1px solid rgba(59,130,246,0.14); border-radius: 16px; padding: 1.25rem; position: relative; overflow: hidden; }
+  .score-glass::before { content: ''; position: absolute; top: -20px; right: -20px; width: 90px; height: 90px; border-radius: 50%; background: radial-gradient(circle, rgba(59,130,246,0.07) 0%, transparent 70%); pointer-events: none; }
 
   /* ── VERDICT ── */
   .verdict-box { border-radius: 14px; padding: 1.25rem; margin-bottom: 1rem; border: 1px solid; }
@@ -169,10 +169,10 @@
   /* ── BCRA TABLE ── */
   .bcra-table { width: 100%; font-size: 13px; border-collapse: separate; border-spacing: 0 5px; }
   .bcra-table th { text-align: left; padding: 6px 12px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--texto-suave); font-weight: 700; }
-  .bcra-table td { padding: 10px 12px; background: #f8fafc; border-top: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; transition: all 0.15s; }
+  .bcra-table td { padding: 10px 12px; background: #F5F7FA; border-top: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; transition: all 0.15s; }
   .bcra-table td:first-child { border-radius: 8px 0 0 8px; border-left: 1px solid #e2e8f0; }
   .bcra-table td:last-child { border-radius: 0 8px 8px 0; border-right: 1px solid #e2e8f0; }
-  .bcra-table tr:hover td { background: var(--azul-suave); box-shadow: 0 2px 8px rgba(37,99,235,0.07); }
+  .bcra-table tr:hover td { background: var(--azul-suave); box-shadow: 0 2px 8px rgba(59,130,246,0.07); }
   .sit-1 { color: #166534; font-weight: 600; }
   .sit-2 { color: #854d0e; font-weight: 600; }
   .sit-3, .sit-4, .sit-5, .sit-6 { color: var(--rojo); font-weight: 600; }
@@ -185,7 +185,7 @@
   .wsp-no-data { font-size: 13px; color: var(--texto-suave); text-align: center; padding: 1rem; }
 
   /* ── UPLOAD AREA ── */
-  .upload-area { border: 2px dashed #cbd5e1; border-radius: 12px; padding: 1.5rem; text-align: center; cursor: pointer; transition: all 0.15s; background: #f8fafc; margin-bottom: 12px; }
+  .upload-area { border: 2px dashed #cbd5e1; border-radius: 12px; padding: 1.5rem; text-align: center; cursor: pointer; transition: all 0.15s; background: #F5F7FA; margin-bottom: 12px; }
   .upload-area:hover { border-color: var(--azul-claro); background: var(--azul-suave); }
   .upload-area.success { border-color: #86efac; border-style: solid; background: #f0fdf4; }
 
@@ -208,7 +208,7 @@
 
   /* ── CLIENT ROWS ── */
   .client-row { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; background: var(--blanco); border: 1px solid #eaeff5; border-radius: 12px; margin-bottom: 8px; gap: 8px; flex-wrap: wrap; transition: all 0.18s; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
-  .client-row:hover { box-shadow: 0 8px 20px rgba(37,99,235,0.1); transform: translateY(-1px); border-color: #bfdbfe; }
+  .client-row:hover { box-shadow: 0 8px 20px rgba(59,130,246,0.1); transform: translateY(-1px); border-color: #bfdbfe; }
   .client-name { font-size: 14px; font-weight: 600; color: var(--texto); }
   .client-meta { font-size: 11px; color: var(--texto-suave); margin-top: 2px; }
   .client-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -218,7 +218,7 @@
 
   /* ── HIST ROWS ── */
   .hist-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: var(--blanco); border: 1px solid #eaeff5; border-radius: 12px; margin-bottom: 8px; gap: 8px; flex-wrap: wrap; cursor: pointer; transition: all 0.18s; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
-  .hist-row:hover { background: var(--azul-suave); border-color: #bfdbfe; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(37,99,235,0.08); }
+  .hist-row:hover { background: var(--azul-suave); border-color: #bfdbfe; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(59,130,246,0.08); }
   .hist-nombre { font-size: 14px; font-weight: 600; color: var(--texto); }
   .hist-meta { font-size: 11px; color: var(--texto-suave); margin-top: 2px; }
 
@@ -238,7 +238,7 @@
   .chq-sum-key { font-size: 10px; color: #475569; text-transform: uppercase; letter-spacing: 0.8px; font-variant: small-caps; }
   .chq-sum-val { font-size: 12px; font-weight: 600; color: #cbd5e1; }
   .chq-sum-val.danger { color: #ef4444 !important; font-weight: 700; }
-  .chq-ia { background: rgba(37,99,235,0.08); border-left: 2px solid #2563eb; padding: 8px 11px; border-radius: 0 6px 6px 0; }
+  .chq-ia { background: rgba(59,130,246,0.08); border-left: 2px solid #3B82F6; padding: 8px 11px; border-radius: 0 6px 6px 0; }
   .chq-ia-label { font-size: 9px; font-weight: 700; color: #3b82f6; letter-spacing: 1.5px; text-transform: uppercase; display: block; margin-bottom: 4px; }
   .chq-ia-text { font-size: 11px; color: #94a3b8; line-height: 1.55; }
   .chq-clean { padding: 12px 0; text-align: center; }
@@ -247,8 +247,8 @@
   /* ── BUSCADOR PREMIUM ── */
   .buscador-wrap { position: relative; margin-bottom: 8px; }
   .buscador-ico { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: #94a3b8; pointer-events: none; }
-  .buscador-input { width: 100%; padding: 14px 16px 14px 48px; border: 2px solid #e2e8f0; border-radius: 14px; font-size: 15px; font-family: 'Inter', sans-serif; background: #fff; color: var(--texto); outline: none; transition: all 0.2s; box-shadow: 0 2px 8px rgba(0,0,0,0.04); flex: none; min-width: 0; }
-  .buscador-input:focus { border-color: var(--azul-claro); box-shadow: 0 0 0 3px rgba(37,99,235,0.1), 0 2px 8px rgba(0,0,0,0.04); }
+  .buscador-input { width: 100%; padding: 14px 16px 14px 48px; border: 2px solid #e2e8f0; border-radius: 14px; font-size: 15px; font-family: 'Sora', sans-serif; background: #fff; color: var(--texto); outline: none; transition: all 0.2s; box-shadow: 0 2px 8px rgba(0,0,0,0.04); flex: none; min-width: 0; }
+  .buscador-input:focus { border-color: var(--azul-claro); box-shadow: 0 0 0 3px rgba(59,130,246,0.1), 0 2px 8px rgba(0,0,0,0.04); }
   .buscador-count { font-size: 12px; color: var(--texto-suave); margin-bottom: 16px; padding-left: 2px; }
 
   /* ── CLIENT CARDS ── */
@@ -261,7 +261,7 @@
   .cli-nombre { font-size: 1.05rem; font-weight: 700; color: var(--texto); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.2px; }
   .cli-cuit-tag { font-size: 12px; color: var(--texto-suave); margin-top: 2px; }
   .cli-header-actions { display: flex; gap: 6px; flex-shrink: 0; }
-  .cli-btn-icon { padding: 5px 9px; font-size: 13px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; color: #64748b; cursor: pointer; transition: all 0.15s; }
+  .cli-btn-icon { padding: 5px 9px; font-size: 13px; border: 1px solid #e2e8f0; border-radius: 8px; background: #F5F7FA; color: #64748b; cursor: pointer; transition: all 0.15s; }
   .cli-btn-icon:hover { background: var(--azul-suave); border-color: var(--azul-claro); color: var(--azul-claro); box-shadow: none; }
   .cli-btn-del:hover { background: #fee2e2 !important; border-color: #fca5a5 !important; color: #991b1b !important; }
   .cli-data-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; padding: 14px 0; border-top: 1px solid #f1f5f9; border-bottom: 1px solid #f1f5f9; margin-bottom: 14px; }
@@ -274,7 +274,7 @@
   .cli-credit-bar-fill { height: 100%; border-radius: 9999px; background: linear-gradient(to right, #22c55e, #0ea5e9); transition: width 0.5s ease; }
   .cli-credit-bar-fill.danger { background: linear-gradient(to right, #f59e0b, #ef4444); }
   .cli-card-footer { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
-  .cli-meta-tag { font-size: 11px; color: #64748b; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 9999px; padding: 3px 10px; }
+  .cli-meta-tag { font-size: 11px; color: #64748b; background: #F5F7FA; border: 1px solid #e2e8f0; border-radius: 9999px; padding: 3px 10px; }
   .cli-btn-detalle { margin-left: auto; font-size: 12px !important; padding: 7px 16px !important; }
 
   /* ── DECISION GRID v31 ── */
@@ -322,7 +322,7 @@
 
   /* ── RESOURCE BAR ── */
   .resource-bar { display: flex; gap: 8px; flex-wrap: wrap; }
-  .resource-btn { display: inline-flex; align-items: center; gap: 7px; padding: 9px 14px; border: 1.5px solid #e2e8f0; border-radius: 10px; background: #fff; color: #64748b; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; font-family: 'Inter', sans-serif; }
+  .resource-btn { display: inline-flex; align-items: center; gap: 7px; padding: 9px 14px; border: 1.5px solid #e2e8f0; border-radius: 10px; background: #fff; color: #64748b; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; font-family: 'Sora', sans-serif; }
   .resource-btn:hover { border-color: var(--azul-claro); color: var(--azul-claro); background: var(--azul-suave); box-shadow: none; }
   .resource-btn.active { border-color: var(--azul-claro); color: var(--azul-claro); background: var(--azul-suave); }
   .resource-btn svg { width: 13px; height: 13px; flex-shrink: 0; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
@@ -369,7 +369,7 @@
   .alr-ico-wrap.exceso svg { stroke: #ea580c; }
   .alr-ico-wrap.cheque svg { stroke: #b91c1c; }
   .alr-counter-info { flex: 1; min-width: 0; }
-  .alr-counter-num { font-family: 'Syne', sans-serif; font-size: 26px; font-weight: 800; line-height: 1; }
+  .alr-counter-num { font-family: 'Sora', sans-serif; font-size: 26px; font-weight: 800; line-height: 1; }
   .alr-counter.critico .alr-counter-num { color: #991b1b; }
   .alr-counter.advertencia .alr-counter-num { color: #92400e; }
   .alr-counter.exceso .alr-counter-num { color: #9a3412; }
@@ -406,7 +406,7 @@
   .alr-wrap > .alr-card.collapsed { border-radius: 12px; }
   .alert-card.collapsed { border-radius: 12px !important; }
   .alert-card:not(.collapsed) { border-radius: 12px 12px 0 0 !important; }
-  .alr-acc { background:#f8fafc; border:1px solid #e2e8f0; border-top:none; border-radius:0 0 12px 12px; overflow:hidden; }
+  .alr-acc { background:#F5F7FA; border:1px solid #e2e8f0; border-top:none; border-radius:0 0 12px 12px; overflow:hidden; }
   .alr-fac-table { width:100%; border-collapse:collapse; font-size:12px; }
   .alr-fac-table thead tr { background:#eff6ff; }
   .alr-fac-table th { padding:8px 12px; text-align:left; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; color:#1e40af; white-space:nowrap; border-bottom:2px solid #bfdbfe; }
@@ -611,7 +611,7 @@
   .bcra-hm-td-monto { font-size:11px; color:#64748b; font-weight:500; padding:4px 12px 4px 6px; text-align:right; white-space:nowrap; position:sticky; left:105px; background:#fff; z-index:1; border-right:1px solid #e8eef4; }
   .bcra-hm-table tr:hover .bcra-hm-td-entity,
   .bcra-hm-table tr:hover .bcra-hm-td-monto { background:#fafbfc; }
-  .bcra-hm-table tbody tr { border-bottom:1px solid #f8fafc; }
+  .bcra-hm-table tbody tr { border-bottom:1px solid #F5F7FA; }
   .bcra-hm-table tbody tr:last-child { border-bottom:none; }
   .bcra-hm-cell { width:22px; min-width:22px; height:26px; text-align:center; vertical-align:middle; font-size:10px; font-weight:700; cursor:default; border:1px solid transparent; transition:filter 0.1s; }
   .bcra-hm-cell:hover { filter:brightness(0.92); border-color:rgba(0,0,0,0.1); }
@@ -620,21 +620,21 @@
   .bcra-hm-cell.s3 { background:#ffedd5; color:#9a3412; }
   .bcra-hm-cell.s45 { background:#fee2e2; color:#991b1b; }
   .bcra-hm-cell.empty { background:transparent; color:#e2e8f0; font-size:9px; font-weight:400; }
-  .bcra-hm-legend { display:flex; gap:12px; padding:8px 16px 0; border-top:1px solid #f8fafc; margin-top:6px; flex-wrap:wrap; }
+  .bcra-hm-legend { display:flex; gap:12px; padding:8px 16px 0; border-top:1px solid #F5F7FA; margin-top:6px; flex-wrap:wrap; }
   .bcra-hm-leg-item { display:flex; align-items:center; gap:5px; font-size:10px; color:#64748b; }
   .bcra-hm-leg-cell { width:12px; height:12px; border-radius:2px; flex-shrink:0; border:1px solid rgba(0,0,0,0.07); }
   #bcra-hm-tip { position:fixed; background:#0f172a; color:#f1f5f9; font-size:11px; line-height:1.6; padding:7px 11px; border-radius:7px; pointer-events:none; z-index:9999; display:none; max-width:230px; box-shadow:0 4px 14px rgba(0,0,0,0.35); white-space:pre; }
 
   /* ── PORTFOLIO MODULE ─────────────────────────────────────────────────── */
-  .pf-spinner { width:24px; height:24px; border:3px solid #e2e8f0; border-top-color:#2563eb; border-radius:50%; animation:spin 0.8s linear infinite; flex-shrink:0; }
+  .pf-spinner { width:24px; height:24px; border:3px solid #e2e8f0; border-top-color:#3B82F6; border-radius:50%; animation:spin 0.8s linear infinite; flex-shrink:0; }
   @keyframes spin { to { transform:rotate(360deg); } }
   .pf-kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:16px; }
   .pf-kpi-card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:14px 16px; cursor:pointer; transition:box-shadow 0.15s,transform 0.15s; position:relative; overflow:hidden; }
-  .pf-kpi-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:var(--pf-kpi-color,#2563eb); }
+  .pf-kpi-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:var(--pf-kpi-color,#3B82F6); }
   .pf-kpi-card:hover { box-shadow:0 4px 16px rgba(0,0,0,0.1); transform:translateY(-1px); }
-  .pf-kpi-card.pf-active-filter { border-color:var(--pf-kpi-color,#2563eb); box-shadow:0 0 0 2px var(--pf-kpi-color,#2563eb)33; }
+  .pf-kpi-card.pf-active-filter { border-color:var(--pf-kpi-color,#3B82F6); box-shadow:0 0 0 2px var(--pf-kpi-color,#3B82F6)33; }
   .pf-kpi-label { font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.6px; margin-bottom:6px; }
-  .pf-kpi-value { font-size:22px; font-weight:800; color:var(--pf-kpi-color,#0f172a); line-height:1; margin-bottom:4px; font-family:'Syne',sans-serif; }
+  .pf-kpi-value { font-size:22px; font-weight:800; color:var(--pf-kpi-color,#0f172a); line-height:1; margin-bottom:4px; font-family:'Sora',sans-serif; }
   .pf-kpi-sub { font-size:11px; color:#94a3b8; }
   .pf-aging-card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px 18px; margin-bottom:16px; }
   .pf-aging-title { font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.7px; margin-bottom:12px; }
@@ -648,11 +648,11 @@
   .pf-search-wrap { position:relative; flex:1; min-width:200px; }
   .pf-search-icon { position:absolute; left:10px; top:50%; transform:translateY(-50%); color:#94a3b8; pointer-events:none; }
   .pf-search-box { width:100%; padding:8px 10px 8px 32px; border:1px solid #e2e8f0; border-radius:8px; font-size:13px; color:#0f172a; background:#fff; box-sizing:border-box; outline:none; }
-  .pf-search-box:focus { border-color:#2563eb; }
+  .pf-search-box:focus { border-color:#3B82F6; }
   .pf-filter-select { padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:13px; color:#0f172a; background:#fff; cursor:pointer; outline:none; }
   .pf-sort-btn { padding:7px 13px; border:1px solid #e2e8f0; border-radius:8px; font-size:12px; font-weight:600; color:#475569; background:#fff; cursor:pointer; transition:all 0.15s; white-space:nowrap; }
-  .pf-sort-btn:hover { border-color:#2563eb; color:#2563eb; }
-  .pf-sort-btn.pf-active { border-color:#2563eb; color:#2563eb; background:#eff6ff; }
+  .pf-sort-btn:hover { border-color:#3B82F6; color:#3B82F6; }
+  .pf-sort-btn.pf-active { border-color:#3B82F6; color:#3B82F6; background:#eff6ff; }
   .pf-results-count { font-size:12px; color:#94a3b8; margin-left:auto; }
   .pf-table-card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; }
   .pf-table-head { display:grid; grid-template-columns:2fr 1fr 1fr 2.2fr 52px; gap:8px; padding:10px 18px; background:#1e40af; color:#e0e7ff; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; }
@@ -663,24 +663,24 @@
   .pf-client-row.pf-expanded .pf-client-row-main { background:#eff6ff; }
   .pf-client-name { font-size:14px; font-weight:700; color:#0f172a; }
   .pf-client-cuit { font-size:11px; color:#64748b; margin-top:2px; }
-  .pf-client-vend { color:#2563eb; font-weight:600; }
+  .pf-client-vend { color:#3B82F6; font-weight:600; }
   .pf-score-badge { display:inline-block; padding:3px 10px; border-radius:20px; font-size:13px; font-weight:800; border:1.5px solid; }
   .pf-score-rango { font-size:10px; font-weight:600; margin-top:3px; }
   .pf-dso-val { font-size:20px; font-weight:800; line-height:1; }
   .pf-dso-label { font-size:10px; color:#64748b; }
-  .pf-saldo-total { font-size:15px; font-weight:800; font-family:'Syne',sans-serif; color:#0f172a; }
+  .pf-saldo-total { font-size:15px; font-weight:800; font-family:'Sora',sans-serif; color:#0f172a; }
   .pf-mini-aging { display:flex; flex-direction:column; gap:4px; }
   .pf-mini-bar-wrap { height:8px; border-radius:4px; overflow:hidden; display:flex; background:#f1f5f9; }
   .pf-mini-bar-seg { height:100%; }
   .pf-mini-aging-labels { display:flex; gap:6px; flex-wrap:wrap; }
   .pf-mini-label { font-size:10px; color:#475569; }
   .pf-expand-btn { width:28px; height:28px; padding:0 !important; border:1px solid #e2e8f0; border-radius:7px; background:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#64748b; transition:all 0.15s; flex-shrink:0; }
-  .pf-expand-btn:hover { border-color:#2563eb; color:#2563eb; background:#eff6ff; }
-  .pf-client-row.pf-expanded .pf-expand-btn { transform:rotate(180deg); background:#eff6ff; color:#2563eb; border-color:#2563eb; }
+  .pf-expand-btn:hover { border-color:#3B82F6; color:#3B82F6; background:#eff6ff; }
+  .pf-client-row.pf-expanded .pf-expand-btn { transform:rotate(180deg); background:#eff6ff; color:#3B82F6; border-color:#3B82F6; }
   .pf-invoice-detail { display:none; padding:0 18px 14px; border-top:1px solid #eff6ff; background:#f8faff; }
   .pf-client-row.pf-expanded .pf-invoice-detail { display:block; }
   .pf-invoice-table { width:100%; border-collapse:collapse; font-size:12px; margin-top:10px; }
-  .pf-invoice-table th { padding:7px 10px; text-align:left; font-size:10px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.5px; border-bottom:1px solid #e2e8f0; background:#f8fafc; }
+  .pf-invoice-table th { padding:7px 10px; text-align:left; font-size:10px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.5px; border-bottom:1px solid #e2e8f0; background:#F5F7FA; }
   .pf-invoice-table td { padding:8px 10px; border-bottom:1px solid #f1f5f9; color:#334155; vertical-align:middle; }
   .pf-invoice-table tr:last-child td { border-bottom:none; }
   .pf-invoice-table tr:hover td { background:#f0f7ff; }
@@ -709,7 +709,7 @@
 <body>
 
 <noscript>
-  <div style="position:fixed;inset:0;z-index:99999;background:#0f2d52;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;padding:24px;text-align:center">
+  <div style="position:fixed;inset:0;z-index:99999;background:#0B1D3A;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;padding:24px;text-align:center">
     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
     <p style="color:#fff;font-family:sans-serif;font-size:16px;font-weight:700;margin:0">Vende Seguro requiere JavaScript</p>
     <p style="color:#94a3b8;font-family:sans-serif;font-size:13px;margin:0;max-width:320px">Por favor habilitá JavaScript en tu navegador y recargá la página. Si estás en modo ahorro de datos, desactivalo temporalmente.</p>
@@ -719,7 +719,7 @@
 <!-- PANTALLA DE CARGA -->
 <div id="splash-screen" style="
   position: fixed; inset: 0; z-index: 9999;
-  background: linear-gradient(135deg, #0f2d52 0%, #1a56a0 60%, #2563eb 100%);
+  background: linear-gradient(135deg, #0B1D3A 0%, #1D4ED8 60%, #3B82F6 100%);
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
   transition: opacity 0.6s ease, visibility 0.6s ease;
@@ -727,15 +727,11 @@
   <div style="text-align:center; animation: splashIn 0.8s ease forwards;">
     <!-- Logo animado -->
     <div style="margin-bottom: 8px;">
-      <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0 4px 16px rgba(37,99,235,0.4));">
-        <rect width="64" height="64" rx="16" fill="white" fill-opacity="0.15"/>
-        <path d="M20 22 L32 14 L44 22 L44 36 C44 42 38 48 32 50 C26 48 20 42 20 36 Z" fill="white" fill-opacity="0.9"/>
-        <path d="M27 32 L31 36 L38 28" stroke="#1a56a0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
+      <img src="/static/logo.svg" width="64" height="64" alt="Vende Seguro" style="display:block; margin:0 auto; border-radius:16px; filter: drop-shadow(0 4px 16px rgba(59,130,246,0.4));">
     </div>
     <!-- Nombre -->
     <div style="
-      font-family: 'Syne', sans-serif;
+      font-family: 'Sora', sans-serif;
       font-size: 36px;
       font-weight: 800;
       color: white;
@@ -745,7 +741,7 @@
     ">Vende Seguro</div>
     <!-- Slogan -->
     <div style="
-      font-family: 'DM Sans', sans-serif;
+      font-family: 'Sora', sans-serif;
       font-size: 14px;
       font-weight: 300;
       font-style: italic;
@@ -793,7 +789,7 @@
   <aside id="sidebar">
     <div class="sb-brand">
       <div class="sb-logo-icon">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9,12 11,14 15,10"/></svg>
+        <img src="/static/logo.svg" width="34" height="34" alt="Vende Seguro" style="display:block;">
       </div>
       <div class="sb-brand-text">
         <div class="sb-name">Vende Seguro</div>
@@ -866,11 +862,11 @@
     <div id="consulta-search-hero" style="display:flex;flex-direction:column;align-items:center;padding:2rem 1rem 1.5rem;">
 
       <!-- ── Panel hero oscuro ─────────────────────────────────────────────── -->
-      <div class="hero-panel" style="width:100%;max-width:640px;background:linear-gradient(140deg,#0b1628 0%,#0f2040 55%,#1a3464 100%);border-radius:20px;padding:2rem 2rem 1.625rem;margin-bottom:1rem;box-shadow:0 20px 60px rgba(11,22,40,0.28),0 4px 16px rgba(11,22,40,0.18);">
+      <div class="hero-panel" style="width:100%;max-width:640px;background:linear-gradient(140deg,#0B1D3A 0%,#0f2040 55%,#1a3464 100%);border-radius:20px;padding:2rem 2rem 1.625rem;margin-bottom:1rem;box-shadow:0 20px 60px rgba(11,29,58,0.28),0 4px 16px rgba(11,29,58,0.18);">
 
         <!-- Brand + estado live -->
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:1.625rem;">
-          <div style="width:36px;height:36px;background:linear-gradient(135deg,#3b82f6,#2563eb);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 4px 12px rgba(37,99,235,0.35);">
+          <div style="width:36px;height:36px;background:linear-gradient(135deg,#3b82f6,#3B82F6);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 4px 12px rgba(59,130,246,0.35);">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
           </div>
           <div>
@@ -884,7 +880,7 @@
         </div>
 
         <!-- Título + descripción -->
-        <div style="font-family:'Syne',sans-serif;font-size:27px;font-weight:800;color:#f1f5f9;letter-spacing:-0.5px;line-height:1.18;margin-bottom:8px;">
+        <div style="font-family:'Sora',sans-serif;font-size:27px;font-weight:800;color:#f1f5f9;letter-spacing:-0.5px;line-height:1.18;margin-bottom:8px;">
           Análisis de riesgo<br>crediticio en tiempo real
         </div>
         <div style="color:#475569;font-size:12.5px;line-height:1.65;margin-bottom:1.625rem;max-width:460px;">
@@ -894,15 +890,15 @@
         <!-- Stats del portfolio -->
         <div style="display:flex;gap:0;padding-top:1.25rem;border-top:1px solid rgba(255,255,255,0.06);">
           <div style="flex:1;padding-right:1.25rem;border-right:1px solid rgba(255,255,255,0.06);">
-            <div id="hero-stat-clientes" style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#60a5fa;line-height:1;">—</div>
+            <div id="hero-stat-clientes" style="font-family:'Sora',sans-serif;font-size:22px;font-weight:800;color:#60a5fa;line-height:1;">—</div>
             <div style="color:#334155;font-size:9.5px;text-transform:uppercase;letter-spacing:0.9px;margin-top:3px;">Clientes</div>
           </div>
           <div style="flex:1;padding-left:1.25rem;padding-right:1.25rem;border-right:1px solid rgba(255,255,255,0.06);">
-            <div id="hero-stat-alertas" style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#f87171;line-height:1;">—</div>
+            <div id="hero-stat-alertas" style="font-family:'Sora',sans-serif;font-size:22px;font-weight:800;color:#f87171;line-height:1;">—</div>
             <div style="color:#334155;font-size:9.5px;text-transform:uppercase;letter-spacing:0.9px;margin-top:3px;">Alertas críticas</div>
           </div>
           <div style="flex:1;padding-left:1.25rem;">
-            <div id="hero-stat-cheques-fecha" style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#34d399;line-height:1;">—</div>
+            <div id="hero-stat-cheques-fecha" style="font-family:'Sora',sans-serif;font-size:22px;font-weight:800;color:#34d399;line-height:1;">—</div>
             <div style="color:#334155;font-size:9.5px;text-transform:uppercase;letter-spacing:0.9px;margin-top:3px;">Base cheques</div>
           </div>
         </div>
@@ -915,9 +911,9 @@
             placeholder="Ingresá un CUIT  —  Ej: 20-21310600-8"
             maxlength="13"
             onkeydown="if(event.key==='Enter') consultarCliente()"
-            style="flex:1;font-size:15px;padding:13px 18px;border-radius:12px;border:2px solid #e2e8f0;background:#fff;box-shadow:0 2px 8px rgba(37,99,235,0.06);transition:border-color 0.15s,box-shadow 0.15s;outline:none;"
-            onfocus="this.style.borderColor='#2563eb';this.style.boxShadow='0 0 0 3px rgba(37,99,235,0.12)'"
-            onblur="this.style.borderColor='#e2e8f0';this.style.boxShadow='0 2px 8px rgba(37,99,235,0.06)'" />
+            style="flex:1;font-size:15px;padding:13px 18px;border-radius:12px;border:2px solid #e2e8f0;background:#fff;box-shadow:0 2px 8px rgba(59,130,246,0.06);transition:border-color 0.15s,box-shadow 0.15s;outline:none;"
+            onfocus="this.style.borderColor='#3B82F6';this.style.boxShadow='0 0 0 3px rgba(59,130,246,0.12)'"
+            onblur="this.style.borderColor='#e2e8f0';this.style.boxShadow='0 2px 8px rgba(59,130,246,0.06)'" />
           <button class="primary" onclick="consultarCliente()" style="padding:13px 22px;font-size:14px;border-radius:12px;white-space:nowrap;">Analizar →</button>
           <button id="btn-nueva-consulta" onclick="nuevaConsulta()" title="Nueva consulta"
             style="display:none;padding:12px 14px;font-size:14px;border-radius:12px;background:#fff;border:1.5px solid #e2e8f0;color:#64748b;cursor:pointer;white-space:nowrap;"
@@ -941,7 +937,7 @@
       <!-- Bloque Información Corporativa (Estilo Nosis) — se pinta al llegar el score -->
       <div id="info-corporativa-card" style="display:none;margin-bottom:8px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;"></div>
 
-      <div id="saldos-interno-card" class="card" style="margin-bottom:8px;display:none;border-left:4px solid #2563eb;"></div>
+      <div id="saldos-interno-card" class="card" style="margin-bottom:8px;display:none;border-left:4px solid #3B82F6;"></div>
 
       <div id="decision-grid">
         <div id="vende-score-container"></div>
@@ -1074,7 +1070,7 @@
       </div>
 
       <!-- Panel de meses acumulados -->
-      <div id="dso-meses-panel" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;margin-bottom:12px;display:none;">
+      <div id="dso-meses-panel" style="background:#F5F7FA;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;margin-bottom:12px;display:none;">
         <div style="font-size:11px;font-weight:600;color:var(--azul-claro);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Ventas acumuladas en servidor (opcional — ya no es necesario para calcular el DSO)</div>
         <div id="dso-meses-lista" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
       </div>
@@ -1116,7 +1112,7 @@
     <div id="dso-actual-card" class="card" style="display:none;margin-bottom:1rem;border-left:4px solid var(--azul-claro);background:linear-gradient(135deg,#eff6ff,#fff);">
       <div style="font-size:11px;color:var(--azul-claro);font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">DSO Vigente — Último Cálculo</div>
       <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
-        <span id="dso-actual-num" style="font-family:'Syne',sans-serif;font-size:48px;font-weight:800;line-height:1;">—</span>
+        <span id="dso-actual-num" style="font-family:'Sora',sans-serif;font-size:48px;font-weight:800;line-height:1;">—</span>
         <div>
           <div id="dso-actual-label" style="font-size:13px;font-weight:700;margin-bottom:4px;">días</div>
           <div id="dso-actual-detalle" style="font-size:11px;color:#64748b;line-height:1.6;"></div>
@@ -1151,17 +1147,17 @@
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:1rem;">
         <div class="card" style="text-align:center;padding:1.5rem 1rem;">
           <div style="font-size:11px;color:var(--azul-claro);font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">DSO Global</div>
-          <div id="dso-numero" style="font-family:'Syne',sans-serif;font-size:48px;font-weight:800;line-height:1;"></div>
+          <div id="dso-numero" style="font-family:'Sora',sans-serif;font-size:48px;font-weight:800;line-height:1;"></div>
           <div style="font-size:12px;color:#64748b;margin-top:4px;">días promedio</div>
         </div>
         <div class="card" style="text-align:center;padding:1.5rem 1rem;">
           <div style="font-size:11px;color:var(--azul-claro);font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">Saldo Total</div>
-          <div id="dso-saldo-total" style="font-family:'Syne',sans-serif;font-size:28px;font-weight:800;color:var(--azul-oscuro);line-height:1;"></div>
+          <div id="dso-saldo-total" style="font-family:'Sora',sans-serif;font-size:28px;font-weight:800;color:var(--azul-oscuro);line-height:1;"></div>
           <div style="font-size:12px;color:#64748b;margin-top:4px;">pendiente de cobro</div>
         </div>
         <div class="card" style="text-align:center;padding:1.5rem 1rem;">
           <div style="font-size:11px;color:var(--azul-claro);font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">Clientes</div>
-          <div id="dso-clientes-total" style="font-family:'Syne',sans-serif;font-size:48px;font-weight:800;color:var(--azul-oscuro);line-height:1;"></div>
+          <div id="dso-clientes-total" style="font-family:'Sora',sans-serif;font-size:48px;font-weight:800;color:var(--azul-oscuro);line-height:1;"></div>
           <div style="font-size:12px;color:#64748b;margin-top:4px;">con saldo pendiente</div>
         </div>
       </div>
@@ -1189,18 +1185,18 @@
   <div id="alertas" class="section">
 
     <!-- ── ACTUALIZAR CARTERA — acción única que reemplaza todos los botones anteriores ── -->
-    <div class="card" style="border-left:4px solid #2563eb;background:linear-gradient(135deg,#eff6ff,#fff);margin-bottom:12px;">
+    <div class="card" style="border-left:4px solid #3B82F6;background:linear-gradient(135deg,#eff6ff,#fff);margin-bottom:12px;">
       <div class="card-title" style="color:#1d4ed8;margin-bottom:4px;">Actualizar Cartera</div>
       <div style="font-size:12px;color:#64748b;margin-bottom:12px;line-height:1.5;">
         Consulta BCRA, recalcula scores con datos frescos y detecta cambios de situación para todos los clientes. Recomendado: una vez por semana.
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
         <button id="btn-proceso-integral" onclick="ejecutarProcesoIntegral(true)"
-          style="background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;border:none;border-radius:10px;padding:10px 22px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(37,99,235,0.3);">
+          style="background:linear-gradient(135deg,#3B82F6,#1d4ed8);color:#fff;border:none;border-radius:10px;padding:10px 22px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(59,130,246,0.3);">
           Actualizar toda la cartera →
         </button>
         <button onclick="ejecutarProcesoIntegral(false)"
-          style="font-size:12px;color:#475569;padding:9px 14px;border-radius:8px;border:1px solid #e2e8f0;background:#f8fafc;cursor:pointer;font-weight:600;"
+          style="font-size:12px;color:#475569;padding:9px 14px;border-radius:8px;border:1px solid #e2e8f0;background:#F5F7FA;cursor:pointer;font-weight:600;"
           title="Consulta BCRA en vivo para clientes en zona gris o nuevos. Más lento.">
           ⚡ Modo completo
         </button>
@@ -1216,10 +1212,10 @@
       <div id="proceso-integral-wrap" style="display:none;">
         <div style="display:flex;justify-content:space-between;font-size:12px;color:#475569;margin-bottom:4px;">
           <span id="proceso-integral-msg">Iniciando...</span>
-          <span id="proceso-integral-pct" style="font-weight:700;color:#2563eb;">0%</span>
+          <span id="proceso-integral-pct" style="font-weight:700;color:#3B82F6;">0%</span>
         </div>
         <div style="background:#e2e8f0;border-radius:6px;height:10px;overflow:hidden;margin-bottom:6px;">
-          <div id="proceso-integral-bar" style="height:100%;background:linear-gradient(90deg,#2563eb,#06b6d4);border-radius:6px;width:0%;transition:width 0.4s;"></div>
+          <div id="proceso-integral-bar" style="height:100%;background:linear-gradient(90deg,#3B82F6,#06b6d4);border-radius:6px;width:0%;transition:width 0.4s;"></div>
         </div>
         <div style="display:flex;gap:16px;font-size:11px;color:#64748b;">
           <span>Procesados: <b id="pi-procesados">0</b></span>
@@ -1279,7 +1275,7 @@
         </div>
       </div>
       <div id="alertas-auto-lista" style="max-height:340px;overflow-y:auto;padding-right:2px;"></div>
-      <div id="alertas-auto-empty" style="display:none;text-align:center;padding:28px;color:#94a3b8;font-size:13px;background:#f8fafc;border-radius:10px;border:1px dashed #e2e8f0;">
+      <div id="alertas-auto-empty" style="display:none;text-align:center;padding:28px;color:#94a3b8;font-size:13px;background:#F5F7FA;border-radius:10px;border:1px dashed #e2e8f0;">
         Sin alertas automáticas pendientes
       </div>
     </div>
@@ -1307,8 +1303,8 @@
 
   <div id="red" class="section">
     <!-- Header -->
-    <div class="card" style="text-align:center;padding:2.5rem 1.5rem;background:linear-gradient(135deg,#0f2d52 0%,#1a56a0 100%);border:none;">
-      <div style="font-family:'Syne',sans-serif;font-size:28px;font-weight:800;color:#fff;margin-bottom:6px;">Red de Bodegas</div>
+    <div class="card" style="text-align:center;padding:2.5rem 1.5rem;background:linear-gradient(135deg,#0B1D3A 0%,#1D4ED8 100%);border:none;">
+      <div style="font-family:'Sora',sans-serif;font-size:28px;font-weight:800;color:#fff;margin-bottom:6px;">Red de Bodegas</div>
       <div style="font-size:14px;color:#93c5fd;font-style:italic;font-weight:300;">La inteligencia colectiva del sector</div>
     </div>
 
@@ -1333,19 +1329,19 @@
         <line x1="100" y1="50" x2="80" y2="160" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4"/>
         <line x1="400" y1="50" x2="420" y2="160" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4"/>
         <!-- Nodo central (tu bodega) -->
-        <circle cx="250" cy="100" r="28" fill="#2563eb"/>
+        <circle cx="250" cy="100" r="28" fill="#3B82F6"/>
         <text x="250" y="95" text-anchor="middle" fill="white" font-size="10" font-family="sans-serif" font-weight="bold">TU</text>
         <text x="250" y="108" text-anchor="middle" fill="white" font-size="10" font-family="sans-serif" font-weight="bold">BODEGA</text>
         <!-- Nodos externos -->
-        <circle cx="100" cy="50" r="18" fill="#1a56a0"/>
+        <circle cx="100" cy="50" r="18" fill="#1D4ED8"/>
         <text x="100" y="54" text-anchor="middle" fill="white" font-size="9" font-family="sans-serif">Bodega</text>
-        <circle cx="400" cy="50" r="18" fill="#1a56a0"/>
+        <circle cx="400" cy="50" r="18" fill="#1D4ED8"/>
         <text x="400" y="54" text-anchor="middle" fill="white" font-size="9" font-family="sans-serif">Bodega</text>
-        <circle cx="80" cy="160" r="18" fill="#1a56a0" opacity="0.6"/>
+        <circle cx="80" cy="160" r="18" fill="#1D4ED8" opacity="0.6"/>
         <text x="80" y="164" text-anchor="middle" fill="white" font-size="9" font-family="sans-serif">+</text>
-        <circle cx="420" cy="160" r="18" fill="#1a56a0" opacity="0.6"/>
+        <circle cx="420" cy="160" r="18" fill="#1D4ED8" opacity="0.6"/>
         <text x="420" y="164" text-anchor="middle" fill="white" font-size="9" font-family="sans-serif">+</text>
-        <circle cx="250" cy="30" r="14" fill="#1a56a0" opacity="0.5"/>
+        <circle cx="250" cy="30" r="14" fill="#1D4ED8" opacity="0.5"/>
         <text x="250" y="34" text-anchor="middle" fill="white" font-size="8" font-family="sans-serif">+</text>
         <!-- Punto animado cliente compartido -->
         <circle cx="175" cy="75" r="6" fill="#ef4444" opacity="0.9">
@@ -1359,7 +1355,7 @@
     <!-- Estado real del producto: sin contador falso -->
     <div class="card" style="text-align:center;padding:1.5rem;border:1.5px dashed #cbd5e1;">
       <div style="font-size:28px;margin-bottom:8px;">🚧</div>
-      <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:700;color:var(--azul-oscuro);margin-bottom:6px;">Próximamente</div>
+      <div style="font-family:'Sora',sans-serif;font-size:18px;font-weight:700;color:var(--azul-oscuro);margin-bottom:6px;">Próximamente</div>
       <div style="font-size:13px;color:#64748b;max-width:400px;margin:0 auto;line-height:1.6;">
         La Red de Bodegas está en desarrollo. Cuando esté lista, vas a poder ver en tiempo real qué clientes tienen alertas compartidas entre bodegas del sector — sin necesidad de WhatsApp.
       </div>
@@ -1373,7 +1369,7 @@
       </div>
       <div id="red-confirmacion" style="display:none;">
         <div style="font-size:28px;margin-bottom:8px;">✅</div>
-        <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:700;color:var(--azul-oscuro);margin-bottom:6px;">Anotado. Te avisamos al lanzar.</div>
+        <div style="font-family:'Sora',sans-serif;font-size:18px;font-weight:700;color:var(--azul-oscuro);margin-bottom:6px;">Anotado. Te avisamos al lanzar.</div>
         <div style="font-size:13px;color:#64748b;">Mientras tanto, seguí usando el módulo de Alertas BCRA para proteger tus ventas.</div>
       </div>
     </div>
@@ -1427,7 +1423,7 @@
 
         <div style="overflow-x:auto;max-height:300px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;">
           <table style="width:100%;border-collapse:collapse;font-size:12px;">
-            <thead style="background:#f8fafc;position:sticky;top:0;">
+            <thead style="background:#F5F7FA;position:sticky;top:0;">
               <tr>
                 <th style="padding:7px 10px;text-align:left;color:#475569;border-bottom:1px solid #e2e8f0;">CUIT</th>
                 <th style="padding:7px 10px;text-align:left;color:#475569;border-bottom:1px solid #e2e8f0;">Nombre</th>
@@ -1471,7 +1467,7 @@
       <p style="font-size:13px;color:#666;line-height:1.6;margin-bottom:12px;">
         El servidor acumula todos los PDFs — cada semana subís solo las facturas nuevas y el historial se conserva.
       </p>
-      <div id="facturas-drive-estado" style="margin-bottom:14px;padding:10px 12px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;font-size:13px;color:#64748b;">
+      <div id="facturas-drive-estado" style="margin-bottom:14px;padding:10px 12px;background:#F5F7FA;border-radius:8px;border:1px solid #e2e8f0;font-size:13px;color:#64748b;">
         Cargando...
       </div>
       <!-- Opción A: subir ZIP directo -->
@@ -2840,7 +2836,7 @@ function renderVendeScore(scoreObj) {
       '<canvas id="bcra-history-chart" style="width:100%;max-height:110px;display:block;"></canvas>' +
       '<div id="bcra-history-nodata" style="display:none;text-align:center;padding:14px 0 6px;font-size:12px;color:#94a3b8;border:1px dashed #e2e8f0;border-radius:8px;">Sin períodos BCRA disponibles — historial no reportado</div>' +
     '</div>' +
-    '<div id="solvencia-card" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;margin-bottom:8px;">' +
+    '<div id="solvencia-card" style="background:#F5F7FA;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;margin-bottom:8px;">' +
       '<div style="font-size:12px;font-weight:700;color:#334155;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px;">Exposición en Sistema Financiero</div>' +
       '<div id="solvencia-body" style="font-size:13px;color:#64748b;">Consultando solvencia...</div>' +
     '</div>'
@@ -3208,9 +3204,9 @@ function renderExposicionSistema() {
   el.innerHTML =
     '<div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start;">' +
     '<div><span style="font-size:11px;color:#94a3b8;display:block;margin-bottom:2px;">Deuda en sistema</span>' +
-      '<span style="font-size:16px;font-weight:700;color:#0f2d52;">' + deudaFmt + '</span></div>' +
+      '<span style="font-size:16px;font-weight:700;color:#0B1D3A;">' + deudaFmt + '</span></div>' +
     '<div><span style="font-size:11px;color:#94a3b8;display:block;margin-bottom:2px;">Entidades acreedoras</span>' +
-      '<span style="font-size:16px;font-weight:700;color:#0f2d52;">' + (numEnt||'—') + '</span></div>' +
+      '<span style="font-size:16px;font-weight:700;color:#0B1D3A;">' + (numEnt||'—') + '</span></div>' +
     '<div><span style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Situación actual</span>' +
       '<span style="font-size:12px;font-weight:700;padding:2px 9px;border-radius:20px;background:' + sitBg[worstSit] + ';color:' + sitColor[worstSit] + ';">Sit. ' + worstSit + ' — ' + (sitLabel[worstSit]||'') + '</span></div>' +
     '<div><span style="font-size:11px;color:#94a3b8;display:block;margin-bottom:2px;">Tendencia 6m</span>' +
@@ -3788,7 +3784,7 @@ async function consultarCliente() {
   document.getElementById('mora-alert-container').innerHTML = mora ? `
     <div class="mora-alert">
       <div class="mora-alert-title">🚨 MORA REGISTRADA — RIESGO ALTO</div>
-      <div class="mora-alert-detail"><strong style="color:#fff;">${mora.nombre||''}</strong> tiene facturas impagas desde <strong style="color:#fff;">${mora.fechaMora||mora.fecha_mora||'fecha desconocida'}</strong>.<br>Saldo adeudado: <strong style="font-size:18px;color:#fff;font-family:'Syne',sans-serif;">$${((mora.saldoAdeudado||mora.saldo||0)).toLocaleString('es-AR')}</strong></div>
+      <div class="mora-alert-detail"><strong style="color:#fff;">${mora.nombre||''}</strong> tiene facturas impagas desde <strong style="color:#fff;">${mora.fechaMora||mora.fecha_mora||'fecha desconocida'}</strong>.<br>Saldo adeudado: <strong style="font-size:18px;color:#fff;font-family:'Sora',sans-serif;">$${((mora.saldoAdeudado||mora.saldo||0)).toLocaleString('es-AR')}</strong></div>
     </div>` : '';
 
   document.getElementById('loading-state').style.display = 'none';
@@ -3964,7 +3960,7 @@ function buildCtaCteHtml(data) {
 
   if (!facturas.length) {
     return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">'
-      + '<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#2563eb;">Cuenta Corriente Piattelli</span>'
+      + '<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#3B82F6;">Cuenta Corriente Piattelli</span>'
       + '</div><div style="font-size:13px;color:#64748b;">Sin deuda registrada en Bodega Piattelli</div>';
   }
 
@@ -3995,7 +3991,7 @@ function buildCtaCteHtml(data) {
 
   var html =
     '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:10px;flex-wrap:wrap;">'
-    + '<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#2563eb;">Cuenta Corriente Piattelli</span>'
+    + '<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#3B82F6;">Cuenta Corriente Piattelli</span>'
     + (alerta30 ? '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:#fee2e2;color:#991b1b;">Vencido +30 días</span>' : '')
     + '</div>'
     + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">'
@@ -4124,7 +4120,7 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
     });
   }
   var yaEstaCartera = cartera.some(function(c) { return (c.cuit||'').replace(/-/g,'') === cuit; });
-  var _avatarGrad = maxSit >= 3 ? 'linear-gradient(135deg,#dc2626,#7f1d1d)' : maxSit === 2 ? 'linear-gradient(135deg,#d97706,#92400e)' : 'linear-gradient(135deg,#1e40af,#0f2d52)';
+  var _avatarGrad = maxSit >= 3 ? 'linear-gradient(135deg,#dc2626,#7f1d1d)' : maxSit === 2 ? 'linear-gradient(135deg,#d97706,#92400e)' : 'linear-gradient(135deg,#1e40af,#0B1D3A)';
   var _inicial = (nombreMostrar && nombreMostrar !== 'Sin denominación') ? nombreMostrar.charAt(0).toUpperCase() : '?';
   var _cuitFmt = cuit.length === 11 ? cuit.slice(0,2)+'-'+cuit.slice(2,10)+'-'+cuit.slice(10) : cuit;
   var headerHtml = '<div class="decision-header">';
@@ -4307,8 +4303,8 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
       var _c = _CAT_COLOR[_cat] || { bg:'#f1f5f9', border:'#cbd5e1', text:'#334155' };
       var chips = '';
       if (_cat) chips += '<span title="Categoría MiPyME — Res. SEyPyME 1/2026" style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;background:' + _c.bg + ';border:1px solid ' + _c.border + ';color:' + _c.text + ';">🏢 ' + (_catLabel[_cat] || _cat) + '</span>';
-      if (_sec) chips += '<span title="Sector de actividad" style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:11px;background:#f8fafc;border:1px solid #e2e8f0;color:#475569;">📊 ' + _sec + '</span>';
-      if (_emp) chips += '<span title="Rango de empleados estimado" style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:11px;background:#f8fafc;border:1px solid #e2e8f0;color:#475569;">👥 ' + _emp + ' empleados</span>';
+      if (_sec) chips += '<span title="Sector de actividad" style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:11px;background:#F5F7FA;border:1px solid #e2e8f0;color:#475569;">📊 ' + _sec + '</span>';
+      if (_emp) chips += '<span title="Rango de empleados estimado" style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:11px;background:#F5F7FA;border:1px solid #e2e8f0;color:#475569;">👥 ' + _emp + ' empleados</span>';
       if (chips) { _mpRow.innerHTML = chips; _mpRow.style.display = 'flex'; }
     })();
 
@@ -4349,7 +4345,7 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
       if (_esPyme) {
         var _cs = _CAT_STYLE[_cat] || 'background:#f1f5f9;border-color:#cbd5e1;color:#334155;';
         _chipsHtml += '<span style="' + _chipBase + _cs + '">🏢 ' + (_CAT_LABEL[_cat] || _cat) + '</span>';
-        if (_sec) _chipsHtml += '<span style="' + _chipBase + 'background:#f8fafc;border-color:#e2e8f0;color:#475569;">📊 ' + _sec + '</span>';
+        if (_sec) _chipsHtml += '<span style="' + _chipBase + 'background:#F5F7FA;border-color:#e2e8f0;color:#475569;">📊 ' + _sec + '</span>';
       } else {
         _chipsHtml += '<span style="' + _chipBase + 'background:#fdf4ff;border-color:#e9d5ff;color:#7e22ce;">🏛 Gran Empresa / Corporativa</span>';
       }
@@ -4369,7 +4365,7 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
 
       _html += '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;">' + _chipsHtml + '</div>';
 
-      _html += '<div style="background:#f8fafc;border-radius:8px;padding:10px 12px;display:inline-block;min-width:160px;">'
+      _html += '<div style="background:#F5F7FA;border-radius:8px;padding:10px 12px;display:inline-block;min-width:160px;">'
         + '<div style="font-size:10px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:3px;">Personal Estimado</div>'
         + '<div style="font-size:17px;font-weight:800;color:#0f172a;line-height:1.1;">' + (_empLabel ? _empLabel + ' emp.' : '—') + '</div>'
         + '<div style="font-size:9px;color:#94a3b8;margin-top:3px;">' + _empSub + '</div>'
@@ -4440,7 +4436,7 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
       }
       scoreElF.innerHTML = renderVendeScore(scoreObjFinal)
         + (_tendenciaHtml ? '<div style="margin-top:4px;">' + _tendenciaHtml + '</div>' : '')
-        + (_usandoFallback ? '<div style="font-size:10px;color:#64748b;margin-top:6px;padding:3px 8px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0;">ℹ Score calculado localmente — servidor demoró en responder</div>' : '');
+        + (_usandoFallback ? '<div style="font-size:10px;color:#64748b;margin-top:6px;padding:3px 8px;background:#F5F7FA;border-radius:6px;border:1px solid #e2e8f0;">ℹ Score calculado localmente — servidor demoró en responder</div>' : '');
       window._ultimoScoreVende = scoreObjFinal;
       guardarReciente(cuit, nombreMostrar);
       // Actualizar historial con nombre y situación definitivos (la primera llamada fue con null)
@@ -5038,7 +5034,7 @@ async function _analizarClienteInner(cuit, piat, wspThreads, mora, scorePreAnali
     resEl.style.display = 'block';
     resEl.innerHTML = _renderCreditoHeader(rangoCredito)
       + _renderExclusionBadge()
-      + '<div style="font-size:11px;color:#2563eb;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;padding-bottom:10px;border-bottom:2px solid #eff6ff;">Análisis de Riesgo Crediticio</div>'
+      + '<div style="font-size:11px;color:#3B82F6;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;padding-bottom:10px;border-bottom:2px solid #eff6ff;">Análisis de Riesgo Crediticio</div>'
       + '<div style="font-size:13px;line-height:1.75;white-space:pre-wrap;color:#1e293b;">' + data.texto + '</div>';
     document.getElementById('btn-export').style.display = 'inline-block';
   } catch(e) {
@@ -5332,7 +5328,7 @@ async function exportarReporte() {
       doc.setFontSize(6); doc.setFont('helvetica','normal'); doc.setTextColor(30,41,59);
       doc.text(ent.substring(0,20), x0+1.5, y+3.5);
       // Debt amount
-      doc.setFont('helvetica','bold'); doc.setTextColor(15,45,82);
+      doc.setFont('helvetica','bold'); doc.setTextColor(11,29,58);
       doc.text(hmUltimoMonto(ent), x0+ENT_W+DEUDA_W/2, y+3.5, {align:'center'});
       // Period cells
       hmDisplayKeys.forEach(function(per, ci){
@@ -5540,7 +5536,7 @@ async function exportarReporte() {
   // ── ANÁLISIS DE RIESGO ────────────────────────────────────────────────────
   if (y > 240) { doc.addPage(); y = 15; }
   doc.setDrawColor(210,220,240); doc.line(10, y, W-10, y); y += 7;
-  doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(15,45,82);
+  doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(11,29,58);
   doc.text('Analisis de Riesgo Crediticio', 10, y); y += 7;
   doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(51,65,85);
 
@@ -5593,7 +5589,7 @@ function generarResumenEjecutivo() {
   var y = 20;
 
   // Header
-  doc.setFillColor(15, 45, 82);
+  doc.setFillColor(11,29,58);
   doc.rect(0, 0, 210, 35, 'F');
   doc.setFontSize(22);
   doc.setTextColor(255, 255, 255);
@@ -5614,7 +5610,7 @@ function generarResumenEjecutivo() {
   // Métricas
   doc.setFontSize(13);
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(15, 45, 82);
+  doc.setTextColor(11,29,58);
   doc.text('Resumen de cartera', 20, y);
   y += 8;
   doc.setDrawColor(200, 220, 255);
@@ -5639,7 +5635,7 @@ function generarResumenEjecutivo() {
     doc.setTextColor(100, 116, 139);
     doc.text(m[0], 25, y);
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(15, 45, 82);
+    doc.setTextColor(11,29,58);
     doc.text(m[1], 130, y);
     y += 8;
   });
@@ -5652,7 +5648,7 @@ function generarResumenEjecutivo() {
     doc.setTextColor(100, 116, 139);
     doc.text('DSO global', 25, y);
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(15, 45, 82);
+    doc.setTextColor(11,29,58);
     doc.text(dsoGlobal + ' días', 130, y);
     y += 8;
   }
@@ -5665,7 +5661,7 @@ function generarResumenEjecutivo() {
   // Top 5 alertas
   doc.setFontSize(13);
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(15, 45, 82);
+  doc.setTextColor(11,29,58);
   doc.text('Top 5 clientes con mayor riesgo', 20, y);
   y += 8;
 
@@ -5696,7 +5692,7 @@ function generarResumenEjecutivo() {
   }
 
   // Footer
-  doc.setFillColor(15, 45, 82);
+  doc.setFillColor(11,29,58);
   doc.rect(0, 280, 210, 17, 'F');
   doc.setFontSize(8);
   doc.setTextColor(147, 197, 253);
@@ -6118,7 +6114,7 @@ function renderCartera(filtro) {
     var scoreColor = c.scoreColor || (scoreNum ? (scoreNum>=700?'#166534':scoreNum>=400?'#854d0e':'#991b1b') : '#94a3b8');
     var scoreEmoji = c.scoreEmoji || '';
     var scoreRango = c.scoreRango || (scoreNum ? (scoreNum>=700?'Bajo Riesgo':scoreNum>=400?'Riesgo Medio':'Alto Riesgo') : '—');
-    var avatarBg = scoreNum ? (scoreNum>=700?'linear-gradient(135deg,#166534,#16a34a)':scoreNum>=400?'linear-gradient(135deg,#854d0e,#d97706)':'linear-gradient(135deg,#991b1b,#ef4444)') : 'linear-gradient(135deg,#2563eb,#0f2d52)';
+    var avatarBg = scoreNum ? (scoreNum>=700?'linear-gradient(135deg,#166534,#16a34a)':scoreNum>=400?'linear-gradient(135deg,#854d0e,#d97706)':'linear-gradient(135deg,#991b1b,#ef4444)') : 'linear-gradient(135deg,#3B82F6,#0B1D3A)';
 
     // BCRA badge
     var sitLabels = ['Sin verificar','Normal','Con seguimiento','Con problemas','Irregular','Irregular','Incobrabilidad'];
@@ -6493,7 +6489,7 @@ function mostrarErrorCuitInexistente(raw) {
     '<div style="font-size:17px;font-weight:800;color:#991b1b;letter-spacing:-0.3px;margin-bottom:8px;">ESTE CUIT NO EXISTE O NO TIENE REGISTRO EN AFIP/BCRA</div>' +
     '<div style="font-size:13px;color:#64748b;margin-bottom:20px;">CUIT consultado: <strong style="color:#475569;">' + cuitFmt + '</strong></div>' +
     '<a href="https://www.afip.gob.ar/genericos/consultaCUIT/" target="_blank" rel="noopener" ' +
-    'style="display:inline-flex;align-items:center;gap:8px;padding:11px 22px;background:#2563eb;color:#fff;border-radius:10px;font-weight:600;font-size:13px;text-decoration:none;">' +
+    'style="display:inline-flex;align-items:center;gap:8px;padding:11px 22px;background:#3B82F6;color:#fff;border-radius:10px;font-weight:600;font-size:13px;text-decoration:none;">' +
     '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">' +
     '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>' +
     'Verificar Constancia en ARCA (ex AFIP)' +
@@ -6700,7 +6696,7 @@ async function ejecutarProcesoIntegral(modo_rapido) {
   var _procEl = document.getElementById('pi-procesados');
   if (_procEl) _procEl.textContent = '0';
   var _barEl = document.getElementById('proceso-integral-bar');
-  if (_barEl) { _barEl.style.width = '0%'; _barEl.style.background = 'linear-gradient(90deg,#2563eb,#06b6d4)'; }
+  if (_barEl) { _barEl.style.width = '0%'; _barEl.style.background = 'linear-gradient(90deg,#3B82F6,#06b6d4)'; }
   var _pctEl = document.getElementById('proceso-integral-pct');
   if (_pctEl) _pctEl.textContent = '0%';
   try {
@@ -7072,7 +7068,7 @@ function _renderAlertasList() {
     html += '</div>';
     if (c.ultimaSit) html += getBadge(c.ultimaSit);
     html += '<div style="display:flex;align-items:center;gap:6px;margin-top:6px;">';
-    html += '<button onclick="event.stopPropagation();verCliente(\''+c.cuit+'\')" style="font-size:11px;font-weight:600;padding:4px 10px;background:#2563eb;color:#fff;border:none;border-radius:6px;cursor:pointer;letter-spacing:0.2px;">🔍 Ver</button>';
+    html += '<button onclick="event.stopPropagation();verCliente(\''+c.cuit+'\')" style="font-size:11px;font-weight:600;padding:4px 10px;background:#3B82F6;color:#fff;border:none;border-radius:6px;cursor:pointer;letter-spacing:0.2px;">🔍 Ver</button>';
     html += '<svg id="alr-chev-'+_cuitRow+'" class="alr-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
     html += '</div>';
     html += '</div></div>';
@@ -7221,7 +7217,7 @@ function renderBuscador(filtro) {
       else if (diff < -5) trendHtml = '<span class="ficha-trend down">▼ ' + diff + '</span>';
       else trendHtml = '<span class="ficha-trend flat">→ Estable</span>';
     }
-    var colors = ['#2563eb','#7c3aed','#0891b2','#059669','#d97706','#dc2626'];
+    var colors = ['#3B82F6','#7c3aed','#0891b2','#059669','#d97706','#dc2626'];
     var avatarBg = esCritico ? '#dc2626' : esAtencion ? '#d97706' : colors[idx % colors.length];
     var initials = c.nombre.trim().split(/\s+/).slice(0,2).map(function(w){ return w[0]; }).join('').toUpperCase();
     var limiteStr = c.limiteCreditoARS ? '$' + Number(c.limiteCreditoARS).toLocaleString('es-AR') : 'No definido';
@@ -7274,7 +7270,7 @@ function renderBuscador(filtro) {
     if (wspTag) html += wspTag;
     if (c.vendedor) html += '<span class="cli-meta-tag">' + c.vendedor + '</span>';
     if (c.plazoDias || c.plazo) html += '<span class="cli-meta-tag">Plazo: ' + (c.plazoDias || c.plazo) + 'd</span>';
-    html += '<button onclick="event.stopPropagation();editarCliente(\'' + c.cuit + '\')" title="Editar datos del cliente" style="margin-left:auto;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:5px 9px;font-size:11px;color:#475569;cursor:pointer;font-family:inherit;">✏ Editar</button>';
+    html += '<button onclick="event.stopPropagation();editarCliente(\'' + c.cuit + '\')" title="Editar datos del cliente" style="margin-left:auto;background:#F5F7FA;border:1px solid #e2e8f0;border-radius:6px;padding:5px 9px;font-size:11px;color:#475569;cursor:pointer;font-family:inherit;">✏ Editar</button>';
     html += '<button class="primary ficha-btn-ver" onclick="event.stopPropagation();verCliente(\'' + c.cuit + '\')">Ver consulta →</button>';
     html += '<button onclick="event.stopPropagation();eliminarClienteCartera(\'' + c.cuit + '\',\'' + (c.nombre||'').replace(/'/g,"\\'") + '\')" title="Eliminar de cartera y limpiar caché" style="background:none;border:1px solid #fca5a5;border-radius:6px;padding:5px 9px;font-size:11px;color:#ef4444;cursor:pointer;font-family:inherit;margin-left:4px;">✕ Eliminar</button>';
     html += '</div></div></div>';
@@ -7289,7 +7285,7 @@ function renderBuscador(filtro) {
     var _pS = Math.max(0, _buscadorPage - 2), _pE = Math.min(_totalPags - 1, _pS + 4);
     for (var _p = _pS; _p <= _pE; _p++) {
       var _isAct = _p === _buscadorPage;
-      _pagHtml += '<button onclick="buscadorGoPage(' + _p + ')" style="padding:7px 12px;border:1.5px solid ' + (_isAct ? '#2563eb' : '#e2e8f0') + ';border-radius:8px;background:' + (_isAct ? '#2563eb' : '#fff') + ';color:' + (_isAct ? '#fff' : '#475569') + ';cursor:pointer;font-size:13px;font-weight:' + (_isAct ? 700 : 400) + ';">' + (_p + 1) + '</button>';
+      _pagHtml += '<button onclick="buscadorGoPage(' + _p + ')" style="padding:7px 12px;border:1.5px solid ' + (_isAct ? '#3B82F6' : '#e2e8f0') + ';border-radius:8px;background:' + (_isAct ? '#3B82F6' : '#fff') + ';color:' + (_isAct ? '#fff' : '#475569') + ';cursor:pointer;font-size:13px;font-weight:' + (_isAct ? 700 : 400) + ';">' + (_p + 1) + '</button>';
     }
     _pagHtml += '<button onclick="buscadorGoPage(' + Math.min(_totalPags - 1, _buscadorPage + 1) + ')"' + (_buscadorPage >= _totalPags - 1 ? ' disabled' : '') + ' style="padding:7px 14px;border:1.5px solid #e2e8f0;border-radius:8px;background:#fff;cursor:pointer;font-size:13px;color:#475569;font-weight:500;">Sig. &rsaquo;</button>';
     _pagHtml += '<span style="font-size:12px;color:#94a3b8;margin-left:4px;">Pág. ' + (_buscadorPage + 1) + ' de ' + _totalPags + '</span>';
@@ -7560,14 +7556,14 @@ init()
   }
   function _pfColorDSO(d) {
     if (d <= 15) return '#16a34a';
-    if (d <= 30) return '#2563eb';
+    if (d <= 30) return '#3B82F6';
     if (d <= 60) return '#ca8a04';
     if (d <= 90) return '#ea580c';
     return '#dc2626';
   }
   function _pfColorDias(d) {
     if (d === 0)  return { bg:'#dcfce7', color:'#16a34a' };
-    if (d <= 30)  return { bg:'#dbeafe', color:'#2563eb' };
+    if (d <= 30)  return { bg:'#dbeafe', color:'#3B82F6' };
     if (d <= 60)  return { bg:'#fef9c3', color:'#ca8a04' };
     if (d <= 90)  return { bg:'#ffedd5', color:'#ea580c' };
     return { bg:'#fee2e2', color:'#dc2626' };
@@ -7608,7 +7604,7 @@ init()
     var critico = (tb.d120||0) + (tb.d120plus||0);
 
     var kpis = [
-      { label:'Saldo Total',   value:'$'+_pfFmt(stats.total_saldo),  sub:_pfFmtFull(stats.total_saldo)+' ARS',    color:'#2563eb',  bucket:'' },
+      { label:'Saldo Total',   value:'$'+_pfFmt(stats.total_saldo),  sub:_pfFmtFull(stats.total_saldo)+' ARS',    color:'#3B82F6',  bucket:'' },
       { label:'0–30 días',     value:'$'+_pfFmt(tb.d30||0),          sub:_pfPct(tb.d30,total)+'% del total',      color:'#16a34a',  bucket:'d30' },
       { label:'31–60 días',    value:'$'+_pfFmt(tb.d60||0),          sub:_pfPct(tb.d60,total)+'% del total',      color:'#ca8a04',  bucket:'d60' },
       { label:'61–90 días',    value:'$'+_pfFmt(tb.d90||0),          sub:_pfPct(tb.d90,total)+'% del total',      color:'#ea580c',  bucket:'d90' },
@@ -7902,7 +7898,7 @@ async function cargarAlertasAuto() {
     if (empty) empty.style.display = 'none';
 
     lista.innerHTML = alertas.map(function(a) {
-      var c = _ALERTA_COLORES[a.tipo] || { bg:'#f8fafc', border:'#94a3b8', txt:'#64748b', ico:'!', label:'' };
+      var c = _ALERTA_COLORES[a.tipo] || { bg:'#F5F7FA', border:'#94a3b8', txt:'#64748b', ico:'!', label:'' };
       var etiqueta = c.label || a.tipo;
       return '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 13px;background:' + c.bg + ';border-radius:9px;border-left:3px solid ' + c.border + ';margin-bottom:6px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">' +
         '<div style="width:22px;height:22px;background:' + c.border + ';border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:900;flex-shrink:0;">' + c.ico + '</div>' +
@@ -7988,7 +7984,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <div id="modal-agregar-cliente" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;align-items:center;justify-content:center;">
   <div style="background:#fff;border-radius:14px;padding:24px;width:92%;max-width:480px;box-shadow:0 20px 60px rgba(0,0,0,0.3);max-height:90vh;overflow-y:auto;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-      <h3 style="margin:0;font-size:16px;font-weight:700;color:#0f2d52;">Agregar a seguimiento</h3>
+      <h3 style="margin:0;font-size:16px;font-weight:700;color:#0B1D3A;">Agregar a seguimiento</h3>
       <button onclick="cerrarModalAgregar()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#64748b;line-height:1;">&#215;</button>
     </div>
     <div style="font-size:12px;color:#64748b;margin-bottom:18px;" id="modal-agregar-subtitulo"></div>

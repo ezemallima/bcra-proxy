@@ -12,7 +12,7 @@
 <title>Vende Seguro — Ingresar</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="/static/supabase.min.js"></script>
 <script src="/supabase-session.js"></script>
 <style>
@@ -24,17 +24,17 @@
   --border: #e2e8f0;
   --text: #1e293b;
   --text-muted: #64748b;
-  --primary: #2563eb;
+  --primary: #3B82F6;
   --primary-hover: #1d4ed8;
   --error-bg: rgba(239,68,68,0.08);
   --error-border: rgba(239,68,68,0.3);
   --error-text: #991b1b;
-  --sidebar-bg: #0b1628;
+  --sidebar-bg: #0B1D3A;
   --radius: 12px;
 }
 
 body {
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: 'Sora', system-ui, sans-serif;
   background: var(--bg);
   color: var(--text);
   min-height: 100dvh;
@@ -58,7 +58,7 @@ body {
   flex-shrink: 0;
   background: var(--sidebar-bg);
   padding: 48px 44px;
-  color: #f8fafc;
+  color: #F5F7FA;
 }
 
 @media (min-width: 768px) {
@@ -74,11 +74,12 @@ body {
 .brand-icon {
   width: 44px;
   height: 44px;
-  background: rgba(255,255,255,0.08);
   border-radius: 10px;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
 }
 
 .brand-name {
@@ -241,7 +242,7 @@ body {
 
 .field input:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.1);
 }
 
 @media (max-width: 767px) {
@@ -327,12 +328,7 @@ body {
   <div class="brand-panel">
     <div class="brand-logo">
       <div class="brand-icon">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M8 22H5a2 2 0 0 1-2-2V7l5-5h11a2 2 0 0 1 2 2v3"/>
-          <path d="M11 7H6V2"/>
-          <circle cx="16" cy="16" r="6"/>
-          <path d="M16 12v4l2 2"/>
-        </svg>
+        <img src="/static/logo.svg" width="44" height="44" alt="Vende Seguro" style="display:block; border-radius:10px;">
       </div>
       <div>
         <div class="brand-name">Vende Seguro</div>
@@ -370,12 +366,7 @@ body {
       <!-- Logo visible solo en mobile -->
       <div class="form-logo-mobile">
         <div class="form-logo-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M8 22H5a2 2 0 0 1-2-2V7l5-5h11a2 2 0 0 1 2 2v3"/>
-            <path d="M11 7H6V2"/>
-            <circle cx="16" cy="16" r="6"/>
-            <path d="M16 12v4l2 2"/>
-          </svg>
+          <img src="/static/logo.svg" width="36" height="36" alt="Vende Seguro" style="display:block; border-radius:8px;">
         </div>
         <span class="form-logo-name">Vende Seguro</span>
       </div>

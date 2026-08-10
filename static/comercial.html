@@ -13,7 +13,7 @@
 <title>Vende Seguro — App Comercial</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Syne:wght@700;800&family=Roboto+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
   /* ── DESIGN TOKENS — Light Mode (App Principal) ─────────────────────── */
   :root {
@@ -21,7 +21,7 @@
     --bg:        #f1f5f9;
     --bg2:       #e8edf4;
     --surface:   #ffffff;
-    --surface2:  #f8fafc;
+    --surface2:  #F5F7FA;
     --surface3:  #f1f5f9;
 
     /* Borders */
@@ -34,7 +34,7 @@
     --text3:     #94a3b8;
 
     /* Semantic colors */
-    --accent:    #2563eb;
+    --accent:    #3B82F6;
     --accent2:   #1d4ed8;
     --green:     #166534;
     --yellow:    #92400e;
@@ -48,11 +48,11 @@
     --card-glow: 0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -1px rgba(0,0,0,0.04);
 
     /* Sidebar */
-    --sidebar-bg:    #0b1628;
+    --sidebar-bg:    #0B1D3A;
     --sidebar-width: 220px;
 
     /* ── Legacy aliases — usados en inline styles del JS ─── */
-    --azul:      #2563eb;
+    --azul:      #3B82F6;
     --verde:     #166534;
     --verde-bg:  #dcfce7;
     --rojo:      #991b1b;
@@ -67,7 +67,7 @@
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   html { height: 100%; }
   body {
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'Sora', system-ui, sans-serif;
     background: var(--bg);
     color: var(--text);
     min-height: 100%;
@@ -106,7 +106,7 @@
     filter: drop-shadow(0 4px 16px rgba(59,130,246,0.3));
   }
   .login-title {
-    font-family: 'Syne', sans-serif;
+    font-family: 'Sora', sans-serif;
     font-size: 27px; font-weight: 800;
     letter-spacing: -0.6px; margin-bottom: 4px; text-align: center;
     color: var(--text);
@@ -133,7 +133,7 @@
     border: 1.5px solid var(--border);
     border-radius: 10px;
     padding: 13px 15px;
-    font-family: 'Inter', sans-serif; font-size: 14px; color: var(--text);
+    font-family: 'Sora', sans-serif; font-size: 14px; color: var(--text);
     outline: none; margin-bottom: 18px;
     transition: border-color 0.2s, background 0.2s;
   }
@@ -147,7 +147,7 @@
   .btn-login {
     width: 100%; padding: 14px;
     background: linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%);
-    color: #fff; font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 700;
+    color: #fff; font-family: 'Sora', sans-serif; font-size: 14px; font-weight: 700;
     border: none; border-radius: 11px; cursor: pointer; letter-spacing: 0.2px;
     transition: opacity 0.2s, transform 0.1s;
     box-shadow: 0 4px 16px rgba(59,130,246,0.3);
@@ -173,7 +173,7 @@
   .header-brand { display: flex; align-items: center; gap: 10px; }
   .header-logo { font-size: 22px; line-height: 1; }
   .header-name {
-    font-family: 'Syne', sans-serif;
+    font-family: 'Sora', sans-serif;
     font-size: 14px; font-weight: 800; color: var(--text);
     letter-spacing: -0.2px;
   }
@@ -182,7 +182,7 @@
     background: var(--surface2); border: 1px solid var(--border);
     color: var(--text2); font-size: 12px; font-weight: 600;
     border-radius: 8px; padding: 7px 13px; cursor: pointer;
-    font-family: 'Inter', sans-serif; transition: background 0.15s;
+    font-family: 'Sora', sans-serif; transition: background 0.15s;
   }
   .btn-logout:hover { background: var(--surface3); }
 
@@ -201,7 +201,7 @@
   .tab-btn {
     flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: 3px; border: none; background: none; color: var(--text3);
-    cursor: pointer; font-family: 'Inter', sans-serif; transition: color 0.2s;
+    cursor: pointer; font-family: 'Sora', sans-serif; transition: color 0.2s;
     min-height: 48px;
   }
   .tab-btn.active { color: var(--accent); }
@@ -210,7 +210,7 @@
 
   /* ── SECTION HEADERS ──────────────────────────────────────────────────── */
   .section-title {
-    font-family: 'Syne', sans-serif;
+    font-family: 'Sora', sans-serif;
     font-size: 19px; font-weight: 800;
     color: var(--text); margin-bottom: 3px; letter-spacing: -0.4px;
   }
@@ -248,11 +248,11 @@
     transition: border-color 0.2s, background 0.2s;
   }
   .search-input:focus { border-color: var(--accent); background: rgba(59,130,246,0.05); }
-  .search-input::placeholder { font-family: 'Inter', sans-serif; color: var(--text3); letter-spacing: 0; font-size: 14px; }
+  .search-input::placeholder { font-family: 'Sora', sans-serif; color: var(--text3); letter-spacing: 0; font-size: 14px; }
   .btn-search {
     background: var(--accent); border: none; border-radius: 12px;
     padding: 0 20px; font-size: 14px; font-weight: 700;
-    color: #fff; cursor: pointer; font-family: 'Inter', sans-serif;
+    color: #fff; cursor: pointer; font-family: 'Sora', sans-serif;
     min-height: 48px; transition: opacity 0.15s;
   }
   .btn-search:active { opacity: 0.82; }
@@ -261,7 +261,7 @@
     width: 100%;
     background: var(--surface); border: 1.5px solid var(--border); border-radius: 12px;
     padding: 11px 16px; font-size: 14px; color: var(--text);
-    font-family: 'Inter', sans-serif; outline: none; margin-bottom: 12px;
+    font-family: 'Sora', sans-serif; outline: none; margin-bottom: 12px;
     transition: border-color 0.2s;
   }
   .buscar-input:focus { border-color: var(--accent); }
@@ -273,7 +273,7 @@
     background: var(--surface); border: 1.5px solid var(--border);
     border-radius: 20px; padding: 6px 14px; font-size: 12px; font-weight: 600;
     color: var(--text2); cursor: pointer; white-space: nowrap;
-    font-family: 'Inter', sans-serif; transition: all 0.15s;
+    font-family: 'Sora', sans-serif; transition: all 0.15s;
   }
   .filter-chip.active { background: rgba(59,130,246,0.15); border-color: var(--accent); color: var(--accent); }
   .filter-chip:hover { border-color: var(--border2); color: var(--text); }
@@ -298,7 +298,7 @@
     gap: 16px; margin-bottom: 4px;
   }
   .score-num {
-    font-family: 'Syne', sans-serif;
+    font-family: 'Sora', sans-serif;
     font-size: 52px; font-weight: 800;
     letter-spacing: -3px; line-height: 1;
     transition: color 0.3s ease;
@@ -323,7 +323,7 @@
   /* ── BCRA SIT GRID ────────────────────────────────────────────────────── */
   .sit-grid { display: flex; flex-wrap: wrap; gap: 8px; }
   .sit-chip {
-    background: #f8fafc; border: 1px solid var(--border);
+    background: #F5F7FA; border: 1px solid var(--border);
     border-radius: 10px; padding: 9px 12px;
     font-size: 12px; display: flex; flex-direction: column; gap: 3px;
     flex: 1; min-width: 90px;
@@ -344,7 +344,7 @@
 
   /* ── CHEQUES ─────────────────────────────────────────────────────────── */
   .cheque-item {
-    background: #f8fafc; border: 1px solid var(--border);
+    background: #F5F7FA; border: 1px solid var(--border);
     border-radius: 10px; padding: 10px 13px; margin-bottom: 7px;
     display: flex; align-items: center; justify-content: space-between;
   }
@@ -365,8 +365,8 @@
     cursor: pointer; transition: all 0.18s;
     box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
   }
-  .cliente-card:hover { box-shadow: 0 8px 20px rgba(37,99,235,0.1); transform: translateY(-1px); border-color: #bfdbfe; }
-  .cliente-card:active { background: #f8fafc; transform: translateY(0); }
+  .cliente-card:hover { box-shadow: 0 8px 20px rgba(59,130,246,0.1); transform: translateY(-1px); border-color: #bfdbfe; }
+  .cliente-card:active { background: #F5F7FA; transform: translateY(0); }
   .cliente-card.alerta { border-color: #fca5a5; border-left: 3px solid #991b1b; }
   .cliente-card.excedido-card { border-color: #fde68a; border-left: 3px solid #92400e; }
   .cliente-row1 { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
@@ -388,7 +388,7 @@
   .av-info   { flex: 1; min-width: 0; }
   .av-nombre { font-size: 13px; font-weight: 700; color: #1e293b; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .av-msg    { font-size: 12px; color: #475569; line-height: 1.4; }
-  .av-ver    { font-size: 12px; font-weight: 700; color: var(--azul); cursor: pointer; white-space: nowrap; flex-shrink: 0; align-self: center; padding: 4px 8px; border-radius: 7px; background: rgba(37,99,235,.07); }
+  .av-ver    { font-size: 12px; font-weight: 700; color: var(--azul); cursor: pointer; white-space: nowrap; flex-shrink: 0; align-self: center; padding: 4px 8px; border-radius: 7px; background: rgba(59,130,246,.07); }
   .av-toggle { font-size: 12px; color: #94a3b8; cursor: pointer; padding: 5px 0; text-align: center; font-weight: 600; }
   .av-toggle:hover { color: var(--azul); }
 
@@ -396,7 +396,7 @@
   .sit-badge { font-size: 10px; font-weight: 700; border-radius: 5px; padding: 2px 6px; }
   .alerta-badge      { font-size: 10px; font-weight: 700; background: rgba(239,68,68,0.13);   color: var(--red);    border-radius: 5px; padding: 2px 6px; }
   .alerta-temprana-badge { font-size: 10px; font-weight: 700; background: rgba(245,158,11,0.13); color: var(--yellow); border-radius: 5px; padding: 2px 6px; }
-  .cliente-vendedor-tag { font-size: 10px; font-weight: 600; background: rgba(37,99,235,0.08); border: 1px solid rgba(37,99,235,0.18); color: var(--azul); border-radius: 20px; padding: 2px 7px; letter-spacing: 0.3px; }
+  .cliente-vendedor-tag { font-size: 10px; font-weight: 600; background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.18); color: var(--azul); border-radius: 20px; padding: 2px 7px; letter-spacing: 0.3px; }
   .excedido-badge    { font-size: 10px; font-weight: 700; background: rgba(249,115,22,0.13);  color: var(--orange); border-radius: 5px; padding: 2px 6px; }
   .saldo-badge       { font-size: 10px; font-weight: 700; background: rgba(245,158,11,0.13);  color: var(--yellow); border-radius: 5px; padding: 2px 6px; }
 
@@ -414,7 +414,7 @@
     transition: background 0.15s;
   }
   .oport-card:active { background: var(--surface2); }
-  .oport-score { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800; color: var(--green); }
+  .oport-score { font-family: 'Sora', sans-serif; font-size: 22px; font-weight: 800; color: var(--green); }
   .oport-nombre { font-size: 14px; font-weight: 700; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .oport-tags { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
   .oport-tag { font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 5px; background: var(--surface2); color: var(--text2); border: 1px solid var(--border); }
@@ -473,7 +473,7 @@
   .btn-wsp {
     width: 100%; background: linear-gradient(135deg, #075e54, #128c7e);
     border: none; border-radius: 12px; padding: 14px;
-    font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 700;
+    font-family: 'Sora', sans-serif; font-size: 14px; font-weight: 700;
     color: #fff; cursor: pointer; margin-top: 14px;
     display: flex; align-items: center; justify-content: center; gap: 8px;
     transition: opacity 0.15s, transform 0.1s;
@@ -531,8 +531,8 @@
   /* ── AVATAR CIRCLE ────────────────────────────────────────────────── */
   .avatar-circle {
     width: 40px; height: 40px; border-radius: 8px; flex-shrink: 0;
-    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-    color: #fff; font-family: 'Syne', sans-serif;
+    background: linear-gradient(135deg, #3B82F6 0%, #1d4ed8 100%);
+    color: #fff; font-family: 'Sora', sans-serif;
     font-weight: 800; font-size: 16px;
     display: flex; align-items: center; justify-content: center;
     letter-spacing: -0.5px;
@@ -621,9 +621,13 @@
       padding: 20px 16px 16px;
       border-bottom: 1px solid rgba(255,255,255,0.07);
     }
-    .sidebar-logo { color: #fff; flex-shrink: 0; }
+    .sidebar-logo {
+      width: 30px; height: 30px; border-radius: 8px; overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; box-shadow: 0 4px 12px rgba(11,29,58,0.5);
+    }
     .sidebar-title {
-      font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 800;
+      font-family: 'Sora', sans-serif; font-size: 13px; font-weight: 800;
       color: #fff; letter-spacing: -0.2px; line-height: 1.2;
     }
     .sidebar-sub { font-size: 10px; color: rgba(255,255,255,0.38); margin-top: 2px; }
@@ -631,7 +635,7 @@
     .sidebar-btn {
       display: flex; align-items: center; gap: 10px;
       width: 100%; padding: 9px 12px; border: none; border-radius: 9px;
-      background: none; cursor: pointer; font-family: 'Inter', sans-serif;
+      background: none; cursor: pointer; font-family: 'Sora', sans-serif;
       font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.45);
       transition: background 0.15s, color 0.15s; text-align: left;
     }
@@ -646,7 +650,7 @@
       width: 100%; padding: 8px 12px; border-radius: 8px;
       background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
       color: rgba(255,255,255,0.45); font-size: 12px; font-weight: 600;
-      cursor: pointer; font-family: 'Inter', sans-serif;
+      cursor: pointer; font-family: 'Sora', sans-serif;
       transition: background 0.15s; margin-top: 6px; text-align: center;
     }
     .btn-sidebar-logout:hover { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.7); }
@@ -699,7 +703,7 @@
   .toggle-sw input:checked + .slider { background: var(--azul); }
   .toggle-sw input:checked + .slider::before { transform: translateX(16px); }
   /* Botón filtros */
-  #btn-filtros { display:flex;align-items:center;gap:5px;background:none;border:1px solid var(--border);border-radius:8px;padding:7px 11px;font-size:12px;color:var(--text2);cursor:pointer;font-family:'Inter',sans-serif;white-space:nowrap; }
+  #btn-filtros { display:flex;align-items:center;gap:5px;background:none;border:1px solid var(--border);border-radius:8px;padding:7px 11px;font-size:12px;color:var(--text2);cursor:pointer;font-family:'Sora',sans-serif;white-space:nowrap; }
   #btn-filtros.filtros-activos { border-color:var(--azul);color:var(--azul);background:rgba(59,130,246,.06); }
   #filtros-badge { display:none;background:var(--azul);color:#fff;border-radius:999px;font-size:10px;font-weight:700;width:16px;height:16px;align-items:center;justify-content:center;margin-left:2px; }
   #filtros-badge.visible { display:inline-flex; }
@@ -730,7 +734,7 @@
   #btn-confirmar-rendicion {
     width: 100%; background: #16a34a; color: #fff; border: none;
     border-radius: 10px; padding: 12px 16px; font-size: 14px; font-weight: 700;
-    cursor: pointer; font-family: 'Inter', sans-serif;
+    cursor: pointer; font-family: 'Sora', sans-serif;
     display: flex; align-items: center; justify-content: center; gap: 8px;
     transition: background .15s;
   }
@@ -928,7 +932,7 @@ async function cargarZipFacturasStatus() {
   <!-- ── SIDEBAR (desktop only) ─────────────────────────────────────── -->
   <aside class="sidebar" id="app-sidebar">
     <div class="sidebar-brand">
-      <span class="sidebar-logo"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 22h8M12 11v11M6 2h12l-2 9a5 5 0 01-8 0z"/></svg></span>
+      <span class="sidebar-logo"><img src="/static/logo.svg" width="30" height="30" alt="Vende Seguro" style="display:block;"></span>
       <div>
         <div class="sidebar-title">Vende Seguro</div>
         <div class="sidebar-sub" id="sb-user-name">—</div>
@@ -970,7 +974,7 @@ async function cargarZipFacturasStatus() {
       </div>
     </div>
     <div id="header-dso" style="text-align:center;opacity:0;transition:opacity 0.4s;cursor:default;" title="">
-      <div id="header-dso-num" style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;line-height:1;">—</div>
+      <div id="header-dso-num" style="font-family:'Sora',sans-serif;font-size:20px;font-weight:800;line-height:1;">—</div>
       <div style="font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;color:var(--accent2);margin-top:2px;">DSO</div>
     </div>
     <button class="btn-logout" onclick="doLogout()">Salir</button>
@@ -1042,12 +1046,12 @@ async function cargarZipFacturasStatus() {
           </div>
         </div>
         <button id="btn-recalc" onclick="actualizarScores(this)"
-                style="background:none;border:1px solid var(--border);border-radius:8px;padding:7px 11px;font-size:12px;color:var(--text2);cursor:pointer;font-family:'Inter',sans-serif;">
+                style="background:none;border:1px solid var(--border);border-radius:8px;padding:7px 11px;font-size:12px;color:var(--text2);cursor:pointer;font-family:'Sora',sans-serif;">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg> Scores
         </button>
         <button id="btn-descarga-cc" onclick="descargarCuentaCorriente(this)"
                 title="Descargar cuenta corriente en Excel"
-                style="background:none;border:1px solid var(--border);border-radius:8px;padding:7px 11px;font-size:12px;color:var(--text2);cursor:pointer;font-family:'Inter',sans-serif;">
+                style="background:none;border:1px solid var(--border);border-radius:8px;padding:7px 11px;font-size:12px;color:var(--text2);cursor:pointer;font-family:'Sora',sans-serif;">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Excel
         </button>
       </div>
@@ -1058,7 +1062,7 @@ async function cargarZipFacturasStatus() {
       <!-- Barra de filtro activo: aparece cuando hay algún filtro aplicado -->
       <div id="filtro-activo-bar" style="display:none;align-items:center;justify-content:space-between;gap:10px;background:rgba(59,130,246,.07);border:1.5px solid rgba(59,130,246,.22);border-radius:10px;padding:8px 12px;margin-bottom:10px">
         <span id="filtro-activo-label" style="font-size:12px;color:var(--azul);font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
-        <button onclick="resetFiltroCartera()" style="flex-shrink:0;background:none;border:1px solid rgba(59,130,246,.4);border-radius:8px;padding:5px 10px;font-size:12px;font-weight:600;color:var(--azul);cursor:pointer;font-family:'Inter',sans-serif;white-space:nowrap">
+        <button onclick="resetFiltroCartera()" style="flex-shrink:0;background:none;border:1px solid rgba(59,130,246,.4);border-radius:8px;padding:5px 10px;font-size:12px;font-weight:600;color:var(--azul);cursor:pointer;font-family:'Sora',sans-serif;white-space:nowrap">
           ← Volver completo
         </button>
       </div>
@@ -2333,7 +2337,7 @@ function renderFacturas(data, nombre) {
       </button>
       <span id="zip-facturas-status" style="font-size:11px;color:#64748b;"></span>
     </div>
-    <div id="zip-drive-panel" style="display:none;margin-top:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;">
+    <div id="zip-drive-panel" style="display:none;margin-top:8px;background:#F5F7FA;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;">
       <!-- Sección: URL configurada (se muestra si ya está guardada) -->
       <div id="zip-panel-configurado" style="display:none;">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
@@ -2342,7 +2346,7 @@ function renderFacturas(data, nombre) {
             <div id="zip-ultimo-auto" style="font-size:11px;color:#64748b;margin-top:2px;"></div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;">
-            <button onclick="reimportarAhora()" id="btn-reimportar" style="background:#2563eb;color:#fff;border:none;border-radius:7px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">Reimportar ahora</button>
+            <button onclick="reimportarAhora()" id="btn-reimportar" style="background:#3B82F6;color:#fff;border:none;border-radius:7px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">Reimportar ahora</button>
             <button onclick="mostrarCambiarUrl()" style="background:none;border:1px solid #cbd5e1;border-radius:7px;padding:6px 10px;font-size:11px;color:#64748b;cursor:pointer;">Cambiar URL</button>
             <button onclick="cerrarPanelZip()" style="background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;line-height:1;">×</button>
           </div>
@@ -2370,7 +2374,7 @@ function renderFacturas(data, nombre) {
         <div style="font-size:11px;color:#94a3b8;margin-bottom:6px;">Compartí el ZIP en Drive con "Cualquier persona con el link" y pegá la URL.</div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <input id="zip-drive-url" type="url" placeholder="https://drive.google.com/file/d/..." style="flex:1;min-width:200px;padding:7px 10px;border:1px solid #cbd5e1;border-radius:7px;font-size:12px;color:#1e293b;background:#fff;">
-          <button onclick="guardarUrlDriveYImportar()" style="background:#2563eb;color:#fff;border:none;border-radius:7px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">Guardar e importar</button>
+          <button onclick="guardarUrlDriveYImportar()" style="background:#3B82F6;color:#fff;border:none;border-radius:7px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">Guardar e importar</button>
           <button onclick="cerrarPanelZip()" style="background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;line-height:1;">×</button>
         </div>
         <div id="zip-config-error" style="margin-top:6px;font-size:11px;color:#dc2626;display:none;"></div>
@@ -2843,7 +2847,7 @@ function mostrarErrorCuitInexistente(raw) {
       Verificar en ARCA →
     </a>
     <button onclick="document.getElementById('consulta-resultado').innerHTML='';document.getElementById('cuit-input').value='';document.getElementById('cuit-input').focus();"
-      style="display:block;margin:14px auto 0;background:none;border:1.5px solid var(--border);border-radius:8px;padding:9px 20px;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;font-family:'Inter',sans-serif">
+      style="display:block;margin:14px auto 0;background:none;border:1.5px solid var(--border);border-radius:8px;padding:9px 20px;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;font-family:'Sora',sans-serif">
       ← Consultar otro CUIT
     </button>
   </div>`;
@@ -2872,7 +2876,7 @@ async function consultarCuit() {
         <div style="font-size:12px;color:var(--text2);margin-bottom:12px">Esperá unos segundos e intentá de nuevo.</div>
         <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
           <button onclick="consultarCuit()" style="background:var(--azul);color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg> Forzar Recálculo</button>
-          <button onclick="document.getElementById('consulta-resultado').innerHTML='';document.getElementById('cuit-input').value='';document.getElementById('cuit-input').focus();" style="background:none;border:1.5px solid var(--border);border-radius:8px;padding:8px 18px;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;font-family:'Inter',sans-serif">← Nuevo CUIT</button>
+          <button onclick="document.getElementById('consulta-resultado').innerHTML='';document.getElementById('cuit-input').value='';document.getElementById('cuit-input').focus();" style="background:none;border:1.5px solid var(--border);border-radius:8px;padding:8px 18px;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;font-family:'Sora',sans-serif">← Nuevo CUIT</button>
         </div>
       </div>`;
       return;
@@ -3040,26 +3044,26 @@ function renderConsulta(cuit, dd, cd, hd, serverScore, afipData) {
 
   html += bcraNoDis;
   html += `<div style="background:${verd.bg};border:2px solid ${verd.borde};border-radius:var(--radius);padding:16px;margin-bottom:10px;text-align:center">
-    <div style="font-size:20px;font-weight:800;color:${verd.color};font-family:'Syne',sans-serif">${verd.texto}</div>
+    <div style="font-size:20px;font-weight:800;color:${verd.color};font-family:'Sora',sans-serif">${verd.texto}</div>
     ${verd.subtexto ? `<div style="font-size:11px;font-weight:500;color:${verd.color};opacity:0.7;margin-top:3px;letter-spacing:0.2px">${verd.subtexto}</div>` : ''}
     ${overrideAdminHtml}${_overrideAdmin ? '' : moraTecHtml}${falsaDeudaHtml}${deuda90dHtml}
     <div style="display:flex;justify-content:center;gap:20px;margin-top:10px;flex-wrap:wrap">
       <div style="text-align:center">
         <div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:3px">Score Vende Seguro</div>
-        <div style="font-size:28px;font-weight:800;color:${_alertaCritica?'#dc2626':cc};font-family:'Syne',sans-serif;${_alertaCritica?'text-shadow:0 0 12px rgba(220,38,38,0.25);':''}">${scoreEst}</div>
+        <div style="font-size:28px;font-weight:800;color:${_alertaCritica?'#dc2626':cc};font-family:'Sora',sans-serif;${_alertaCritica?'text-shadow:0 0 12px rgba(220,38,38,0.25);':''}">${scoreEst}</div>
         <div style="font-size:12px;margin-top:2px">${_rangoDisplay}</div>
         ${_alertaCritica?'<div style="font-size:11px;font-weight:700;color:#991b1b;margin-top:4px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);border-radius:6px;padding:3px 8px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Alerta Crediticia Crítica</div>':''}
       </div>
       <div style="text-align:center">
-        <div style="font-size:28px;font-weight:800;color:${activos.length>0?'var(--rojo)':'var(--verde)'};font-family:'Syne',sans-serif">${activos.length}</div>
+        <div style="font-size:28px;font-weight:800;color:${activos.length>0?'var(--rojo)':'var(--verde)'};font-family:'Sora',sans-serif">${activos.length}</div>
         <div style="font-size:10px;color:var(--texto2)">Cheques impagos</div>
       </div>
       <div style="text-align:center">
-        <div style="font-size:18px;font-weight:700;color:var(--azul);font-family:'Syne',sans-serif">${calcularCredito(scoreEst, maxSit)}</div>
+        <div style="font-size:18px;font-weight:700;color:var(--azul);font-family:'Sora',sans-serif">${calcularCredito(scoreEst, maxSit)}</div>
         <div style="font-size:10px;color:var(--texto2)">Crédito sugerido</div>
       </div>
       <div style="text-align:center">
-        <div style="font-size:${ingSize};font-weight:700;color:${ingColor};font-family:'Syne',sans-serif">${ingStr}</div>
+        <div style="font-size:${ingSize};font-weight:700;color:${ingColor};font-family:'Sora',sans-serif">${ingStr}</div>
         <div style="font-size:10px;color:var(--texto2)">Ingresos estimados</div>
       </div>
     </div>
@@ -3088,7 +3092,7 @@ function renderConsulta(cuit, dd, cd, hd, serverScore, afipData) {
       if (_arcaCat) {
         regLabel = `Cat. ${_arcaCat}`;
         regTipo  = 'Monotributo';
-        regColor = '#2563eb';
+        regColor = '#3B82F6';
       } else if (/JURIDICA/i.test(_arcaTipo||'')) {
         regTipo  = 'Persona Jurídica';
         regColor = '#7c3aed';
@@ -4035,7 +4039,7 @@ document.getElementById('cuit-input').addEventListener('keypress',e=>{if(e.key==
       '<b>Error al iniciar la app:</b><br><br>' +
       '<code style="font-size:11px;color:#7f1d1d;word-break:break-all;">' + msg + '</code>' +
       '<br><br><button onclick="localStorage.clear();window.location.replace(\'/login\')" ' +
-      'style="padding:10px 20px;background:#2563eb;color:#fff;border:none;border-radius:8px;cursor:pointer;">' +
+      'style="padding:10px 20px;background:#3B82F6;color:#fff;border:none;border-radius:8px;cursor:pointer;">' +
       'Borrar sesión y reintentar</button></div>';
   }
   try {
