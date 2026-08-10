@@ -2923,13 +2923,27 @@ function renderBcraHistoryChart(periodos) {
   var chqOverlay = labels.map(function(lbl) { return mesesChq[lbl] ? chqY : null; });
   var tieneChq   = chqOverlay.some(function(v) { return v !== null; });
 
+  // Puntos coloreados por situación de ese mes (severidad), línea/área en el
+  // azul de marca — mismo dato que antes (monto BCRA), estilo del mockup.
+  var pointColors = sits.map(function(v) {
+    var base = v === 1 ? '#16a34a' : v === 2 ? '#ca8a04' : v === 3 ? '#ea580c' : '#dc2626';
+    return sinDeuda ? base + '80' : base;
+  });
+
   var datasets = [{
-    type: 'bar',
+    type: 'line',
     label: sinDeuda ? 'Sin deuda registrada' : 'Deuda BCRA',
     data: barData,
-    backgroundColor: colors,
-    borderRadius: 3,
-    borderSkipped: false,
+    borderColor: '#1D4ED8',
+    backgroundColor: 'rgba(29,78,216,0.12)',
+    fill: 'start',
+    tension: 0.35,
+    borderWidth: 2.25,
+    pointBackgroundColor: pointColors,
+    pointBorderColor: '#fff',
+    pointBorderWidth: 1.5,
+    pointRadius: 4,
+    pointHoverRadius: 6,
     order: 2
   }];
   if (tieneChq) {
@@ -2947,29 +2961,33 @@ function renderBcraHistoryChart(periodos) {
   if (existing) existing.destroy();
 
   new Chart(canvas, {
-    type: 'bar',
+    type: 'line',
     data: { labels: labels, datasets: datasets },
     options: {
       plugins: {
         legend: { display: tieneChq || sinDeuda, labels: { font: { size: 9 }, usePointStyle: true, color: '#94a3b8' } },
-        tooltip: { callbacks: { label: function(ctx) {
-          if (ctx.dataset.type === 'line') return 'Cheque rechazado';
-          var sit  = sits[ctx.dataIndex];
-          var monto = montos[ctx.dataIndex];
-          if (sinDeuda) return 'Sit. 1 — Normal · Sin deuda reportada';
-          var sitTxt = 'Sit. ' + sit + ' — ' + sitNombre(sit);
-          if (!monto) return sitTxt + ' (sin deuda registrada)';
-          var montoFmt = monto >= 1000
-            ? '$' + (monto / 1000).toFixed(1) + 'M ARS'
-            : '$' + Math.round(monto).toLocaleString('es-AR') + ' miles ARS';
-          return sitTxt + ' · ' + montoFmt;
-        }}}
+        tooltip: {
+          backgroundColor: '#0B1D3A', padding: 10, cornerRadius: 8,
+          titleFont: { size: 10, weight: '700' }, bodyFont: { size: 12, weight: '700' },
+          callbacks: { label: function(ctx) {
+            if (ctx.dataset.type === 'line' && ctx.dataset.label === 'Cheque rechazado') return 'Cheque rechazado';
+            var sit  = sits[ctx.dataIndex];
+            var monto = montos[ctx.dataIndex];
+            if (sinDeuda) return 'Sit. 1 — Normal · Sin deuda reportada';
+            var sitTxt = 'Sit. ' + sit + ' — ' + sitNombre(sit);
+            if (!monto) return sitTxt + ' (sin deuda registrada)';
+            var montoFmt = monto >= 1000
+              ? '$' + (monto / 1000).toFixed(1) + 'M ARS'
+              : '$' + Math.round(monto).toLocaleString('es-AR') + ' miles ARS';
+            return sitTxt + ' · ' + montoFmt;
+          }}
+        }
       },
       scales: {
         y: {
-          display: !sinDeuda,
+          display: !sinDeuda, beginAtZero: true,
           ticks: {
-            font: { size: 9 },
+            font: { size: 9 }, color: '#94a3b8',
             callback: function(v) {
               if (v === 0) return '';
               return v >= 1000 ? '$' + (v/1000).toFixed(0) + 'M' : '$' + Math.round(v) + 'k';
@@ -2977,7 +2995,7 @@ function renderBcraHistoryChart(periodos) {
           },
           grid: { color: '#f1f5f9' }
         },
-        x: { ticks: { font: { size: 8 }, maxRotation: 45 }, grid: { display: false } }
+        x: { ticks: { font: { size: 8 }, color: '#94a3b8', maxRotation: 45 }, grid: { display: false } }
       }
     }
   });
