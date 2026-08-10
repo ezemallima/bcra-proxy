@@ -4016,23 +4016,11 @@ function buildCtaCteHtml(data) {
     + '<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#3B82F6;">Cuenta Corriente Piattelli</span>'
     + (alerta30 ? '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:#fee2e2;color:#991b1b;">Vencido +30 días</span>' : '')
     + '</div>'
-    + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">'
-    + '<div style="text-align:center;">'
-    +   '<div style="font-family:\'Syne\',sans-serif;font-size:20px;font-weight:800;color:'+colorSaldo+';line-height:1;">'+(totalSaldo>0?'$'+fmtL(Math.round(totalSaldo)):'—')+'</div>'
-    +   '<div style="font-size:11px;color:#64748b;margin-top:3px;">Saldo total</div>'
-    + '</div>'
-    + '<div style="text-align:center;">'
-    +   '<div style="font-family:\'Syne\',sans-serif;font-size:20px;font-weight:800;color:'+colorV30+';line-height:1;">'+(montoVencido30>0?'$'+fmtL(Math.round(montoVencido30)):'—')+'</div>'
-    +   '<div style="font-size:11px;color:#64748b;margin-top:3px;">Vencido (mora)</div>'
-    + '</div>'
-    + '<div style="text-align:center;">'
-    +   '<div style="font-family:\'Syne\',sans-serif;font-size:20px;font-weight:800;color:'+dsoColor+';line-height:1;">'+(dsoCliente!==null?dsoCliente+'d':'—')+'</div>'
-    +   '<div style="font-size:11px;color:#64748b;margin-top:3px;">DSO del cliente</div>'
-    + '</div>'
-    + '<div style="text-align:center;">'
-    +   '<div style="font-family:\'Syne\',sans-serif;font-size:20px;font-weight:800;color:#334155;line-height:1;">'+pendientes.length+'</div>'
-    +   '<div style="font-size:11px;color:#64748b;margin-top:3px;">Facturas abiertas</div>'
-    + '</div>'
+    + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;">'
+    +   _statCardHtml('Saldo total', (totalSaldo>0?'$'+fmtL(Math.round(totalSaldo)):'—'), colorSaldo)
+    +   _statCardHtml('Vencido (mora)', (montoVencido30>0?'$'+fmtL(Math.round(montoVencido30)):'—'), colorV30)
+    +   _statCardHtml('DSO del cliente', (dsoCliente!==null?dsoCliente+'d':'—'), dsoColor)
+    +   _statCardHtml('Facturas abiertas', String(pendientes.length), '#334155')
     + '</div>';
 
   // Listado de facturas vencidas >30d con número, fecha y días exactos
