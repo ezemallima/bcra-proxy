@@ -2119,7 +2119,10 @@ async function procesarDSO() {
         html += '<span>Corte: <strong style="color:var(--azul-oscuro);">' + (srv.fecha_corte || '—') + '</strong></span>';
         html += '<span>Clientes: <strong style="color:var(--azul-oscuro);">' + (srv.clientes_count || 0) + '</strong></span>';
         html += '<span>Saldo pendiente: <strong style="color:var(--azul-oscuro);">$' + Math.round(srv.saldo_total || 0).toLocaleString('es-AR') + '</strong></span>';
-        html += '<span>Fórmula: <strong style="color:var(--azul-oscuro);">antigüedad de saldo</strong></span>';
+        if (srv.total_cheques > 0) {
+          html += '<span>Cheques en cartera: <strong style="color:var(--azul-oscuro);">$' + Math.round(srv.total_cheques).toLocaleString('es-AR') + '</strong></span>';
+        }
+        html += '<span>Fórmula: <strong style="color:var(--azul-oscuro);">antigüedad de saldo' + (srv.total_cheques > 0 ? ' + cheques' : '') + '</strong></span>';
         html += '</div>';
         document.getElementById('dso-servidor-wrap').innerHTML = html;
         document.getElementById('dso-servidor-wrap').style.display = 'block';
@@ -2301,8 +2304,9 @@ async function cargarDSOActual() {
     var saldoBase = Math.round(d.saldo_base || d.saldo_total || 0);
     var detalleHtml =
       'Corte: <strong>' + (d.fecha_corte || '—') + '</strong> &nbsp;·&nbsp; '
-      + 'Saldo pendiente: <strong>$' + saldoBase.toLocaleString('es-AR') + '</strong> &nbsp;·&nbsp; '
-      + 'Clientes: <strong>' + (d.clientes_count || 0) + '</strong>';
+      + 'Saldo pendiente: <strong>$' + saldoBase.toLocaleString('es-AR') + '</strong>'
+      + (d.total_cheques > 0 ? ' &nbsp;·&nbsp; Cheques: <strong>$' + Math.round(d.total_cheques).toLocaleString('es-AR') + '</strong>' : '')
+      + ' &nbsp;·&nbsp; Clientes: <strong>' + (d.clientes_count || 0) + '</strong>';
     if (d.breakdown && d.breakdown.length && saldoBase > 0) {
       detalleHtml += '<div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;">';
       d.breakdown.forEach(function(b) {

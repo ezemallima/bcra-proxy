@@ -5191,8 +5191,15 @@ def api_director_data():
             total_b[bk] += c['buckets'].get(bk, 0)
     total_b = {k: round(v) for k, v in total_b.items()}
 
+    # DSO global suma Cheques en Cartera si hay un reporte cargado (ver
+    # _dso_cheques_pond) — sin Cheques, facturas ya "cerradas" en Odoo al
+    # recibir un cheque desaparecen del saldo pendiente aunque esa plata
+    # todavía no se cobró, y el DSO da más bajo de lo real. total_saldo (KPI
+    # "Saldo Total") queda sin tocar — Cheques es otro instrumento.
     suma_pond_g = sum(f['saldo'] * f['dias'] for c in clientes_list for f in c['facturas'])
-    dso_global  = round(suma_pond_g / total_saldo) if total_saldo > 0 else 0
+    _cheq_pond_g, _cheq_monto_g = _dso_cheques_pond()
+    _base_dso_g = total_saldo + _cheq_monto_g
+    dso_global  = round((suma_pond_g + _cheq_pond_g) / _base_dso_g) if _base_dso_g > 0 else 0
 
     n_con_score = sum(1 for c in clientes_list if c.get('score'))
     n_riesgo    = sum(1 for c in clientes_list if c.get('score') and c['score'] < 400)
@@ -10563,9 +10570,39 @@ def _dso_aging_por_cliente(saldos_lista: list) -> dict:
     }
 
 
+def _dso_cheques_pond() -> tuple:
+    """Cheques en Cartera como antigüedad ponderada, para sumar al cálculo de DSO.
+    No tienen fecha de factura: se usan los días de distancia (para adelante o
+    para atrás) a su Fecha de Pago. Un cheque a fecha lejana representa demora
+    de cobro tan real como uno vencido y no cobrado — y explica por qué el DSO
+    calculado solo con Saldos da más bajo que uno que también suma Cheques
+    (en Odoo, la factura suele quedar 'cobrada' apenas se recibe el cheque,
+    aunque el efectivo todavía no esté disponible). Retorna (suma_pond, suma_monto)."""
+    from datetime import datetime
+    c_path = os.path.join(DATA_DIR, 'dso_cheques_actual.json')
+    if not os.path.exists(c_path):
+        return 0.0, 0.0
+    try:
+        cheques = json.load(open(c_path, 'r', encoding='utf-8')).get('cheques', [])
+    except Exception:
+        return 0.0, 0.0
+    hoy = datetime.now()
+    suma_pond, suma_monto = 0.0, 0.0
+    for c in cheques:
+        monto = float(c.get('total') or 0)
+        if monto <= 0:
+            continue
+        fp = _parsear_fecha_dso(c.get('fecha_pago', ''))
+        dias = abs((hoy - fp).days) if fp else 0
+        suma_pond  += monto * dias
+        suma_monto += monto
+    return suma_pond, suma_monto
+
+
 def _dso_aging_global(saldos_lista: list) -> dict:
     """DSO global por antigüedad ponderado por saldo, con desglose por tramo de mora.
-    Método: Σ(saldo×días_desde_fecha_factura) / Σ(saldo). No depende de Ventas ni Cheques."""
+    Método: Σ(saldo×días_desde_fecha_factura) / Σ(saldo), sumando Cheques en
+    Cartera (ver _dso_cheques_pond) cuando hay un reporte cargado."""
     suma_pond, suma_saldo = 0.0, 0.0
     buckets = {'d30': 0.0, 'd60': 0.0, 'd90': 0.0, 'd120': 0.0, 'd120plus': 0.0}
     clientes = set()
@@ -10580,10 +10617,16 @@ def _dso_aging_global(saldos_lista: list) -> dict:
         cli = str(s.get('cliente') or '').strip()
         if cli:
             clientes.add(cli.upper())
-    dso = round(suma_pond / suma_saldo) if suma_saldo > 0 else None
+    # El DSO suma Cheques al ponderado, pero "saldo_total"/buckets quedan solo
+    # con Saldos (cuentas por cobrar abiertas) — Cheques ya es otro instrumento,
+    # no se mezcla en el monto que se muestra como deuda pendiente.
+    cheques_pond, cheques_monto = _dso_cheques_pond()
+    dso = (round((suma_pond + cheques_pond) / (suma_saldo + cheques_monto))
+           if (suma_saldo + cheques_monto) > 0 else None)
     return {
         "dso":            dso,
         "saldo_total":    suma_saldo,
+        "cheques_total":  cheques_monto,
         "clientes_count": len(clientes),
         "buckets":        {k: round(v) for k, v in buckets.items()},
     }
@@ -12056,7 +12099,8 @@ def get_dso_todos():
     Fuente: _saldos_gestion/_saldos_facturas ('Actualizar Saldos Comerciales',
     siempre fresco) con fallback a dso_saldos_actual.json (Módulo DSO) si todavía
     no se subió ningún reporte de gestión. Σ(saldo×días_desde_fecha_factura)/Σ(saldo).
-    No depende de Ventas ni Cheques (ver _dso_aging_global / _dso_fuente_saldos)."""
+    El DSO global (no el de cada cliente/vendedor) suma Cheques en Cartera si hay
+    un reporte cargado — ver _dso_cheques_pond / _dso_fuente_saldos."""
     from datetime import datetime
 
     saldos_lista = _dso_fuente_saldos()
@@ -12116,10 +12160,13 @@ def get_dso_todos():
     }
     dso_vendedor_ponderado = {vend: info["dso"] for vend, info in dso_por_vendedor.items()}
 
-    # ── DSO global ponderado (mismo agregado: Σ(saldo×días) / Σ(saldo) total) ──
+    # ── DSO global ponderado (mismo agregado: Σ(saldo×días) / Σ(saldo) total,
+    # sumando Cheques en Cartera — ver _dso_cheques_pond) ──────────────────────
     total_saldo = sum(saldo_por_cli.values())
     total_pond  = sum(pond_por_cli.values())
-    dso_global_ponderado = round(total_pond / total_saldo) if total_saldo > 0 else None
+    cheques_pond, cheques_monto = _dso_cheques_pond()
+    _base_dso = total_saldo + cheques_monto
+    dso_global_ponderado = round((total_pond + cheques_pond) / _base_dso) if _base_dso > 0 else None
     global _dso_global_ponderado_cache
     if dso_global_ponderado is not None:
         _dso_global_ponderado_cache = dso_global_ponderado
@@ -12153,8 +12200,11 @@ def _parsear_fecha_dso(s):
 @app.route("/dso-global-saldos")
 def get_dso_global_saldos():
     """DSO global — método de antigüedad de saldos (aging), ponderado por saldo.
-    DSO = Σ(saldo × días_desde_fecha_factura) / Σ(saldo). No depende de Ventas ni
-    Cheques. Fuente: _saldos_gestion/_saldos_facturas ('Actualizar Saldos
+    DSO = Σ(saldo × días_desde_fecha_factura) / Σ(saldo), sumando Cheques en
+    Cartera cuando hay un reporte cargado (ver _dso_cheques_pond) — sin Cheques,
+    facturas que ya se "cerraron" en Odoo al recibir un cheque desaparecen del
+    saldo pendiente aunque esa plata todavía no se cobró, y el DSO da más bajo
+    de lo real. Fuente: _saldos_gestion/_saldos_facturas ('Actualizar Saldos
     Comerciales', siempre fresco) con fallback a dso_saldos_actual.json (Módulo
     DSO) — ver _dso_fuente_saldos. Reemplaza el método de agotamiento
     (AR/Ventas×días), que quedaba desactualizado en cuanto dejaba de subirse el
@@ -12175,6 +12225,7 @@ def get_dso_global_saldos():
     dso = res["dso"]
     buckets = res["buckets"]
     saldo_base = res["saldo_total"]
+    cheques_total = res["cheques_total"]
 
     _labels = {'d30': '0-30d', 'd60': '31-60d', 'd90': '61-90d',
                'd120': '91-120d', 'd120plus': '+120d'}
@@ -12182,7 +12233,8 @@ def get_dso_global_saldos():
 
     print(
         f"[dso-global] corte={fecha_corte.strftime('%d/%m/%Y')} "
-        f"saldo_total={saldo_base:.0f} clientes={res['clientes_count']} DSO(aging)={dso}d",
+        f"saldo_total={saldo_base:.0f} cheques={cheques_total:.0f} "
+        f"clientes={res['clientes_count']} DSO(aging)={dso}d",
         flush=True
     )
 
@@ -12190,9 +12242,10 @@ def get_dso_global_saldos():
         "dso":            dso,
         "saldo_total":    saldo_base,
         "saldo_base":     saldo_base,
+        "total_cheques":  cheques_total,
         "clientes_count": res["clientes_count"],
         "fecha_corte":    fecha_corte.strftime('%d/%m/%Y'),
-        "formula":        "antiguedad_saldos",
+        "formula":        "antiguedad_saldos_mas_cheques" if cheques_total > 0 else "antiguedad_saldos",
         "breakdown":      breakdown,
         "ultima_actualizacion": time.strftime('%d/%m/%Y')
     })
