@@ -290,6 +290,11 @@
   .verdict-compact.aprobar .vc-text { color: #166534; }
   .verdict-compact.revisar .vc-text { color: #92400e; }
   .verdict-compact.rechazar .vc-text { color: #991b1b; }
+  /* Reusa el mismo veredicto (texto/icono) dentro del hero azul del score —
+     mismo HTML que #verdict-container, solo re-coloreado para fondo oscuro. */
+  .hero-verdict-wrap { margin-top: 12px; }
+  .hero-verdict-wrap .verdict-compact { display: inline-flex; background: rgba(255,255,255,0.14) !important; border-color: rgba(255,255,255,0.32) !important; }
+  .hero-verdict-wrap .vc-text { color: #fff !important; }
 
 
   /* ── ALERTAS PROMPT ── */
@@ -2826,28 +2831,30 @@ function _statCardHtml(label, valueHtml, stripeColor) {
   '</div>';
 }
 
-function renderVendeScore(scoreObj) {
+function renderVendeScore(scoreObj, verdictPillHtml, tendenciaHtml) {
   if (!scoreObj) return '';
-  var desglose = '';
+  var _fechaHoy = new Date().toLocaleDateString('es-AR');
 
   return (
-    '<div style="background:linear-gradient(120deg,var(--azul-medio),var(--azul-claro));border-radius:16px;padding:20px 22px 16px;color:#fff;box-shadow:0 10px 28px rgba(29,78,216,0.25);margin-bottom:8px;">' +
+    '<div style="background:linear-gradient(120deg,var(--azul-medio),var(--azul-claro));border-radius:16px;padding:20px 22px 18px;color:#fff;box-shadow:0 10px 28px rgba(29,78,216,0.25);margin-bottom:8px;">' +
       '<div style="font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,0.78);">Score Vende Seguro</div>' +
       '<div style="display:flex;align-items:baseline;gap:12px;margin-top:6px;flex-wrap:wrap;">' +
         '<div style="font-size:48px;font-weight:800;line-height:1;font-family:\'Syne\',sans-serif;">' + scoreObj.score + '</div>' +
         '<div style="font-size:14px;color:rgba(255,255,255,0.65);font-weight:600;">/ 999</div>' +
         '<span style="background:#fff;color:' + scoreObj.color + ';padding:4px 12px;border-radius:999px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.4px;">' + scoreObj.emoji + ' ' + scoreObj.rango + '</span>' +
       '</div>' +
-      desglose +
+      (tendenciaHtml || '') +
+      '<div style="font-size:11px;color:rgba(255,255,255,0.6);margin-top:10px;">Actualizado ' + _fechaHoy + ' · Fuentes: BCRA + AFIP + Nomdeu</div>' +
+      (verdictPillHtml ? '<div class="hero-verdict-wrap">' + verdictPillHtml + '</div>' : '') +
+    '</div>' +
+    '<div id="solvencia-card" style="margin-bottom:8px;">' +
+      '<div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">Exposición en Sistema Financiero</div>' +
+      '<div id="solvencia-body" style="font-size:13px;color:#64748b;">Consultando solvencia...</div>' +
     '</div>' +
     '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;margin-bottom:8px;">' +
       '<div style="font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:0.6px;text-transform:uppercase;margin-bottom:8px;">Historial BCRA — 24 meses</div>' +
       '<canvas id="bcra-history-chart" style="width:100%;max-height:110px;display:block;"></canvas>' +
       '<div id="bcra-history-nodata" style="display:none;text-align:center;padding:14px 0 6px;font-size:12px;color:#94a3b8;border:1px dashed #e2e8f0;border-radius:8px;">Sin períodos BCRA disponibles — historial no reportado</div>' +
-    '</div>' +
-    '<div id="solvencia-card" style="margin-bottom:8px;">' +
-      '<div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">Exposición en Sistema Financiero</div>' +
-      '<div id="solvencia-body" style="font-size:13px;color:#64748b;">Consultando solvencia...</div>' +
     '</div>'
   );
 }
@@ -4521,16 +4528,19 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
         var _delta = scoreObjFinal.score - (_scorePrev.score || 0);
         if (Math.abs(_delta) >= 5) {
           var _tendDir = _delta > 0 ? '▲' : '▼';
-          var _tendCol = _delta > 0 ? '#16a34a' : '#dc2626';
-          var _tendBg  = _delta > 0 ? '#f0fdf4' : '#fef2f2';
-          _tendenciaHtml = '<div style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;'
-            + 'color:' + _tendCol + ';background:' + _tendBg + ';border-radius:6px;padding:2px 8px;margin-top:4px;">'
+          _tendenciaHtml = '<div style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;'
+            + 'color:#fff;background:rgba(255,255,255,0.16);border-radius:6px;padding:3px 9px;margin-top:10px;">'
             + _tendDir + ' ' + (_delta > 0 ? '+' : '') + _delta + ' pts vs. última verificación</div>';
         }
       }
-      scoreElF.innerHTML = renderVendeScore(scoreObjFinal)
-        + (_tendenciaHtml ? '<div style="margin-top:4px;">' + _tendenciaHtml + '</div>' : '')
+      // El veredicto (texto/icono) ya se calculó más arriba y quedó en #verdict-container —
+      // lo reusamos tal cual dentro del hero (re-coloreado por .hero-verdict-wrap) en vez de
+      // duplicar la lógica de maxSit, y limpiamos el banner suelto para no repetirlo dos veces.
+      var _verdictContEl = document.getElementById('verdict-container');
+      var _heroVerdictHtml = _verdictContEl ? _verdictContEl.innerHTML : '';
+      scoreElF.innerHTML = renderVendeScore(scoreObjFinal, _heroVerdictHtml, _tendenciaHtml)
         + (_usandoFallback ? '<div style="font-size:10px;color:#64748b;margin-top:6px;padding:3px 8px;background:#F5F7FA;border-radius:6px;border:1px solid #e2e8f0;">ℹ Score calculado localmente — servidor demoró en responder</div>' : '');
+      if (_verdictContEl) _verdictContEl.innerHTML = '';
       window._ultimoScoreVende = scoreObjFinal;
       guardarReciente(cuit, nombreMostrar);
       // Actualizar historial con nombre y situación definitivos (la primera llamada fue con null)
@@ -4617,13 +4627,16 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
       ? '<div class="bcra-indicator danger"><span class="bcra-ind-icon">⛔</span><div><div class="bcra-ind-text">Situación ' + _sitReal + ' — ' + sitNombre(_sitReal) + '</div><div class="bcra-ind-sub">Mora bancaria confirmada por el motor de score. Reconsultá para ver el detalle completo.</div></div></div>'
       : '<div class="bcra-indicator warn"><span class="bcra-ind-icon">⚠️</span><div><div class="bcra-ind-text">Situación 2 — Atrasos detectados</div><div class="bcra-ind-sub">El motor de score detectó atrasos. Reconsultá para ver el detalle.</div></div></div>';
     document.getElementById('bcra-data').innerHTML = _bcraInd;
-    // Corregir también el veredicto (fue calculado con entidades vacías → mostró "sin actividad")
+    // Corregir también el veredicto (fue calculado con entidades vacías → mostró "sin actividad").
+    // #verdict-container ya se vació al armar el hero del score — si sigue vacío no hay nada que
+    // corregir ahí, pero el pill DENTRO del hero (ya renderizado) sí puede haber quedado desactualizado.
+    var _verdictCorregidoHtml = _sitReal >= 3
+      ? '<div class="verdict-compact rechazar"><span class="vc-icon">⛔</span><span class="vc-text">Situación ' + _sitReal + ' — ' + sitNombre(_sitReal) + '</span></div>'
+      : '<div class="verdict-compact revisar"><span class="vc-icon">⚠️</span><span class="vc-text">Situación 2 — Atrasos detectados</span></div>';
     var _vEl = document.getElementById('verdict-container');
-    if (_vEl) {
-      _vEl.innerHTML = _sitReal >= 3
-        ? '<div class="verdict-compact rechazar"><span class="vc-icon">⛔</span><span class="vc-text">Situación ' + _sitReal + ' — ' + sitNombre(_sitReal) + '</span></div>'
-        : '<div class="verdict-compact revisar"><span class="vc-icon">⚠️</span><span class="vc-text">Situación 2 — Atrasos detectados</span></div>';
-    }
+    if (_vEl && _vEl.innerHTML.trim()) _vEl.innerHTML = _verdictCorregidoHtml;
+    var _heroVEl = document.querySelector('#vende-score-container .hero-verdict-wrap');
+    if (_heroVEl) _heroVEl.innerHTML = _verdictCorregidoHtml;
   } else {
     _bcraInd = maxSit >= 3
       ? '<div class="bcra-indicator danger"><span class="bcra-ind-icon">⛔</span><div><div class="bcra-ind-text">Situación ' + maxSit + ' — ' + sitNombre(maxSit) + '</div><div class="bcra-ind-sub">Mora bancaria activa en el sistema financiero.</div></div></div>'
