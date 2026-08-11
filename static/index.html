@@ -4177,6 +4177,25 @@ function agregarDesdConsulta(cuit, nombre) {
   abrirModalAgregarCliente(cuit, nombre, prefill);
 }
 
+// Tabla de detalle por entidad — usada tanto por el render sincrónico inicial
+// (con el período en vivo) como por la corrección con historial 24m (ver
+// dentro de mostrarResultado, cuando el fetch inicial vino sin entidades
+// pero el historial sí tiene actividad real).
+function _buildEntidadesTablaHtml(entidadesList) {
+  var conMonto = entidadesList.filter(function(e) { return e.monto > 0; });
+  var t = '<div class="bcra-table-wrap"><table class="bcra-table"><thead><tr><th>Entidad</th><th>Período</th><th style="text-align:right;">Monto (miles $)</th><th>Situación</th><th style="text-align:right;">Días atraso</th></tr></thead><tbody>';
+  entidadesList.forEach(function(e) {
+    var monto = e.monto > 0 ? '$' + (e.monto).toLocaleString('es-AR') : '-';
+    t += '<tr><td>' + (e.entidad||'-') + '</td><td>' + (e.periodo||'-') + '</td><td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:600;">' + monto + '</td><td class="sit-' + e.situacion + '">' + e.situacion + ' — ' + sitNombre(e.situacion) + '</td><td style="text-align:right;font-variant-numeric:tabular-nums;">' + (e.diasAtrasoPago||0) + '</td></tr>';
+  });
+  t += '</tbody></table></div>';
+  if (conMonto.length) {
+    var totalMiles = conMonto.reduce(function(s,e) { return s + (e.monto||0); }, 0);
+    t += '<div style="font-size:12px;color:#64748b;margin-top:6px;text-align:right;">Total deuda sistema financiero: <strong>$' + totalMiles.toLocaleString('es-AR') + '</strong></div>';
+  }
+  return t;
+}
+
 function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nombreExterno) {
   estadoAfip = estadoAfip || "";
   domicilioAfip = domicilioAfip || "";
@@ -4316,6 +4335,27 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
         if (_vrdEl && _vrdEl.innerHTML.indexOf('Sin actividad bancaria') >= 0) {
           _vrdEl.innerHTML = '<div class="verdict-compact aprobar"><span class="vc-icon">✅</span><span class="vc-text">Situación Normal — Sin deudas activas registradas</span></div>';
         }
+      }
+    }
+    // Corregir "Detalle por entidad" con el mismo criterio: el fetch inicial (período
+    // en vivo) puede venir sin entidades por retraso de reporte del banco, aunque el
+    // historial de 24m sí tenga actividad real reciente. Sin esto, el heatmap de más
+    // arriba (que sí usa el historial completo) puede mostrar bancos con saldo mientras
+    // esta tabla dice "Sin deudas" — dos fuentes del mismo dato en desacuerdo.
+    if (!entidades.length && historial && historial.results && historial.results.periodos) {
+      var _histPeriodosOrd = historial.results.periodos.slice().sort(function(a, b) {
+        return (parseInt(b.periodo, 10) || 0) - (parseInt(a.periodo, 10) || 0);
+      });
+      var _histEntVistas = {};
+      var _histEntidades = [];
+      _histPeriodosOrd.forEach(function(p) {
+        (p.entidades || []).forEach(function(e) {
+          var key = e.entidad || e.codigo;
+          if (!_histEntVistas[key]) { _histEntVistas[key] = true; _histEntidades.push(e); }
+        });
+      });
+      if (_histEntidades.length) {
+        document.getElementById('bcra-data').innerHTML = _buildEntidadesTablaHtml(_histEntidades);
       }
     }
     // CUIT inexistente detectado por el backend — solo bloquear si además
@@ -4643,18 +4683,7 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
   } else {
     // El veredicto (Situación normal / 2 / mora) ya se muestra en el hero del score —
     // acá va directo el detalle, sin repetir el mismo mensaje una tercera vez.
-    var conMonto = entidades.filter(function(e) { return e.monto > 0; });
-    let t = `<div class="bcra-table-wrap"><table class="bcra-table"><thead><tr><th>Entidad</th><th>Período</th><th style="text-align:right;">Monto (miles $)</th><th>Situación</th><th style="text-align:right;">Días atraso</th></tr></thead><tbody>`;
-    entidades.forEach(function(e) {
-      var monto = e.monto > 0 ? '$' + (e.monto).toLocaleString('es-AR') : '-';
-      t += `<tr><td>${e.entidad||'-'}</td><td>${e.periodo||'-'}</td><td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:600;">${monto}</td><td class="sit-${e.situacion}">${e.situacion} — ${sitNombre(e.situacion)}</td><td style="text-align:right;font-variant-numeric:tabular-nums;">${e.diasAtrasoPago||0}</td></tr>`;
-    });
-    t += `</tbody></table></div>`;
-    if (conMonto.length) {
-      var totalMiles = conMonto.reduce(function(s,e) { return s + (e.monto||0); }, 0);
-      t += `<div style="font-size:12px;color:#64748b;margin-top:6px;text-align:right;">Total deuda sistema financiero: <strong>$${totalMiles.toLocaleString('es-AR')}</strong></div>`;
-    }
-    document.getElementById('bcra-data').innerHTML = t;
+    document.getElementById('bcra-data').innerHTML = _buildEntidadesTablaHtml(entidades);
   }
 }
 
