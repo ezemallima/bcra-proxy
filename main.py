@@ -97,20 +97,15 @@ _APAL_RANGO     = float(os.environ.get('APALANCAMIENTO_RANGO',  '1.0'))
 _APAL_PENAL_MAX = float(os.environ.get('APALANCAMIENTO_PENAL_MAX', '200'))
 _APAL_FACTOR    = float(os.environ.get('APALANCAMIENTO_FACTOR', '0.5'))
 
-# ── Cap Fiscal: techo al aporte de ARCA/MiPyME sobre el score ────────────────
+# ── Sin tope al aporte fiscal (ARCA/MiPyME) sobre el score ───────────────────
 # La verificación masiva de cartera corre con sin_arca=True (nunca consulta ARCA
 # en vivo, para no colgar el batch) y usa solo BCRA bulk + cheques + comportamiento
-# interno (Odoo/Artel). La consulta individual sí golpea ARCA en vivo, y el perfil
-# fiscal puede mover el score por varias vías (Capa C, bono de estructura, piso de
-# empresa grande, hasta reemplazar la Capa B entera en prospectos sin historial).
-# Sin techo, un mismo CUIT puede mostrar 300 puntos de diferencia entre Cartera y
-# la consulta individual — mismo cliente, mismo dato bancario, veredicto distinto
-# según qué pantalla lo mire. _CAP_FISCAL_MAX acota cuánto puede SUBIR el score
-# por datos fiscales por encima de lo que daría el mismo cliente sin ARCA (la
-# línea base de la masiva). No limita bajas: una alerta fiscal real (clave dada
-# de baja, CLAE de riesgo) debe poder penalizar sin techo — ver REGLA de este
-# archivo: "siempre conservador, es peor aprobar un moroso que rechazar un solvente".
-_CAP_FISCAL_MAX = float(os.environ.get('CAP_FISCAL_MAX_PTS', '100'))
+# interno. La consulta individual sí golpea ARCA en vivo. Es esperable — y correcto—
+# que un mismo CUIT puntúe distinto entre Cartera e individual: la individual tiene
+# más información real (perfil fiscal ARCA) que la masiva deliberadamente omite
+# para no bloquearse. Hubo un tope acá (_CAP_FISCAL_MAX) que recortaba esa suba;
+# se sacó a pedido explícito — no hay que "corregir" una diferencia que refleja
+# datos reales. Decisión: 2026-08, ver historial de commits para el porqué.
 
 # ── Bright Data: RETIRADO de la cadena de proxies ────────────────────────────
 # La IP de salida de Render quedó vetada en la zona residencial contratada y el
@@ -3126,10 +3121,9 @@ def calcular_rating_predictivo(
     Default real (≥3m en Sit.1 luego Sit.2+) → Hard Block D2 ($0).
     Anti-Videla: scoreHistory[] 12 meses; degradación ≥15% → alerta.
 
-    Cap Fiscal: cuando hay señal fiscal real (ARCA/MiPyME), el score no puede
-    superar en más de _CAP_FISCAL_MAX puntos al que daría el mismo CUIT sin esos
-    datos (línea base BCRA + cheques + comportamiento interno, la que usa la
-    verificación masiva). Ver comentario junto al clamp de `score` más abajo.
+    Nota: la consulta individual (con ARCA en vivo) y la verificación masiva
+    (sin ARCA, para no bloquearse) pueden dar scores distintos para el mismo
+    CUIT — es esperado, la individual tiene más información real.
     """
     cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
     # Limpieza extra: elimina cualquier carácter no numérico residual
@@ -3158,9 +3152,9 @@ def calcular_rating_predictivo(
             print(f"[NORM WARN] {cuit_limpio} {_d_name}.results={type(_r).__name__} forzado a {{}}", flush=True)
             _d_ref['results'] = {}
 
-    # _base_sin_fiscal=True es un recálculo interno (ver Cap Fiscal más abajo):
-    # nunca debe leer ni escribir la caché de sesión del CUIT real, o contaminaría
-    # el score canónico de este CUIT con un resultado sintético sin ARCA.
+    # _base_sin_fiscal: parámetro legado, ya nadie lo pasa como True (se usaba
+    # para el Cap Fiscal, removido). Se deja el guard por si en el futuro vuelve
+    # a existir un recálculo interno — hoy es un no-op (siempre False).
     if not _base_sin_fiscal and cuit_limpio in _score_session_cache:
         print(f">>> CACHE HIT - CUIT: {cuit_limpio}", flush=True)
         return _score_session_cache[cuit_limpio]
@@ -3773,45 +3767,6 @@ def calcular_rating_predictivo(
 
     score = max(1, min(999, round(puntos)))
 
-    # ── Cap Fiscal: ARCA/MiPyME no puede subir el score más de _CAP_FISCAL_MAX
-    # puntos por encima de lo que daría el mismo cliente solo con BCRA + cheques +
-    # comportamiento interno (la línea base que usa la verificación masiva, que
-    # nunca consulta ARCA en vivo). Se recalcula el mismo CUIT con solvency_data={}
-    # — mismo camino de código, así que cualquier ajuste futuro del motor que toque
-    # Capa B/C, bono de estructura o piso de empresa queda cubierto automáticamente
-    # sin tener que acotarlo pieza por pieza. Solo topea subas: una alerta fiscal
-    # real (clave dada de baja, CLAE de riesgo) sigue penalizando sin límite.
-    # Disparador: solo si hay señal fiscal REAL (ARCA/TangoFactura resuelto o
-    # padrón MiPyME), no la inferencia cruda por prefijo de CUIT (tipo_persona
-    # JURIDICA/FISICA) que usa la masiva como fallback sin red — esa inferencia
-    # no activa Capa C ni el piso de estructura, así que recalcular sería CPU
-    # desperdiciada en cada corrida masiva sin ningún cap real que aplicar.
-    _solvencia_es_real = bool(solvency_data) and (
-        solvency_data.get('es_empleador') is True
-        or solvency_data.get('categoria_mipyme')
-        or solvency_data.get('antiguedad_anos')
-        or solvency_data.get('clae_actividad')
-        or solvency_data.get('actividad_principal')
-        or solvency_data.get('estado_clave')
-        or solvency_data.get('n_impuestos_activos') is not None
-    )
-    score_sin_fiscal = None
-    if not _base_sin_fiscal and _solvencia_es_real:
-        _resultado_base = calcular_rating_predictivo(
-            cuit=cuit, bcra_data=bcra_data, hist_data=hist_data,
-            cheq_data=cheq_data, en_mora=en_mora, solvency_data={},
-            ciudad=ciudad, _base_sin_fiscal=True,
-        )
-        score_sin_fiscal = _resultado_base.get('score')
-        if score_sin_fiscal is not None and score > score_sin_fiscal + _CAP_FISCAL_MAX:
-            _score_pre_cap = score
-            score = round(score_sin_fiscal + _CAP_FISCAL_MAX)
-            print(
-                f"[score v{_SCORE_VERSION}] {cuit_limpio} cap_fiscal: {_score_pre_cap} → {score} "
-                f"(base_sin_fiscal={score_sin_fiscal}, tope=+{_CAP_FISCAL_MAX:.0f})",
-                flush=True
-            )
-
     if   score >= 750: rango, color, emoji = 'Excelente',   '#16a34a', '🟢'
     elif score >= 600: rango, color, emoji = 'Bueno',       '#ca8a04', '🟡'
     elif score >= 400: rango, color, emoji = 'Revisar',     '#ea580c', '🟠'
@@ -3940,8 +3895,6 @@ def calcular_rating_predictivo(
         # Campos v20.0
         'semaforo': 'verde' if score >= 700 else ('amarillo' if score >= 400 else 'rojo'),
         'falsas_deudas': _fd,   # entidades excluidas + razones para UI y análisis IA
-        # Cap Fiscal — score_sin_fiscal: None si no había datos ARCA para comparar.
-        'score_sin_fiscal': score_sin_fiscal,
     }
     if not _base_sin_fiscal:
         _score_session_cache[cuit_limpio] = resultado
