@@ -296,12 +296,6 @@
   .hero-verdict-wrap .verdict-compact { display: inline-flex; background: rgba(255,255,255,0.14) !important; border-color: rgba(255,255,255,0.32) !important; }
   .hero-verdict-wrap .vc-text { color: #fff !important; }
 
-  /* Grilla de 2 columnas del resultado — gráfico+heatmap a la izquierda,
-     entidades acreedoras a la derecha (como el mockup del dashboard). */
-  .main-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 8px; align-items: start; margin-bottom: 8px; }
-  .main-col, .side-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-  @media (max-width: 860px) { .main-grid { grid-template-columns: 1fr; } }
-
 
   /* ── ALERTAS PROMPT ── */
   .alertas-prompt { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 3rem 1rem; text-align: center; }
@@ -955,24 +949,14 @@
 
       <div id="saldos-interno-card" class="card" style="margin-bottom:8px;display:none;border-left:4px solid #3B82F6;"></div>
 
-      <!-- Grilla principal: gráfico + heatmap a la izquierda, entidades acreedoras a la derecha -->
-      <div class="main-grid">
-        <div class="main-col">
-          <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;">
-            <div style="font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:0.6px;text-transform:uppercase;margin-bottom:8px;">Historial BCRA — 24 meses</div>
-            <canvas id="bcra-history-chart" style="width:100%;max-height:110px;display:block;"></canvas>
-            <div id="bcra-history-nodata" style="display:none;text-align:center;padding:14px 0 6px;font-size:12px;color:#94a3b8;border:1px dashed #e2e8f0;border-radius:8px;">Sin períodos BCRA disponibles — historial no reportado</div>
-          </div>
-          <!-- Heatmap BCRA 24m por entidad — renderizado por renderBcraHeatmap() -->
-          <div id="bcra-timeline-container" style="display:none;"></div>
-        </div>
-        <div class="side-col">
-          <div class="card" id="entidades-lista-card" style="display:none;">
-            <div class="card-title">Entidades acreedoras</div>
-            <div id="entidades-lista-body"></div>
-          </div>
-        </div>
+      <!-- Gráfico de historial + heatmap por entidad, a todo el ancho -->
+      <div class="card" style="margin-bottom:8px;">
+        <div style="font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:0.6px;text-transform:uppercase;margin-bottom:8px;">Historial BCRA — 24 meses</div>
+        <canvas id="bcra-history-chart" style="width:100%;max-height:140px;display:block;"></canvas>
+        <div id="bcra-history-nodata" style="display:none;text-align:center;padding:14px 0 6px;font-size:12px;color:#94a3b8;border:1px dashed #e2e8f0;border-radius:8px;">Sin períodos BCRA disponibles — historial no reportado</div>
       </div>
+      <!-- Heatmap BCRA 24m por entidad — renderizado por renderBcraHeatmap() -->
+      <div id="bcra-timeline-container" style="display:none;"></div>
 
       <!-- BCRA detalle — tabla completa (período, días de atraso) -->
       <div class="card" id="bcra-summary-card" style="margin-bottom:8px;">
@@ -2878,35 +2862,6 @@ function renderVendeScore(scoreObj, verdictPillHtml, tendenciaHtml) {
   );
 }
 
-// Fila compacta para la lista "Entidades acreedoras" de la columna lateral.
-function _entidadRowHtml(nombre, sit, montoStr) {
-  var sitBg    = sit === 1 ? '#dcfce7' : sit === 2 ? '#fef9c3' : sit === 3 ? '#ffedd5' : '#fee2e2';
-  var sitColor = sit === 1 ? '#166534' : sit === 2 ? '#854d0e' : sit === 3 ? '#9a3412' : '#991b1b';
-  return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #f1f5f9;">' +
-    '<span style="font-size:10px;font-weight:800;padding:2px 7px;border-radius:999px;background:' + sitBg + ';color:' + sitColor + ';flex-shrink:0;">Sit. ' + sit + '</span>' +
-    '<span style="flex:1;min-width:0;font-size:12.5px;font-weight:700;color:#334155;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(nombre) + '</span>' +
-    '<span style="font-size:12.5px;font-weight:800;color:#0f172a;flex-shrink:0;">' + montoStr + '</span>' +
-  '</div>';
-}
-
-// Lista compacta de entidades acreedoras (columna lateral) — mismo dato que
-// la tabla detallada de #bcra-data, solo con menos columnas para que entre
-// en la columna angosta.
-function buildEntidadesListaHtml(entidades) {
-  var conMonto = (entidades || []).filter(function(e) { return (e.monto || 0) > 0; })
-    .sort(function(a, b) { return (b.monto || 0) - (a.monto || 0); });
-  if (!conMonto.length) return '<div style="font-size:12px;color:#94a3b8;">Sin entidades con exposición actual</div>';
-  var html = conMonto.map(function(e) {
-    return _entidadRowHtml(e.entidad || '—', e.situacion || 1, '$' + (e.monto || 0).toLocaleString('es-AR'));
-  }).join('');
-  var total = conMonto.reduce(function(s, e) { return s + (e.monto || 0); }, 0);
-  html += '<div style="display:flex;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1.5px solid #e2e8f0;">' +
-    '<span style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;">Total</span>' +
-    '<span style="font-size:14px;font-weight:800;color:#0f172a;">$' + total.toLocaleString('es-AR') + '</span>' +
-  '</div>';
-  return html;
-}
-
 function renderBcraHistoryChart(periodos) {
   var canvas  = document.getElementById('bcra-history-chart');
   var nodata  = document.getElementById('bcra-history-nodata');
@@ -3842,8 +3797,7 @@ async function consultarCliente() {
   var resetIds = [
     'cliente-header','verdict-container','bcra-data',
     'cheques-rechazados-data','afip-container','wsp-data',
-    'veraz-datos','mora-alert-container','saldos-interno-card',
-    'entidades-lista-body'
+    'veraz-datos','mora-alert-container','saldos-interno-card'
   ];
   var _icReset = document.getElementById('info-corporativa-card');
   if (_icReset) { _icReset.innerHTML = ''; _icReset.style.display = 'none'; }
@@ -3855,8 +3809,6 @@ async function consultarCliente() {
   });
   var chCard = document.getElementById('cheques-rechazados-card');
   if (chCard) chCard.style.display = 'none';
-  var elCardReset = document.getElementById('entidades-lista-card');
-  if (elCardReset) elCardReset.style.display = 'none';
   document.getElementById('veraz-status').style.display = 'none';
   document.getElementById('veraz-datos').style.display = 'none';
   document.getElementById('veraz-area').className = 'upload-area';
@@ -4703,13 +4655,6 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
       t += `<div style="font-size:12px;color:#64748b;margin-top:6px;text-align:right;">Total deuda sistema financiero: <strong>$${totalMiles.toLocaleString('es-AR')}</strong></div>`;
     }
     document.getElementById('bcra-data').innerHTML = t;
-    // Lista compacta de la columna lateral — mismo dato que la tabla de arriba
-    var _elCard = document.getElementById('entidades-lista-card');
-    var _elBody = document.getElementById('entidades-lista-body');
-    if (_elCard && _elBody && conMonto.length) {
-      _elBody.innerHTML = buildEntidadesListaHtml(entidades);
-      _elCard.style.display = 'block';
-    }
   }
 }
 
@@ -6755,12 +6700,10 @@ function mostrarErrorCuitInexistente(raw) {
   // Limpiar y ocultar todo lo demás — estado de error total
   document.getElementById('mora-alert-container').innerHTML = '';
   ['saldos-interno-card','decision-grid','bcra-summary-card','cheques-rechazados-card',
-   'recursos-card','analisis-resultado','entidades-lista-card'].forEach(function(id) {
+   'recursos-card','analisis-resultado'].forEach(function(id) {
     var el = document.getElementById(id);
     if (el) el.style.display = 'none';
   });
-  var _mainGridReset = document.querySelector('.main-grid');
-  if (_mainGridReset) _mainGridReset.style.display = 'none';
   var scoreEl = document.getElementById('vende-score-container');
   if (scoreEl) scoreEl.innerHTML = '';
   var verdEl = document.getElementById('verdict-container');
