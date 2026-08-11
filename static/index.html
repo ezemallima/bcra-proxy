@@ -4470,8 +4470,12 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
       var _esPersonaFisica = _tipoP.indexOf('FISICA') !== -1 || _tipoP === 'F';
       var _esGranEmpresa = !_esPyme && (_sv.es_empleador === true) && !_esPersonaFisica;
 
+      // Alerta de población del domicilio ARCA — INDEC Censo 2022, solo informativa.
+      var _alertaPob = _sv.alerta_poblacion || {};
+      var _tieneAlertaPob = !!(_alertaPob && _alertaPob.localidad && _alertaPob.poblacion != null);
+
       // Sin datos suficientes para mostrar el bloque
-      if (!_esPyme && !_esGranEmpresa) { _icCard.style.display = 'none'; return; }
+      if (!_esPyme && !_esGranEmpresa && !_tieneAlertaPob) { _icCard.style.display = 'none'; return; }
 
       // ── Chips corporativos ────────────────────────────────────────────────
       var _CAT_STYLE = {
@@ -4490,7 +4494,7 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
         var _cs = _CAT_STYLE[_cat] || 'background:#f1f5f9;border-color:#cbd5e1;color:#334155;';
         _chipsHtml += '<span style="' + _chipBase + _cs + '">🏢 ' + (_CAT_LABEL[_cat] || _cat) + '</span>';
         if (_sec) _chipsHtml += '<span style="' + _chipBase + 'background:#F5F7FA;border-color:#e2e8f0;color:#475569;">📊 ' + _sec + '</span>';
-      } else {
+      } else if (_esGranEmpresa) {
         _chipsHtml += '<span style="' + _chipBase + 'background:#fdf4ff;border-color:#e9d5ff;color:#7e22ce;">🏛 Gran Empresa / Corporativa</span>';
       }
 
@@ -4501,19 +4505,37 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
       var _empSub   = _esPyme ? 'Rango SEPYME según categoría' : 'Empleador registrado (AFIP)';
 
       // ── Construir HTML ────────────────────────────────────────────────────
+      var _fuentes = [];
+      if (_esPyme || _esGranEmpresa) _fuentes.push('Min. Producción / SEPYME');
+      if (_tieneAlertaPob) _fuentes.push('INDEC Censo 2022');
       var _html = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">'
         + '<div style="font-size:13px;font-weight:700;color:#1e293b;">Información Corporativa</div>'
         + '<div style="flex:1;height:1px;background:#f1f5f9;"></div>'
-        + '<div style="font-size:10px;color:#94a3b8;">Fuente: Min. Producción / SEPYME</div>'
+        + '<div style="font-size:10px;color:#94a3b8;">Fuente: ' + _fuentes.join(' · ') + '</div>'
         + '</div>';
 
-      _html += '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;">' + _chipsHtml + '</div>';
+      if (_chipsHtml) _html += '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;">' + _chipsHtml + '</div>';
 
-      _html += '<div style="background:#F5F7FA;border-radius:8px;padding:10px 12px;display:inline-block;min-width:160px;">'
-        + '<div style="font-size:10px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:3px;">Personal Estimado</div>'
-        + '<div style="font-size:17px;font-weight:800;color:#0f172a;line-height:1.1;">' + (_empLabel ? _empLabel + ' emp.' : '—') + '</div>'
-        + '<div style="font-size:9px;color:#94a3b8;margin-top:3px;">' + _empSub + '</div>'
-        + '</div>';
+      _html += '<div style="display:flex;flex-wrap:wrap;gap:8px;">';
+      if (_esPyme || _esGranEmpresa) {
+        _html += '<div style="background:#F5F7FA;border-radius:8px;padding:10px 12px;display:inline-block;min-width:160px;">'
+          + '<div style="font-size:10px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:3px;">Personal Estimado</div>'
+          + '<div style="font-size:17px;font-weight:800;color:#0f172a;line-height:1.1;">' + (_empLabel ? _empLabel + ' emp.' : '—') + '</div>'
+          + '<div style="font-size:9px;color:#94a3b8;margin-top:3px;">' + _empSub + '</div>'
+          + '</div>';
+      }
+      if (_tieneAlertaPob) {
+        var _esChico   = _alertaPob.nivel === 'chico';
+        var _pobColor  = _esChico ? '#b45309' : '#0f172a';
+        var _pobBg     = _esChico ? '#fffbeb' : '#F5F7FA';
+        var _pobNumFmt = Number(_alertaPob.poblacion).toLocaleString('es-AR');
+        _html += '<div style="background:' + _pobBg + ';border-radius:8px;padding:10px 12px;display:inline-block;min-width:190px;">'
+          + '<div style="font-size:10px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:3px;">📍 ' + esc(_alertaPob.localidad) + '</div>'
+          + '<div style="font-size:17px;font-weight:800;color:' + _pobColor + ';line-height:1.1;">' + _pobNumFmt + ' hab.</div>'
+          + '<div style="font-size:9px;color:#94a3b8;margin-top:3px;">' + (_esChico ? 'Mercado acotado — evaluar con cuidado adicional' : 'INDEC 2022') + '</div>'
+          + '</div>';
+      }
+      _html += '</div>';
 
       _icCard.innerHTML = _html;
       _icCard.style.display = 'block';

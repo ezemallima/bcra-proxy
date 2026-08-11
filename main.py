@@ -2423,6 +2423,127 @@ def _alerta_logistica(ciudad: str) -> str:
     return ''
 
 
+# ── Alerta de población — SOLO informativa, no toca el score (a pedido explícito) ──
+# Fuente: INDEC, Censo Nacional de Población, Hogares y Viviendas 2022, resultados
+# definitivos por gobierno local (censo.gob.ar). 2291 gobiernos locales, descargado
+# 2026-08. NO se combina con nada de ARCA/BCRA — es dato censal público, estático.
+_POBLACION_UMBRAL_CHICO = float(os.environ.get('POBLACION_ALERTA_UMBRAL', '20000'))
+_poblacion_idx: dict = {}   # (provincia_norm, localidad_norm) → población
+
+
+def _norm_geo(s: str) -> str:
+    """Normaliza nombres de localidad/provincia para matching: sin tildes,
+    minúsculas, sin espacios/puntuación redundante. Determinístico — el mismo
+    nombre siempre normaliza igual, para que el índice y la búsqueda coincidan."""
+    import unicodedata, re
+    s = unicodedata.normalize('NFKD', str(s or ''))
+    s = ''.join(c for c in s if not unicodedata.combining(c))
+    s = re.sub(r'[^a-zA-Z0-9 ]', ' ', s).lower()
+    return re.sub(r'\s+', ' ', s).strip()
+
+
+def _cargar_poblacion_localidades() -> None:
+    """Carga el censo de gobiernos locales a memoria, una sola vez al arrancar."""
+    global _poblacion_idx
+    _path = os.path.join(os.path.dirname(__file__), 'poblacion_gobiernos_locales.json')
+    try:
+        with open(_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        idx = {}
+        for row in data:
+            key = (_norm_geo(row.get('provincia')), _norm_geo(row.get('gobierno_local')))
+            idx[key] = row.get('poblacion')
+        _poblacion_idx = idx
+        print(f"[poblacion] {len(idx)} gobiernos locales cargados (INDEC Censo 2022)", flush=True)
+    except Exception as e:
+        print(f"[poblacion] No se pudo cargar poblacion_gobiernos_locales.json: {e}", flush=True)
+        _poblacion_idx = {}
+
+
+_cargar_poblacion_localidades()   # una sola vez, al importar el módulo
+
+
+_LOCALIDAD_PREFIJOS_ARCA = ('ciudad de ', 'cdad de ', 'localidad de ', 'pueblo de ', 'comuna de ')
+
+
+def _variantes_localidad(localidad_cruda: str) -> list:
+    """Genera variantes DETERMINÍSTICAS (no aproximadas) del nombre de localidad
+    que trae ARCA, para absorber formato conocido sin adivinar: ARCA suele traer
+    aclaraciones entre paréntesis ('CIUDAD DE LA PUNTA (CAPITAL)') o anteponer
+    'Ciudad de' / 'Localidad de' que el nombre oficial del censo no lleva.
+    Recibe el string CRUDO (antes de normalizar) — el recorte de paréntesis
+    tiene que pasar antes de _norm_geo(), porque _norm_geo() ya convierte
+    '(' y ')' en espacios y no queda nada que recortar después.
+    Cada variante sigue siendo un match EXACTO contra el índice, solo cambia
+    qué string se compara — no hay tolerancia a errores de tipeo ni similitud."""
+    import re
+    crudas = [localidad_cruda]
+    sin_parentesis = re.sub(r'\([^)]*\)', '', localidad_cruda).strip()
+    if sin_parentesis and sin_parentesis != localidad_cruda:
+        crudas.append(sin_parentesis)
+
+    variantes = [_norm_geo(c) for c in crudas]
+    for base in list(variantes):
+        for pref in _LOCALIDAD_PREFIJOS_ARCA:
+            if base.startswith(pref):
+                variantes.append(base[len(pref):].strip())
+    # dedupe preservando orden
+    vistas = set()
+    return [v for v in variantes if v and not (v in vistas or vistas.add(v))]
+
+
+def _poblacion_localidad(localidad: str, provincia: str):
+    """Busca población por (provincia, localidad) tras normalizar, probando un
+    conjunto acotado de variantes deterministas del nombre (ver
+    _variantes_localidad). Sin match → None. Deliberadamente NO hace fuzzy
+    matching por similitud: preferimos no mostrar alerta antes que mostrar una
+    mal matcheada (ej. confundir 'San Martín' de Mendoza con el de Buenos Aires)."""
+    if not _poblacion_idx or not localidad or not provincia:
+        return None
+    prov_norm = _norm_geo(provincia)
+    for cand in _variantes_localidad(localidad):
+        pob = _poblacion_idx.get((prov_norm, cand))
+        if pob is not None:
+            return pob
+    return None
+
+
+def _alerta_poblacion(localidad: str, provincia: str) -> dict:
+    """Alerta informativa (no numérica) según población del gobierno local del
+    domicilio ARCA. Devuelve {} si no hay match confiable — nunca inventa un
+    numero. No afecta el score: es solo contexto para el análisis humano."""
+    pob = _poblacion_localidad(localidad, provincia)
+    if pob is None:
+        return {}
+    if pob < _POBLACION_UMBRAL_CHICO:
+        return {
+            'localidad': localidad, 'provincia': provincia, 'poblacion': pob,
+            'nivel': 'chico',
+            'texto': f'{localidad} tiene {pob:,} habitantes (INDEC 2022) — mercado acotado, evaluar con cuidado adicional'.replace(',', '.'),
+        }
+    return {
+        'localidad': localidad, 'provincia': provincia, 'poblacion': pob,
+        'nivel': 'normal',
+        'texto': f'{localidad} tiene {pob:,} habitantes (INDEC 2022)'.replace(',', '.'),
+    }
+
+
+def _domicilio_localidad_arca(solvency_data: dict):
+    """Extrae (localidad, provincia) del primer domicilio válido que trajo ARCA
+    para este CUIT. No inventa: si ARCA no trajo domicilios o no tienen
+    localidad, devuelve (None, None)."""
+    if not isinstance(solvency_data, dict):
+        return None, None
+    for dom in (solvency_data.get('domicilios') or []):
+        if not isinstance(dom, dict):
+            continue
+        loc = (dom.get('localidad') or '').strip()
+        prov = (dom.get('provincia') or '').strip()
+        if loc and prov:
+            return loc, prov
+    return None, None
+
+
 def _layer1_estabilidad_bancaria(
     max_sit: int,
     n_periodos_h: int,
@@ -3812,6 +3933,10 @@ def calcular_rating_predictivo(
     )
     alerta_log = _alerta_logistica(ciudad)
 
+    # Alerta de población del domicilio ARCA — solo informativa, no toca `score`.
+    _loc_arca, _prov_arca = _domicilio_localidad_arca(solvency_data)
+    alerta_poblacion = _alerta_poblacion(_loc_arca, _prov_arca) if _loc_arca else {}
+
     if es_mora_tecnica:
         color = '#ca8a04'
         rango = rango if score >= 750 else ('Revisar' if rango in ('Rechazar', 'Alto riesgo') else rango)
@@ -3840,6 +3965,7 @@ def calcular_rating_predictivo(
         'alerta_temprana':          alerta_temprana,
         'bloquear_oportunidad':     bloquear_oportunidad,
         'alerta_logistica':         alerta_log,
+        'alerta_poblacion':         alerta_poblacion,
         'componentes': {
             'capaA': pts_c1, 'capaB': pts_cb,
             'capaC': pts_cc, 'liquidez': pts_liq,
