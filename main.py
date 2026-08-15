@@ -7716,12 +7716,11 @@ def _check_cheques_cartera_bg():
         fecha_ahora = datetime.now().strftime('%Y-%m-%d %H:%M')
 
         for cuit, cheq in cheques_actuales.items():
-            resultados = (cheq.get('results') or {})
-            # Contar cheques rechazados actuales
-            n_rechazados = (
-                len(resultados.get('chequesRechazadosCamaraCompensadora', [])) +
-                len(resultados.get('chequesRechazadosDenunciados', []))
-            )
+            # n_rechazados = cheques ACTIVOS (sin fecha de pago / IMPAGA, es decir sin
+            # reponer). cheq viene en formato results.causales[].entidades[].detalle[]
+            # (ver _cheques_local_batch) — chequesRechazados* nunca existe en ese formato,
+            # por eso antes esto siempre daba 0 y jamás se disparaba una alerta real.
+            n_rechazados, n_total, _ = _cheques_activos_de(cheq)
             n_anterior = estado_anterior.get(cuit, {}).get('n_rechazados', 0)
 
             if n_rechazados > n_anterior:
@@ -7737,8 +7736,8 @@ def _check_cheques_cartera_bg():
                     # leen nroCheques/totalCheques — con otro tipo quedan invisibles.
                     'tipo':         'cheque',
                     'nroCheques':   n_rechazados,
-                    'totalCheques': n_rechazados,
-                    'detalle':      f"{diff} cheque(s) rechazado(s) nuevo(s) detectado(s) · total {n_rechazados}",
+                    'totalCheques': n_total,
+                    'detalle':      f"{diff} cheque(s) rechazado(s) sin reponer nuevo(s) detectado(s) · total {n_rechazados} activo(s)",
                     'rango':        '',
                     'score_nuevo':  None,
                     'leida':        False,
