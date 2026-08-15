@@ -1234,6 +1234,7 @@
         <div style="display:flex;gap:16px;font-size:11px;color:#64748b;">
           <span>Procesados: <b id="pi-procesados">0</b></span>
           <span>Errores: <b id="pi-errores" style="color:#dc2626;">0</b></span>
+          <span title="Clientes cuyo score no se pudo calcular y quedó con un valor aproximado por situación BCRA, no el score real del motor.">Contingencia: <b id="pi-contingencia" style="color:#ea580c;">0</b></span>
           <span>Total: <b id="pi-total">0</b></span>
         </div>
         <div id="pi-log-errores" style="display:none;margin-top:10px;max-height:160px;overflow-y:auto;border:1px solid #fecaca;border-radius:6px;padding:6px 8px;background:#fff5f5;font-size:11px;font-family:monospace;color:#991b1b;"></div>
@@ -6946,6 +6947,8 @@ async function ejecutarProcesoIntegral(modo_rapido) {
   if (_logEl) { _logEl.innerHTML = ''; _logEl.style.display = 'none'; }
   var _errEl = document.getElementById('pi-errores');
   if (_errEl) _errEl.textContent = '0';
+  var _contEl = document.getElementById('pi-contingencia');
+  if (_contEl) _contEl.textContent = '0';
   var _procEl = document.getElementById('pi-procesados');
   if (_procEl) _procEl.textContent = '0';
   var _barEl = document.getElementById('proceso-integral-bar');
@@ -6994,7 +6997,7 @@ async function reprocesarVacios() {
   if (btn2) { btn2.disabled = true; btn2.textContent = 'Proceso en curso...'; }
   var _logEl = document.getElementById('pi-log-errores');
   if (_logEl) { _logEl.innerHTML = ''; _logEl.style.display = 'none'; }
-  ['pi-errores','pi-procesados'].forEach(function(id){ var el=document.getElementById(id); if(el) el.textContent='0'; });
+  ['pi-errores','pi-contingencia','pi-procesados'].forEach(function(id){ var el=document.getElementById(id); if(el) el.textContent='0'; });
   var _barEl = document.getElementById('proceso-integral-bar');
   if (_barEl) { _barEl.style.width='0%'; _barEl.style.background='linear-gradient(90deg,#0891b2,#06b6d4)'; }
   var _pctEl = document.getElementById('proceso-integral-pct');
@@ -7040,6 +7043,7 @@ async function _pollProcesoIntegral() {
     var bar  = document.getElementById('proceso-integral-bar');
     var proc = document.getElementById('pi-procesados');
     var err  = document.getElementById('pi-errores');
+    var cont = document.getElementById('pi-contingencia');
     var tot  = document.getElementById('pi-total');
     var p = total > 0 ? Math.round((d.procesados || 0) / total * 100) : 0;
     if (msg)  msg.textContent  = d.mensaje || 'Procesando...';
@@ -7047,6 +7051,7 @@ async function _pollProcesoIntegral() {
     if (bar)  bar.style.width  = p + '%';
     if (proc) proc.textContent = d.procesados || 0;
     if (err)  err.textContent  = d.errores    || 0;
+    if (cont) cont.textContent = d.contingencia || 0;
     if (tot)  tot.textContent  = total;
     // Log de errores en tiempo real
     var logEl = document.getElementById('pi-log-errores');

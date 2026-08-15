@@ -1358,7 +1358,7 @@ def consultar_bcra_cached(cuit, skip_padron=False, live_primero=False):
 
 _proceso_integral_estado: dict = {
     "corriendo": False, "total": 0, "procesados": 0,
-    "errores": 0, "cliente_actual": "", "mensaje": "Listo",
+    "errores": 0, "contingencia": 0, "cliente_actual": "", "mensaje": "Listo",
     "iniciado_en": None, "log_errores": []
 }
 # Locks para evitar escrituras concurrentes sobre archivos compartidos
@@ -7080,6 +7080,8 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
                     'score': _sc_c, 'rango': _rg_c, 'color': _cl_c, 'emoji': _em_c,
                     'max_sit': _ms_c, '_contingencia': True,
                 })
+                with _proceso_lock:
+                    _proceso_integral_estado['contingencia'] += 1
                 print(
                     f'[proceso-integral] Contingencia BCRA sit={_ms_c} → {_sc_c} {_rg_c} '
                     f'({cuit} {nombre})',
@@ -7196,8 +7198,10 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
         _n_bcra_f  = sum(1 for a in _pi_alertas if a.get('tipo') == 'bcra')
         _n_cheq_f  = sum(1 for a in _pi_alertas if a.get('tipo') == 'cheque')
         _proceso_integral_estado['corriendo'] = False
+        _n_conting = _proceso_integral_estado['contingencia']
+        _conting_txt = f', {_n_conting} score(s) de contingencia (no reales)' if _n_conting else ''
         _proceso_integral_estado['mensaje'] = (
-            f'Completado — {n_ok} OK, {_proceso_integral_estado["errores"]} errores'
+            f'Completado — {n_ok} OK, {_proceso_integral_estado["errores"]} errores{_conting_txt}'
             f' | {total} clientes · {_n_bcra_f} alerta(s) BCRA · {_n_cheq_f} alerta(s) cheques'
         )
     print(f'[proceso-integral] {_proceso_integral_estado["mensaje"]}', flush=True)
@@ -7238,7 +7242,7 @@ def iniciar_proceso_integral():
     with _proceso_lock:
         _proceso_integral_estado.update({
             "corriendo": True, "total": len(cartera), "procesados": 0,
-            "errores": 0, "cliente_actual": "", "mensaje": "Iniciando proceso...",
+            "errores": 0, "contingencia": 0, "cliente_actual": "", "mensaje": "Iniciando proceso...",
             "iniciado_en": _dt.datetime.now().strftime("%d/%m/%Y %H:%M"),
             "log_errores": [],
         })
@@ -7314,6 +7318,7 @@ def reprocesar_vacios():
             "total":        len(pendientes),
             "procesados":   0,
             "errores":      0,
+            "contingencia": 0,
             "cliente_actual": "",
             "mensaje":      f"Reprocesando {len(pendientes)} clientes sin score...",
             "iniciado_en":  datetime.utcnow().isoformat(),
