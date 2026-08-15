@@ -6915,6 +6915,49 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
         try:
             _score_session_cache.pop(cuit, None)
 
+            # ── Paso 0a: Detectar cheques rechazados activos para alertas ────────────
+            # Corre SIEMPRE, antes del atajo de "score reutilizado" de abajo — si no,
+            # un cliente con score individual reciente (<2h) se salteaba por completo
+            # de la detección de cheques y quedaba sin alerta aunque tuviera cheques
+            # rechazados sin reponer activos.
+            _cheq_activos_pi = 0
+            _cheq_para_score_pi = _bulk_cheques_pi.get(cuit)  # default seguro si el try de abajo falla
+            try:
+                _cheq_raw_pi = {}  # solo bulk en modo masivo, sin consulta CDI en vivo
+                _act_live_pi, _, _det_live_pi = _cheques_activos_de(_cheq_raw_pi)
+                # Cruzar SIEMPRE contra el bulk local (snapshot diario BCRA, importado
+                # por /update-cheques-db) — un "sin_deudas=True" en vivo puede ser un
+                # falso negativo, igual que con deudas/historial. Nunca subestimar el
+                # riesgo: usar la fuente con más cheques activos.
+                _act_bulk_pi, _, _det_bulk_pi = _cheques_activos_de(_bulk_cheques_pi.get(cuit))
+                if _act_bulk_pi > _act_live_pi:
+                    _cheq_activos_pi, _det_pi = _act_bulk_pi, _det_bulk_pi
+                    _cheq_para_score_pi = _bulk_cheques_pi.get(cuit)
+                else:
+                    _cheq_activos_pi, _det_pi = _act_live_pi, _det_live_pi
+                    _cheq_para_score_pi = _cheq_raw_pi
+
+                if _cheq_activos_pi > 0:
+                    _pi_alertas.append({
+                        'nombre':        nombre,
+                        'cuit':          cuit,
+                        'tipo':          'cheque',
+                        'nroCheques':    _cheq_activos_pi,
+                        'totalCheques':  len(_det_pi),
+                        'fecha':         time.strftime('%d/%m/%Y'),
+                        'scoreCompleto': None,
+                        'scoreRango':    None,
+                        'scoreColor':    None,
+                        'scoreEmoji':    None,
+                    })
+                    print(
+                        f'[proceso-integral] ALERTA CHEQUES: {nombre} ({cuit})'
+                        f' — {_cheq_activos_pi}/{len(_det_pi)} cheque(s) activo(s)',
+                        flush=True,
+                    )
+            except Exception as _cal_e:
+                print(f'[proceso-integral] Cheques alert parse fallo {cuit}: {_cal_e}', flush=True)
+
             # ── Paso 0: Reutilizar score de consulta individual reciente ──────────────
             # _ts en score_cache indica que el score fue calculado por una consulta
             # individual real (datos BCRA en vivo o padron_local fresco). El proceso
@@ -6980,45 +7023,6 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
             # 4. Bulk sintético — último recurso
             if bcra_data is None:
                 bcra_data = _bulk_to_bcra_data(nombre, _deuda_bulk_pi) if _deuda_bulk_pi else {}
-
-            # ── Paso 1.5b: Detectar cheques rechazados activos para alertas ──────────
-            _cheq_activos_pi = 0
-            _cheq_para_score_pi = _bulk_cheques_pi.get(cuit)  # default seguro si el try de abajo falla
-            try:
-                _cheq_raw_pi = {}  # solo bulk en modo masivo, sin consulta CDI en vivo
-                _act_live_pi, _, _det_live_pi = _cheques_activos_de(_cheq_raw_pi)
-                # Cruzar SIEMPRE contra el bulk local (snapshot diario BCRA, importado
-                # por /update-cheques-db) — un "sin_deudas=True" en vivo puede ser un
-                # falso negativo, igual que con deudas/historial. Nunca subestimar el
-                # riesgo: usar la fuente con más cheques activos.
-                _act_bulk_pi, _, _det_bulk_pi = _cheques_activos_de(_bulk_cheques_pi.get(cuit))
-                if _act_bulk_pi > _act_live_pi:
-                    _cheq_activos_pi, _det_pi = _act_bulk_pi, _det_bulk_pi
-                    _cheq_para_score_pi = _bulk_cheques_pi.get(cuit)
-                else:
-                    _cheq_activos_pi, _det_pi = _act_live_pi, _det_live_pi
-                    _cheq_para_score_pi = _cheq_raw_pi
-
-                if _cheq_activos_pi > 0:
-                    _pi_alertas.append({
-                        'nombre':        nombre,
-                        'cuit':          cuit,
-                        'tipo':          'cheque',
-                        'nroCheques':    _cheq_activos_pi,
-                        'totalCheques':  len(_det_pi),
-                        'fecha':         time.strftime('%d/%m/%Y'),
-                        'scoreCompleto': None,
-                        'scoreRango':    None,
-                        'scoreColor':    None,
-                        'scoreEmoji':    None,
-                    })
-                    print(
-                        f'[proceso-integral] ALERTA CHEQUES: {nombre} ({cuit})'
-                        f' — {_cheq_activos_pi}/{len(_det_pi)} cheque(s) activo(s)',
-                        flush=True,
-                    )
-            except Exception as _cal_e:
-                print(f'[proceso-integral] Cheques alert parse fallo {cuit}: {_cal_e}', flush=True)
 
             # ── Paso 2: Score — idéntico a consulta individual ───────────────────────
             # calcular_score_servidor usa exactamente la misma cadena de fuentes que la
