@@ -12419,7 +12419,8 @@ def upload_echeq_endpoint():
         def _nh(s):
             return (str(s or '').upper()
                     .replace('Á', 'A').replace('É', 'E').replace('Í', 'I')
-                    .replace('Ó', 'O').replace('Ú', 'U').replace('Ü', 'U').replace('Ñ', 'N'))
+                    .replace('Ó', 'O').replace('Ú', 'U').replace('Ü', 'U').replace('Ñ', 'N')
+                    .replace('°', '').replace('º', ''))  # "Nº de cheque" → "N DE CHEQUE"
 
         # Los exports de banco suelen anteponer una fila de títulos de grupo
         # ("Datos del cheque" / "Datos del librador") antes de los nombres de
@@ -12482,14 +12483,39 @@ def upload_echeq_endpoint():
                     return i  # match exacto: columna bajo "Datos del librador"
             return candidatas[0][0]  # fallback: primera columna no descartada
 
-        col_cuit    = find_col_librador(['CUIT', 'CUIL', 'CDI'])
+        def find_col_cerca(col_ref, kws, ventana=3):
+            """Busca una columna que matchee kws pegada a col_ref (a la derecha,
+            dentro de `ventana` columnas) — los exports de banco suelen poner el
+            nombre del titular seguido inmediatamente de su CUIT."""
+            if col_ref < 0:
+                return -1
+            for i in range(col_ref, min(col_ref + ventana + 1, len(headers_n))):
+                if any(_nh(kw) in headers_n[i] for kw in kws):
+                    return i
+            return -1
+
+        # Identificar CUIT/nombre del cliente a evaluar: algunos bancos (ej.
+        # extractos de cartera de eCheq) no usan "Datos del librador" sino
+        # "Recibido de" (quien te entrega/endosa el cheque — tu cliente real
+        # en esta operación) seguido de "Emitido a" (a quién, normalmente tu
+        # propia empresa). "Recibido de" tiene prioridad porque es el CUIT
+        # cuyo riesgo importa evaluar; si no existe esa columna, se cae al
+        # esquema anterior de "Datos del librador" por título de grupo.
+        col_razon = find_col(['RECIBIDO DE', 'RECIBIDO'])
+        if col_razon >= 0:
+            col_cuit = find_col_cerca(col_razon, ['CUIT', 'CUIL', 'CDI'])
+        else:
+            col_razon = find_col_librador(['RAZON SOCIAL', 'LIBRADOR', 'RAZON'])
+            col_cuit = -1
+        if col_cuit < 0:
+            col_cuit = find_col_librador(['CUIT', 'CUIL', 'CDI'])
+
         col_nro     = find_col(['N DE CHEQUE', 'NRO CHEQUE', 'NUMERO DE CHEQUE', 'NUMERO CHEQUE', 'N CHEQUE'])
         col_importe = find_col(['IMPORTE', 'MONTO'])
         col_fpago   = find_col(['FECHA DE PAGO', 'FECHA PAGO', 'VENCIMIENTO'])
         col_femis   = find_col(['FECHA DE EMISION', 'FECHA EMISION'])
         col_estado  = find_col(['ESTADO'])
         col_banco   = find_col(['BANCO EMISOR', 'BANCO'])
-        col_razon   = find_col_librador(['RAZON SOCIAL', 'LIBRADOR', 'RAZON'])
 
         if col_cuit < 0:
             return jsonify({
