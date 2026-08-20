@@ -12483,32 +12483,17 @@ def upload_echeq_endpoint():
                     return i  # match exacto: columna bajo "Datos del librador"
             return candidatas[0][0]  # fallback: primera columna no descartada
 
-        def find_col_cerca(col_ref, kws, ventana=3):
-            """Busca una columna que matchee kws pegada a col_ref (a la derecha,
-            dentro de `ventana` columnas) — los exports de banco suelen poner el
-            nombre del titular seguido inmediatamente de su CUIT."""
-            if col_ref < 0:
-                return -1
-            for i in range(col_ref, min(col_ref + ventana + 1, len(headers_n))):
-                if any(_nh(kw) in headers_n[i] for kw in kws):
-                    return i
-            return -1
+        # CUIT/razón social del LIBRADOR (quien emitió el cheque desde su
+        # cuenta) — es el único dato relevante para cruzar contra cheques
+        # rechazados del BCRA, que están indexados por cuenta emisora, no
+        # por quien te endosa el cheque.
+        col_razon = find_col_librador(['RAZON SOCIAL', 'LIBRADOR', 'RAZON'])
+        col_cuit  = find_col_librador(['CUIT', 'CUIL', 'CDI'])
 
-        # Identificar CUIT/nombre del cliente a evaluar: algunos bancos (ej.
-        # extractos de cartera de eCheq) no usan "Datos del librador" sino
-        # "Recibido de" (quien te entrega/endosa el cheque — tu cliente real
-        # en esta operación) seguido de "Emitido a" (a quién, normalmente tu
-        # propia empresa). "Recibido de" tiene prioridad porque es el CUIT
-        # cuyo riesgo importa evaluar; si no existe esa columna, se cae al
-        # esquema anterior de "Datos del librador" por título de grupo.
-        col_razon = find_col(['RECIBIDO DE', 'RECIBIDO'])
-        if col_razon >= 0:
-            col_cuit = find_col_cerca(col_razon, ['CUIT', 'CUIL', 'CDI'])
-        else:
-            col_razon = find_col_librador(['RAZON SOCIAL', 'LIBRADOR', 'RAZON'])
-            col_cuit = -1
-        if col_cuit < 0:
-            col_cuit = find_col_librador(['CUIT', 'CUIL', 'CDI'])
+        # "Cliente" (columna "Recibido de") es puramente informativo — quién
+        # te entregó/endosó el cheque — no participa en la decisión
+        # ACEPTAR/RECHAZAR, que siempre corre sobre el CUIT del librador.
+        col_cliente = find_col(['RECIBIDO DE', 'RECIBIDO'])
 
         col_nro     = find_col(['N DE CHEQUE', 'NRO CHEQUE', 'NUMERO DE CHEQUE', 'NUMERO CHEQUE', 'N CHEQUE'])
         col_importe = find_col(['IMPORTE', 'MONTO'])
@@ -12563,6 +12548,7 @@ def upload_echeq_endpoint():
                 'estado':        gv(row, col_estado),
                 'bancoEmisor':   gv(row, col_banco),
                 'razonSocial':   gv(row, col_razon),
+                'cliente':       gv(row, col_cliente),
             })
 
         if not filas:

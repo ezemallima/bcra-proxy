@@ -1421,8 +1421,9 @@
             <thead style="background:#F5F7FA;position:sticky;top:0;">
               <tr>
                 <th style="padding:7px 10px;text-align:left;color:#475569;border-bottom:1px solid #e2e8f0;">N° Cheque</th>
-                <th style="padding:7px 10px;text-align:left;color:#475569;border-bottom:1px solid #e2e8f0;">Cliente</th>
+                <th style="padding:7px 10px;text-align:left;color:#475569;border-bottom:1px solid #e2e8f0;">Librador</th>
                 <th style="padding:7px 10px;text-align:left;color:#475569;border-bottom:1px solid #e2e8f0;">CUIT</th>
+                <th style="padding:7px 10px;text-align:left;color:#475569;border-bottom:1px solid #e2e8f0;">Cliente</th>
                 <th style="padding:7px 10px;text-align:left;color:#475569;border-bottom:1px solid #e2e8f0;">Banco emisor</th>
                 <th style="padding:7px 10px;text-align:right;color:#475569;border-bottom:1px solid #e2e8f0;">Importe</th>
                 <th style="padding:7px 10px;text-align:left;color:#475569;border-bottom:1px solid #e2e8f0;">Fecha de pago</th>
@@ -6257,13 +6258,14 @@ function renderEcheqResultado(d) {
       '<td style="padding:7px 10px;font-family:monospace;font-size:11px;">' + (c.nroCheque || '—') + '</td>' +
       '<td style="padding:7px 10px;font-weight:500;color:#1e293b;">' + (c.razonSocial || '—') + '</td>' +
       '<td style="padding:7px 10px;font-family:monospace;font-size:11px;color:#64748b;">' + c.cuit + '</td>' +
+      '<td style="padding:7px 10px;color:#64748b;">' + (c.cliente || '') + '</td>' +
       '<td style="padding:7px 10px;color:#64748b;">' + (c.bancoEmisor || '') + '</td>' +
       '<td style="padding:7px 10px;text-align:right;font-weight:600;color:#1e293b;">$' + (c.importe||0).toLocaleString('es-AR') + '</td>' +
       '<td style="padding:7px 10px;color:#64748b;">' + (c.fechaPago || '') + '</td>' +
       '<td style="padding:7px 10px;text-align:center;">' + badge + ' <span style="color:#94a3b8;">▾</span></td>' +
     '</tr>';
     var det = '<tr id="echeq-det-' + idx + '" style="display:none;">' +
-      '<td colspan="7" style="padding:14px 18px;background:#f8fafc;">' + buildEcheqDetalleHtml(c, idx) + '</td>' +
+      '<td colspan="8" style="padding:14px 18px;background:#f8fafc;">' + buildEcheqDetalleHtml(c, idx) + '</td>' +
     '</tr>';
     return row + det;
   }).join('');
@@ -6304,9 +6306,9 @@ function toggleEcheqDetalle(idx) {
 
 function descargarEcheqCSV() {
   if (!_echeqData || !_echeqData.length) { alert('No hay datos para descargar.'); return; }
-  var headerRow = ['Nro Cheque', 'CUIT', 'Cliente', 'Banco Emisor', 'Importe', 'Fecha Pago', 'Veredicto', 'Motivos'];
+  var headerRow = ['Nro Cheque', 'Librador', 'CUIT', 'Cliente', 'Banco Emisor', 'Importe', 'Fecha Pago', 'Veredicto', 'Motivos'];
   var rows = [headerRow].concat(_echeqData.map(function(c) {
-    return [c.nroCheque, c.cuit, c.razonSocial, c.bancoEmisor, c.importe, c.fechaPago, c.veredicto, (c.motivos || []).join(' | ')];
+    return [c.nroCheque, c.razonSocial, c.cuit, c.cliente, c.bancoEmisor, c.importe, c.fechaPago, c.veredicto, (c.motivos || []).join(' | ')];
   }));
   var csv = rows.map(function(r) {
     return r.map(function(v) {
