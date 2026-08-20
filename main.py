@@ -4320,50 +4320,26 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
         cheq_bulk = get_cheques_local(cuit_limpio)   # DB local: cero latencia, siempre se consulta
         cheq_vivo = None
 
-        if live_primero:
+        if live_primero or not sin_arca:
             # INDIVIDUAL: BCRA en vivo también — es una "consulta puntual" (así la
-            # recomienda usar el propio BCRA). Guard de <2min: si el caché en disco
-            # ya fue escrito hace instantes (p.ej. por el fetch directo de /cheques
-            # que corre en paralelo en el mismo request de usuario), se reutiliza
-            # como "vivo" en vez de duplicar la consulta al BCRA.
-            _cheq_reciente = False
-            try:
-                _ccp = _cheques_cache_path(cuit_limpio)
-                if os.path.exists(_ccp):
-                    with open(_ccp, 'r', encoding='utf-8') as _f:
-                        _ccraw = json.load(_f)
-                    if time.time() - _ccraw.get('ts', 0) < 120:
-                        cheq_vivo = _ccraw.get('payload')
-                        _cheq_reciente = True
-            except Exception:
-                pass
-
-            if _cheq_reciente:
-                print(f"[score] cheq {cuit_limpio} caché reciente (<2min) — reutilizada como vivo (evita doble consulta)", flush=True)
-            else:
-                print(f"[cheques] {cuit_limpio} individual — BCRA en vivo + DB local", flush=True)
-                _cd, _ = _consultar_bcra_directo(cuit_limpio, 'cheques', timeout_per_req=8, max_intentos=1)
-                if _cd:
-                    cheq_vivo = _cd
-                    try:
-                        with open(os.path.join(DATA_DIR, f'cheques_{cuit_limpio}.json'), 'w') as f:
-                            json.dump({'payload': cheq_vivo, 'ts': time.time()}, f)
-                    except: pass
-                else:
-                    print(f"[cheques] {cuit_limpio} BCRA en vivo falló — score sigue con DB local + caché", flush=True)
-        elif not sin_arca:
-            # Ruta teórica de robustez (individual sin live_primero — no ocurre en
-            # la práctica hoy, todos los llamados individuales pasan live_primero=True).
-            _cd, _ = _consultar_bcra_directo(cuit_limpio, 'cheques', timeout_per_req=8, max_intentos=1)
-            if _cd:
-                cheq_vivo = _cd
+            # recomienda usar el propio BCRA). _cheques_fetch_vivo() deduplica
+            # contra una consulta ya en curso para el mismo CUIT (p.ej. si
+            # /deudas/<cuit>/cheques está corriendo en paralelo para el mismo
+            # request de usuario) — evita tanto golpear al BCRA dos veces como
+            # que el score y la pantalla terminen viendo datos distintos.
+            print(f"[cheques] {cuit_limpio} individual — BCRA en vivo (dedup) + DB local", flush=True)
+            cheq_vivo, _ = _cheques_fetch_vivo(cuit_limpio)
+            if cheq_vivo:
                 try:
                     with open(os.path.join(DATA_DIR, f'cheques_{cuit_limpio}.json'), 'w') as f:
                         json.dump({'payload': cheq_vivo, 'ts': time.time()}, f)
                 except: pass
-        # MASIVA (sin_arca=True): nunca golpear la API en vivo del BCRA acá — mismo
-        # motivo que el historial (comparte el semáforo global de 2 permisos con
-        # las consultas individuales; un BCRA lento trabaría todo el batch).
+            else:
+                print(f"[cheques] {cuit_limpio} BCRA en vivo sin datos — score sigue con DB local + caché", flush=True)
+        # MASIVA (sin_arca=True, live_primero=False): nunca golpear la API en vivo
+        # del BCRA acá — mismo motivo que el historial (comparte el semáforo
+        # global de 2 permisos con las consultas individuales; un BCRA lento
+        # trabaría todo el batch).
         #
         # cheq_data (caché en disco, cargado más arriba) entra igual a la unión de
         # abajo junto con bulk y vivo — cubre cheques regularizados que ya salieron
@@ -9332,6 +9308,99 @@ def _cheques_cache_set(cuit, payload):
             json.dump({'payload': payload, 'ts': time.time()}, f, ensure_ascii=False)
     except: pass
 
+
+def _cheques_fetch_vivo_raw(cuit_limpio: str):
+    """Consulta cheques rechazados al BCRA en vivo, en paralelo contra 3
+    endpoints (wrapper + 2 oficiales). Devuelve (payload_o_None, got_404) —
+    got_404=True cuando un endpoint oficial confirma explícitamente "sin
+    cheques" (los workers no-oficiales pueden devolver 404 solo por ruta no
+    soportada, eso no cuenta)."""
+    def _fetch_chq(url, tmt, via):
+        try:
+            r = _bcra_get(url, timeout=tmt) if 'bcra.gob.ar' in url else requests.get(url, timeout=tmt, verify=False)
+            if r.status_code == 404:
+                if 'bcra.gob.ar' in url:
+                    return 'NOT_FOUND', via
+                return None, via
+            if r.status_code == 200 and len(r.text.strip()) > 10:
+                d = _norm_bcra_resp(r.json())
+                if d.get('results') is not None:
+                    return d, via
+        except Exception as e:
+            print(f"[cheques_vivo] {via} error para {cuit_limpio}: {e}", flush=True)
+        return None, via
+
+    endpoints_chq = [
+        (BCRA_WRAPPER_BASE + '/cheques-rechazados/' + cuit_limpio, 3.5, 'bcra_wrapper'),
+        (f"https://api.bcra.gob.ar/CentralDeInformacion/v1.0/ChequesRechazados/{cuit_limpio}", 10, "bcra_cdi"),
+        (f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/{cuit_limpio}", 10, "bcra_legacy"),
+    ]
+    got_404_chq = False
+    with ThreadPoolExecutor(max_workers=len(endpoints_chq)) as ex:
+        futs = {ex.submit(_fetch_chq, url, tmt, via): via for url, tmt, via in endpoints_chq}
+        try:
+            for fut in as_completed(futs, timeout=20):
+                result, via = fut.result()
+                if result == 'NOT_FOUND':
+                    got_404_chq = True
+                elif result:
+                    payload = result if result.get('results') else {"results": {"causales": []}, "sin_deudas": True, "error_bcra": None}
+                    print(f"[cheques_vivo] {cuit_limpio} OK via {via}", flush=True)
+                    return payload, got_404_chq
+        except Exception:
+            pass
+    return None, got_404_chq
+
+
+_cheques_vivo_lock       = threading.Lock()
+_cheques_vivo_eventos:    dict = {}   # cuit -> threading.Event (consulta en curso)
+_cheques_vivo_resultados: dict = {}   # cuit -> (payload_o_None, got_404) del último fetch
+
+def _cheques_fetch_vivo(cuit_limpio: str):
+    """Wrapper deduplicado de _cheques_fetch_vivo_raw.
+
+    /deudas/<cuit>/cheques (la tarjeta) y /fetch-score (el motor) pueden llegar
+    casi al mismo tiempo para el mismo CUIT y cada uno pedía su propia consulta
+    en vivo — compitiendo por el semáforo de 2 conexiones al BCRA y arriesgando
+    que UNA de las dos se quede sin datos por contención. Eso hacía que la
+    pantalla mostrara más cheques que los que realmente entraron al score.
+
+    Acá: si ya hay una consulta en vivo en curso para este CUIT, la segunda
+    espera el resultado de la primera en vez de disparar otra — motor y
+    pantalla ven siempre exactamente el mismo dato, y de paso se evita
+    duplicar consultas al BCRA (recomendación explícita del propio BCRA).
+    """
+    with _cheques_vivo_lock:
+        ev = _cheques_vivo_eventos.get(cuit_limpio)
+        if ev is not None:
+            soy_lider = False
+        else:
+            ev = threading.Event()
+            _cheques_vivo_eventos[cuit_limpio] = ev
+            soy_lider = True
+
+    if not soy_lider:
+        ev.wait(timeout=22)
+        return _cheques_vivo_resultados.get(cuit_limpio, (None, False))
+
+    try:
+        resultado = _cheques_fetch_vivo_raw(cuit_limpio)
+    except Exception as e:
+        print(f"[cheques_vivo] {cuit_limpio} error inesperado: {e}", flush=True)
+        resultado = (None, False)
+    finally:
+        with _cheques_vivo_lock:
+            _cheques_vivo_resultados[cuit_limpio] = resultado
+            _cheques_vivo_eventos.pop(cuit_limpio, None)
+        ev.set()
+
+        def _limpiar(cuit=cuit_limpio):
+            time.sleep(30)
+            _cheques_vivo_resultados.pop(cuit, None)
+        threading.Thread(target=_limpiar, daemon=True).start()
+    return resultado
+
+
 @app.route("/deudas/<cuit>/cheques")
 def get_cheques(cuit):
     cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
@@ -9342,46 +9411,7 @@ def get_cheques(cuit):
     # fallar, tardar o devolver un falso negativo (mismo criterio ya usado para
     # deudas/historial: nunca subestimar el riesgo).
     cheq_bulk = get_cheques_local(cuit_limpio)
-
-    # Workers + BCRA en paralelo — el primero que traiga datos reales corta la espera
-    def _fetch_chq(url, tmt, via):
-        try:
-            r = _bcra_get(url, timeout=tmt) if 'bcra.gob.ar' in url else requests.get(url, timeout=tmt, verify=False)
-            if r.status_code == 404:
-                # Solo los endpoints BCRA oficiales tienen autoridad para decir
-                # que un CUIT no tiene cheques. Los workers Cloudflare devuelven
-                # 404 cuando no soportan el sub-path — eso no es "sin cheques".
-                if 'bcra.gob.ar' in url:
-                    return 'NOT_FOUND', via
-                return None, via   # worker 404 = ruta no soportada, no "sin datos"
-            if r.status_code == 200 and len(r.text.strip()) > 10:
-                d = _norm_bcra_resp(r.json())
-                if d.get('results') is not None:
-                    return d, via
-        except Exception as e:
-            print(f"[cheques] {via} error para {cuit_limpio}: {e}", flush=True)
-        return None, via
-
-    endpoints_chq = [
-        (BCRA_WRAPPER_BASE + '/cheques-rechazados/' + cuit_limpio, 3.5, 'bcra_wrapper'),
-        (f"https://api.bcra.gob.ar/CentralDeInformacion/v1.0/ChequesRechazados/{cuit_limpio}", 10, "bcra_cdi"),
-        (f"https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/{cuit_limpio}", 10, "bcra_legacy"),
-    ]
-    cheq_vivo   = None
-    got_404_chq = False
-    with ThreadPoolExecutor(max_workers=len(endpoints_chq)) as ex:
-        futs = {ex.submit(_fetch_chq, url, tmt, via): via for url, tmt, via in endpoints_chq}
-        try:
-            for fut in as_completed(futs, timeout=20):
-                result, via = fut.result()
-                if result == 'NOT_FOUND':
-                    got_404_chq = True
-                elif result:
-                    cheq_vivo = result if result.get('results') else {"results": {"causales": []}, "sin_deudas": True, "error_bcra": None}
-                    print(f"[cheques] {cuit_limpio} OK via {via}", flush=True)
-                    break
-        except Exception:
-            pass
+    cheq_vivo, got_404_chq = _cheques_fetch_vivo(cuit_limpio)
 
     if cheq_vivo is None:
         if got_404_chq:
