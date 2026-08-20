@@ -4775,6 +4775,34 @@ def _cheques_local_batch(cuits: list) -> dict:
         return {}
 
 
+_SIT_LABELS_ECHEQ = {1: 'Normal', 2: 'Riesgo bajo', 3: 'Irregular', 4: 'Mora', 5: 'Mora alta'}
+
+
+def _evaluar_echeq_cuit(cuit: str, nomdeu_data: dict, cheq_data: dict) -> dict:
+    """Veredicto ACEPTAR/RECHAZAR para un eCheq pendiente de aceptar, en base a
+    situación BCRA actual (sit_padron) y cheques rechazados activos sin reponer
+    del librador. Reglas rápidas offline (sin BCRA vivo ni ARCA) — ver CLAUDE.md
+    antes de tocar (no modifica calcular_rating_predictivo ni _layer_liquidez,
+    solo lee los mismos datos batch por otra vía)."""
+    motivos = []
+    sit_padron = (nomdeu_data or {}).get('sit_padron', 1)
+    if sit_padron >= 2:
+        label = _SIT_LABELS_ECHEQ.get(sit_padron, 'Mora')
+        motivos.append(f"Situación BCRA {sit_padron} ({label}) en el mes actual")
+
+    activos_ch, total_ch, _detalle = _cheques_activos_de(cheq_data)
+    if activos_ch >= 1:
+        motivos.append(f"{activos_ch} cheque(s) rechazado(s) activo(s) sin reponer")
+
+    return {
+        'veredicto': 'RECHAZAR' if motivos else 'ACEPTAR',
+        'motivos': motivos,
+        'sit_padron': sit_padron,
+        'cheques_rechazados_activos': activos_ch,
+        'cheques_detalle': cheq_data,
+    }
+
+
 def _bulk_bcra_from_historial(cuit: str, nombre: str = '') -> dict:
     """BCRA data del periodo más reciente desde historial_detalle (datos reales per-entidad).
     Usa sit_01/monto_01 de cada entidad — misma fuente que _bulk_to_hist_data() pero
@@ -12357,6 +12385,194 @@ def confirmar_upload_cartera():
     except Exception as e:
         import traceback
         print(f"[confirmar-cartera] Error: {traceback.format_exc()}", flush=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/upload-echeq", methods=["POST"])
+def upload_echeq_endpoint():
+    """Analiza un archivo de eCheq pendientes de aceptar (export del banco) y
+    devuelve veredicto ACEPTAR/RECHAZAR por cheque, cruzando situación BCRA y
+    cheques rechazados sin reponer del CUIT librador. Reglas rápidas offline:
+    _nomdeu_batch() + _cheques_local_batch() (sin BCRA vivo ni ARCA), 2 queries
+    SQL totales sin importar cuántas filas tenga el archivo. No persiste nada
+    en disco — es una herramienta de análisis, no de carga de datos."""
+    try:
+        if 'file' not in request.files:
+            return jsonify({"error": "Sin archivo"}), 400
+        file = request.files['file']
+        nombre_arch = (file.filename or '').lower()
+
+        import io, csv as _csv
+
+        if nombre_arch.endswith('.csv'):
+            contenido = file.read().decode('utf-8-sig', errors='replace')
+            todas = list(_csv.reader(io.StringIO(contenido)))
+        else:
+            import openpyxl
+            wb = openpyxl.load_workbook(io.BytesIO(file.read()), data_only=True)
+            ws = wb.active
+            todas = [['' if v is None else v for v in row] for row in ws.iter_rows(values_only=True)]
+
+        if not todas:
+            return jsonify({"error": "Archivo vacío"}), 400
+
+        def _nh(s):
+            return (str(s or '').upper()
+                    .replace('Á', 'A').replace('É', 'E').replace('Í', 'I')
+                    .replace('Ó', 'O').replace('Ú', 'U').replace('Ü', 'U').replace('Ñ', 'N'))
+
+        # Los exports de banco suelen anteponer una fila de títulos de grupo
+        # ("Datos del cheque" / "Datos del librador") antes de los nombres de
+        # columna reales — se busca la primera fila que tenga tanto una
+        # columna CUIT/CUIL/CDI como CHEQUE/IMPORTE para usarla como encabezado.
+        header_idx = 0
+        for i, row in enumerate(todas[:6]):
+            row_n = [_nh(c) for c in row]
+            tiene_cuit = any(('CUIT' in c or 'CUIL' in c or 'CDI' in c) for c in row_n)
+            tiene_cheque = any(('CHEQUE' in c or 'IMPORTE' in c) for c in row_n)
+            if tiene_cuit and tiene_cheque:
+                header_idx = i
+                break
+
+        headers = [str(h or '').strip() for h in todas[header_idx]]
+        headers_n = [_nh(h) for h in headers]
+
+        # Fila de títulos de grupo (si existe, es la fila anterior al encabezado
+        # real — ej. "Datos del cheque" / "Datos del librador" / "Datos del
+        # endosante"). Los títulos van en celdas combinadas: Excel solo pone el
+        # valor en la celda de más a la izquierda del rango combinado y deja el
+        # resto vacío, así que se "arrastra" el último título no vacío hacia la
+        # derecha para saber a qué grupo pertenece cada columna.
+        grupos_n = []
+        if header_idx > 0:
+            fila_grupo = todas[header_idx - 1]
+            actual = ''
+            for i in range(len(headers_n)):
+                val = _nh(fila_grupo[i]) if i < len(fila_grupo) else ''
+                if val:
+                    actual = val
+                grupos_n.append(actual)
+        else:
+            grupos_n = [''] * len(headers_n)
+
+        def find_col(kws):
+            for i, hn in enumerate(headers_n):
+                if any(_nh(kw) in hn for kw in kws):
+                    return i
+            return -1
+
+        def find_col_librador(kws):
+            """Como find_col(), pero para datos del LIBRADOR (quien emitió el
+            cheque) — nunca el del endosante. Un eCheq puede traer más de una
+            columna de CUIT/razón social si el archivo incluye también datos
+            de endoso; hay que identificar la que corresponde al librador
+            usando el título de grupo, no la primera columna que matchee el
+            keyword a secas."""
+            candidatas = []
+            for i, hn in enumerate(headers_n):
+                if any(_nh(kw) in hn for kw in kws):
+                    grupo = grupos_n[i] if i < len(grupos_n) else ''
+                    if 'ENDOS' in grupo or 'ENDOS' in hn:
+                        continue  # excluir columnas del endosante
+                    candidatas.append((i, grupo))
+            if not candidatas:
+                return -1
+            for i, grupo in candidatas:
+                if 'LIBRADOR' in grupo:
+                    return i  # match exacto: columna bajo "Datos del librador"
+            return candidatas[0][0]  # fallback: primera columna no descartada
+
+        col_cuit    = find_col_librador(['CUIT', 'CUIL', 'CDI'])
+        col_nro     = find_col(['N DE CHEQUE', 'NRO CHEQUE', 'NUMERO DE CHEQUE', 'NUMERO CHEQUE', 'N CHEQUE'])
+        col_importe = find_col(['IMPORTE', 'MONTO'])
+        col_fpago   = find_col(['FECHA DE PAGO', 'FECHA PAGO', 'VENCIMIENTO'])
+        col_femis   = find_col(['FECHA DE EMISION', 'FECHA EMISION'])
+        col_estado  = find_col(['ESTADO'])
+        col_banco   = find_col(['BANCO EMISOR', 'BANCO'])
+        col_razon   = find_col_librador(['RAZON SOCIAL', 'LIBRADOR', 'RAZON'])
+
+        if col_cuit < 0:
+            return jsonify({
+                "error": f"No se encontró columna de CUIT/CUIL/CDI. Encabezados detectados: {headers[:10]}"
+            }), 400
+
+        def gv(row, col):
+            if col < 0 or col >= len(row):
+                return ''
+            v = row[col]
+            return str(v).strip() if v is not None else ''
+
+        def parse_importe(raw):
+            # El Excel puede traer el importe como número real (celda numérica,
+            # el "$" es solo formato visual) o como texto formateado (CSV,
+            # celda de texto) — "$ 26.935.750,80". Solo se aplica el parseo de
+            # formato argentino (miles "." / decimales ",") cuando es texto.
+            if isinstance(raw, (int, float)):
+                return float(raw)
+            s = str(raw or '').strip()
+            if not s:
+                return 0.0
+            s = s.replace('$', '').replace(' ', '')
+            s = s.replace('.', '').replace(',', '.')  # formato AR: miles "." decimales ","
+            try:
+                return float(s)
+            except ValueError:
+                return 0.0
+
+        filas = []
+        for row in todas[header_idx + 1:]:
+            cuit_raw = gv(row, col_cuit)
+            if not cuit_raw:
+                continue
+            cuit = _limpiar_cuit_upload(cuit_raw)
+            if not cuit:
+                continue
+            importe_raw = row[col_importe] if 0 <= col_importe < len(row) else ''
+            filas.append({
+                'cuit':          cuit,
+                'nroCheque':     gv(row, col_nro),
+                'importe':       parse_importe(importe_raw),
+                'fechaPago':     gv(row, col_fpago),
+                'fechaEmision':  gv(row, col_femis),
+                'estado':        gv(row, col_estado),
+                'bancoEmisor':   gv(row, col_banco),
+                'razonSocial':   gv(row, col_razon),
+            })
+
+        if not filas:
+            return jsonify({"error": "No se encontraron filas válidas con CUIT"}), 400
+
+        cuits_unicos = list({f['cuit'] for f in filas})
+        nomdeu_batch = _nomdeu_batch(cuits_unicos)
+        cheques_batch = _cheques_local_batch(cuits_unicos)
+
+        resultado = []
+        n_aceptar = 0
+        n_rechazar = 0
+        for f in filas:
+            ev = _evaluar_echeq_cuit(f['cuit'], nomdeu_batch.get(f['cuit']), cheques_batch.get(f['cuit']))
+            if ev['veredicto'] == 'RECHAZAR':
+                n_rechazar += 1
+            else:
+                n_aceptar += 1
+            resultado.append({**f, **ev})
+
+        print(
+            f"[upload-echeq] {len(resultado)} cheques ({len(cuits_unicos)} CUITs) - "
+            f"{n_aceptar} aceptar, {n_rechazar} rechazar",
+            flush=True,
+        )
+        return jsonify({
+            "ok": True,
+            "total": len(resultado),
+            "aceptados": n_aceptar,
+            "rechazados": n_rechazar,
+            "cheques": resultado,
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"[upload-echeq] Error: {traceback.format_exc()}", flush=True)
         return jsonify({"error": str(e)}), 500
 
 

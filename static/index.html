@@ -824,6 +824,10 @@
         <span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
         <span class="sb-label">Alertas <span id="alertas-badge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;font-size:9px;font-weight:700;padding:1px 5px;margin-left:2px;vertical-align:middle;"></span></span>
       </button>
+      <button class="tab" onclick="switchTab('echeq',this)" title="Control masivo de eCheq">
+        <span class="sb-ico"><svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="6" y1="15" x2="10" y2="15"/></svg></span>
+        <span class="sb-label">Control eCheq</span>
+      </button>
       <div class="sb-section-label">Comunidad</div>
       <button class="tab" onclick="switchTab('red',this)" title="Red de Bodegas">
         <span class="sb-ico"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></span>
@@ -1387,6 +1391,50 @@
         <div style="font-family:'Sora',sans-serif;font-size:18px;font-weight:700;color:var(--azul-oscuro);margin-bottom:6px;">Anotado. Te avisamos al lanzar.</div>
         <div style="font-size:13px;color:#64748b;">Mientras tanto, seguí usando el módulo de Alertas BCRA para proteger tus ventas.</div>
       </div>
+    </div>
+  </div>
+
+  <div id="echeq" class="section">
+    <div class="card">
+      <div class="card-title">Control masivo de eCheq</div>
+      <p style="font-size:13px;color:#666;line-height:1.6;margin-bottom:12px;">
+        Subí el archivo de eCheq pendientes de aceptar que descargás del banco (.xlsx o .csv).
+        El sistema cruza cada CUIT librador contra la situación BCRA actual y los cheques
+        rechazados sin reponer, y te devuelve un veredicto ACEPTAR / RECHAZAR por cheque.
+      </p>
+
+      <div class="upload-area" id="echeq-upload-area" onclick="document.getElementById('echeq-file').click()">
+        <div style="font-size:13px;color:#888;">📁 Clic para subir archivo de eCheq (.xlsx / .csv)</div>
+        <div style="font-size:12px;color:#aaa;margin-top:4px;">Se necesita columna CUIT/CUIL/CDI del librador</div>
+      </div>
+      <input type="file" id="echeq-file" accept=".xlsx,.xls,.csv" style="display:none;" onchange="uploadEcheq(this)" />
+
+      <div id="echeq-preview" style="display:none;margin-top:14px;">
+        <div id="echeq-stats" style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;padding:10px 12px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0;"></div>
+
+        <div style="margin-bottom:10px;">
+          <button onclick="descargarEcheqCSV()" style="font-size:12px;background:#fff;border:1px solid #cbd5e1;color:#334155;cursor:pointer;padding:7px 14px;border-radius:8px;">⬇ Descargar resultado (CSV)</button>
+        </div>
+
+        <div style="overflow-x:auto;max-height:480px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead style="background:#F5F7FA;position:sticky;top:0;">
+              <tr>
+                <th style="padding:7px 10px;text-align:left;color:#475569;border-bottom:1px solid #e2e8f0;">N° Cheque</th>
+                <th style="padding:7px 10px;text-align:left;color:#475569;border-bottom:1px solid #e2e8f0;">Librador</th>
+                <th style="padding:7px 10px;text-align:left;color:#475569;border-bottom:1px solid #e2e8f0;">CUIT</th>
+                <th style="padding:7px 10px;text-align:left;color:#475569;border-bottom:1px solid #e2e8f0;">Banco emisor</th>
+                <th style="padding:7px 10px;text-align:right;color:#475569;border-bottom:1px solid #e2e8f0;">Importe</th>
+                <th style="padding:7px 10px;text-align:left;color:#475569;border-bottom:1px solid #e2e8f0;">Fecha de pago</th>
+                <th style="padding:7px 10px;text-align:center;color:#475569;border-bottom:1px solid #e2e8f0;">Veredicto</th>
+              </tr>
+            </thead>
+            <tbody id="echeq-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="echeq-upload-status" style="font-size:13px;margin-top:8px;"></div>
     </div>
   </div>
 
@@ -3628,7 +3676,7 @@ function filtrarWSPReciente(threads) {
 }
 function buscarEnMoras(cuit) { return morasIndex ? morasIndex[cuit.replace(/-/g,'')] || null : null; }
 
-var _pageTitles = {consulta:'Consultar CUIT', buscador:'Cartera', cartera:'Cartera', portfolio:'Portfolio de Saldos', dso:'Módulo DSO', alertas:'Alertas BCRA', red:'Red de Bodegas', configuracion:'Configuración'};
+var _pageTitles = {consulta:'Consultar CUIT', buscador:'Cartera', cartera:'Cartera', portfolio:'Portfolio de Saldos', dso:'Módulo DSO', alertas:'Alertas BCRA', red:'Red de Bodegas', configuracion:'Configuración', echeq:'Control masivo de eCheq'};
 
 var _alertasFilter  = null; // 'critico' | 'advertencia' | 'exceso' | null
 var _alertasMoraData = null; // cache de /api/alertas-mora
@@ -6139,6 +6187,142 @@ async function confirmarUploadCartera() {
     btn.disabled = false;
     btn.textContent = '✓ Confirmar e importar';
   }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Control masivo de eCheq ──────────────────────────────────────────────────
+var _echeqData = null; // resultado crudo procesado en memoria (no se persiste)
+
+async function uploadEcheq(input) {
+  var file = input.files[0];
+  if (!file) return;
+  var area    = document.getElementById('echeq-upload-area');
+  var status  = document.getElementById('echeq-upload-status');
+  var preview = document.getElementById('echeq-preview');
+
+  preview.style.display = 'none';
+  _echeqData = null;
+  area.innerHTML = '<div style="font-size:12px;color:#059669;">⏳ Analizando ' + file.name + '...</div>';
+  status.textContent = '';
+
+  var formData = new FormData();
+  formData.append('file', file);
+  try {
+    var r = await fetch('/upload-echeq', { method: 'POST', body: formData });
+    var d = await r.json();
+    if (!r.ok || d.error) {
+      area.innerHTML = '<div style="font-size:13px;color:#888;">📁 Clic para subir archivo de eCheq (.xlsx / .csv)</div>';
+      status.textContent = '✗ ' + (d.error || 'Error al procesar');
+      status.style.color = '#dc2626';
+      return;
+    }
+
+    _echeqData = d.cheques;
+    renderEcheqResultado(d);
+    area.innerHTML = '<div style="font-size:13px;color:#059669;">✓ ' + file.name + ' procesado</div>';
+    preview.style.display = 'block';
+
+  } catch(e) {
+    area.innerHTML = '<div style="font-size:13px;color:#888;">📁 Clic para subir archivo de eCheq (.xlsx / .csv)</div>';
+    status.textContent = '✗ Error de red: ' + e.message;
+    status.style.color = '#dc2626';
+  }
+  input.value = '';
+}
+
+function renderEcheqResultado(d) {
+  var cheques = d.cheques || [];
+  var montoRiesgo = cheques.filter(function(c){ return c.veredicto === 'RECHAZAR'; })
+    .reduce(function(s,c){ return s + (c.importe||0); }, 0);
+
+  var statsEl = document.getElementById('echeq-stats');
+  statsEl.innerHTML = [
+    { label: 'Cheques analizados', val: d.total,      color: '#1e40af' },
+    { label: 'Aceptar',            val: d.aceptados,  color: '#166534' },
+    { label: 'Rechazar',           val: d.rechazados, color: '#b91c1c' },
+    { label: 'Monto en riesgo',    val: '$' + montoRiesgo.toLocaleString('es-AR'), color: '#b91c1c' },
+  ].map(function(s) {
+    return '<div style="text-align:center;">' +
+      '<div style="font-size:20px;font-weight:800;color:' + s.color + ';">' + s.val + '</div>' +
+      '<div style="font-size:11px;color:#64748b;">' + s.label + '</div>' +
+    '</div>';
+  }).join('');
+
+  var tbody = document.getElementById('echeq-tbody');
+  tbody.innerHTML = cheques.map(function(c, idx) {
+    var badge = c.veredicto === 'RECHAZAR'
+      ? '<span style="background:#fee2e2;color:#b91c1c;font-weight:700;padding:3px 10px;border-radius:12px;font-size:11px;">✗ RECHAZAR</span>'
+      : '<span style="background:#dcfce7;color:#166534;font-weight:700;padding:3px 10px;border-radius:12px;font-size:11px;">✓ ACEPTAR</span>';
+    var row = '<tr style="border-bottom:1px solid #f1f5f9;cursor:pointer;" onclick="toggleEcheqDetalle(' + idx + ')">' +
+      '<td style="padding:7px 10px;font-family:monospace;font-size:11px;">' + (c.nroCheque || '—') + '</td>' +
+      '<td style="padding:7px 10px;font-weight:500;color:#1e293b;">' + (c.razonSocial || '—') + '</td>' +
+      '<td style="padding:7px 10px;font-family:monospace;font-size:11px;color:#64748b;">' + c.cuit + '</td>' +
+      '<td style="padding:7px 10px;color:#64748b;">' + (c.bancoEmisor || '') + '</td>' +
+      '<td style="padding:7px 10px;text-align:right;font-weight:600;color:#1e293b;">$' + (c.importe||0).toLocaleString('es-AR') + '</td>' +
+      '<td style="padding:7px 10px;color:#64748b;">' + (c.fechaPago || '') + '</td>' +
+      '<td style="padding:7px 10px;text-align:center;">' + badge + ' <span style="color:#94a3b8;">▾</span></td>' +
+    '</tr>';
+    var det = '<tr id="echeq-det-' + idx + '" style="display:none;">' +
+      '<td colspan="7" style="padding:14px 18px;background:#f8fafc;">' + buildEcheqDetalleHtml(c, idx) + '</td>' +
+    '</tr>';
+    return row + det;
+  }).join('');
+}
+
+function buildEcheqDetalleHtml(c, idx) {
+  var motivosHtml = (c.motivos && c.motivos.length)
+    ? '<div style="font-size:11px;font-weight:700;color:#b91c1c;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Motivo de rechazo</div>' +
+      '<ul style="margin:0 0 14px 18px;padding:0;font-size:12px;color:#b91c1c;">' +
+        c.motivos.map(function(m){ return '<li>' + m + '</li>'; }).join('') +
+      '</ul>'
+    : '<div style="font-size:12px;color:#166534;margin-bottom:14px;">✓ Sin motivos de rechazo detectados.</div>';
+  var chArr = _normalizarCheques(c.cheques_detalle);
+  return motivosHtml + buildChequesRiesgoHtml(chArr, 'echeq-chq-' + idx);
+}
+
+function toggleEcheqDetalle(idx) {
+  var row = document.getElementById('echeq-det-' + idx);
+  if (!row) return;
+  var isOpen = row.style.display !== 'none';
+  if (isOpen) {
+    row.style.display = 'none';
+    return;
+  }
+  row.style.display = 'table-row';
+  var c = (_echeqData || [])[idx];
+  if (!c) return;
+  var chArr = _normalizarCheques(c.cheques_detalle);
+  if (chArr.length) {
+    var resc  = chArr.filter(_chqIsLevantado).length;
+    var nopag = chArr.length - resc;
+    initChequesDonut('echeq-chq-' + idx, resc, nopag);
+    if (typeof initChequesMonthlyChart === 'function') {
+      initChequesMonthlyChart('echeq-chq-' + idx + '-monthly', chArr);
+    }
+  }
+}
+
+function descargarEcheqCSV() {
+  if (!_echeqData || !_echeqData.length) { alert('No hay datos para descargar.'); return; }
+  var headerRow = ['Nro Cheque', 'CUIT', 'Razon Social', 'Banco Emisor', 'Importe', 'Fecha Pago', 'Veredicto', 'Motivos'];
+  var rows = [headerRow].concat(_echeqData.map(function(c) {
+    return [c.nroCheque, c.cuit, c.razonSocial, c.bancoEmisor, c.importe, c.fechaPago, c.veredicto, (c.motivos || []).join(' | ')];
+  }));
+  var csv = rows.map(function(r) {
+    return r.map(function(v) {
+      var s = String(v == null ? '' : v).replace(/"/g, '""');
+      return /[",;\n]/.test(s) ? '"' + s + '"' : s;
+    }).join(';');
+  }).join('\r\n');
+  var blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'control_echeq_' + new Date().toISOString().slice(0, 10) + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
