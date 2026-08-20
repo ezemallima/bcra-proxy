@@ -1339,7 +1339,7 @@ def consultar_bcra_cached(cuit, skip_padron=False, live_primero=False):
             data['bcra_disponible'] = True
             cache_set(cuit, data)
             _guardar_en_padron_local(cuit, data)
-            print(f"[bcra] {cuit} OK en vivo → guardado en padrón local", flush=True)
+            print(f"[bcra] {cuit} OK en vivo -> guardado en padrón local", flush=True)
             return data, None
         # Fallback: bulk local si la API falló
         print(f"[bcra_source] {cuit} live falló — fallback a bulk local", flush=True)

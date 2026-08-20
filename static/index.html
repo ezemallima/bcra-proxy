@@ -6279,7 +6279,73 @@ function buildEcheqDetalleHtml(c, idx) {
       '</ul>'
     : '<div style="font-size:12px;color:#166534;margin-bottom:14px;">✓ Sin motivos de rechazo detectados.</div>';
   var chArr = _normalizarCheques(c.cheques_detalle);
-  return motivosHtml + buildChequesRiesgoHtml(chArr, 'echeq-chq-' + idx);
+  var botonVivo = '<div style="margin-bottom:14px;">' +
+    '<button onclick="consultarEnVivoEcheq(' + idx + ')" id="echeq-btn-vivo-' + idx + '" style="font-size:12px;background:#fff;border:1px solid #93c5fd;color:#1d4ed8;cursor:pointer;padding:6px 12px;border-radius:8px;">🔍 Consultar en vivo (BCRA)</button>' +
+    '<div id="echeq-vivo-' + idx + '" style="margin-top:10px;"></div>' +
+  '</div>';
+  var labelOffline = '<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Cheques rechazados (snapshot diario BCRA)</div>';
+  return motivosHtml + botonVivo + labelOffline + buildChequesRiesgoHtml(chArr, 'echeq-chq-' + idx);
+}
+
+async function consultarEnVivoEcheq(idx) {
+  var c = (_echeqData || [])[idx];
+  if (!c) return;
+  var btn = document.getElementById('echeq-btn-vivo-' + idx);
+  var box = document.getElementById('echeq-vivo-' + idx);
+  if (!btn || !box) return;
+  btn.disabled = true;
+  btn.textContent = '⏳ Consultando BCRA en vivo...';
+  box.innerHTML = '';
+  try {
+    var resps = await Promise.all([
+      fetch('/deudas/' + c.cuit + '?fresh=1'),
+      fetch('/deudas/' + c.cuit + '/cheques'),
+    ]);
+    var dDeudas = await resps[0].json();
+    var dCheques = await resps[1].json();
+
+    // Aplanar entidades por período (misma lógica que mostrarResultado()):
+    // quedarse con la entrada más reciente por entidad.
+    var todasEntidades = [];
+    var periodos = (dDeudas && dDeudas.results && dDeudas.results.periodos) || [];
+    if (periodos.length) {
+      var ordenados = periodos.slice().sort(function(a, b) {
+        return (parseInt(b.periodo, 10) || 0) - (parseInt(a.periodo, 10) || 0);
+      });
+      var vistos = {};
+      ordenados.forEach(function(p) {
+        (p.entidades || []).forEach(function(e) {
+          var key = e.entidad || e.codigo;
+          if (!vistos[key]) { vistos[key] = true; todasEntidades.push(e); }
+        });
+      });
+    }
+
+    var chArrVivo = _normalizarCheques(dCheques);
+    var htmlSituacion = todasEntidades.length
+      ? _buildEntidadesTablaHtml(todasEntidades)
+      : '<div style="font-size:12px;color:#64748b;">Sin deuda registrada en el sistema financiero.</div>';
+
+    box.innerHTML =
+      '<div style="font-size:11px;font-weight:700;color:#1d4ed8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Situación BCRA en vivo, por entidad</div>' +
+      htmlSituacion +
+      '<div style="font-size:11px;font-weight:700;color:#1d4ed8;text-transform:uppercase;letter-spacing:0.5px;margin:14px 0 6px;">Cheques rechazados en vivo</div>' +
+      buildChequesRiesgoHtml(chArrVivo, 'echeq-vivochq-' + idx);
+
+    if (chArrVivo.length) {
+      var rescV  = chArrVivo.filter(_chqIsLevantado).length;
+      var nopagV = chArrVivo.length - rescV;
+      initChequesDonut('echeq-vivochq-' + idx, rescV, nopagV);
+      if (typeof initChequesMonthlyChart === 'function') {
+        initChequesMonthlyChart('echeq-vivochq-' + idx + '-monthly', chArrVivo);
+      }
+    }
+    btn.style.display = 'none';
+  } catch (e) {
+    box.innerHTML = '<div style="font-size:12px;color:#dc2626;">✗ Error al consultar BCRA en vivo: ' + e.message + '</div>';
+    btn.disabled = false;
+    btn.textContent = '🔍 Reintentar consulta en vivo';
+  }
 }
 
 function toggleEcheqDetalle(idx) {
