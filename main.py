@@ -4284,6 +4284,40 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
     # Módulo cheques — aislado con fallback absoluto.
     # Un timeout o error en este módulo NO debe abortar el cálculo del score.
     try:
+        if live_primero:
+            # INDIVIDUAL: BCRA en vivo primero. Es una "consulta puntual" (así la
+            # recomienda usar el propio BCRA) y el dato de cheques tiene que ser el
+            # más fresco posible — un caché viejo puede esconder cheques rechazados
+            # nuevos durante hasta 24h. Guard de <2min: si el caché en disco ya fue
+            # escrito hace instantes (p.ej. por el fetch directo de /cheques que
+            # corre en paralelo para el mismo request de usuario), lo reutilizamos
+            # en vez de duplicar la consulta en vivo al BCRA.
+            _cheq_reciente = False
+            try:
+                _ccp = _cheques_cache_path(cuit_limpio)
+                if os.path.exists(_ccp):
+                    with open(_ccp, 'r', encoding='utf-8') as _f:
+                        _ccraw = json.load(_f)
+                    if time.time() - _ccraw.get('ts', 0) < 120:
+                        _cheq_reciente = True
+            except Exception:
+                pass
+
+            if cheq_data and _cheq_reciente:
+                print(f"[score] cheq {cuit_limpio} caché reciente (<2min) — reutilizando (evita doble consulta)", flush=True)
+            else:
+                print(f"[cheques] {cuit_limpio} individual — BCRA en vivo primero", flush=True)
+                _cd, _ = _consultar_bcra_directo(cuit_limpio, 'cheques', timeout_per_req=8, max_intentos=1)
+                if _cd:
+                    cheq_data = _cd
+                    try:
+                        with open(os.path.join(DATA_DIR, f'cheques_{cuit_limpio}.json'), 'w') as f:
+                            json.dump({'payload': cheq_data, 'ts': time.time()}, f)
+                    except: pass
+                    print(f"[score] cheq {cuit_limpio} BCRA en vivo (individual)", flush=True)
+                else:
+                    print(f"[cheques] {cuit_limpio} BCRA en vivo falló — fallback a caché/DB local", flush=True)
+
         if not cheq_data:
             # DB local (snapshot diario BCRA) — cero latencia de red
             cheq_data = get_cheques_local(cuit_limpio)
@@ -4298,8 +4332,9 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
                 # Si la DB local de cheques no tiene al CUIT, sigue sin antecedentes.
                 print(f"[score] cheq {cuit_limpio} sin datos en DB local — "
                       f"se omite en modo masivo (evita bloqueo en API en vivo)", flush=True)
-            else:
-                # INDIVIDUAL: timeout corto para no bloquear el endpoint
+            elif not live_primero:
+                # Ruta teórica de robustez (individual sin live_primero — no ocurre
+                # en la práctica hoy, todos los llamados individuales pasan True).
                 _cd, _ = _consultar_bcra_directo(cuit_limpio, 'cheques', timeout_per_req=8, max_intentos=1)
                 if _cd:
                     cheq_data = _cd
@@ -9247,8 +9282,10 @@ def _cheques_cache_get(cuit):
                     print(f"[cheques] {cuit} desde caché disco ({len(_causales)} causales)", flush=True)
                     return payload
             else:
-                # "Sin antecedentes" → caché 24h. Datos BCRA son estáticos durante el día
-                # (actualización mensual). API directa desde Render es el canal confiable.
+                # "Sin antecedentes" → caché 24h. El snapshot de cheques del BCRA se
+                # actualiza a diario (no mensual como el bulk de deudas) — este TTL es
+                # solo para no golpear al BCRA en cada request cuando ya sabemos que
+                # el CUIT no tiene antecedentes recientes.
                 if edad < 86400:
                     print(f"[cheques] {cuit} sin antecedentes (caché 24h)", flush=True)
                     return payload
@@ -9266,26 +9303,10 @@ def _cheques_cache_set(cuit, payload):
 @app.route("/deudas/<cuit>/cheques")
 def get_cheques(cuit):
     cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
-    # Caché en disco primero (TTL 24h con cheques, 1h sin cheques)
-    cached = _cheques_cache_get(cuit_limpio)
-    if cached:
-        print(f"[cheques] {cuit_limpio} desde caché", flush=True)
-        return jsonify(cached), 200
-    # DB local (snapshot diario BCRA) — fuente autoritativa para cheques activos (sin pagar).
-    # IMPORTANTE: el snapshot diario solo contiene cheques que están actualmente impagos.
-    # Si el cheque fue pagado recientemente, ya no aparece en el bulk aunque exista historial.
-    # Por eso: si encontramos causales activos → usar bulk (sin latencia de red).
-    # Si el bulk devuelve 0 → igualmente caer a la API en vivo para capturar historial completo.
-    local_db = get_cheques_local(cuit_limpio)
-    if local_db is not None:
-        n_ch = len((local_db.get('results') or {}).get('causales') or [])
-        if n_ch > 0:
-            _cheques_cache_set(cuit_limpio, local_db)
-            print(f"[cheques] {cuit_limpio} desde DB local (causales={n_ch})", flush=True)
-            return jsonify(local_db), 200
-        # causales=0: el snapshot diario no lo tiene activo. Puede que el cheque haya sido
-        # pagado ayer y ya salió del bulk. Verificar BCRA en vivo para historial completo.
-        print(f"[cheques] {cuit_limpio} DB local sin cheques activos — verificando historial BCRA en vivo", flush=True)
+    # INDIVIDUAL: BCRA en vivo primero. Es una "consulta puntual" (así la recomienda
+    # usar el propio BCRA) y el dato de cheques tiene que ser el más fresco posible —
+    # un caché de hasta 24h puede esconder cheques rechazados nuevos. Caché en disco
+    # y DB local (snapshot diario) quedan como fallback si el vivo falla o no responde.
     # Workers + BCRA en paralelo — el primero que responda gana
     def _fetch_chq(url, tmt, via):
         try:
@@ -9329,6 +9350,21 @@ def get_cheques(cuit):
         payload = {"results": {"causales": []}, "sin_deudas": True, "error_bcra": None}
         _cheques_cache_set(cuit_limpio, payload)
         return jsonify(payload), 200
+
+    # BCRA en vivo no respondió a tiempo — fallback a caché en disco y luego DB local.
+    print(f"[cheques] {cuit_limpio} BCRA en vivo sin respuesta — fallback a caché/DB local", flush=True)
+    cached = _cheques_cache_get(cuit_limpio)
+    if cached:
+        print(f"[cheques] {cuit_limpio} desde caché (fallback)", flush=True)
+        return jsonify(cached), 200
+    local_db = get_cheques_local(cuit_limpio)
+    if local_db is not None:
+        n_ch = len((local_db.get('results') or {}).get('causales') or [])
+        if n_ch > 0:
+            _cheques_cache_set(cuit_limpio, local_db)
+        print(f"[cheques] {cuit_limpio} desde DB local (fallback, causales={n_ch})", flush=True)
+        return jsonify(local_db), 200
+
     print(f"[cheques] {cuit_limpio} sin respuesta — devolviendo vacío", flush=True)
     return jsonify({"results": {"causales": []}, "sin_deudas": True, "error_bcra": None}), 200
 
