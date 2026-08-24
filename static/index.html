@@ -5438,110 +5438,148 @@ async function exportarReporte(conIA) {
     else if (scoreRango === 'Rechazar')    scoreRGB = [127,29,29];
   }
 
-  // ── HEADER / MEMBRETE ────────────────────────────────────────────────────────
+  // ── Helpers de renderizado (cierran sobre doc, W, scoreRGB) ─────────────────
+  function sectionHeader(label, yPos) {
+    doc.setFillColor(...scoreRGB);
+    doc.rect(10, yPos - 3.8, 3, 6, 'F');
+    doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(11, 29, 58);
+    doc.text(label, 16, yPos);
+    return yPos + 7;
+  }
+  function hRule(yPos) {
+    doc.setDrawColor(210, 220, 240); doc.setLineWidth(0.25);
+    doc.line(10, yPos, W - 10, yPos);
+  }
+
+  // ── HEADER ────────────────────────────────────────────────────────────────
   doc.setFillColor(11, 29, 58);
-  doc.rect(0, 0, W, 34, 'F');
+  doc.rect(0, 0, W, 36, 'F');
+  // Franja de acento (color del score) a la derecha
   doc.setFillColor(...scoreRGB);
-  doc.rect(0, 0, 4, 34, 'F');
+  doc.rect(W - 4, 0, 4, 36, 'F');
+  // Línea superior fina en color score
+  var _accentLight = scoreRGB.map(function(v){ return Math.min(255, v + 70); });
+  doc.setFillColor(_accentLight[0], _accentLight[1], _accentLight[2]);
+  doc.rect(0, 0, W - 4, 1.2, 'F');
 
   if (logoUrl) {
-    try { doc.addImage(logoUrl, 'PNG', 10, 8, 16, 16); } catch (e) { console.warn('[VS] addImage logo falló:', e); }
+    try { doc.addImage(logoUrl, 'PNG', 10, 10, 13, 13); } catch (e) {}
   }
-  var _lx = logoUrl ? 30 : 10;
-  doc.setFontSize(14); doc.setFont('helvetica','bold'); doc.setTextColor(255,255,255);
-  doc.text('VENDE SEGURO', _lx, 14);
-  doc.setFontSize(7.5); doc.setFont('helvetica','italic'); doc.setTextColor(147,197,253);
-  doc.text('vende sin riesgo.', _lx, 20);
+  var _lx = logoUrl ? 27 : 10;
+  doc.setFontSize(13); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255);
+  doc.text('VENDE SEGURO', _lx, 17);
+  doc.setFontSize(7); doc.setFont('helvetica', 'italic'); doc.setTextColor(147, 197, 253);
+  doc.text('vende sin riesgo.', _lx, 23);
 
-  doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(255,255,255);
-  doc.text('Informe de Riesgo Financiero', W-10, 12, {align:'right'});
-  doc.setFontSize(8.5); doc.setFont('helvetica','normal'); doc.setTextColor(147,197,253);
-  doc.text(bodega, W-10, 18, {align:'right'});
-  doc.setFontSize(7.5); doc.setFont('helvetica','italic'); doc.setTextColor(180,200,240);
-  doc.text(fecha + (conIA ? ' · con análisis IA' : ''), W-10, 24, {align:'right'});
-  doc.setFontSize(7); doc.setFont('helvetica','bold'); doc.setTextColor(255,140,140);
-  doc.text('CONFIDENCIAL — USO INTERNO', W-10, 30, {align:'right'});
+  doc.setFontSize(9.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255);
+  doc.text('Informe de Riesgo Financiero', W - 10, 13, {align: 'right'});
+  doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(147, 197, 253);
+  doc.text(bodega, W - 10, 20, {align: 'right'});
+  doc.setFontSize(7); doc.setFont('helvetica', 'italic'); doc.setTextColor(180, 200, 240);
+  doc.text(fecha + (conIA ? ' · con análisis IA' : ''), W - 10, 27, {align: 'right'});
+  doc.setFontSize(6.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 120, 120);
+  doc.text('CONFIDENCIAL — USO INTERNO', W - 10, 33, {align: 'right'});
 
-  // ── NOMBRE CLIENTE + SCORE HERO ───────────────────────────────────────────
-  var y = 44;
-  doc.setFontSize(15); doc.setFont('helvetica','bold'); doc.setTextColor(10,34,64);
-  doc.text(nombre.substring(0, 38), 10, y);
-  doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(100,116,139);
-  doc.text('CUIT ' + cuitFmt, 10, y+7);
+  // ── NOMBRE CLIENTE + SCORE CIRCULAR ───────────────────────────────────────
+  var y = 46;
+  doc.setFontSize(16); doc.setFont('helvetica', 'bold'); doc.setTextColor(11, 29, 58);
+  doc.text(nombre.substring(0, 34), 10, y);
+  doc.setFontSize(8.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(100, 116, 139);
+  doc.text('CUIT ' + cuitFmt, 10, y + 7);
 
-  var sbX = 144, sbY = 37, sbW = 56, sbH = 26, sbR = 4;
-  doc.setFillColor(scoreRGB[0]*0.6, scoreRGB[1]*0.6, scoreRGB[2]*0.6);
-  doc.roundedRect(sbX+1, sbY+1.5, sbW, sbH, sbR, sbR, 'F');
+  // Círculo score — anillo externo claro + círculo interior en color
+  var sbCX = 177, sbCY = 50, sbR = 15;
+  var sbLightRGB = scoreRGB.map(function(v){ return Math.min(255, Math.round(v * 0.18 + 195)); });
+  doc.setFillColor(sbLightRGB[0], sbLightRGB[1], sbLightRGB[2]);
+  doc.circle(sbCX, sbCY, sbR + 2.5, 'F');
   doc.setFillColor(...scoreRGB);
-  doc.roundedRect(sbX, sbY, sbW, sbH, sbR, sbR, 'F');
-  doc.setDrawColor(255,255,255,60);
-  doc.setLineWidth(0.5);
-  doc.roundedRect(sbX, sbY, sbW, sbH, sbR, sbR, 'S');
-  doc.setTextColor(255,255,255);
-  doc.setFontSize(24); doc.setFont('helvetica','bold');
-  doc.text(scoreVal > 0 ? String(scoreVal) : '—', sbX + sbW/2, sbY + 14, {align:'center'});
-  doc.setFontSize(7.5); doc.setFont('helvetica','bold');
-  doc.text(scoreRango.toUpperCase(), sbX + sbW/2, sbY + 21, {align:'center'});
-  doc.setFontSize(6.5); doc.setFont('helvetica','normal'); doc.setTextColor(220,235,255);
-  doc.text('escala 1–999', sbX + sbW/2, sbY + 27, {align:'center'});
+  doc.circle(sbCX, sbCY, sbR, 'F');
+  // Número score
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(23); doc.setFont('helvetica', 'bold');
+  doc.text(scoreVal > 0 ? String(scoreVal) : '—', sbCX, sbCY + 4, {align: 'center'});
+  // Rango: pill debajo del círculo
+  doc.setFontSize(6.5); doc.setFont('helvetica', 'bold');
+  var _rangoTxt = scoreRango.toUpperCase();
+  var _rangoW = doc.getTextWidth(_rangoTxt) + 8;
+  doc.setFillColor(...scoreRGB);
+  doc.roundedRect(sbCX - _rangoW/2, sbCY + sbR + 2, _rangoW, 5.5, 1.5, 1.5, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.text(_rangoTxt, sbCX, sbCY + sbR + 5.8, {align: 'center'});
+  doc.setFontSize(6); doc.setFont('helvetica', 'normal'); doc.setTextColor(148, 163, 184);
+  doc.text('escala 1–999', sbCX, sbCY + sbR + 11, {align: 'center'});
 
-  y = 67;
-  doc.setDrawColor(210,220,240); doc.setLineWidth(0.4); doc.line(10, y, W-10, y);
-  y += 6;
+  y = 72;
+  hRule(y);
+  y += 7;
 
-  // ── EXPOSICIÓN EN SISTEMA FINANCIERO — mismos números que la tarjeta en pantalla ──
+  // ── KPI — 4 tarjetas ──────────────────────────────────────────────────────
   var ex = _calcularExposicionSistema();
   if (ex) {
-    var exCols = [
-      { x: 10,  label: 'DEUDA EN SISTEMA' },
-      { x: 65,  label: 'ENTIDADES ACREEDORAS' },
-      { x: 120, label: 'SITUACIÓN ACTUAL' },
-      { x: 165, label: 'TENDENCIA 6M' }
+    var kpiCardW = 43, kpiCardH = 19, kpiGap = (W - 20 - 4 * kpiCardW) / 3;
+    var kpiCards = [
+      { label: 'DEUDA EN SISTEMA',    value: ex.deudaFmt },
+      { label: 'ENTIDADES ACREEDORAS', value: String(ex.numEnt || '—') },
+      { label: 'SITUACIÓN ACTUAL',    value: 'Sit. '+ex.worstSit+' — '+ex.sitLabel, fillHex: ex.sitBg, textHex: ex.sitColor },
+      { label: 'TENDENCIA 6M',        value: ex.trendArrow+' '+ex.trend, trendColor: ex.trendColor }
     ];
-    doc.setFontSize(7.5); doc.setFont('helvetica','bold'); doc.setTextColor(148,163,184);
-    exCols.forEach(function(c){ doc.text(c.label, c.x, y); });
-    y += 6;
-    doc.setFontSize(13); doc.setFont('helvetica','bold'); doc.setTextColor(11,29,58);
-    doc.text(ex.deudaFmt, exCols[0].x, y);
-    doc.text(String(ex.numEnt || '—'), exCols[1].x, y);
-    var _sitRgbBg = _hex2rgb(ex.sitBg), _sitRgbTxt = _hex2rgb(ex.sitColor);
-    var _sitTxt = 'Sit. ' + ex.worstSit + ' — ' + ex.sitLabel;
-    doc.setFontSize(8.5); doc.setFont('helvetica','bold');
-    var _sitW = doc.getTextWidth(_sitTxt) + 6;
-    doc.setFillColor(_sitRgbBg[0], _sitRgbBg[1], _sitRgbBg[2]);
-    doc.roundedRect(exCols[2].x, y - 4.2, _sitW, 6, 2, 2, 'F');
-    doc.setTextColor(_sitRgbTxt[0], _sitRgbTxt[1], _sitRgbTxt[2]);
-    doc.text(_sitTxt, exCols[2].x + 3, y);
-    var _trendRgb = _hex2rgb(ex.trendColor);
-    doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(_trendRgb[0], _trendRgb[1], _trendRgb[2]);
-    doc.text(ex.trendArrow + ' ' + ex.trend, exCols[3].x, y);
-    y += 10;
-    doc.setDrawColor(230,235,245); doc.setLineWidth(0.3); doc.line(10, y, W-10, y);
-    y += 8;
+    kpiCards.forEach(function(c, i) {
+      var cx = 10 + i * (kpiCardW + kpiGap);
+      // Fondo tarjeta
+      doc.setFillColor(245, 248, 253);
+      doc.setDrawColor(210, 220, 240); doc.setLineWidth(0.25);
+      doc.roundedRect(cx, y, kpiCardW, kpiCardH, 2, 2, 'FD');
+      // Barra superior en color score
+      doc.setFillColor(...scoreRGB);
+      doc.roundedRect(cx, y, kpiCardW, 1.8, 0.8, 0.8, 'F');
+      // Label
+      doc.setFontSize(5.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(148, 163, 184);
+      doc.text(c.label, cx + kpiCardW/2, y + 6.5, {align: 'center'});
+      // Valor
+      if (c.fillHex && c.textHex) {
+        var _sr = _hex2rgb(c.fillHex), _tr = _hex2rgb(c.textHex);
+        doc.setFontSize(7.5); doc.setFont('helvetica', 'bold');
+        var _pw = doc.getTextWidth(c.value) + 6;
+        doc.setFillColor(_sr[0], _sr[1], _sr[2]);
+        doc.roundedRect(cx + kpiCardW/2 - _pw/2, y + 10, _pw, 5.5, 1.5, 1.5, 'F');
+        doc.setTextColor(_tr[0], _tr[1], _tr[2]);
+        doc.text(c.value, cx + kpiCardW/2, y + 14.2, {align: 'center'});
+      } else if (c.trendColor) {
+        var _tc = _hex2rgb(c.trendColor);
+        doc.setFontSize(11); doc.setFont('helvetica', 'bold');
+        doc.setTextColor(_tc[0], _tc[1], _tc[2]);
+        doc.text(c.value, cx + kpiCardW/2, y + 14.5, {align: 'center'});
+      } else {
+        doc.setFontSize(13); doc.setFont('helvetica', 'bold'); doc.setTextColor(11, 29, 58);
+        doc.text(c.value, cx + kpiCardW/2, y + 14.5, {align: 'center'});
+      }
+    });
+    y += kpiCardH + 9;
   }
 
   // ── GRÁFICO — EVOLUCIÓN DE SITUACIÓN BCRA (24 MESES) ─────────────────────────
   if (chartImg) {
-    if (y > 245) { doc.addPage(); y = 15; }
-    doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(100,116,139);
-    doc.text('EVOLUCIÓN DE SITUACIÓN BCRA — 24 MESES', 10, y);
-    y += 4;
+    if (y > 230) { doc.addPage(); y = 15; }
+    hRule(y); y += 6;
+    y = sectionHeader('EVOLUCIÓN DE SITUACIÓN BCRA — 24 MESES', y);
     var chW = W - 20, chH = chW * (230 / 820);
-    try { doc.addImage(chartImg, 'PNG', 10, y, chW, chH); } catch (e) { console.warn('[VS] addImage gráfico falló:', e); }
-    y += chH + 8;
+    try { doc.addImage(chartImg, 'PNG', 10, y, chW, chH); } catch (e) {}
+    y += chH + 9;
   }
 
   // ── MORA — BLOQUE ROJO CRÍTICO ───────────────────────────────────────────
   if (mora) {
-    doc.setFillColor(220,38,38);
-    doc.rect(10, y, W-20, 18, 'F');
-    doc.setTextColor(255,255,255);
-    doc.setFontSize(11); doc.setFont('helvetica','bold');
-    doc.text('MORA REGISTRADA — RIESGO ALTO', 15, y+8);
-    doc.setFontSize(9); doc.setFont('helvetica','normal');
+    doc.setFillColor(254, 226, 226);
+    doc.setDrawColor(185, 28, 28); doc.setLineWidth(0.4);
+    doc.roundedRect(10, y, W - 20, 16, 2, 2, 'FD');
+    doc.setFillColor(185, 28, 28);
+    doc.roundedRect(10, y, 3, 16, 1, 1, 'F');
+    doc.setFontSize(9.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(185, 28, 28);
+    doc.text('MORA REGISTRADA — RIESGO ALTO', 17, y + 7);
+    doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(154, 52, 18);
     var moraLinea = (mora.nombre||nombre) + ' · Saldo: $' + (mora.saldo||mora.saldoAdeudado||0).toLocaleString('es-AR') + '  desde ' + (mora.fecha_mora||mora.fechaMora||'');
-    doc.text(String(moraLinea).substring(0, 80), 15, y+15);
-    y += 23;
+    doc.text(String(moraLinea).substring(0, 80), 17, y + 13);
+    y += 22;
   }
 
   // ── HISTORIAL CREDITICIO BCRA — HEATMAP MATRICIAL ────────────────────────────
@@ -5579,21 +5617,19 @@ async function exportarReporte(conIA) {
   var hmDisplayKeys = hmPeriodKeys.slice().reverse();
 
   if (hmEntities.length && hmDisplayKeys.length) {
-    if (y > 220) { doc.addPage(); y = 15; }
-    doc.setDrawColor(210,220,240); doc.setLineWidth(0.4); doc.line(10, y, W-10, y); y += 5;
-    doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(30,41,59);
-    doc.text('Historial Crediticio BCRA — Últimos 24 meses', 10, y); y += 6;
+    if (y > 210) { doc.addPage(); y = 15; }
+    hRule(y); y += 6;
+    y = sectionHeader('HISTORIAL CREDITICIO BCRA — ÚLTIMOS 24 MESES', y);
 
     var ENT_W   = 38;
     var DEUDA_W = 22;
     var AVAIL_W = W - 20 - ENT_W - DEUDA_W;
     var nCols   = hmDisplayKeys.length;
     var COL_W   = AVAIL_W / nCols;
-    var ROW_H   = 5;
+    var ROW_H   = 5.5;
     var HDR_H   = 8;
     var x0      = 10;
 
-    // Most recent debt per entity (periodKeys is chronological asc; last = newest)
     function hmUltimoMonto(ent) {
       for (var i = hmPeriodKeys.length - 1; i >= 0; i--) {
         var d = hmEntMap[ent][hmPeriodKeys[i]];
@@ -5605,79 +5641,78 @@ async function exportarReporte(conIA) {
       return '—';
     }
 
-    // Header row
+    // Header — redondeado oscuro
+    var _hmTableW = ENT_W + DEUDA_W + AVAIL_W;
     doc.setFillColor(30, 41, 59);
-    doc.rect(x0, y, ENT_W + DEUDA_W + AVAIL_W, HDR_H, 'F');
-    doc.setFontSize(5.5); doc.setFont('helvetica','bold'); doc.setTextColor(255,255,255);
-    doc.text('Entidad', x0+2, y+5.5);
-    doc.text('Deuda actual', x0+ENT_W+DEUDA_W/2, y+5.5, {align:'center'});
-    hmDisplayKeys.forEach(function(per, i){
-      var lbl = per.length===6 ? per.slice(4,6)+'/'+per.slice(2,4) : per;
-      doc.text(lbl, x0+ENT_W+DEUDA_W + i*COL_W + COL_W/2, y+5.5, {align:'center'});
+    doc.roundedRect(x0, y, _hmTableW, HDR_H, 2, 2, 'F');
+    doc.setFontSize(5.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255);
+    doc.text('Entidad', x0 + 2, y + 5.5);
+    doc.text('Deuda actual', x0 + ENT_W + DEUDA_W/2, y + 5.5, {align: 'center'});
+    hmDisplayKeys.forEach(function(per, i) {
+      var lbl = per.length === 6 ? per.slice(4,6)+'/'+per.slice(2,4) : per;
+      doc.text(lbl, x0 + ENT_W + DEUDA_W + i*COL_W + COL_W/2, y + 5.5, {align: 'center'});
     });
     y += HDR_H;
 
     var sitFillPdf = {1:[220,252,231],2:[254,249,195],3:[255,237,213],4:[254,226,226],5:[254,226,226]};
     var sitTextPdf = {1:[22,101,52],2:[133,77,14],3:[154,52,18],4:[153,27,27],5:[127,29,29]};
+    var _hmStart = y;
 
-    hmEntities.forEach(function(ent, ri){
+    hmEntities.forEach(function(ent, ri) {
       if (y + ROW_H > 272) { doc.addPage(); y = 15; }
-      if (ri%2===0) { doc.setFillColor(248,250,252); } else { doc.setFillColor(255,255,255); }
-      doc.rect(x0, y, ENT_W+DEUDA_W+AVAIL_W, ROW_H, 'F');
-      // Entity name
-      doc.setFontSize(6); doc.setFont('helvetica','normal'); doc.setTextColor(30,41,59);
-      doc.text(ent.substring(0,20), x0+1.5, y+3.5);
-      // Debt amount
-      doc.setFont('helvetica','bold'); doc.setTextColor(11,29,58);
-      doc.text(hmUltimoMonto(ent), x0+ENT_W+DEUDA_W/2, y+3.5, {align:'center'});
-      // Period cells
-      hmDisplayKeys.forEach(function(per, ci){
+      doc.setFillColor(ri % 2 === 0 ? 248 : 255, ri % 2 === 0 ? 250 : 255, ri % 2 === 0 ? 252 : 255);
+      doc.rect(x0, y, _hmTableW, ROW_H, 'F');
+      doc.setFontSize(6); doc.setFont('helvetica', 'normal'); doc.setTextColor(30, 41, 59);
+      doc.text(ent.substring(0, 20), x0 + 1.5, y + 3.8);
+      doc.setFont('helvetica', 'bold'); doc.setTextColor(11, 29, 58);
+      doc.text(hmUltimoMonto(ent), x0 + ENT_W + DEUDA_W/2, y + 3.8, {align: 'center'});
+      hmDisplayKeys.forEach(function(per, ci) {
         var cell = hmEntMap[ent][per];
         var cx = x0 + ENT_W + DEUDA_W + ci*COL_W;
         if (cell) {
           var s = cell.sit;
-          var f = sitFillPdf[s]||sitFillPdf[1];
-          doc.setFillColor(f[0],f[1],f[2]);
-          doc.rect(cx+0.4, y+0.5, COL_W-0.8, ROW_H-1, 'F');
-          var t = sitTextPdf[s]||sitTextPdf[1];
-          doc.setTextColor(t[0],t[1],t[2]);
-          doc.setFontSize(5); doc.setFont('helvetica','bold');
-          doc.text(String(s), cx+COL_W/2, y+3.5, {align:'center'});
+          var f = sitFillPdf[s] || sitFillPdf[1];
+          doc.setFillColor(f[0], f[1], f[2]);
+          doc.roundedRect(cx + 0.5, y + 0.6, COL_W - 1, ROW_H - 1.2, 0.6, 0.6, 'F');
+          var t = sitTextPdf[s] || sitTextPdf[1];
+          doc.setTextColor(t[0], t[1], t[2]);
+          doc.setFontSize(5); doc.setFont('helvetica', 'bold');
+          doc.text(String(s), cx + COL_W/2, y + 3.8, {align: 'center'});
         } else {
-          doc.setFillColor(241,245,249);
-          doc.rect(cx+0.4, y+0.5, COL_W-0.8, ROW_H-1, 'F');
+          doc.setFillColor(241, 245, 249);
+          doc.roundedRect(cx + 0.5, y + 0.6, COL_W - 1, ROW_H - 1.2, 0.6, 0.6, 'F');
         }
       });
       y += ROW_H;
     });
 
-    // Grid border
-    doc.setDrawColor(203,213,225); doc.setLineWidth(0.3);
-    doc.rect(x0, y - hmEntities.length*ROW_H - HDR_H, ENT_W+DEUDA_W+AVAIL_W, hmEntities.length*ROW_H + HDR_H);
+    // Borde exterior de la tabla
+    doc.setDrawColor(203, 213, 225); doc.setLineWidth(0.3);
+    doc.rect(x0, _hmStart - HDR_H, _hmTableW, y - _hmStart + HDR_H);
 
-    // Legend
-    y += 4;
+    // Leyenda
+    y += 5;
     if (y > 278) { doc.addPage(); y = 15; }
     var legendData = [
-      [1,'Normal',       [220,252,231],[22,101,52]],
-      [2,'Atraso >90d',  [254,249,195],[133,77,14]],
-      [3,'Irregular',    [255,237,213],[154,52,18]],
-      [4,'Dudoso/Irrec.',[254,226,226],[153,27,27]]
+      [1, 'Normal',        [220,252,231], [22,101,52]],
+      [2, 'Atraso >90d',   [254,249,195], [133,77,14]],
+      [3, 'Irregular',     [255,237,213], [154,52,18]],
+      [4, 'Dudoso/Irrec.', [254,226,226], [153,27,27]]
     ];
-    legendData.forEach(function(ld, li){
-      var lx = x0 + li*47;
-      doc.setFillColor(ld[2][0],ld[2][1],ld[2][2]);
-      doc.rect(lx, y, 5, 3, 'F');
-      doc.setDrawColor(180,190,210); doc.setLineWidth(0.2);
-      doc.rect(lx, y, 5, 3, 'S');
-      doc.setFontSize(6); doc.setFont('helvetica','normal');
-      doc.setTextColor(ld[3][0],ld[3][1],ld[3][2]);
-      doc.text('Sit.'+ld[0]+' — '+ld[1], lx+6.5, y+2.4);
+    legendData.forEach(function(ld, li) {
+      var lx = x0 + li * 47;
+      doc.setFillColor(ld[2][0], ld[2][1], ld[2][2]);
+      doc.roundedRect(lx, y, 5, 3.5, 0.5, 0.5, 'F');
+      doc.setDrawColor(180, 190, 210); doc.setLineWidth(0.2);
+      doc.rect(lx, y, 5, 3.5, 'S');
+      doc.setFontSize(6); doc.setFont('helvetica', 'normal');
+      doc.setTextColor(ld[3][0], ld[3][1], ld[3][2]);
+      doc.text('Sit.'+ld[0]+' — '+ld[1], lx + 7, y + 2.7);
     });
-    y += 8;
+    y += 10;
   } else {
-    doc.setFontSize(8); doc.setFont('helvetica','italic'); doc.setTextColor(148,163,184);
-    doc.text('Historial BCRA no disponible para este período.', 10, y+5);
+    doc.setFontSize(8); doc.setFont('helvetica', 'italic'); doc.setTextColor(148, 163, 184);
+    doc.text('Historial BCRA no disponible para este período.', 10, y + 5);
     y += 12;
   }
 
@@ -5693,102 +5728,134 @@ async function exportarReporte(conIA) {
         });
       });
     });
-    if (y > 220) { doc.addPage(); y = 15; }
-    doc.setDrawColor(210,220,240); doc.line(10,y,W-10,y); y+=5;
-    doc.setFontSize(9); doc.setFont('helvetica','bold');
-    var rescPdf = chqPdf.filter(function(c){ return c.levantado; }).length;
-    var nopagPdf = chqPdf.filter(function(c){ return !c.levantado; }).length;
-    var montoPend = chqPdf.filter(function(c){ return !c.levantado; }).reduce(function(s,c){ return s+c.monto; },0);
+    if (y > 210) { doc.addPage(); y = 15; }
+    hRule(y); y += 6;
+    var rescPdf   = chqPdf.filter(function(c){ return  c.levantado; }).length;
+    var nopagPdf  = chqPdf.filter(function(c){ return !c.levantado; }).length;
+    var montoPend = chqPdf.filter(function(c){ return !c.levantado; }).reduce(function(s,c){ return s+c.monto; }, 0);
+
     if (!chqPdf.length) {
-      doc.setTextColor(22,101,52);
-      doc.text('Cheques BCRA: Sin antecedentes de cheques rechazados en los ultimos 24 meses', 10, y);
-      y += 9;
+      // Banner verde: sin cheques rechazados
+      doc.setFillColor(220, 252, 231);
+      doc.setDrawColor(22, 101, 52); doc.setLineWidth(0.35);
+      doc.roundedRect(10, y, W - 20, 13, 2, 2, 'FD');
+      doc.setFillColor(22, 101, 52);
+      doc.roundedRect(10, y, 3, 13, 1, 1, 'F');
+      doc.setFontSize(8.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(22, 101, 52);
+      doc.text('Sin antecedentes de cheques rechazados en los últimos 24 meses', 17, y + 8);
+      y += 19;
     } else {
-      doc.setTextColor(185,28,28);
-      doc.text('Cheques rechazados en BCRA', 10, y);
-      doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(71,85,105);
-      doc.text('Rescatados: ' + rescPdf + '  |  Sin pagar: ' + nopagPdf + '  |  Monto pendiente: $' + montoPend.toLocaleString('es-AR'), 10, y+6);
-      y += 12;
-      // Tabla detalle
-      doc.setFillColor(237,242,250); doc.rect(10,y,W-20,6,'F');
-      doc.setFontSize(7.5); doc.setFont('helvetica','bold'); doc.setTextColor(71,85,105);
-      doc.text('Banco / Entidad', 12, y+4.2);
-      doc.text('Fecha rechazo', 80, y+4.2);
-      doc.text('Monto', 120, y+4.2, {align:'right'});
-      doc.text('Estado', 130, y+4.2);
-      doc.text('Motivo', 165, y+4.2);
-      y += 7;
-      doc.setFont('helvetica','normal'); doc.setTextColor(51,65,85);
-      chqPdf.slice(0,10).forEach(function(c, i){
+      y = sectionHeader('CHEQUES RECHAZADOS EN BCRA', y);
+      // Banner rojo si hay sin pagar
+      if (nopagPdf > 0) {
+        doc.setFillColor(254, 226, 226);
+        doc.setDrawColor(185, 28, 28); doc.setLineWidth(0.35);
+        doc.roundedRect(10, y, W - 20, 16, 2, 2, 'FD');
+        doc.setFillColor(185, 28, 28);
+        doc.roundedRect(10, y, 3, 16, 1, 1, 'F');
+        doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(185, 28, 28);
+        doc.text('Sin pagar: ' + nopagPdf + '   Monto pendiente: $' + montoPend.toLocaleString('es-AR'), 17, y + 7);
+        doc.setFontSize(7); doc.setFont('helvetica', 'normal'); doc.setTextColor(154, 52, 18);
+        doc.text('Rescatados: ' + rescPdf + ' de ' + chqPdf.length + ' cheques registrados en BCRA', 17, y + 13);
+        y += 22;
+      } else {
+        doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(71, 85, 105);
+        doc.text('Rescatados: '+rescPdf+'  |  Sin pagar: '+nopagPdf+'  |  Monto pendiente: $'+montoPend.toLocaleString('es-AR'), 10, y);
+        y += 8;
+      }
+
+      // Tabla — header oscuro redondeado
+      var _chTableStart = y;
+      doc.setFillColor(30, 41, 59);
+      doc.roundedRect(10, y, W - 20, 7.5, 1.5, 1.5, 'F');
+      doc.setFontSize(6.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255);
+      doc.text('Banco / Entidad',  13,  y + 5);
+      doc.text('Fecha rechazo',    80,  y + 5);
+      doc.text('Monto',            122, y + 5, {align: 'right'});
+      doc.text('Estado',           132, y + 5);
+      doc.text('Motivo',           167, y + 5);
+      y += 8.5;
+
+      chqPdf.slice(0, 10).forEach(function(c, i) {
         if (y > 272) { doc.addPage(); y = 15; }
-        if (i%2===0) { doc.setFillColor(248,250,252); doc.rect(10,y-1,W-20,6,'F'); }
-        doc.setTextColor(51,65,85);
-        doc.text(String(c.entidad||'-').substring(0,20), 12, y+3.5);
-        doc.text(String(c.fecha||'-').substring(0,10), 80, y+3.5);
-        doc.text('$' + (c.monto||0).toLocaleString('es-AR'), 120, y+3.5, {align:'right'});
-        if (c.levantado) { doc.setTextColor(22,101,52); doc.setFont('helvetica','bold'); doc.text('Abonado', 130, y+3.5); }
-        else             { doc.setTextColor(185,28,28); doc.setFont('helvetica','bold'); doc.text('Rechazado', 130, y+3.5); }
-        doc.setTextColor(71,85,105); doc.setFont('helvetica','normal');
-        doc.text(String(c.motivo||'-').substring(0,20), 165, y+3.5);
-        y += 6;
+        doc.setFillColor(i % 2 === 0 ? 248 : 255, i % 2 === 0 ? 250 : 255, i % 2 === 0 ? 252 : 255);
+        doc.rect(10, y - 1, W - 20, 7, 'F');
+        doc.setFontSize(6.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(51, 65, 85);
+        doc.text(String(c.entidad||'-').substring(0,22), 13, y + 4);
+        doc.text(String(c.fecha||'-').substring(0,10),   80, y + 4);
+        doc.setFont('helvetica', 'bold');
+        doc.text('$'+(c.monto||0).toLocaleString('es-AR'), 122, y + 4, {align: 'right'});
+        if (c.levantado) {
+          doc.setTextColor(22, 101, 52);
+          doc.text('Abonado', 132, y + 4);
+        } else {
+          // Pill rojo
+          doc.setFillColor(254, 226, 226);
+          doc.roundedRect(130, y, 20, 5.5, 1.2, 1.2, 'F');
+          doc.setTextColor(185, 28, 28);
+          doc.text('Rechazado', 140, y + 3.8, {align: 'center'});
+        }
+        doc.setTextColor(71, 85, 105); doc.setFont('helvetica', 'normal');
+        doc.text(String(c.motivo||'-').substring(0,20), 167, y + 4);
+        y += 7;
       });
       if (chqPdf.length > 10) {
-        doc.setFontSize(6.5); doc.setFont('helvetica','italic'); doc.setTextColor(148,163,184);
-        doc.text('... y ' + (chqPdf.length - 10) + ' cheque(s) adicional(es)', 12, y+3); y += 6;
+        doc.setFontSize(6.5); doc.setFont('helvetica', 'italic'); doc.setTextColor(148, 163, 184);
+        doc.text('... y ' + (chqPdf.length - 10) + ' cheque(s) adicional(es)', 13, y + 3);
+        y += 6;
       }
-      // Mini gráfico: distribución mensual de rechazos (últimos 24 meses)
-      if (y > 250) { doc.addPage(); y = 15; }
-      y += 2;
-      doc.setFontSize(7.5); doc.setFont('helvetica','bold'); doc.setTextColor(71,85,105);
-      doc.text('Distribución mensual de rechazos (24m)', 10, y); y += 5;
-      var hoyPdf = new Date();
-      var mLabels = [], mCounts = [];
+      // Borde exterior
+      doc.setDrawColor(210, 220, 240); doc.setLineWidth(0.25);
+      doc.rect(10, _chTableStart, W - 20, y - _chTableStart);
+
+      // Mini gráfico — distribución mensual 24m
+      if (y > 248) { doc.addPage(); y = 15; }
+      y += 5;
+      doc.setFontSize(7); doc.setFont('helvetica', 'bold'); doc.setTextColor(71, 85, 105);
+      doc.text('Distribución mensual de rechazos (24 meses)', 10, y); y += 5;
+      var hoyPdf = new Date(), mLabels = [], mCounts = [];
       for (var mi = 23; mi >= 0; mi--) {
         var md = new Date(hoyPdf.getFullYear(), hoyPdf.getMonth() - mi, 1);
-        mLabels.push(('0'+(md.getMonth()+1)).slice(-2) + '/' + String(md.getFullYear()).slice(-2));
+        mLabels.push(('0'+(md.getMonth()+1)).slice(-2)+'/'+String(md.getFullYear()).slice(-2));
         mCounts.push(0);
       }
       chqPdf.forEach(function(c){
         var f = c.fecha ? new Date(c.fecha) : null;
         if (!f || isNaN(f)) return;
-        var lbl = ('0'+(f.getMonth()+1)).slice(-2) + '/' + String(f.getFullYear()).slice(-2);
+        var lbl = ('0'+(f.getMonth()+1)).slice(-2)+'/'+String(f.getFullYear()).slice(-2);
         var idx = mLabels.indexOf(lbl);
         if (idx !== -1) mCounts[idx]++;
       });
       var maxCnt = Math.max.apply(null, mCounts) || 1;
-      var barMaxH = 10, barW = (W - 20) / 24;
-      // Draw bars
+      var barMaxH = 12, barW = (W - 20) / 24;
       for (var bi = 0; bi < 24; bi++) {
         var bx = 10 + bi * barW;
         var bh = (mCounts[bi] / maxCnt) * barMaxH;
         if (mCounts[bi] > 0) {
-          doc.setFillColor(239,68,68);
+          doc.setFillColor(185, 28, 28);
+          doc.roundedRect(bx + 0.5, y + (barMaxH - bh), barW - 1, bh, 0.5, 0.5, 'F');
         } else {
-          doc.setFillColor(226,232,240);
+          doc.setFillColor(226, 232, 240);
+          doc.rect(bx + 0.5, y + barMaxH - 0.5, barW - 1, 0.5, 'F');
         }
-        doc.rect(bx + 0.5, y + (barMaxH - bh), barW - 1, bh || 0.5, 'F');
       }
-      // X-axis labels: every 6 months
-      doc.setFontSize(5); doc.setFont('helvetica','normal'); doc.setTextColor(148,163,184);
+      doc.setFontSize(5); doc.setFont('helvetica', 'normal'); doc.setTextColor(148, 163, 184);
       for (var li2 = 0; li2 < 24; li2 += 6) {
-        doc.text(mLabels[li2], 10 + li2 * barW + barW/2, y + barMaxH + 3.5, {align:'center'});
+        doc.text(mLabels[li2], 10 + li2*barW + barW/2, y + barMaxH + 4, {align: 'center'});
       }
-      y += barMaxH + 7;
-      y += 4;
+      y += barMaxH + 9;
     }
   }
 
   // ── SALDOS BODEGA ─────────────────────────────────────────────────────────
   var saldosPdf = window._saldosCliente;
   if (saldosPdf && saldosPdf.facturas && saldosPdf.facturas.length > 0) {
-    if (y > 240) { doc.addPage(); y = 15; }
-    doc.setDrawColor(210,220,240); doc.line(10,y,W-10,y); y+=5;
-    doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(30,41,59);
-    doc.text('Cuenta Corriente Bodega', 10, y);
+    if (y > 230) { doc.addPage(); y = 15; }
+    hRule(y); y += 6;
+    y = sectionHeader('CUENTA CORRIENTE BODEGA', y);
     var saldoTotalPdf = saldosPdf.total_saldo || 0;
-    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(71,85,105);
-    doc.text('Saldo pendiente: $' + Math.round(saldoTotalPdf).toLocaleString('es-AR') + '  |  Facturas: ' + saldosPdf.facturas.length, 10, y+6);
-    // DSO: antigüedad ponderada por saldo (igual que Panel Director)
+    doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(71, 85, 105);
+    doc.text('Saldo pendiente: $' + Math.round(saldoTotalPdf).toLocaleString('es-AR') + '  |  Facturas: ' + saldosPdf.facturas.length, 10, y);
     var parseFePdf = function(s){ if(!s) return null; var p=String(s).split('/'); return p.length===3?new Date(+p[2],+p[1]-1,+p[0]):new Date(s); };
     var dsoPdf = null;
     var saldoTotalPdfDso = (saldosPdf.facturas||[]).reduce(function(s,f){ return s+(f.saldo||0); }, 0);
@@ -5801,45 +5868,48 @@ async function exportarReporte(conIA) {
       }, 0);
       dsoPdf = Math.round(sumaPondPdf / saldoTotalPdfDso);
     }
-    if (dsoPdf !== null) doc.text('DSO cliente: ' + dsoPdf + ' dias promedio', 130, y+6);
-    y += 13;
-    // Tabla facturas pendientes
+    if (dsoPdf !== null) doc.text('DSO cliente: ' + dsoPdf + ' días promedio', 140, y);
+    y += 9;
     var pendientesPdf = (saldosPdf.facturas||[]).filter(function(f){ return (f.saldo||0) > 0; });
     if (pendientesPdf.length && y < 260) {
       if (y > 250) { doc.addPage(); y = 15; }
-      doc.setFillColor(237,242,250); doc.rect(10,y,W-20,6,'F');
-      doc.setFontSize(7.5); doc.setFont('helvetica','bold'); doc.setTextColor(71,85,105);
-      doc.text('N Factura', 12, y+4.2);
-      doc.text('Fecha', 65, y+4.2);
-      doc.text('Total', 110, y+4.2, {align:'right'});
-      doc.text('Saldo', 148, y+4.2, {align:'right'});
-      doc.text('Estado pago', W-12, y+4.2, {align:'right'});
-      y += 7;
-      doc.setFont('helvetica','normal'); doc.setTextColor(51,65,85);
-      pendientesPdf.slice(0,10).forEach(function(f, i) {
+      var _saldosStart = y;
+      doc.setFillColor(30, 41, 59);
+      doc.roundedRect(10, y, W - 20, 7.5, 1.5, 1.5, 'F');
+      doc.setFontSize(6.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255);
+      doc.text('N Factura',   13,  y + 5);
+      doc.text('Fecha',       65,  y + 5);
+      doc.text('Total',       112, y + 5, {align: 'right'});
+      doc.text('Saldo',       150, y + 5, {align: 'right'});
+      doc.text('Estado',      W-12,y + 5, {align: 'right'});
+      y += 8.5;
+      doc.setFont('helvetica', 'normal');
+      pendientesPdf.slice(0, 10).forEach(function(f, i) {
         if (y > 272) { doc.addPage(); y = 15; }
-        if (i%2===0) { doc.setFillColor(248,250,252); doc.rect(10,y-1,W-20,6,'F'); }
-        doc.setTextColor(51,65,85);
-        doc.text(String(f.nroFactura||'-').substring(0,22), 12, y+3.5);
-        doc.text(String(f.fechaFactura||'-').substring(0,10), 65, y+3.5);
-        doc.text('$'+(f.totalFactura||0).toLocaleString('es-AR'), 110, y+3.5, {align:'right'});
-        doc.setTextColor(185,28,28); doc.setFont('helvetica','bold');
-        doc.text('$'+(f.saldo||0).toLocaleString('es-AR'), 148, y+3.5, {align:'right'});
-        doc.setTextColor(71,85,105); doc.setFont('helvetica','normal');
-        doc.text(String(f.fechaPago||'Pendiente').substring(0,12), W-12, y+3.5, {align:'right'});
-        y += 6;
+        doc.setFillColor(i%2===0?248:255, i%2===0?250:255, i%2===0?252:255);
+        doc.rect(10, y - 1, W - 20, 7, 'F');
+        doc.setFontSize(6.5); doc.setTextColor(51, 65, 85);
+        doc.text(String(f.nroFactura||'-').substring(0,22), 13, y + 4);
+        doc.text(String(f.fechaFactura||'-').substring(0,10), 65, y + 4);
+        doc.setFont('helvetica', 'bold');
+        doc.text('$'+(f.totalFactura||0).toLocaleString('es-AR'), 112, y + 4, {align: 'right'});
+        doc.setTextColor(185, 28, 28);
+        doc.text('$'+(f.saldo||0).toLocaleString('es-AR'), 150, y + 4, {align: 'right'});
+        doc.setTextColor(71, 85, 105); doc.setFont('helvetica', 'normal');
+        doc.text(String(f.fechaPago||'Pendiente').substring(0,12), W-12, y + 4, {align: 'right'});
+        y += 7;
       });
+      doc.setDrawColor(210, 220, 240); doc.setLineWidth(0.25);
+      doc.rect(10, _saldosStart, W - 20, y - _saldosStart);
       y += 4;
     }
   }
 
   // ── ANÁLISIS DE RIESGO — solo si se pidió el informe con IA ─────────────────
   if (conIA && ultimoAnalisis) {
-    if (y > 240) { doc.addPage(); y = 15; }
-    doc.setDrawColor(210,220,240); doc.line(10, y, W-10, y); y += 7;
-    doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(11,29,58);
-    doc.text('Analisis de Riesgo Crediticio (IA)', 10, y); y += 7;
-    doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(51,65,85);
+    if (y > 230) { doc.addPage(); y = 15; }
+    hRule(y); y += 6;
+    y = sectionHeader('ANÁLISIS DE RIESGO CREDITICIO — IA', y);
 
     var textoLimpio = (ultimoAnalisis.texto || '')
       .replace(/\bsolicitar\s+Veraz\s+completo\b/gi, 'analizar el historial completo del sistema financiero')
@@ -5850,20 +5920,74 @@ async function exportarReporte(conIA) {
       .replace(/Ubicaci[oó]n no disponible[^.]*\./gi, '')
       .replace(/\bUBICACION\b.*?\n/gi, '');
 
-    var lines = doc.splitTextToSize(textoLimpio, W-20);
-    lines.forEach(function(l) {
-      if (y > 275) { doc.addPage(); y = 15; }
-      doc.text(l, 10, y); y += 5;
+    // Parsear secciones del texto IA para darles jerarquía visual
+    var iaSecs = [
+      { key: 'ANÁLISIS DE RIESGO CREDITICIO:',  color: [11, 29, 58],   bg: [235, 242, 255] },
+      { key: 'OBSERVACIONES DE MERCADO:',        color: [71, 85, 105],  bg: [241, 245, 249] },
+      { key: 'DIAGNÓSTICO FINANCIERO:',          color: [154, 52, 18],  bg: [255, 241, 235] },
+      { key: 'RECOMENDACIÓN ESTRATÉGICA:',       color: scoreRGB,       bg: [254, 242, 242] }
+    ];
+    var parsed = [], remainTxt = textoLimpio.trim();
+    iaSecs.forEach(function(sec) {
+      var idx = remainTxt.toUpperCase().indexOf(sec.key.toUpperCase());
+      if (idx === -1) return;
+      var afterKey = remainTxt.substring(idx + sec.key.length).trim();
+      var nextIdx = afterKey.length;
+      iaSecs.forEach(function(s2) {
+        if (s2.key === sec.key) return;
+        var ni = afterKey.toUpperCase().indexOf(s2.key.toUpperCase());
+        if (ni !== -1 && ni < nextIdx) nextIdx = ni;
+      });
+      parsed.push({ label: sec.key.replace(':', ''), text: afterKey.substring(0, nextIdx).trim(), color: sec.color, bg: sec.bg });
     });
+
+    if (!parsed.length) {
+      // Fallback: texto plano
+      doc.setFontSize(8.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(51, 65, 85);
+      doc.splitTextToSize(textoLimpio, W - 22).forEach(function(l) {
+        if (y > 275) { doc.addPage(); y = 15; }
+        doc.text(l, 12, y); y += 5;
+      });
+    } else {
+      parsed.forEach(function(sec) {
+        if (y > 240) { doc.addPage(); y = 15; }
+        // Pill de sección
+        doc.setFillColor(sec.bg[0], sec.bg[1], sec.bg[2]);
+        doc.setDrawColor(sec.color[0], sec.color[1], sec.color[2]); doc.setLineWidth(0.25);
+        doc.roundedRect(10, y, W - 20, 7.5, 2, 2, 'FD');
+        doc.setFillColor(sec.color[0], sec.color[1], sec.color[2]);
+        doc.roundedRect(10, y, 3, 7.5, 1, 1, 'F');
+        doc.setFontSize(7); doc.setFont('helvetica', 'bold');
+        doc.setTextColor(sec.color[0], sec.color[1], sec.color[2]);
+        doc.text(sec.label.toUpperCase(), 16, y + 5.2);
+        y += 11;
+        // Texto de la sección
+        doc.setFontSize(8.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(51, 65, 85);
+        doc.splitTextToSize(sec.text, W - 24).forEach(function(l) {
+          if (y > 275) { doc.addPage(); y = 15; }
+          doc.text(l, 14, y); y += 5.2;
+        });
+        y += 4;
+      });
+    }
   }
 
-  // ── PIE ────────────────────────────────────────────────────────────────────
+  // ── FOOTER en todas las páginas ───────────────────────────────────────────
   var totalPages = doc.internal.getNumberOfPages();
   for (var pg = 1; pg <= totalPages; pg++) {
     doc.setPage(pg);
-    doc.setDrawColor(210,220,240); doc.line(10, H-13, W-10, H-13);
-    doc.setFontSize(7); doc.setFont('helvetica','italic'); doc.setTextColor(148,163,184);
-    doc.text(bodega + ' · Vende Seguro · ' + fecha + ' · Confidencial — Uso interno · Pagina ' + pg + ' de ' + totalPages, W/2, H-7, {align:'center'});
+    // Barra navy
+    doc.setFillColor(11, 29, 58);
+    doc.rect(0, H - 11, W, 11, 'F');
+    // Acento color score en borde izquierdo
+    doc.setFillColor(...scoreRGB);
+    doc.rect(0, H - 11, 3, 11, 'F');
+    // Texto centrado
+    doc.setFontSize(6.5); doc.setFont('helvetica', 'italic'); doc.setTextColor(147, 197, 253);
+    doc.text(bodega + ' · Vende Seguro · ' + fecha + ' · Confidencial — Uso interno', W/2, H - 4.5, {align: 'center'});
+    // Número de página alineado a la derecha
+    doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255);
+    doc.text(String(pg) + ' / ' + String(totalPages), W - 8, H - 4.5, {align: 'right'});
   }
 
   doc.save('VendeSeguro_' + bodega.replace(/\s+/g,'_') + '_' + raw + (conIA ? '_ConIA' : '') + '_' + fecha.replace(/\//g,'-') + '.pdf');
