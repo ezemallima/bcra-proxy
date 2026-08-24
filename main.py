@@ -9502,18 +9502,34 @@ def get_historial(cuit):
     # ── PRIORIDAD 1: bulk local, antes de tocar la API externa ───────────
     # El BCRA bloquea la IP al segundo intento consecutivo; el bulk cubre a
     # todo CUIT con actividad bancaria reciente sin gastar una llamada.
+    # Excepción: si el bulk tiene saldo=0 en todos los períodos (cliente que
+    # pagó su deuda antes del último corte del bulk), se guarda como fallback
+    # pero se continúa a la API live para obtener el historial completo.
+    _hist_bulk_fallback = None
     try:
         if _nomdeu_get_deuda(cuit_limpio):
             _hist_bulk = _bulk_to_hist_data(cuit_limpio)
-            print(f"[bcra_source] {cuit_limpio} Datos obtenidos del bulk local de "
-                  f"{_HIST_DETALLE_MESES} meses (endpoint historial)", flush=True)
-            return jsonify(_hist_bulk), 200
+            _tiene_monto = any(
+                (e.get('monto') or 0) > 0
+                for p in (_hist_bulk.get('results') or {}).get('periodos') or []
+                for e in (p.get('entidades') or [])
+            )
+            if _tiene_monto:
+                print(f"[bcra_source] {cuit_limpio} Datos obtenidos del bulk local de "
+                      f"{_HIST_DETALLE_MESES} meses (endpoint historial)", flush=True)
+                return jsonify(_hist_bulk), 200
+            # Bulk sin montos (saldo=0 en período actual) → guardar como fallback
+            # y probar la API live para recuperar el historial completo de 24 meses.
+            _hist_bulk_fallback = _hist_bulk
+            print(f"[bcra_source] {cuit_limpio} bulk sin montos reales — "
+                  f"intentando API live para historial completo", flush=True)
     except Exception as _e_hb:
         print(f"[bcra_source] {cuit_limpio} error leyendo bulk local: {_e_hb}", flush=True)
 
-    # ── PRIORIDAD 2: API externa, solo si el CUIT no está en el bulk ──────
-    print(f"[bcra_source] {cuit_limpio} sin historial en bulk local — "
-          f"consultando API externa", flush=True)
+    # ── PRIORIDAD 2: API externa ──────────────────────────────────────────
+    # Se llega aquí cuando: (a) CUIT ausente del bulk, o (b) bulk con saldo=0.
+    _motivo = "bulk sin montos reales" if _hist_bulk_fallback is not None else "sin historial en bulk local"
+    print(f"[bcra_source] {cuit_limpio} {_motivo} — consultando API externa", flush=True)
     # Workers + BCRA en paralelo — el primero que responda gana
     def _fetch_hist(url, tmt, via):
         try:
@@ -9574,6 +9590,9 @@ def get_historial(cuit):
             return jsonify(_retry_data), 200
         # Antes de declarar "sin datos": un 404 en un endpoint + connection-reset en el otro
         # no es prueba de que no haya historial — probar el padrón offline primero.
+        if _hist_bulk_fallback is not None:
+            print(f"[historial] {cuit_limpio} fallback bulk post-404 (sin montos reales, API live no disponible)", flush=True)
+            return jsonify(_hist_bulk_fallback), 200
         _deuda_bulk_404 = _nomdeu_get_deuda(cuit_limpio)
         if _deuda_bulk_404:
             _offline_hist_404 = _bulk_to_hist_data(cuit_limpio)
@@ -9590,6 +9609,9 @@ def get_historial(cuit):
     # ambos endpoints), reconstruir el historial real desde historial_detalle — mismo
     # criterio que usa el motor de scoring. Un solo período (_nomdeu_build_deudas_resp)
     # no sirve para un análisis de tendencia real.
+    if _hist_bulk_fallback is not None:
+        print(f"[historial] {cuit_limpio} fallback bulk (sin montos reales, API live sin respuesta)", flush=True)
+        return jsonify(_hist_bulk_fallback), 200
     _deuda_bulk = _nomdeu_get_deuda(cuit_limpio)
     if _deuda_bulk:
         _offline_hist = _bulk_to_hist_data(cuit_limpio)
