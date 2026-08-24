@@ -3054,14 +3054,19 @@ def _detectar_degradacion(score_history: list) -> tuple:
     return ('', 0, '')
 
 
-def _layer_liquidez(cheq_data: dict, max_sit: int, n_periodos_h: int) -> tuple:
+def _layer_liquidez(cheq_data: dict, max_sit: int, n_periodos_h: int,
+                    monto_bcra_k: float = 0.0) -> tuple:
     """
     Liquidez (cheques rechazados) — bonus/penalidad (0-100 pts).
-    rechazar=True → score = 1 (rechazo definitivo por cheques críticos).
-    Returns (pts: int, rechazar: bool)
+    rechazar=True     → score = 1 (hard reject: >15 activos o ≥113 históricos).
+    cap_cheques!=None → cap aplicado al final del pipeline (6-15 activos moderados).
+      El cap depende del ratio monto_cheques / exposición_BCRA:
+        ratio ≥ 30% o monto_abs ≥ $3M → cap 200 (alto riesgo severo)
+        ratio  < 30%                  → cap 300 (alto riesgo moderado)
+    Returns (pts: int, rechazar: bool, cap_cheques: int | None)
     """
     if not cheq_data:
-        return 0, False
+        return 0, False, None
     if cheq_data.get('sin_deudas'):
         if   n_periodos_h >= 12: pts = 100
         elif n_periodos_h >= 6:  pts = 80
@@ -3082,14 +3087,23 @@ def _layer_liquidez(cheq_data: dict, max_sit: int, n_periodos_h: int) -> tuple:
         total_ch   = len(detalles)
         activos_ch = sum(1 for d in detalles
                          if not d.get('fechaPago') or d.get('estadoMulta') == 'IMPAGA')
-        if activos_ch > 5 or total_ch >= 113:
-            return 0, True
+        if activos_ch > 15 or total_ch >= 113:
+            return 0, True, None   # Hard reject: >15 activos o historial masivo
+        if activos_ch > 5:
+            # 6-15 activos: no hard reject; cap proporcional a monto vs exposición BCRA
+            monto_activos = sum(
+                float(d.get('monto') or 0) for d in detalles
+                if not d.get('fechaPago') or d.get('estadoMulta') == 'IMPAGA'
+            )
+            ratio = (monto_activos / 1_000.0) / monto_bcra_k if monto_bcra_k > 0 else 999.0
+            cap = 200 if (ratio >= 0.30 or monto_activos >= 3_000_000) else 300
+            return 0, False, cap
         if   total_ch == 0:   pts = 100 if n_periodos_h > 6 else (50 if n_periodos_h >= 1 else 20)
         elif activos_ch == 0: pts = 50
         else:                 pts = 0
     if   max_sit >= 3:               pts = 0
     elif max_sit == 2 and pts > 50:  pts = 50
-    return pts, False
+    return pts, False, None
 
 
 def _safe_periodos(lst) -> list:
@@ -3613,7 +3627,9 @@ def calcular_rating_predictivo(
 
     # ═══ LIQUIDEZ: Cheques (0-100 pts) ═══════════════════════════════════
     # Para mora administrativa: sit_efectivo (no max_sit) para no zerear el bonus
-    pts_liq, rechazar = _layer_liquidez(cheq_data or {}, sit_efectivo, n_periodos_h)
+    pts_liq, rechazar, cap_cheques = _layer_liquidez(
+        cheq_data or {}, sit_efectivo, n_periodos_h, monto_sit1_k
+    )
     if rechazar:
         resultado = {
             'score': 1, 'rango': 'Rechazar', 'color': '#7f1d1d', 'emoji': '⛔',
@@ -3915,6 +3931,17 @@ def calcular_rating_predictivo(
         elif _max_dias > 90:
             puntos -= 50
             print(f"[score] {cuit_limpio} diasAtraso={_max_dias} → −50pts", flush=True)
+
+    # ── Cap cheques moderados (6-15 activos): aplica después de todos los pisos ──
+    # El cap es proporcional al monto relativo a la exposición BCRA del cliente.
+    # Se aplica aquí para que pise pisos de estructura/empleador pero respete
+    # los caps de mora interna y actividad bancaria que vienen a continuación.
+    if cap_cheques is not None:
+        puntos = min(puntos, float(cap_cheques))
+        print(
+            f"[score v{_SCORE_VERSION}] {cuit_limpio} cheques_moderados → cap {cap_cheques}",
+            flush=True
+        )
 
     score = max(1, min(999, round(puntos)))
 
