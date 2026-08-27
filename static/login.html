@@ -517,6 +517,24 @@ async function handleLogin(e) {
       }
     }
 
+    // ── Camino E: Turismo Mendoza ─────────────────────────────────────────────
+    if (idUp === 'TURISMO MENDOZA' || idUp === 'TURISMO') {
+      try {
+        const res  = await fetch('/turismo-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ usuario: identifier, clave: password }),
+        });
+        const json = await res.json();
+        if (json.ok) { window.location.replace('/turismo'); return; }
+        btn.disabled = false; btn.classList.remove('loading');
+        mostrarError('Usuario o contraseña incorrectos.'); return;
+      } catch (_) {
+        btn.disabled = false; btn.classList.remove('loading');
+        mostrarError('Error de conexión. Intentá de nuevo.'); return;
+      }
+    }
+
     // ── Camino B: Email + contraseña (Supabase) ───────────────────────────────
     try {
       await loginConEmail(identifier, password);
