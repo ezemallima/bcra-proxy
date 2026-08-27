@@ -3106,15 +3106,24 @@ function renderBcraHeatmap(periodos) {
   }
 
   // Construir mapa: entidad → { periodo → {sit, monto, dias} }
-  // Solo se incluyen entradas con monto > 0 (exposición real)
+  // Solo se incluyen entradas con monto > 0 (exposición real).
+  // Clave normalizada (mayúsculas): deduplica el mismo banco que bulk y live
+  // reportan con casing distinto (ej: "Banco BBVA" vs "BANCO BBVA ARGENTINA").
   var entMap = {};
+  var entDisplay = {}; // clave normalizada → nombre de visualización (preferir título sobre mayúsculas)
   data24.forEach(function(p) {
     var per = String(p.periodo || '').trim();
     (p.entidades || []).forEach(function(e) {
       if ((e.monto || 0) <= 0) return;
-      var n = (e.entidad || 'Entidad s/d').trim();
-      if (!entMap[n]) entMap[n] = {};
-      entMap[n][per] = { sit: e.situacion || 1, monto: e.monto || 0, dias: e.diasAtraso || 0 };
+      var raw = (e.entidad || 'Entidad s/d').trim();
+      var key = raw.toUpperCase().replace(/\s+/g, ' ');
+      if (!entMap[key]) {
+        entMap[key] = {};
+        entDisplay[key] = raw;
+      } else if (raw !== raw.toUpperCase() && entDisplay[key] === entDisplay[key].toUpperCase()) {
+        entDisplay[key] = raw; // preferir título sobre todo-mayúsculas
+      }
+      entMap[key][per] = { sit: e.situacion || 1, monto: e.monto || 0, dias: e.diasAtraso || 0 };
     });
   });
 
@@ -3179,8 +3188,9 @@ function renderBcraHeatmap(periodos) {
 
   entities.forEach(function(entName) {
     var entData = entMap[entName];
+    var entLabel = entDisplay[entName] || entName;
     html += '<tr>'
-      + '<td class="bcra-hm-td-entity" title="' + entName + '">' + entName + '</td>'
+      + '<td class="bcra-hm-td-entity" title="' + entLabel + '">' + entLabel + '</td>'
       + '<td class="bcra-hm-td-monto">' + ultimoMonto(entName) + '</td>';
 
     displayKeys.forEach(function(per, i) {
@@ -3188,7 +3198,7 @@ function renderBcraHeatmap(periodos) {
       if (d) {
         var tid = 'hm' + (tipIdx++);
         window._bcraHmTip[tid] = {
-          period: perLabel(per), entity: entName,
+          period: perLabel(per), entity: entLabel,
           sit: d.sit, dias: d.dias,
           monto: '$' + (d.monto * 1000).toLocaleString('es-AR')
         };
@@ -5618,13 +5628,20 @@ async function exportarReporte(conIA) {
   }
 
   var hmEntMap = {};
+  var hmEntDisplay = {};
   hmData24.forEach(function(p){
     var per = String(p.periodo||'').trim();
     (p.entidades||[]).forEach(function(e){
       if ((e.monto||0) <= 0) return;
-      var n = (e.entidad||'Entidad s/d').trim();
-      if (!hmEntMap[n]) hmEntMap[n] = {};
-      hmEntMap[n][per] = { sit: e.situacion||1, monto: e.monto||0 };
+      var raw = (e.entidad||'Entidad s/d').trim();
+      var key = raw.toUpperCase().replace(/\s+/g, ' ');
+      if (!hmEntMap[key]) {
+        hmEntMap[key] = {};
+        hmEntDisplay[key] = raw;
+      } else if (raw !== raw.toUpperCase() && hmEntDisplay[key] === hmEntDisplay[key].toUpperCase()) {
+        hmEntDisplay[key] = raw;
+      }
+      hmEntMap[key][per] = { sit: e.situacion||1, monto: e.monto||0 };
     });
   });
 
@@ -5679,7 +5696,7 @@ async function exportarReporte(conIA) {
       doc.setFillColor(ri % 2 === 0 ? 248 : 255, ri % 2 === 0 ? 250 : 255, ri % 2 === 0 ? 252 : 255);
       doc.rect(x0, y, _hmTableW, ROW_H, 'F');
       doc.setFontSize(6); doc.setFont('helvetica', 'normal'); doc.setTextColor(30, 41, 59);
-      doc.text(ent.substring(0, 20), x0 + 1.5, y + 3.8);
+      doc.text((hmEntDisplay[ent] || ent).substring(0, 20), x0 + 1.5, y + 3.8);
       doc.setFont('helvetica', 'bold'); doc.setTextColor(11, 29, 58);
       doc.text(hmUltimoMonto(ent), x0 + ENT_W + DEUDA_W/2, y + 3.8, {align: 'center'});
       hmDisplayKeys.forEach(function(per, ci) {
