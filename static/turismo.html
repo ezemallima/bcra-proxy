@@ -450,6 +450,23 @@ tr:hover td { background: var(--surface2); }
 }
 .drawer-close:hover { background: var(--border); }
 .drawer-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
+.drawer-send-row { display: flex; gap: 8px; margin-top: 14px; }
+.btn-wsp {
+  flex: 1; height: 38px;
+  background: #25D366; border: none; border-radius: 9px;
+  color: #fff; font-size: 13px; font-weight: 700; font-family: 'Sora', sans-serif;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
+  transition: opacity 0.15s;
+}
+.btn-wsp:hover { opacity: 0.88; }
+.btn-mail {
+  flex: 1; height: 38px;
+  background: var(--surface2); border: 1.5px solid var(--border2); border-radius: 9px;
+  color: var(--text); font-size: 13px; font-weight: 600; font-family: 'Sora', sans-serif;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
+  transition: background 0.15s;
+}
+.btn-mail:hover { background: var(--border); }
 .drawer-cuit-section { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
 .drawer-cuit-label { font-size: 11px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
 .drawer-cuit-row { display: flex; gap: 8px; }
@@ -772,11 +789,21 @@ tr:hover td { background: var(--surface2); }
 <div class="drawer-overlay" id="drawer-overlay" onclick="cerrarDrawer()"></div>
 <div class="drawer" id="drawer">
   <div class="drawer-header">
-    <div>
+    <div style="flex:1;min-width:0">
       <div class="drawer-title" id="drawer-nombre">—</div>
       <div class="drawer-sub" id="drawer-total">—</div>
+      <div class="drawer-send-row">
+        <button class="btn-wsp" onclick="enviarEstadoCuenta('whatsapp')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.558 4.126 1.535 5.859L.057 23.428a.5.5 0 0 0 .611.61l5.79-1.521A11.943 11.943 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22a9.938 9.938 0 0 1-5.11-1.404l-.364-.217-3.777.99 1.006-3.674-.235-.378A9.944 9.944 0 0 1 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
+          WhatsApp
+        </button>
+        <button class="btn-mail" onclick="enviarEstadoCuenta('email')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><polyline points="2,4 12,13 22,4"/></svg>
+          Email
+        </button>
+      </div>
     </div>
-    <button class="drawer-close" onclick="cerrarDrawer()">
+    <button class="drawer-close" onclick="cerrarDrawer()" style="align-self:flex-start;margin-top:2px">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
     </button>
   </div>
@@ -966,7 +993,8 @@ async function abrirDrawer(cliente, saldo) {
 
   try {
     const d = await safeFetch('/api/turismo-facturas/' + encodeURIComponent(cliente));
-    renderDrawerFacturas(d.facturas || []);
+    _drawerFacturas = d.facturas || [];
+    renderDrawerFacturas(_drawerFacturas);
   } catch(e) {
     document.getElementById('drawer-facturas-list').innerHTML = '<div class="alert alert-error">Error cargando facturas.</div>';
   }
@@ -975,6 +1003,7 @@ async function abrirDrawer(cliente, saldo) {
 function cerrarDrawer() {
   document.getElementById('drawer-overlay').classList.remove('open');
   document.getElementById('drawer').classList.remove('open');
+  _drawerFacturas = [];
 }
 
 function renderDrawerFacturas(facturas) {
@@ -1227,6 +1256,73 @@ function renderCheques(d, cuit) {
         </div>
       `).join('')}
     </div>`;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ENVIAR ESTADO DE CUENTA (WhatsApp / Email)
+═══════════════════════════════════════════════════════════════════════════ */
+let _drawerFacturas = [];
+
+function enviarEstadoCuenta(canal) {
+  const nombre   = document.getElementById('drawer-nombre').textContent.trim();
+  const facturas = _drawerFacturas;
+  if (!facturas.length) { alert('No hay facturas para enviar.'); return; }
+
+  const hora   = new Date().getHours();
+  const saludo = hora < 13 ? 'Buenos días' : hora < 20 ? 'Buenas tardes' : 'Buenas noches';
+  const hoy    = new Date(); hoy.setHours(0, 0, 0, 0);
+
+  function parseFechaLocal(s) {
+    if (!s) return null;
+    const p = s.split('/');
+    if (p.length === 3) return new Date(+p[2], +p[1] - 1, +p[0]);
+    return null;
+  }
+
+  const totalPend = facturas.reduce((s, f) => s + (parseFloat(f.saldo) || 0), 0);
+  const vencidas  = facturas.filter(f => {
+    const d = parseFechaLocal(f.fechaPago);
+    return d && (hoy - d) > 0;
+  });
+
+  const fmtNum = n => Math.round(n).toLocaleString('es-AR');
+  const SEP    = '------------------------------';
+
+  const detalle = facturas.map(f => {
+    const d = parseFechaLocal(f.fechaPago);
+    const dias = d ? Math.floor((hoy - d) / 86400000) : null;
+    const esVenc = dias !== null && dias > 0;
+    const lineas = [
+      'Factura: ' + (f.nroFactura || 'S/N'),
+      'Emisión:     ' + (f.fechaFactura || '-'),
+      (esVenc ? 'Venció:      ' : 'Vencimiento: ') + (f.fechaPago || '-'),
+      'Saldo:       $' + fmtNum(f.saldo),
+    ];
+    if (esVenc) lineas.push('⚠️ VENCIDA hace ' + dias + ' día' + (dias !== 1 ? 's' : ''));
+    return lineas.join('\n');
+  }).join('\n\n');
+
+  const notaVenc = vencidas.length
+    ? '\n' + vencidas.length + ' factura' + (vencidas.length !== 1 ? 's' : '') + ' vencida' + (vencidas.length !== 1 ? 's' : '')
+    : '';
+
+  const msg =
+    'Estimado/a ' + nombre + ', ' + saludo + '.\n\n' +
+    'Le acercamos el detalle de su cuenta corriente en *Turismo Mendoza*:\n\n' +
+    '*FACTURAS PENDIENTES*\n\n' +
+    detalle + '\n\n' +
+    SEP + '\n' +
+    '*TOTAL PENDIENTE: $' + fmtNum(totalPend) + '*' + notaVenc + '\n' +
+    SEP + '\n\n' +
+    'Quedamos a su disposición para coordinar el pago.\n' +
+    'Muchas gracias!';
+
+  if (canal === 'whatsapp') {
+    window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+  } else {
+    const asunto = 'Estado de cuenta — ' + nombre + ' — Turismo Mendoza';
+    window.location.href = 'mailto:?subject=' + encodeURIComponent(asunto) + '&body=' + encodeURIComponent(msg);
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
