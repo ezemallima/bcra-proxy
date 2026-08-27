@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Acceso · Turismo Mendoza</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%;
+    font-family: 'Sora', sans-serif;
+    background: #0f1623;
+    color: #e2e8f0;
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 20px;
+    background: radial-gradient(ellipse at 60% 20%, rgba(16,185,129,0.10) 0%, transparent 60%),
+                radial-gradient(ellipse at 20% 80%, rgba(59,130,246,0.07) 0%, transparent 50%),
+                #0f1623;
+  }
+  .card {
+    background: #1a2235;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    padding: 40px 36px;
+    width: 100%;
+    max-width: 380px;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+  }
+  .logo-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 28px;
+  }
+  .logo-icon {
+    width: 42px; height: 42px;
+    background: linear-gradient(135deg, #10b981, #059669);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .logo-text { font-size: 17px; font-weight: 800; }
+  .logo-sub  { font-size: 11px; color: #64748b; margin-top: 1px; }
+  h1 { font-size: 22px; font-weight: 700; color: #f1f5f9; margin-bottom: 6px; }
+  .subtitle { font-size: 13px; color: #64748b; margin-bottom: 28px; line-height: 1.5; }
+  .field { margin-bottom: 16px; }
+  label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: #94a3b8;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+  }
+  input {
+    width: 100%;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    padding: 12px 16px;
+    color: #f1f5f9;
+    font-size: 14px;
+    font-family: 'Sora', sans-serif;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  input:focus {
+    border-color: #10b981;
+    box-shadow: 0 0 0 3px rgba(16,185,129,0.15);
+  }
+  input::placeholder { color: #475569; }
+  .error-msg {
+    display: none;
+    background: rgba(239,68,68,0.1);
+    border: 1px solid rgba(239,68,68,0.25);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 13px;
+    color: #fca5a5;
+    margin-bottom: 16px;
+    text-align: center;
+  }
+  .btn {
+    width: 100%;
+    background: linear-gradient(135deg, #10b981, #059669);
+    border: none;
+    border-radius: 10px;
+    padding: 13px;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+    font-family: 'Sora', sans-serif;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(16,185,129,0.30);
+    transition: opacity 0.15s, transform 0.1s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .btn:hover  { opacity: 0.92; }
+  .btn:active { transform: scale(0.98); }
+  .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+  .spinner {
+    width: 16px; height: 16px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    display: none;
+  }
+  .btn.loading .spinner { display: block; }
+  .btn.loading .btn-text { display: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .footer { margin-top: 24px; text-align: center; font-size: 11px; color: #334155; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo-wrap">
+    <div class="logo-icon">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+      </svg>
+    </div>
+    <div>
+      <div class="logo-text">Turismo Mendoza</div>
+      <div class="logo-sub">Panel de Gestión</div>
+    </div>
+  </div>
+
+  <h1>Bienvenido</h1>
+  <p class="subtitle">Ingresá tus credenciales para acceder al panel.</p>
+
+  <div class="field">
+    <label>Usuario</label>
+    <input type="text" id="inp-usuario" placeholder="Usuario asignado"
+           autocomplete="username" autocapitalize="off" spellcheck="false"
+           onkeydown="if(event.key==='Enter')doLogin()">
+  </div>
+  <div class="field">
+    <label>Contraseña</label>
+    <input type="password" id="inp-pass" placeholder="••••••••"
+           autocomplete="current-password"
+           onkeydown="if(event.key==='Enter')doLogin()">
+  </div>
+
+  <div class="error-msg" id="error-msg"></div>
+
+  <button class="btn" id="btn-login" onclick="doLogin()">
+    <div class="spinner"></div>
+    <span class="btn-text">Ingresar →</span>
+  </button>
+
+  <div class="footer">Vende Seguro · Turismo Mendoza</div>
+</div>
+
+<script>
+async function doLogin() {
+  const usuario = document.getElementById('inp-usuario').value.trim();
+  const clave   = document.getElementById('inp-pass').value.trim();
+  const errEl   = document.getElementById('error-msg');
+  const btn     = document.getElementById('btn-login');
+  if (!usuario || !clave) {
+    errEl.textContent = 'Completá usuario y contraseña.';
+    errEl.style.display = 'block';
+    return;
+  }
+  errEl.style.display = 'none';
+  btn.disabled = true;
+  btn.classList.add('loading');
+  try {
+    const r = await fetch('/turismo-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuario, clave })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      window.location.replace('/turismo');
+    } else {
+      errEl.textContent = d.error || 'Usuario o contraseña incorrectos.';
+      errEl.style.display = 'block';
+    }
+  } catch(e) {
+    errEl.textContent = 'Error de conexión. Intentá de nuevo.';
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('loading');
+  }
+}
+document.getElementById('inp-usuario').focus();
+</script>
+</body>
+</html>

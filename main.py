@@ -157,6 +157,9 @@ ADMIN_PASS = 'Artel2026'
 DIRECTOR_USER = 'DIRECTORCOMERCIAL'
 DIRECTOR_PASS = 'ARTEL2026'
 
+TURISMO_USER = 'TURISMO MENDOZA'
+TURISMO_PASS = 'Turismomdz2026'
+
 # ── Fuentes BCRA externas ────────────────────────────────────────────────────
 BCRA_WRAPPER_BASE = 'https://bcra-wrapper.vercel.app'   # proxy Vercel, sin rate-limit
 
@@ -4967,6 +4970,14 @@ def require_director(f):
         return f(*args, **kwargs)
     return _wrapped
 
+def require_turismo(f):
+    @wraps(f)
+    def _wrapped(*args, **kwargs):
+        if not session.get('turismo_logged_in'):
+            return redirect(url_for('turismo_login_page'))
+        return f(*args, **kwargs)
+    return _wrapped
+
 # ─── ENDPOINTS ───────────────────────────────────────────
 
 @app.route("/")
@@ -5079,6 +5090,38 @@ def director_logout():
 @require_director
 def director():
     resp = send_from_directory('static', 'director.html')
+    resp.headers['Cache-Control'] = 'no-store, must-revalidate'
+    resp.headers['Pragma'] = 'no-cache'
+    return resp
+
+@app.route("/turismo-login", methods=["GET", "POST"])
+def turismo_login_page():
+    if request.method == "POST":
+        ip = request.headers.get('X-Forwarded-For', request.remote_addr or 'unknown').split(',')[0].strip()
+        _rate_key = f'tur:{ip}'
+        if not _login_rate_check(_rate_key):
+            return jsonify({"ok": False, "error": "Demasiados intentos. Esperá 15 minutos."}), 429
+        data = request.get_json(silent=True) or {}
+        usuario = str(data.get('usuario', '')).strip().upper()
+        clave   = str(data.get('clave', '')).strip()
+        if usuario == TURISMO_USER.upper() and clave == TURISMO_PASS:
+            _login_rate_reset(_rate_key)
+            session['turismo_logged_in'] = True
+            session.permanent = True
+            return jsonify({"ok": True})
+        print(f'[SECURITY] Turismo-login fallido — IP: {ip}', flush=True)
+        return jsonify({"ok": False, "error": "Usuario o clave incorrectos"}), 401
+    return send_from_directory('static', 'turismo_login.html')
+
+@app.route("/turismo-logout")
+def turismo_logout():
+    session.pop('turismo_logged_in', None)
+    return redirect(url_for('turismo_login_page'))
+
+@app.route("/turismo")
+@require_turismo
+def turismo():
+    resp = send_from_directory('static', 'turismo.html')
     resp.headers['Cache-Control'] = 'no-store, must-revalidate'
     resp.headers['Pragma'] = 'no-cache'
     return resp
@@ -10391,6 +10434,7 @@ _saldos_facturas = _load_json_with_fallback('saldos_facturas.json')
 # ── Saldos de Gestión (vista semanal para vendedores — separado del DSO) ──
 _saldos_gestion_loaded = _load_json_with_fallback('saldos_gestion_vendedores.json')
 _saldos_gestion = _saldos_gestion_loaded if _saldos_gestion_loaded else list(_saldos_facturas)
+_turismo_saldos = _load_json_with_fallback('turismo_saldos.json')
 if not _saldos_gestion_loaded:
     print("[gestion] Usando saldos_facturas como fallback inicial para gestión", flush=True)
 
@@ -13116,6 +13160,222 @@ def _cheques_auto_update_loop():
 
 threading.Thread(target=_cheques_auto_update_loop, daemon=True).start()
 threading.Thread(target=_facturas_auto_loop, daemon=True).start()
+
+# ── Turismo Mendoza — Upload y Portfolio ────────────────────────────────────
+
+@app.route("/upload-saldos-turismo", methods=["POST"])
+@require_turismo
+def upload_saldos_turismo():
+    """Recibe Excel con saldos de Turismo Mendoza — mismo formato que saldos Artel."""
+    global _turismo_saldos
+    try:
+        if 'file' not in request.files:
+            return jsonify({"error": "Sin archivo"}), 400
+        file = request.files['file']
+        import io, openpyxl
+        wb = openpyxl.load_workbook(io.BytesIO(file.read()))
+        ws = wb.active
+
+        primera = [str(c or '').strip() for c in next(ws.iter_rows(min_row=1, max_row=1, values_only=True))]
+        tiene_header = any(
+            p.upper() in ('VENDEDOR', 'CLIENTE', 'SALDO', 'TOTAL', 'FACTURA', 'NUMERO',
+                          'VENCIM', 'EMISION', 'ADEUDADO', 'PENDIENTE')
+            for p in primera
+        )
+        min_row = 2 if tiene_header else 1
+
+        if tiene_header:
+            hu = [str(c or '').upper().strip() for c in primera]
+            _ci = lambda *kws: next((i for i, h in enumerate(hu) if any(k in h for k in kws)), None)
+            _col_v  = _ci('VENDEDOR', 'SALESPERSON', 'RESPONSABLE', 'COMERCIAL')
+            _col_c  = _ci('CLIENTE', 'PARTNER', 'CONTACTO', 'EMPRESA', 'RAZON')
+            _col_nf = _ci('FACTURA', 'NUMERO', 'N°', 'NRO', 'COMPROBANTE', 'INVOICE', 'REFERENCIA')
+            _col_ff = _ci('EMISION', 'FECHA FAC', 'FECHA DE FAC') or \
+                      next((i for i, h in enumerate(hu)
+                            if 'FECHA' in h and 'VENCIM' not in h and 'PAG' not in h and 'DUE' not in h), None)
+            _col_fp = _ci('VENCIM', 'DUE DATE', 'FECHA VEN', 'FECHA PAG', 'FECHA PAGO')
+            _col_t  = _ci('TOTAL FAC', 'TOTAL COMP', 'IMPORTE TOTAL', 'AMOUNT DUE', 'IMPORTE') or \
+                      next((i for i, h in enumerate(hu)
+                            if 'TOTAL' in h and 'SALDO' not in h and 'ADEUDADO' not in h
+                            and 'PENDIENTE' not in h), None)
+            _col_s  = _ci('SALDO PEND', 'IMPORTE ADEUD', 'ADEUDADO', 'PENDIENTE DE COBRO',
+                           'IMPORTE PEND', 'SALDO PENDIENTE') or _ci('SALDO')
+            col_v  = _col_v  if _col_v  is not None else 0
+            col_c  = _col_c  if _col_c  is not None else 1
+            col_nf = _col_nf if _col_nf is not None else 2
+            col_ff = _col_ff if _col_ff is not None else 3
+            col_fp = _col_fp if _col_fp is not None else 4
+            col_t  = _col_t  if _col_t  is not None else 5
+            col_s  = _col_s  if _col_s  is not None else 6
+        else:
+            col_v = 0; col_c = 1; col_nf = 2; col_ff = 3; col_fp = 4; col_t = 5; col_s = 6
+
+        if col_c == col_v:
+            old_nf = col_nf
+            col_c  = col_nf
+            _usadas = {col_v, col_c, col_ff, col_fp, col_t, col_s}
+            col_nf  = next((i for i in range(max(_usadas, default=6) + 3) if i not in _usadas), old_nf)
+
+        _chk_row = ws.cell(row=min_row, column=col_nf + 1).value
+        _chk_ff  = ws.cell(row=min_row, column=col_ff + 1).value
+        if hasattr(_chk_row, 'strftime') and not hasattr(_chk_ff, 'strftime'):
+            col_nf, col_ff = col_ff, col_nf
+
+        def fmt_fecha(d):
+            if not d: return ''
+            if hasattr(d, 'strftime'): return d.strftime('%d/%m/%Y')
+            s = str(d).strip()
+            if len(s) == 10 and s[4] == '-':
+                return s[8:] + '/' + s[5:7] + '/' + s[:4]
+            return s[:10]
+
+        saldos = []
+        for row in ws.iter_rows(min_row=min_row, values_only=True):
+            if not row: continue
+            vals = list(row) + [None] * 9
+            cliente    = vals[col_c]
+            nro_fac    = vals[col_nf]
+            fecha_fac  = vals[col_ff]
+            fecha_pago = vals[col_fp]
+            total      = vals[col_t]
+            saldo      = vals[col_s]
+            if not cliente: continue
+            try: saldo_f = float(saldo or 0)
+            except Exception: saldo_f = 0
+            if saldo_f <= 0: continue
+            try: total_f = float(total or 0)
+            except Exception: total_f = 0
+            saldos.append({
+                'cliente': str(cliente).strip(),
+                'nroFactura': str(nro_fac or '').strip(),
+                'fechaFactura': fmt_fecha(fecha_fac),
+                'fechaPago': fmt_fecha(fecha_pago),
+                'totalFactura': total_f,
+                'saldo': saldo_f,
+            })
+
+        sf_path = os.path.join(DATA_DIR, 'turismo_saldos.json')
+        ts_path = os.path.join(DATA_DIR, 'turismo_saldos_ts.json')
+        tmp_path = sf_path + '.tmp'
+        with open(tmp_path, 'w', encoding='utf-8') as _f:
+            json.dump(saldos, _f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, sf_path)
+        with open(ts_path, 'w', encoding='utf-8') as _f:
+            json.dump({'ts': time.time(), 'fecha': time.strftime('%d/%m/%Y %H:%M'),
+                       'total': len(saldos)}, _f)
+        _turismo_saldos = saldos
+        print(f"[turismo] {len(saldos)} facturas importadas", flush=True)
+        return jsonify({"ok": True, "total": len(saldos)})
+    except Exception as _e:
+        print(f"[turismo] Error upload: {_e}", flush=True)
+        return jsonify({"error": str(_e)}), 500
+
+
+@app.route("/api/turismo-portfolio")
+@require_turismo
+def api_turismo_portfolio():
+    """Portfolio Turismo Mendoza: aging y resumen agrupado por cliente."""
+    def _parse_f(s):
+        if not s: return None
+        s = str(s).strip()
+        if '/' in s:
+            p = s.split('/')
+            try: return datetime(int(p[2]), int(p[1]), int(p[0]))
+            except Exception: return None
+        if '-' in s and len(s) >= 10:
+            p = s.split('-')
+            try: return datetime(int(p[0]), int(p[1]), int(p[2]))
+            except Exception: return None
+        return None
+
+    hoy = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+    def _bucket(dias):
+        if dias <= 30:  return 'd30'
+        if dias <= 60:  return 'd60'
+        if dias <= 90:  return 'd90'
+        if dias <= 120: return 'd120'
+        return 'd120plus'
+
+    fuente = _turismo_saldos or _load_json_with_fallback('turismo_saldos.json')
+
+    por_cliente: dict = {}
+    total_saldo = 0.0
+    total_b: dict = {'d30': 0.0, 'd60': 0.0, 'd90': 0.0, 'd120': 0.0, 'd120plus': 0.0}
+
+    for fac in fuente:
+        cli = str(fac.get('cliente', '')).strip()
+        if not cli: continue
+        saldo = float(fac.get('saldo', 0) or 0)
+        total_saldo += saldo
+        ff = _parse_f(fac.get('fechaFactura'))
+        dias = (hoy - ff).days if ff else 0
+        bk = _bucket(dias)
+        total_b[bk] = total_b.get(bk, 0) + saldo
+        if cli not in por_cliente:
+            por_cliente[cli] = {
+                'cliente': cli,
+                'facturas': 0,
+                'saldo': 0.0,
+                'dias_max': 0,
+                'bucket': 'd30',
+                'detalle': [],
+            }
+        d = por_cliente[cli]
+        d['facturas'] += 1
+        d['saldo'] += saldo
+        d['detalle'].append({
+            'nroFactura': fac.get('nroFactura', ''),
+            'fechaFactura': fac.get('fechaFactura', ''),
+            'fechaPago': fac.get('fechaPago', ''),
+            'totalFactura': fac.get('totalFactura', 0),
+            'saldo': saldo,
+            'dias': dias,
+        })
+        if dias > d['dias_max']:
+            d['dias_max'] = dias
+            d['bucket'] = bk
+
+    clientes_list = sorted(por_cliente.values(), key=lambda x: x['saldo'], reverse=True)
+    for c in clientes_list:
+        c['saldo'] = round(c['saldo'], 2)
+
+    num_dso = sum(
+        (hoy - _parse_f(f.get('fechaFactura'))).days * float(f.get('saldo', 0))
+        for f in fuente
+        if _parse_f(f.get('fechaFactura')) and float(f.get('saldo', 0) or 0) > 0
+    )
+    dso = round(num_dso / total_saldo) if total_saldo > 0 else 0
+
+    ts_path = os.path.join(DATA_DIR, 'turismo_saldos_ts.json')
+    ts_info: dict = {}
+    try:
+        if os.path.exists(ts_path):
+            with open(ts_path, encoding='utf-8') as _f:
+                ts_info = json.load(_f)
+    except Exception:
+        pass
+
+    return jsonify({
+        'total_saldo': round(total_saldo, 2),
+        'buckets': {k: round(v, 2) for k, v in total_b.items()},
+        'dso': dso,
+        'n_clientes': len(clientes_list),
+        'n_vencido': sum(1 for c in clientes_list if c['dias_max'] > 30),
+        'clientes': clientes_list,
+        'ultima_actualizacion': ts_info.get('fecha', ''),
+    })
+
+
+@app.route("/api/turismo-facturas/<path:cliente>")
+@require_turismo
+def api_turismo_facturas(cliente):
+    """Detalle de facturas de un cliente Turismo para el panel lateral."""
+    from urllib.parse import unquote
+    nombre = unquote(str(cliente)).strip()
+    fuente = _turismo_saldos or _load_json_with_fallback('turismo_saldos.json')
+    result = [f for f in fuente if str(f.get('cliente', '')).strip() == nombre]
+    return jsonify({'facturas': result, 'total': round(sum(float(f.get('saldo', 0)) for f in result), 2)})
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))

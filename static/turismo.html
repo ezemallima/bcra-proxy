@@ -1,0 +1,1205 @@
+<!DOCTYPE html>
+<html lang="es" translate="no">
+<head>
+<meta charset="UTF-8">
+<meta name="google" content="notranslate">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Turismo Mendoza — Panel de Gestión</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* ── TOKENS ─────────────────────────────────────────────────────────────── */
+:root {
+  --bg:        #f1f5f9;
+  --bg2:       #e8edf4;
+  --surface:   #ffffff;
+  --surface2:  #F5F7FA;
+  --border:    #e2e8f0;
+  --border2:   #cbd5e1;
+  --text:      #0f172a;
+  --text2:     #64748b;
+  --text3:     #94a3b8;
+  --accent:    #10b981;
+  --accent2:   #059669;
+  --green:     #166534;
+  --green-bg:  #dcfce7;
+  --yellow:    #92400e;
+  --yellow-bg: #fef3c7;
+  --orange:    #9a3412;
+  --orange-bg: #ffedd5;
+  --red:       #991b1b;
+  --red-bg:    #fee2e2;
+  --blue:      #1e40af;
+  --blue-bg:   #dbeafe;
+  --radius:    14px;
+  --sidebar-bg:    #0B1D3A;
+  --sidebar-w:     220px;
+}
+
+/* ── RESET ──────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; }
+body {
+  font-family: 'Sora', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+* { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+*::-webkit-scrollbar { width: 5px; height: 5px; }
+*::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 3px; }
+
+/* ── SIDEBAR ─────────────────────────────────────────────────────────────── */
+.sidebar {
+  width: var(--sidebar-w);
+  min-width: var(--sidebar-w);
+  background: var(--sidebar-bg);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  z-index: 10;
+}
+.sidebar-logo {
+  padding: 22px 20px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sidebar-logo-icon {
+  width: 36px; height: 36px;
+  background: linear-gradient(135deg, #10b981, #059669);
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.sidebar-logo-text { font-size: 13px; font-weight: 700; color: #f1f5f9; line-height: 1.3; }
+.sidebar-logo-sub  { font-size: 10px; color: #64748b; }
+.nav { flex: 1; padding: 12px 10px; overflow-y: auto; }
+.nav-section { font-size: 9px; font-weight: 700; color: #475569; letter-spacing: 0.8px; text-transform: uppercase; padding: 12px 10px 6px; }
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 9px;
+  cursor: pointer;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.15s, color 0.15s;
+  user-select: none;
+  margin-bottom: 2px;
+}
+.nav-item:hover { background: rgba(255,255,255,0.06); color: #e2e8f0; }
+.nav-item.active { background: rgba(16,185,129,0.15); color: #10b981; font-weight: 600; }
+.nav-item svg { flex-shrink: 0; opacity: 0.7; }
+.nav-item.active svg { opacity: 1; }
+.sidebar-footer {
+  padding: 14px 16px;
+  border-top: 1px solid rgba(255,255,255,0.07);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sidebar-footer-user { font-size: 11px; color: #64748b; }
+.logout-btn {
+  font-size: 11px;
+  color: #475569;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.07);
+  background: transparent;
+  color: #64748b;
+  font-family: inherit;
+  transition: color 0.15s, background 0.15s;
+}
+.logout-btn:hover { color: #ef4444; background: rgba(239,68,68,0.08); border-color: rgba(239,68,68,0.2); }
+
+/* ── MAIN AREA ───────────────────────────────────────────────────────────── */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+.topbar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.topbar-title { font-size: 16px; font-weight: 700; }
+.topbar-badge {
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(16,185,129,0.1);
+  color: #059669;
+  border: 1px solid rgba(16,185,129,0.2);
+  padding: 3px 10px;
+  border-radius: 20px;
+}
+.content { flex: 1; overflow-y: auto; padding: 24px; }
+.section { display: none; }
+.section.active { display: block; }
+
+/* ── CARDS ───────────────────────────────────────────────────────────────── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+.card + .card, .card + .stat-grid, .stat-grid + .card { margin-top: 16px; }
+
+/* ── STAT GRID ───────────────────────────────────────────────────────────── */
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+}
+.stat-label { font-size: 11px; color: var(--text2); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+.stat-value { font-size: 24px; font-weight: 800; color: var(--text); line-height: 1; }
+.stat-value.green { color: #059669; }
+.stat-value.red   { color: #dc2626; }
+.stat-value.orange{ color: #d97706; }
+.stat-sub { font-size: 11px; color: var(--text3); margin-top: 4px; }
+
+/* ── SEARCH BOX ─────────────────────────────────────────────────────────── */
+.search-wrap {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.search-input {
+  flex: 1;
+  height: 44px;
+  background: var(--surface2);
+  border: 1.5px solid var(--border2);
+  border-radius: 10px;
+  padding: 0 16px;
+  font-size: 15px;
+  font-family: 'Roboto Mono', monospace;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.search-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(16,185,129,0.12);
+}
+.search-input::placeholder { color: var(--text3); font-family: 'Sora', sans-serif; font-size: 14px; }
+.btn-primary {
+  height: 44px;
+  padding: 0 22px;
+  background: linear-gradient(135deg, #10b981, #059669);
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: 'Sora', sans-serif;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(16,185,129,0.3);
+  transition: opacity 0.15s, transform 0.1s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.btn-primary:hover   { opacity: 0.92; }
+.btn-primary:active  { transform: scale(0.97); }
+.btn-primary:disabled{ opacity: 0.5; cursor: not-allowed; }
+.btn-secondary {
+  height: 36px;
+  padding: 0 16px;
+  background: var(--surface2);
+  border: 1.5px solid var(--border2);
+  border-radius: 9px;
+  color: var(--text2);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: 'Sora', sans-serif;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-secondary:hover { background: var(--border); color: var(--text); }
+
+/* ── SPINNER ─────────────────────────────────────────────────────────────── */
+.spinner {
+  width: 14px; height: 14px;
+  border: 2px solid rgba(255,255,255,0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: none;
+}
+.loading .spinner { display: inline-block; }
+.loading .btn-label { display: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── SCORE PANEL ─────────────────────────────────────────────────────────── */
+#score-panel { display: none; }
+.score-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.score-badge {
+  width: 72px; height: 72px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 800;
+  flex-shrink: 0;
+  border: 3px solid;
+}
+.badge-verde  { background: var(--green-bg);  color: #166534; border-color: #bbf7d0; }
+.badge-amarillo { background: var(--yellow-bg); color: #92400e; border-color: #fde68a; }
+.badge-naranja { background: var(--orange-bg); color: #9a3412; border-color: #fed7aa; }
+.badge-rojo   { background: var(--red-bg);   color: #991b1b; border-color: #fecaca; }
+.score-info-main { flex: 1; min-width: 200px; }
+.score-nombre { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+.score-cuit   { font-size: 12px; color: var(--text2); font-family: 'Roboto Mono', monospace; }
+.score-estado-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  margin-top: 8px;
+}
+
+.info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 16px 0; }
+.info-item { background: var(--surface2); border-radius: 10px; padding: 12px 14px; }
+.info-item-label { font-size: 10px; color: var(--text3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 4px; }
+.info-item-value { font-size: 15px; font-weight: 700; }
+
+/* ── HISTORIAL ───────────────────────────────────────────────────────────── */
+.hist-bar-wrap { margin-top: 12px; }
+.hist-label { font-size: 11px; color: var(--text2); margin-bottom: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.hist-bars { display: flex; gap: 3px; height: 32px; align-items: flex-end; }
+.hist-bar {
+  flex: 1;
+  border-radius: 3px 3px 0 0;
+  min-height: 4px;
+  transition: opacity 0.15s;
+  cursor: default;
+  position: relative;
+}
+.hist-bar:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: 100%; left: 50%;
+  transform: translateX(-50%);
+  background: #1e293b;
+  color: #f1f5f9;
+  font-size: 10px;
+  padding: 3px 7px;
+  border-radius: 5px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 100;
+  margin-bottom: 4px;
+}
+.hist-months { display: flex; gap: 3px; margin-top: 3px; }
+.hist-month { flex: 1; text-align: center; font-size: 8px; color: var(--text3); }
+
+/* ── DEUDAS TABLE ────────────────────────────────────────────────────────── */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; padding: 8px 12px; font-size: 10px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1.5px solid var(--border); white-space: nowrap; }
+td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--surface2); }
+
+/* ── CHEQUES ─────────────────────────────────────────────────────────────── */
+.cheque-card {
+  background: var(--red-bg);
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr auto;
+  gap: 12px;
+  align-items: center;
+}
+.cheque-label { font-size: 10px; color: var(--red); font-weight: 600; text-transform: uppercase; margin-bottom: 2px; }
+.cheque-val   { font-size: 14px; font-weight: 600; }
+
+/* ── CARTERA ─────────────────────────────────────────────────────────────── */
+.aging-bars { display: flex; height: 8px; border-radius: 4px; overflow: hidden; gap: 2px; margin: 12px 0; }
+.aging-seg { border-radius: 4px; transition: width 0.4s; }
+.aging-legend { display: flex; flex-wrap: wrap; gap: 10px 20px; margin-bottom: 16px; }
+.aging-leg-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text2); }
+.aging-dot { width: 10px; height: 10px; border-radius: 3px; }
+
+.cartera-row {
+  display: grid;
+  grid-template-columns: 1fr 80px 110px 80px 36px;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.cartera-row:hover { background: var(--surface2); }
+.cartera-row:last-child { border-bottom: none; }
+.cartera-nombre { font-size: 14px; font-weight: 600; }
+.cartera-facturas { font-size: 12px; color: var(--text2); text-align: center; }
+.cartera-saldo { font-size: 14px; font-weight: 700; text-align: right; }
+.bucket-pill {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 20px;
+  text-align: center;
+}
+.b-d30      { background: var(--green-bg);  color: var(--green); }
+.b-d60      { background: var(--yellow-bg); color: var(--yellow); }
+.b-d90      { background: var(--orange-bg); color: var(--orange); }
+.b-d120     { background: var(--red-bg);    color: var(--red); }
+.b-d120plus { background: #fee2e2; color: #7f1d1d; }
+
+.btn-icon {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border2);
+  background: var(--surface2);
+  color: var(--text2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s, color 0.12s;
+}
+.btn-icon:hover { background: var(--border); color: var(--accent); }
+
+/* ── DRAWER (panel lateral de facturas) ──────────────────────────────────── */
+.drawer-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.3);
+  z-index: 90;
+}
+.drawer-overlay.open { display: block; }
+.drawer {
+  position: fixed;
+  top: 0; right: 0;
+  width: 420px;
+  max-width: 95vw;
+  height: 100vh;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  box-shadow: -4px 0 24px rgba(0,0,0,0.1);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.25s cubic-bezier(0.4,0,0.2,1);
+}
+.drawer.open { transform: translateX(0); }
+.drawer-header {
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.drawer-title { font-size: 16px; font-weight: 700; }
+.drawer-sub   { font-size: 12px; color: var(--text2); margin-top: 2px; }
+.drawer-close {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text2);
+  transition: background 0.12s;
+}
+.drawer-close:hover { background: var(--border); }
+.drawer-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
+.drawer-cuit-section { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+.drawer-cuit-label { font-size: 11px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+.drawer-cuit-row { display: flex; gap: 8px; }
+.drawer-cuit-input {
+  flex: 1;
+  height: 38px;
+  background: var(--surface2);
+  border: 1.5px solid var(--border2);
+  border-radius: 9px;
+  padding: 0 12px;
+  font-size: 14px;
+  font-family: 'Roboto Mono', monospace;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.15s;
+}
+.drawer-cuit-input:focus { border-color: var(--accent); }
+.drawer-cuit-btn {
+  height: 38px;
+  padding: 0 14px;
+  background: linear-gradient(135deg, #10b981, #059669);
+  border: none;
+  border-radius: 9px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: 'Sora', sans-serif;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.drawer-score-result { margin-top: 12px; }
+
+/* ── UPLOAD ZONE ─────────────────────────────────────────────────────────── */
+.upload-zone {
+  border: 2px dashed var(--border2);
+  border-radius: var(--radius);
+  padding: 32px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: rgba(16,185,129,0.04); }
+.upload-zone svg { opacity: 0.4; margin-bottom: 8px; }
+.upload-zone p { font-size: 13px; color: var(--text2); }
+.upload-zone strong { color: var(--accent); }
+
+/* ── ALERTAS / ESTADOS ───────────────────────────────────────────────────── */
+.alert {
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 13px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.alert-info    { background: var(--blue-bg);   color: var(--blue); }
+.alert-success { background: var(--green-bg);  color: var(--green); }
+.alert-warning { background: var(--yellow-bg); color: var(--yellow); }
+.alert-error   { background: var(--red-bg);    color: var(--red); }
+
+/* ── EMPTY STATE ─────────────────────────────────────────────────────────── */
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text3);
+}
+.empty-state svg { opacity: 0.3; margin-bottom: 12px; }
+.empty-state p { font-size: 14px; }
+
+/* ── SECTION HEADER ──────────────────────────────────────────────────────── */
+.section-title { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+.section-sub   { font-size: 13px; color: var(--text2); margin-bottom: 20px; }
+
+/* ── RESPONSIVE ──────────────────────────────────────────────────────────── */
+@media (max-width: 680px) {
+  .sidebar { position: fixed; left: -240px; transition: left 0.25s; z-index: 200; }
+  .sidebar.open { left: 0; }
+  .main { width: 100%; }
+  .cartera-row { grid-template-columns: 1fr auto auto; }
+  .cartera-facturas { display: none; }
+  .cheque-card { grid-template-columns: 1fr 1fr; }
+  .drawer { width: 100vw; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── SIDEBAR ──────────────────────────────────────────────────────────── -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-logo">
+    <div class="sidebar-logo-icon">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+      </svg>
+    </div>
+    <div>
+      <div class="sidebar-logo-text">Turismo Mendoza</div>
+      <div class="sidebar-logo-sub">Panel de Gestión</div>
+    </div>
+  </div>
+
+  <nav class="nav">
+    <div class="nav-section">Principal</div>
+
+    <div class="nav-item active" data-section="cartera" onclick="showSection('cartera', this)">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
+      </svg>
+      Mi Cartera
+    </div>
+
+    <div class="nav-item" data-section="cuit" onclick="showSection('cuit', this)">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+      </svg>
+      Consultar CUIT
+    </div>
+
+    <div class="nav-item" data-section="cheques" onclick="showSection('cheques', this)">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/>
+      </svg>
+      Cheques
+    </div>
+  </nav>
+
+  <div class="sidebar-footer">
+    <div class="sidebar-footer-user">Turismo Mendoza</div>
+    <button class="logout-btn" onclick="window.location='/turismo-logout'">Salir</button>
+  </div>
+</aside>
+
+<!-- ── MAIN ──────────────────────────────────────────────────────────────── -->
+<div class="main">
+  <div class="topbar">
+    <div id="topbar-title" class="topbar-title">Mi Cartera</div>
+    <span class="topbar-badge">Turismo Mendoza</span>
+  </div>
+
+  <div class="content">
+
+    <!-- ━━━━ SECCIÓN: MI CARTERA ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
+    <div class="section active" id="sec-cartera">
+      <div class="section-title">Mi Cartera</div>
+      <p class="section-sub">Estado de cuentas corrientes y saldos pendientes.</p>
+
+      <!-- Stats -->
+      <div class="stat-grid" id="cartera-stats" style="display:none">
+        <div class="stat-card">
+          <div class="stat-label">Total Cartera</div>
+          <div class="stat-value" id="st-total">$0</div>
+          <div class="stat-sub" id="st-actualizacion"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Clientes</div>
+          <div class="stat-value" id="st-clientes">0</div>
+          <div class="stat-sub" id="st-vencido-label"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">DSO Promedio</div>
+          <div class="stat-value" id="st-dso">0</div>
+          <div class="stat-sub">días promedio de cobro</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Vencido +30d</div>
+          <div class="stat-value red" id="st-vencido">$0</div>
+          <div class="stat-sub">saldo con mora</div>
+        </div>
+      </div>
+
+      <!-- Upload zone (visible cuando no hay datos) -->
+      <div class="card" id="upload-card">
+        <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()"
+             ondragover="event.preventDefault();this.classList.add('drag')"
+             ondragleave="this.classList.remove('drag')"
+             ondrop="handleDrop(event)">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/>
+            <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+          </svg>
+          <p><strong>Subir planilla de saldos</strong></p>
+          <p style="margin-top:6px;font-size:12px;">Arrastrá el archivo Excel o hacé clic para seleccionarlo</p>
+          <p style="margin-top:4px;font-size:11px;color:var(--text3);">Formato: Vendedor · Cliente · N° Factura · Fecha · Vencimiento · Total · Saldo</p>
+        </div>
+        <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none" onchange="uploadSaldos(this)">
+        <div id="upload-status" style="margin-top:12px;display:none"></div>
+      </div>
+
+      <!-- Aging bars (visible cuando hay datos) -->
+      <div class="card" id="aging-card" style="display:none">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div style="font-size:14px;font-weight:700">Distribución de Deuda por Antigüedad</div>
+          <button class="btn-secondary" onclick="document.getElementById('file-input2').click()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+            Actualizar archivo
+          </button>
+          <input type="file" id="file-input2" accept=".xlsx,.xls" style="display:none" onchange="uploadSaldos(this)">
+        </div>
+        <div class="aging-legend">
+          <div class="aging-leg-item"><div class="aging-dot" style="background:#10b981"></div>0–30 días</div>
+          <div class="aging-leg-item"><div class="aging-dot" style="background:#f59e0b"></div>31–60 días</div>
+          <div class="aging-leg-item"><div class="aging-dot" style="background:#f97316"></div>61–90 días</div>
+          <div class="aging-leg-item"><div class="aging-dot" style="background:#ef4444"></div>91–120 días</div>
+          <div class="aging-leg-item"><div class="aging-dot" style="background:#991b1b"></div>+120 días</div>
+        </div>
+        <div class="aging-bars" id="aging-bars">
+          <div class="aging-seg" id="ab-d30"     style="background:#10b981;width:20%"></div>
+          <div class="aging-seg" id="ab-d60"     style="background:#f59e0b;width:20%"></div>
+          <div class="aging-seg" id="ab-d90"     style="background:#f97316;width:20%"></div>
+          <div class="aging-seg" id="ab-d120"    style="background:#ef4444;width:20%"></div>
+          <div class="aging-seg" id="ab-d120plus"style="background:#991b1b;width:20%"></div>
+        </div>
+        <div style="display:flex;gap:4px;margin-top:4px" id="aging-amounts"></div>
+      </div>
+
+      <!-- Tabla de clientes -->
+      <div class="card" id="clientes-card" style="display:none">
+        <div style="font-size:14px;font-weight:700;margin-bottom:14px">Clientes con Saldo Pendiente</div>
+        <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden">
+          <div class="cartera-row" style="cursor:default;background:var(--surface2)">
+            <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Cliente</div>
+            <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;text-align:center">Facturas</div>
+            <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;text-align:right">Saldo</div>
+            <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;text-align:center">Aging</div>
+            <div></div>
+          </div>
+          <div id="clientes-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ━━━━ SECCIÓN: CONSULTAR CUIT ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
+    <div class="section" id="sec-cuit">
+      <div class="section-title">Consultar CUIT</div>
+      <p class="section-sub">Verificá la situación crediticia de cualquier empresa o persona en el BCRA.</p>
+
+      <div class="search-wrap">
+        <input class="search-input" id="cuit-input" type="text" placeholder="CUIT sin guiones — ej: 20304050607"
+               maxlength="13" inputmode="numeric"
+               onkeydown="if(event.key==='Enter')consultarCuit()"
+               oninput="this.value=this.value.replace(/[^0-9-]/g,'')">
+        <button class="btn-primary" id="btn-consultar" onclick="consultarCuit()">
+          <div class="spinner"></div>
+          <span class="btn-label">Consultar</span>
+        </button>
+      </div>
+
+      <div id="score-panel" class="card">
+        <!-- se llena dinámicamente -->
+      </div>
+
+      <div id="cuit-placeholder" class="card">
+        <div class="empty-state">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <p>Ingresá un CUIT para ver la situación BCRA.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ━━━━ SECCIÓN: CHEQUES ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
+    <div class="section" id="sec-cheques">
+      <div class="section-title">Cheques Rechazados</div>
+      <p class="section-sub">Consultá si un CUIT tiene cheques rechazados registrados en el BCRA.</p>
+
+      <div class="search-wrap">
+        <input class="search-input" id="cheque-cuit-input" type="text" placeholder="CUIT sin guiones — ej: 20304050607"
+               maxlength="13" inputmode="numeric"
+               onkeydown="if(event.key==='Enter')consultarCheques()"
+               oninput="this.value=this.value.replace(/[^0-9-]/g,'')">
+        <button class="btn-primary" id="btn-cheques" onclick="consultarCheques()">
+          <div class="spinner"></div>
+          <span class="btn-label">Consultar</span>
+        </button>
+      </div>
+
+      <div id="cheques-resultado"></div>
+
+      <div id="cheques-placeholder" class="card">
+        <div class="empty-state">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+          <p>Ingresá un CUIT para consultar cheques rechazados.</p>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<!-- ── DRAWER (detalle de facturas + score rápido) ──────────────────────── -->
+<div class="drawer-overlay" id="drawer-overlay" onclick="cerrarDrawer()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-header">
+    <div>
+      <div class="drawer-title" id="drawer-nombre">—</div>
+      <div class="drawer-sub" id="drawer-total">—</div>
+    </div>
+    <button class="drawer-close" onclick="cerrarDrawer()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="drawer-body">
+    <div id="drawer-facturas-list"></div>
+
+    <div class="drawer-cuit-section">
+      <div class="drawer-cuit-label">Consultar BCRA para este cliente</div>
+      <div class="drawer-cuit-row">
+        <input class="drawer-cuit-input" id="drawer-cuit-inp" type="text" placeholder="Ingresá el CUIT"
+               maxlength="13" inputmode="numeric"
+               onkeydown="if(event.key==='Enter')consultarDrawerCuit()">
+        <button class="drawer-cuit-btn" onclick="consultarDrawerCuit()">Ver score</button>
+      </div>
+      <div class="drawer-score-result" id="drawer-score-result"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════════════
+   NAVEGACIÓN
+═══════════════════════════════════════════════════════════════════════════ */
+const SECTION_TITLES = {
+  cartera: 'Mi Cartera',
+  cuit:    'Consultar CUIT',
+  cheques: 'Cheques',
+};
+
+function showSection(id, el) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('sec-' + id).classList.add('active');
+  el.classList.add('active');
+  document.getElementById('topbar-title').textContent = SECTION_TITLES[id] || id;
+  if (id === 'cartera') cargarPortfolio();
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   HELPERS
+═══════════════════════════════════════════════════════════════════════════ */
+function fmt$(n) {
+  if (n === undefined || n === null || isNaN(n)) return '$0';
+  if (n >= 1_000_000) return '$' + (n / 1_000_000).toFixed(1) + 'M';
+  if (n >= 1_000)     return '$' + (n / 1_000).toFixed(0) + 'K';
+  return '$' + Math.round(n).toLocaleString('es-AR');
+}
+function limpiarCuit(v) { return String(v).replace(/[^0-9]/g, ''); }
+
+async function safeFetch(url, opts) {
+  const r = await fetch(url, opts);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   UPLOAD SALDOS
+═══════════════════════════════════════════════════════════════════════════ */
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('upload-zone').classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file) subirArchivo(file);
+}
+
+function uploadSaldos(input) {
+  const file = input.files[0];
+  input.value = '';
+  if (file) subirArchivo(file);
+}
+
+async function subirArchivo(file) {
+  const statusEl = document.getElementById('upload-status');
+  statusEl.style.display = 'block';
+  statusEl.innerHTML = '<div class="alert alert-info">⏳ Procesando archivo...</div>';
+
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const d = await safeFetch('/upload-saldos-turismo', { method: 'POST', body: fd });
+    if (d.ok) {
+      statusEl.innerHTML = `<div class="alert alert-success">✓ ${d.total} facturas importadas correctamente.</div>`;
+      setTimeout(() => { statusEl.style.display = 'none'; }, 3000);
+      cargarPortfolio();
+    } else {
+      statusEl.innerHTML = `<div class="alert alert-error">Error: ${d.error || 'desconocido'}</div>`;
+    }
+  } catch(e) {
+    statusEl.innerHTML = `<div class="alert alert-error">Error al subir el archivo. Verificá el formato.</div>`;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PORTFOLIO / CARTERA
+═══════════════════════════════════════════════════════════════════════════ */
+let _portfolioData = null;
+
+async function cargarPortfolio() {
+  try {
+    const d = await safeFetch('/api/turismo-portfolio');
+    _portfolioData = d;
+    renderPortfolio(d);
+  } catch(e) {
+    console.log('[cartera] Error cargando portfolio:', e);
+  }
+}
+
+function renderPortfolio(d) {
+  const noData = !d || !d.n_clientes;
+
+  document.getElementById('cartera-stats').style.display = noData ? 'none' : 'grid';
+  document.getElementById('aging-card').style.display    = noData ? 'none' : 'block';
+  document.getElementById('clientes-card').style.display = noData ? 'none' : 'block';
+  document.getElementById('upload-card').style.display   = noData ? 'block' : 'none';
+
+  if (noData) return;
+
+  // Stats
+  document.getElementById('st-total').textContent    = fmt$(d.total_saldo);
+  document.getElementById('st-clientes').textContent = d.n_clientes;
+  document.getElementById('st-dso').textContent      = d.dso + ' d';
+  document.getElementById('st-vencido-label').textContent = d.n_vencido + ' con saldo vencido';
+  document.getElementById('st-actualizacion').textContent = d.ultima_actualizacion ? 'al ' + d.ultima_actualizacion : '';
+
+  const vencidoTotal = (d.buckets.d60 || 0) + (d.buckets.d90 || 0) + (d.buckets.d120 || 0) + (d.buckets.d120plus || 0);
+  document.getElementById('st-vencido').textContent = fmt$(vencidoTotal);
+
+  // Aging bars
+  const bks = ['d30', 'd60', 'd90', 'd120', 'd120plus'];
+  const total = d.total_saldo || 1;
+  bks.forEach(bk => {
+    const pct = Math.max(((d.buckets[bk] || 0) / total) * 100, 0).toFixed(1);
+    const seg = document.getElementById('ab-' + bk);
+    if (seg) seg.style.width = pct + '%';
+  });
+
+  const amtsEl = document.getElementById('aging-amounts');
+  const colors = { d30: '#10b981', d60: '#f59e0b', d90: '#f97316', d120: '#ef4444', d120plus: '#991b1b' };
+  amtsEl.innerHTML = bks.map(bk => {
+    const v = d.buckets[bk] || 0;
+    if (v < 1) return '<div style="flex:1"></div>';
+    return `<div style="flex:1;text-align:center;font-size:10px;font-weight:700;color:${colors[bk]}">${fmt$(v)}</div>`;
+  }).join('');
+
+  // Tabla clientes
+  const list = document.getElementById('clientes-list');
+  if (!d.clientes || !d.clientes.length) {
+    list.innerHTML = '<div class="empty-state" style="padding:24px"><p>Sin clientes con saldo pendiente.</p></div>';
+    return;
+  }
+
+  const bucketLabel = { d30: '0–30d', d60: '31–60d', d90: '61–90d', d120: '91–120d', d120plus: '+120d' };
+  list.innerHTML = d.clientes.map(c => `
+    <div class="cartera-row" onclick="abrirDrawer('${escapar(c.cliente)}', ${c.saldo})">
+      <div class="cartera-nombre">${escapar(c.cliente)}</div>
+      <div class="cartera-facturas">${c.facturas} fac.</div>
+      <div class="cartera-saldo">${fmt$(c.saldo)}</div>
+      <div><span class="bucket-pill b-${c.bucket}">${bucketLabel[c.bucket] || c.bucket}</span></div>
+      <div>
+        <button class="btn-icon" title="Ver detalle" onclick="event.stopPropagation();abrirDrawer('${escapar(c.cliente)}', ${c.saldo})">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function escapar(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DRAWER
+═══════════════════════════════════════════════════════════════════════════ */
+async function abrirDrawer(cliente, saldo) {
+  document.getElementById('drawer-nombre').textContent = cliente;
+  document.getElementById('drawer-total').textContent  = 'Saldo pendiente: ' + fmt$(saldo);
+  document.getElementById('drawer-facturas-list').innerHTML = '<div style="color:var(--text3);font-size:13px">Cargando...</div>';
+  document.getElementById('drawer-score-result').innerHTML = '';
+  document.getElementById('drawer-cuit-inp').value = '';
+  document.getElementById('drawer-overlay').classList.add('open');
+  document.getElementById('drawer').classList.add('open');
+
+  try {
+    const d = await safeFetch('/api/turismo-facturas/' + encodeURIComponent(cliente));
+    renderDrawerFacturas(d.facturas || []);
+  } catch(e) {
+    document.getElementById('drawer-facturas-list').innerHTML = '<div class="alert alert-error">Error cargando facturas.</div>';
+  }
+}
+
+function cerrarDrawer() {
+  document.getElementById('drawer-overlay').classList.remove('open');
+  document.getElementById('drawer').classList.remove('open');
+}
+
+function renderDrawerFacturas(facturas) {
+  const el = document.getElementById('drawer-facturas-list');
+  if (!facturas.length) {
+    el.innerHTML = '<div class="empty-state"><p>Sin facturas encontradas.</p></div>';
+    return;
+  }
+  el.innerHTML = `
+    <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Facturas pendientes</div>
+    <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden">
+      ${facturas.map(f => `
+        <div style="display:grid;grid-template-columns:1fr 80px;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px">
+          <div>
+            <div style="font-weight:600">${escapar(f.nroFactura || '—')}</div>
+            <div style="font-size:11px;color:var(--text2);margin-top:2px">Emisión: ${f.fechaFactura || '—'} · Vto: ${f.fechaPago || '—'}</div>
+            ${f.dias ? `<div style="font-size:10px;color:${f.dias > 30 ? '#dc2626':'#64748b'};margin-top:1px">${f.dias} días</div>` : ''}
+          </div>
+          <div style="text-align:right;font-weight:700">${fmt$(f.saldo)}</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+async function consultarDrawerCuit() {
+  const cuit = limpiarCuit(document.getElementById('drawer-cuit-inp').value);
+  if (cuit.length < 10) { return; }
+  const el = document.getElementById('drawer-score-result');
+  el.innerHTML = '<div style="color:var(--text3);font-size:13px">Consultando BCRA...</div>';
+  try {
+    const d = await safeFetch('/fetch-score/' + cuit);
+    el.innerHTML = renderScoreMini(d);
+  } catch(e) {
+    el.innerHTML = '<div class="alert alert-error">Error consultando BCRA.</div>';
+  }
+}
+
+function renderScoreMini(d) {
+  if (!d || d.error) return '<div class="alert alert-error">Sin datos disponibles.</div>';
+  const score = d.score ?? 0;
+  const color = score >= 700 ? '#059669' : score >= 400 ? '#d97706' : '#dc2626';
+  const label = score >= 700 ? 'Bueno' : score >= 400 ? 'Revisar' : 'Rechazar';
+  const sit   = d.sit_padron ?? d.sit_max ?? '—';
+  return `
+    <div style="display:flex;align-items:center;gap:14px;padding:12px 14px;background:var(--surface2);border-radius:10px;border:1px solid var(--border)">
+      <div style="font-size:28px;font-weight:800;color:${color};line-height:1">${score}</div>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:${color}">${label}</div>
+        <div style="font-size:11px;color:var(--text2);margin-top:2px">Situación BCRA: ${sit} · ${d.nombre || ''}</div>
+        ${d.tiene_deuda ? `<div style="font-size:11px;color:#dc2626;margin-top:2px">Deuda registrada: ${fmt$(d.monto_total_deuda)}</div>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CONSULTA CUIT (sección principal)
+═══════════════════════════════════════════════════════════════════════════ */
+async function consultarCuit() {
+  const cuit = limpiarCuit(document.getElementById('cuit-input').value);
+  if (cuit.length < 10) {
+    document.getElementById('cuit-input').focus();
+    return;
+  }
+  const btn = document.getElementById('btn-consultar');
+  btn.disabled = true;
+  btn.classList.add('loading');
+  document.getElementById('score-panel').style.display = 'none';
+  document.getElementById('cuit-placeholder').style.display = 'none';
+
+  try {
+    const d = await safeFetch('/fetch-score/' + cuit);
+    renderScore(d, cuit);
+    document.getElementById('score-panel').style.display = 'block';
+  } catch(e) {
+    document.getElementById('score-panel').innerHTML = '<div class="alert alert-error">Error al consultar. Verificá el CUIT.</div>';
+    document.getElementById('score-panel').style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('loading');
+  }
+}
+
+function renderScore(d, cuitBuscado) {
+  const panel = document.getElementById('score-panel');
+  if (!d || d.error) {
+    panel.innerHTML = '<div class="alert alert-error">Sin datos para este CUIT.</div>';
+    return;
+  }
+
+  const score  = d.score ?? 0;
+  const nombre = d.nombre || d.denominacion || cuitBuscado;
+  const sit    = d.sit_padron ?? d.sit_max ?? '—';
+
+  let badgeClass, estadoColor, estadoLabel;
+  if (score >= 700)       { badgeClass = 'badge-verde';    estadoColor = 'var(--green-bg)'; estadoLabel = '✓ Bueno';    }
+  else if (score >= 400)  { badgeClass = 'badge-amarillo'; estadoColor = 'var(--yellow-bg)';estadoLabel = '⚠ Revisar';  }
+  else                    { badgeClass = 'badge-rojo';     estadoColor = 'var(--red-bg)';   estadoLabel = '✕ Rechazar'; }
+
+  const sitColor = {1:'#059669',2:'#d97706',3:'#d97706',4:'#dc2626',5:'#dc2626'}[sit] || '#64748b';
+
+  // Historial
+  let histHtml = '';
+  if (d.historial && d.historial.length) {
+    const COLORES = ['#10b981','#10b981','#f59e0b','#f59e0b','#ef4444','#991b1b'];
+    const maxV = Math.max(...d.historial.map(h => h.monto || 0), 1);
+    histHtml = `
+      <div class="hist-bar-wrap">
+        <div class="hist-label">Historial BCRA — últimos meses</div>
+        <div class="hist-bars">
+          ${d.historial.map(h => {
+            const pct = Math.max(((h.monto || 0) / maxV) * 100, h.situacion > 0 ? 8 : 0);
+            const col = COLORES[Math.min(h.situacion, 5)] || '#94a3b8';
+            return `<div class="hist-bar" style="background:${col};height:${pct}%"
+              data-tip="Sit ${h.situacion} · ${fmt$(h.monto)} · ${h.periodo || ''}"></div>`;
+          }).join('')}
+        </div>
+        <div class="hist-months">
+          ${d.historial.map(h => `<div class="hist-month">${(h.periodo || '').toString().slice(4,6)}</div>`).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  // Deudas
+  let deudasHtml = '';
+  if (d.deudas && d.deudas.length) {
+    deudasHtml = `
+      <div style="margin-top:16px">
+        <div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Deudas por Entidad</div>
+        <div class="table-wrap">
+          <table>
+            <tr><th>Entidad</th><th>Situación</th><th style="text-align:right">Monto</th></tr>
+            ${d.deudas.map(deu => `
+              <tr>
+                <td style="font-weight:600">${escapar(deu.entidad || '—')}</td>
+                <td><span style="padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700;background:${sitColor}22;color:${sitColor}">Sit ${deu.situacion ?? '—'}</span></td>
+                <td style="text-align:right;font-weight:700">${fmt$(deu.monto)}</td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
+  panel.innerHTML = `
+    <div class="score-header">
+      <div class="score-badge ${badgeClass}">${score}</div>
+      <div class="score-info-main">
+        <div class="score-nombre">${escapar(nombre)}</div>
+        <div class="score-cuit">${cuitBuscado}</div>
+        <div class="score-estado-badge" style="background:${estadoColor};color:${sit<=1?'var(--green)':sit<=2?'var(--yellow)':'var(--red)'}">
+          ${estadoLabel}
+        </div>
+      </div>
+    </div>
+    <div class="info-grid">
+      <div class="info-item">
+        <div class="info-item-label">Situación BCRA</div>
+        <div class="info-item-value" style="color:${sitColor}">${sit}</div>
+      </div>
+      ${d.monto_total_deuda ? `<div class="info-item">
+        <div class="info-item-label">Deuda Total</div>
+        <div class="info-item-value">${fmt$(d.monto_total_deuda)}</div>
+      </div>` : ''}
+      ${d.tipo_persona ? `<div class="info-item">
+        <div class="info-item-label">Tipo Persona</div>
+        <div class="info-item-value" style="font-size:12px">${escapar(d.tipo_persona)}</div>
+      </div>` : ''}
+      ${d.empleados !== undefined && d.empleados !== null ? `<div class="info-item">
+        <div class="info-item-label">Empleados</div>
+        <div class="info-item-value">${d.empleados.toLocaleString('es-AR')}</div>
+      </div>` : ''}
+    </div>
+    ${histHtml}
+    ${deudasHtml}
+    ${d.mora_administrativa ? `<div class="alert alert-warning" style="margin-top:16px">⚠ Mora técnica / administrativa — sin historial de incumplimientos previos.</div>` : ''}
+    ${d.default_real ? `<div class="alert alert-error" style="margin-top:16px">⛔ Default real — cliente con historial de incumplimiento.</div>` : ''}
+  `;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CHEQUES
+═══════════════════════════════════════════════════════════════════════════ */
+async function consultarCheques() {
+  const cuit = limpiarCuit(document.getElementById('cheque-cuit-input').value);
+  if (cuit.length < 10) return;
+
+  const btn = document.getElementById('btn-cheques');
+  btn.disabled = true;
+  btn.classList.add('loading');
+  document.getElementById('cheques-placeholder').style.display = 'none';
+  document.getElementById('cheques-resultado').innerHTML = '<div class="alert alert-info">Consultando BCRA...</div>';
+
+  try {
+    const d = await safeFetch('/deudas/' + cuit + '/cheques');
+    renderCheques(d, cuit);
+  } catch(e) {
+    document.getElementById('cheques-resultado').innerHTML = '<div class="alert alert-error">Error al consultar cheques.</div>';
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('loading');
+  }
+}
+
+function renderCheques(d, cuit) {
+  const el = document.getElementById('cheques-resultado');
+  const causales = d?.causales || d?.results?.causales || d?.results?.detalle || [];
+  const total = d?.total_importe ?? causales.reduce((s, c) => s + (c.monto || 0), 0);
+
+  if (!causales.length) {
+    el.innerHTML = `
+      <div class="card">
+        <div class="alert alert-success">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          Sin cheques rechazados registrados para el CUIT <strong>${cuit}</strong>.
+        </div>
+      </div>`;
+    return;
+  }
+
+  el.innerHTML = `
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div>
+          <div style="font-size:15px;font-weight:700;color:#dc2626">${causales.length} cheque${causales.length !== 1 ? 's' : ''} rechazado${causales.length !== 1 ? 's' : ''}</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:2px">CUIT ${cuit} · Total: ${fmt$(total)}</div>
+        </div>
+      </div>
+      ${causales.map(c => `
+        <div class="cheque-card">
+          <div>
+            <div class="cheque-label">Causal</div>
+            <div class="cheque-val">${escapar(c.causal || c.descripcion || '—')}</div>
+          </div>
+          <div>
+            <div class="cheque-label">Monto</div>
+            <div class="cheque-val">${fmt$(c.monto)}</div>
+          </div>
+          <div>
+            <div class="cheque-label">Fecha</div>
+            <div class="cheque-val">${c.fecha || c.fechaRechazo || '—'}</div>
+          </div>
+          <div>
+            <div class="cheque-label">Entidad</div>
+            <div class="cheque-val" style="font-size:12px">${escapar(c.entidad || c.banco || '—')}</div>
+          </div>
+        </div>
+      `).join('')}
+    </div>`;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   INIT
+═══════════════════════════════════════════════════════════════════════════ */
+cargarPortfolio();
+</script>
+</body>
+</html>
