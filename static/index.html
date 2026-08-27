@@ -802,7 +802,6 @@
       </div>
     </div>
     <nav class="sb-nav">
-      <div class="sb-section-label">Análisis</div>
       <button class="tab active" onclick="switchTab('consulta',this)" title="Consultar CUIT">
         <span class="sb-ico"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
         <span class="sb-label">Consultar</span>
@@ -812,26 +811,21 @@
         <span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
         <span class="sb-label">Cartera</span>
       </button>
-      <button class="tab" onclick="switchTab('portfolio',this)" title="Portfolio de saldos">
+      <button class="tab" onclick="switchTab('portfolio',this)" title="Saldos de cartera">
         <span class="sb-ico"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
-        <span class="sb-label">Portfolio</span>
+        <span class="sb-label">Saldos</span>
       </button>
-      <button class="tab" onclick="switchTab('dso',this)" title="Días de venta pendiente">
+      <button class="tab" onclick="switchTab('dso',this)" title="Actualizar saldos comerciales">
         <span class="sb-ico"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
-        <span class="sb-label">DSO</span>
+        <span class="sb-label">Subir Saldos</span>
       </button>
       <button class="tab" onclick="switchTab('alertas',this)" title="Alertas BCRA" id="btn-tab-alertas">
         <span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
         <span class="sb-label">Alertas <span id="alertas-badge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;font-size:9px;font-weight:700;padding:1px 5px;margin-left:2px;vertical-align:middle;"></span></span>
       </button>
-      <button class="tab" onclick="switchTab('echeq',this)" title="Control masivo de eCheq">
+      <button class="tab" onclick="switchTab('echeq',this)" title="Cheques electrónicos">
         <span class="sb-ico"><svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="6" y1="15" x2="10" y2="15"/></svg></span>
-        <span class="sb-label">Control eCheq</span>
-      </button>
-      <div class="sb-section-label">Comunidad</div>
-      <button class="tab" onclick="switchTab('red',this)" title="Red de Bodegas">
-        <span class="sb-ico"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></span>
-        <span class="sb-label">Red</span>
+        <span class="sb-label">eCheq</span>
       </button>
       <button class="tab" onclick="switchTab('configuracion',this)" title="Configuración">
         <span class="sb-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
@@ -859,9 +853,7 @@
         <div id="page-title-el" class="page-title-text">Consultar CUIT</div>
         <div class="page-subtitle">Motor de Scoring · Análisis de Riesgo Crediticio</div>
       </div>
-      <div class="ph-actions">
-        <button class="primary" onclick="generarResumenEjecutivo()" style="font-size:12px;padding:7px 14px;">📄 Resumen</button>
-      </div>
+      <div class="ph-actions"></div>
     </div>
     <div class="canvas-body">
       <div class="container">
@@ -923,10 +915,10 @@
             style="flex:1;font-size:15px;padding:13px 18px;border-radius:12px;border:2px solid #e2e8f0;background:#fff;box-shadow:0 2px 8px rgba(59,130,246,0.06);transition:border-color 0.15s,box-shadow 0.15s;outline:none;"
             onfocus="this.style.borderColor='#3B82F6';this.style.boxShadow='0 0 0 3px rgba(59,130,246,0.12)'"
             onblur="this.style.borderColor='#e2e8f0';this.style.boxShadow='0 2px 8px rgba(59,130,246,0.06)'" />
-          <button class="primary" onclick="consultarCliente()" style="padding:13px 22px;font-size:14px;border-radius:12px;white-space:nowrap;">Analizar →</button>
-          <button id="btn-nueva-consulta" onclick="nuevaConsulta()" title="Nueva consulta"
+          <button class="primary" onclick="consultarCliente()" style="padding:13px 22px;font-size:14px;border-radius:12px;white-space:nowrap;">Consultar →</button>
+          <button id="btn-nueva-consulta" onclick="nuevaConsulta()" title="Nueva búsqueda"
             style="display:none;padding:12px 14px;font-size:14px;border-radius:12px;background:#fff;border:1.5px solid #e2e8f0;color:#64748b;cursor:pointer;white-space:nowrap;"
-            onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='#fff'">✕ Nuevo</button>
+            onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='#fff'">← Nueva búsqueda</button>
         </div>
       </div>
 
@@ -1128,7 +1120,7 @@
 
     <!-- ── INDICADOR DSO ACTUAL (siempre visible, carga del servidor) ── -->
     <div id="dso-actual-card" class="card" style="display:none;margin-bottom:1rem;border-left:4px solid var(--azul-claro);background:linear-gradient(135deg,#eff6ff,#fff);">
-      <div style="font-size:11px;color:var(--azul-claro);font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">DSO Vigente — Último Cálculo</div>
+      <div style="font-size:11px;color:var(--azul-claro);font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">Días de Cobranza — Último Cálculo</div>
       <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
         <span id="dso-actual-num" style="font-family:'Sora',sans-serif;font-size:48px;font-weight:800;line-height:1;">—</span>
         <div>
@@ -1157,14 +1149,14 @@
 
     <div id="dso-loading" style="display:none;text-align:center;padding:2rem;">
       <div class="loading-spinner"></div>
-      <div style="font-size:13px;color:#64748b;margin-top:8px;">Calculando DSO...</div>
+      <div style="font-size:13px;color:#64748b;margin-top:8px;">Calculando días de cobranza...</div>
     </div>
 
     <div id="dso-resultado" style="display:none;">
       <!-- KPI principal -->
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:1rem;">
         <div class="card" style="text-align:center;padding:1.5rem 1rem;">
-          <div style="font-size:11px;color:var(--azul-claro);font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">DSO Global</div>
+          <div style="font-size:11px;color:var(--azul-claro);font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">Días de Cobranza</div>
           <div id="dso-numero" style="font-family:'Sora',sans-serif;font-size:48px;font-weight:800;line-height:1;"></div>
           <div style="font-size:12px;color:#64748b;margin-top:4px;">días promedio</div>
         </div>
@@ -3687,7 +3679,7 @@ function filtrarWSPReciente(threads) {
 }
 function buscarEnMoras(cuit) { return morasIndex ? morasIndex[cuit.replace(/-/g,'')] || null : null; }
 
-var _pageTitles = {consulta:'Consultar CUIT', buscador:'Cartera', cartera:'Cartera', portfolio:'Portfolio de Saldos', dso:'Módulo DSO', alertas:'Alertas BCRA', red:'Red de Bodegas', configuracion:'Configuración', echeq:'Control masivo de eCheq'};
+var _pageTitles = {consulta:'Consultar CUIT', buscador:'Cartera', cartera:'Cartera', portfolio:'Saldos de Cartera', dso:'Subir Saldos', alertas:'Alertas BCRA', red:'Red de Bodegas', configuracion:'Configuración', echeq:'eCheq'};
 
 var _alertasFilter  = null; // 'critico' | 'advertencia' | 'exceso' | null
 var _alertasMoraData = null; // cache de /api/alertas-mora
