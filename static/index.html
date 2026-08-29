@@ -4176,10 +4176,25 @@ function agregarDesdConsulta(cuit, nombre) {
   if (_dom.trim()) {
     prefill.ciudad = _dom.split(',')[0].trim(); // tomar solo la localidad
   }
-  // Límite dinámico sugerido desde el score del servidor
+  // Límite sugerido: prioridad 1 — score servidor (30% de deuda Sit.1)
   var _sc = window._ultimoScoreVende;
   if (_sc && _sc.limite_dinamico_sugerido && _sc.limite_dinamico_sugerido > 0) {
     prefill.limite = Math.round(_sc.limite_dinamico_sugerido);
+  } else {
+    // Prioridad 2 — fallback desde datos BCRA ya cargados (score aún no llegó)
+    // Usa el mismo criterio que el backend: 30% del monto reportado en Sit.1
+    var _bcra = window._ultimoBcraData;
+    var _montoSit1 = 0;
+    if (_bcra && _bcra.results && Array.isArray(_bcra.results.periodos)) {
+      var _periReciente = _bcra.results.periodos.slice().sort(function(a,b){ return (parseInt(b.periodo)||0)-(parseInt(a.periodo)||0); })[0];
+      if (_periReciente && Array.isArray(_periReciente.entidades)) {
+        _periReciente.entidades.forEach(function(e) {
+          if ((e.situacion||0) === 1 && (e.monto||0) > 0) _montoSit1 += e.monto;
+        });
+      }
+    }
+    // monto de /deudas viene en miles de pesos; × 1000 = pesos; × 0.30 = 30%
+    if (_montoSit1 > 0) prefill.limite = Math.round(_montoSit1 * 1000 * 0.30);
   }
   // Plazo de pago: valor por defecto del sector (30 días)
   prefill.plazo = 30;
@@ -4270,9 +4285,11 @@ function mostrarResultado(cuit, data, esTimeout, estadoAfip, domicilioAfip, nomb
   headerHtml += '<div id="cli-mipyme-row" style="display:none;margin-top:5px;flex-wrap:wrap;gap:5px;align-items:center;"></div>';
   headerHtml += '</div>';
   headerHtml += '<div class="decision-actions" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">';
+  headerHtml += '<span id="cli-cartera-estado">';
   headerHtml += yaEstaCartera
     ? '<span class="badge-cartera">En cartera ✓</span>'
     : '<span class="badge-no-cartera">Sin seguimiento</span><button onclick="agregarDesdConsulta(\''+cuit+'\', \''+nombreMostrar.replace(/'/g,'')+'\');" class="resource-btn" style="font-size:12px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>Agregar</button>';
+  headerHtml += '</span>';
   headerHtml += '<button onclick="verCliente(\''+cuit+'\')" title="Refrescar datos BCRA" style="padding:5px 9px;font-size:14px;background:none;border:1px solid #cbd5e1;border-radius:7px;cursor:pointer;color:#475569;line-height:1;" >↻</button>';
   headerHtml += '<button onclick="nuevaConsulta()" title="Nueva consulta" style="padding:5px 9px;font-size:14px;background:none;border:1px solid #cbd5e1;border-radius:7px;cursor:pointer;color:#475569;line-height:1;">✕</button>';
   headerHtml += '</div></div>';
@@ -7025,8 +7042,12 @@ async function confirmarAgregarCliente() {
     cerrarModalAgregar();
     // Si venía de una consulta, actualizar el badge en el header
     if (_modalAgregarCuit) {
+      // Header viejo (carga inicial): div #cli-acciones
       var acEl = document.getElementById('cli-acciones');
-      if (acEl) acEl.innerHTML = '<span style="font-size:11px;color:var(--verde);padding:4px 10px;background:var(--verde-bg);border-radius:6px;font-weight:600;">Agregado a cartera ✓</span>';
+      if (acEl) acEl.innerHTML = '<span style="font-size:11px;color:var(--verde);padding:4px 10px;background:var(--verde-bg);border-radius:6px;font-weight:600;">En cartera ✓</span>';
+      // Header final (post-mostrarResultado): span #cli-cartera-estado
+      var estadoEl = document.getElementById('cli-cartera-estado');
+      if (estadoEl) estadoEl.innerHTML = '<span class="badge-cartera">En cartera ✓</span>';
     }
     renderCartera(); actualizarMetricas(); sincronizarServidor();
   } catch(e) {
@@ -8613,7 +8634,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <select id="agregar-vendedor" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;background:#fff;color:#1e293b;"></select></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">L&iacute;mite de cr&eacute;dito ($) *</label>
-          <input id="agregar-limite" type="number" min="0" placeholder="ej. 600000" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" /></div>
+          <input id="agregar-limite" type="number" min="0" placeholder="Sugerido según deuda BCRA" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" /></div>
         <div><label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Plazo de pago (d&iacute;as) *</label>
           <input id="agregar-plazo" type="number" min="0" placeholder="ej. 30" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" /></div>
       </div>
