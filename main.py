@@ -11071,14 +11071,15 @@ def get_saldos_cuit(cuit):
         cn = _norm_nombre(nombre_en_cartera)
         result = [f for f in fuente_g if _norm_nombre(f.get('cliente', '')) == cn]
         if not result:
-            # Fuzzy: match ≥2 palabras significativas (excluyendo sufijos societarios).
-            # "WINE BAR SRL" → ["WINE","BAR"] — "SRL" no discrimina porque aparece en
-            # miles de razones sociales y genera falsos positivos con clientes sin relación.
+            # Fuzzy: requiere ≥2 palabras significativas para evitar falsos positivos.
+            # "TU BEBIDA SA" → solo 1 palabra significativa ("BEBIDA") → sin fuzzy.
+            # Sin este guard, "BEBIDA" matchea como substring de "BEBIDAS" en razones
+            # sociales sin relación (p.ej. Compañía Argentina de Bebidas S.A.).
             palabras = [p for p in cn.split() if len(p) > 2 and p not in _DSO_SUFIJOS]
-            if palabras:
+            if len(palabras) >= 2:
                 result = [f for f in fuente_g
                           if sum(1 for p in palabras
-                                 if p in _norm_nombre(f.get('cliente', ''))) >= min(2, len(palabras))]
+                                 if p in _norm_nombre(f.get('cliente', ''))) >= 2]
                 if result:
                     print(f"[saldos-cuit] Fuzzy '{nombre_en_cartera}' → {len(result)} facturas", flush=True)
         total_saldo = sum(f.get('saldo', 0) for f in result)
