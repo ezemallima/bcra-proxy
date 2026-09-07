@@ -2229,13 +2229,18 @@ def _inferir_desde_bcra(cuit):
 
 def get_solvency_data(cuit, cache_only=False):
     """
-    Solvencia multi-fuente con cadena de fallback activo. Caché 7 días.
+    Solvencia multi-fuente con cadena de fallback activo. Caché 35 días.
       0. ARCA oficial (WSAA + Padrón A13, con A5 de respaldo) — canal autorizado
       1. API configurada (env var)
       2. TangoFactura AFIP JSON — extrae cat, actividad, empleador, antigüedad
       3. AFIP HTML scraper — endpoints públicos con UA rotativo
       4. Inferencia desde deuda BCRA — si el banco prestó $X, el cliente tiene ingresos
     cache_only=True: retorna solo desde disco, sin llamadas de red (para modo masivo).
+
+    TTL 35 días: la verificación profunda mensual (ver _enriquecer_scores_worker)
+    refresca este caché tras cada bulk; el masivo semanal lo lee con cache_only=True.
+    Así ambos flujos puntúan con el mismo perfil fiscal que la consulta individual
+    durante todo el mes — es el mecanismo de convergencia masivo vs individual.
     """
     cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
     cache_path  = os.path.join(DATA_DIR, f'solvency_{cuit_limpio}.json')
@@ -2243,7 +2248,7 @@ def get_solvency_data(cuit, cache_only=False):
         if os.path.exists(cache_path):
             with open(cache_path, 'r') as f:
                 cached = json.load(f)
-            if time.time() - cached.get('ts', 0) < 86400 * 7:  # 7 días — dato fiscal es estable
+            if time.time() - cached.get('ts', 0) < 86400 * 35:  # 35 días — dato fiscal estable; refresca la verif. profunda mensual
                 cached_data = cached.get('data') or {}
                 # Normalizar: caché antiguo pudo guardar lista en lugar de dict
                 if isinstance(cached_data, list):
@@ -4262,9 +4267,9 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
     cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
 
     # ── ARCA/solvencia en paralelo con la extracción BCRA ──────────────────
-    # get_solvency_data cachea 24h en disco, así que en consultas repetidas el
-    # thread termina de inmediato. Nunca propaga excepción: el score debe poder
-    # calcularse aunque el canal fiscal esté caído.
+    # get_solvency_data cachea 35 días en disco, así que en consultas repetidas
+    # el thread termina de inmediato. Nunca propaga excepción: el score debe
+    # poder calcularse aunque el canal fiscal esté caído.
     # sin_arca=True omite el fetch completamente (modo masivo: ARCA bloquea en masa).
     _solv_box: dict = {}
 
@@ -4391,8 +4396,8 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
     # ── Reunir la rama fiscal (ya venía corriendo en paralelo) ─────────────
     if _th_solv is None:
         # sin_arca=True: no hace llamadas de red.
-        # Prioridad 1: caché en disco (datos de consultas individuales previas, TTL 7d).
-        #   → score idéntico al individual para clientes ya consultados esta semana.
+        # Prioridad 1: caché en disco (verif. profunda mensual o consultas previas, TTL 35d).
+        #   → score idéntico al individual para clientes con solvencia cacheada este mes.
         # Prioridad 2: inferir tipo_persona desde prefijo CUIT (determinístico).
         #   → cierra el gap Layer 2 (120 neutro → 300 JURIDICA / 120 FISICA)
         #     sin necesidad de ARCA, porque el tipo de persona no requiere validación externa.
@@ -4444,6 +4449,15 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
 
 # Alias para mantener compatibilidad con código legado
 _calcular_score = calcular_score_servidor
+
+# Fuentes de solvencia que provienen de un organismo/servicio externo real.
+# Todo lo demás (bcra_fallback, cuit_prefix, vacío) es inferencia local y NO
+# marca el score como verificado. Sensor del circuit breaker de la verificación
+# profunda y del badge "✓ Verificado" en la cartera.
+_SOLV_FUENTES_REALES = (
+    'arca_oficial', 'arca_padron_a13', 'arca_a13+a5',
+    'tangofactura', 'afip_html', 'custom',
+)
 
 
 def _actualizar_score_en_cartera(cuit_limpio: str, score_data: dict, solvency: dict = None):
@@ -4501,6 +4515,11 @@ def _actualizar_score_en_cartera(cuit_limpio: str, score_data: dict, solvency: d
             'degradacion_delta':    deg_delta,
             'degradacion_msg':      deg_msg or None,
         }
+        # score_verificado: solo se actualiza cuando este llamado trae solvencia.
+        # El masivo pasa solvency={} (reutiliza score individual o corre sin_arca)
+        # y NO debe pisar el flag que dejó una verificación con ARCA real.
+        if isinstance(solvency, dict) and solvency:
+            patch['score_verificado'] = solvency.get('fuente') in _SOLV_FUENTES_REALES
         found = False
         for i, c in enumerate(cartera):
             if str(c.get('cuit', '')).replace('-', '').replace(' ', '').strip() == nc:
@@ -5627,6 +5646,262 @@ def admin_precacheo_progreso():
     if not _admin_auth(request):
         return jsonify({"error": "no_autorizado"}), 403
     return jsonify(_precacheo_estado)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# VERIFICACIÓN PROFUNDA — enriquecimiento mensual de scores con ARCA en vivo
+# ═══════════════════════════════════════════════════════════════════════════
+# Se ejecuta una vez al mes, después de actualizar el bulk 24DSF. Recorre la
+# cartera recalculando cada score con la misma profundidad que la consulta
+# individual: BCRA desde el bulk local (dato oficial, sin red), cheques BCRA
+# en vivo y ARCA en vivo. La solvencia de cada CUIT queda cacheada en disco
+# (TTL 35 días), por lo que la verificación masiva semanal —que la lee con
+# cache_only=True— produce scores convergentes con la consulta individual
+# durante todo el mes.
+#
+# Circuit breaker: si ARCA deja de responder con datos reales (bloqueo de IP)
+# o se acumulan errores duros, el worker pausa automáticamente y reanuda solo.
+# Tras _ENRICH_MAX_PAUSAS pausas el ciclo aborta; el progreso queda guardado
+# (los CUITs ya verificados no se repiten al relanzar).
+
+_enrich_estado = {
+    "corriendo": False, "pausado": False,
+    "total": 0, "procesados": 0, "exitosos": 0, "saltados": 0,
+    "errores_total": 0, "arca_reales": 0, "arca_inferidos": 0,
+    "pausas": 0, "pausa_hasta": 0,
+    "cliente_actual": "", "mensaje": "Inactivo", "inicio": "", "fin": "",
+}
+_enrich_stop = threading.Event()
+
+_ENRICH_MAX_ARCA_FALLIDOS = 4           # consecutivos sin fuente real → pausa larga
+_ENRICH_MAX_ERRORES       = 4           # errores duros consecutivos → pausa corta
+_ENRICH_PAUSA_CORTA_SEG   = 30 * 60     # 30 min — errores transitorios
+_ENRICH_PAUSA_LARGA_SEG   = 3 * 3600    # 3 h — bloqueo ARCA detectado
+_ENRICH_MAX_PAUSAS        = 6           # tras N pausas el ciclo aborta
+_ENRICH_SKIP_TTL_SEG      = 20 * 86400  # saltar CUITs verificados hace < 20 días
+
+
+def _solvencia_es_real(solvency: dict) -> bool:
+    """True si la solvencia vino de una fuente externa real (ARCA WS /
+    TangoFactura / AFIP HTML), no de inferencia local. Sensor del breaker."""
+    if not isinstance(solvency, dict) or not solvency:
+        return False
+    return str(solvency.get('fuente', '') or '') in _SOLV_FUENTES_REALES
+
+
+def _enriquecer_scores_worker(delay_seg: float = 120.0):
+    """Worker de verificación profunda. Un CUIT cada `delay_seg` segundos.
+
+    Invariantes:
+      - Nunca golpea la API BCRA de deudas/historial (el bulk local es la fuente;
+        live solo si el CUIT no figura en el bulk, igual que el masivo).
+      - Una sola llamada ARCA por CUIT (get_solvency_data, cacheada 35 d); los
+        cheques BCRA en vivo van al mismo ritmo, limitados por el semáforo global.
+      - Persiste igual que una consulta individual: score_cache.json con _ts
+        (el masivo lo reutiliza) + alertas_cartera.json con score_verificado.
+    """
+    global _enrich_estado
+    try:
+        with _cartera_lock:
+            _cc_snap = list(_cartera_comercial)
+
+        with _score_cache_lock:
+            _sc_now = _score_cache_read()
+
+        pendientes, saltados = [], 0
+        vistos = set()
+        for c in _cc_snap:
+            cuit = str(c.get('cuit', '')).replace('-', '').replace(' ', '').strip()
+            if not (len(cuit) == 11 and cuit.isdigit()) or cuit in vistos:
+                continue
+            vistos.add(cuit)
+            _ts_prev = ((_sc_now.get(cuit) or {}).get('_ts')) or 0
+            if _ts_prev and time.time() - _ts_prev < _ENRICH_SKIP_TTL_SEG:
+                saltados += 1
+                continue
+            pendientes.append(
+                (cuit, str(c.get('nombre', '') or ''), str(c.get('ciudad', '') or ''))
+            )
+
+        _enrich_estado.update({
+            "corriendo": True, "pausado": False,
+            "total": len(pendientes), "procesados": 0, "exitosos": 0,
+            "saltados": saltados, "errores_total": 0,
+            "arca_reales": 0, "arca_inferidos": 0,
+            "pausas": 0, "pausa_hasta": 0,
+            "cliente_actual": "", "inicio": time.strftime('%d/%m/%Y %H:%M'), "fin": "",
+            "mensaje": f"Iniciando: {len(pendientes)} CUITs pendientes ({saltados} ya verificados)",
+        })
+        print(
+            f"[enrich] Verificación profunda iniciada: {len(pendientes)} CUITs, "
+            f"delay {delay_seg:.0f}s (~{len(pendientes) * delay_seg / 3600:.1f} h estimadas)",
+            flush=True,
+        )
+
+        _err_consec, _arca_fail_consec = 0, 0
+
+        for idx, (cuit, nombre, ciudad) in enumerate(pendientes):
+            if _enrich_stop.is_set():
+                _enrich_estado["mensaje"] = "Detenido manualmente"
+                break
+
+            _enrich_estado["cliente_actual"] = nombre or cuit
+            _enrich_estado["mensaje"] = f"Verificando {nombre or cuit} ({idx + 1}/{len(pendientes)})"
+
+            try:
+                # Refrescar solvencia si el caché supera los 20 días: el TTL de
+                # lectura es 35 d y sin esta purga el ciclo mensual siguiente
+                # reutilizaría el perfil fiscal del mes anterior sin ir a ARCA.
+                _solv_path = os.path.join(DATA_DIR, f'solvency_{cuit}.json')
+                try:
+                    if os.path.exists(_solv_path):
+                        with open(_solv_path, 'r') as _sf:
+                            _solv_ts = (json.load(_sf) or {}).get('ts', 0)
+                        if time.time() - _solv_ts > _ENRICH_SKIP_TTL_SEG:
+                            os.remove(_solv_path)
+                except Exception:
+                    pass
+
+                # 1. ARCA en vivo — única fuente rate-limitada del ciclo. El
+                #    resultado queda en caché disco 35 d: lo reutilizan el masivo
+                #    semanal (cache_only=True) y las consultas individuales.
+                solvency = get_solvency_data(cuit)
+                if not isinstance(solvency, dict):
+                    solvency = {}
+
+                if _solvencia_es_real(solvency):
+                    _arca_fail_consec = 0
+                    _enrich_estado["arca_reales"] += 1
+                else:
+                    _arca_fail_consec += 1
+                    _enrich_estado["arca_inferidos"] += 1
+
+                # 2. BCRA desde bulk local + score con la misma profundidad que
+                #    la consulta individual (solvencia recién cacheada incluida).
+                bcra_data, _ = consultar_bcra_cached(cuit, live_primero=False)
+                score_data = calcular_score_servidor(
+                    cuit, bcra_data or {}, ciudad=ciudad,
+                    live_primero=False, sin_arca=False,
+                )
+
+                if score_data and score_data.get('score'):
+                    _err_consec = 0
+                    with _alertas_file_lock:
+                        _actualizar_score_en_cartera(cuit, score_data, solvency)
+                    resp = _score_response(score_data, solvency, _cheques_cache_get(cuit))
+                    resp['_ts'] = time.time()
+                    resp['_enriquecido'] = True
+                    with _score_cache_lock:
+                        _sc_w = _score_cache_read()
+                        _sc_w[cuit] = resp
+                        _score_cache_write(_sc_w)
+                    _enrich_estado["exitosos"] += 1
+                else:
+                    _err_consec += 1
+                    _enrich_estado["errores_total"] += 1
+                    print(f"[enrich] {cuit} sin score calculable", flush=True)
+
+            except Exception as _e:
+                _err_consec += 1
+                _enrich_estado["errores_total"] += 1
+                print(f"[enrich] Error {cuit}: {type(_e).__name__}: {_e}", flush=True)
+
+            _enrich_estado["procesados"] = idx + 1
+
+            # ── Circuit breaker ──────────────────────────────────────────────
+            _pausa_seg, _motivo = 0, ""
+            if _arca_fail_consec >= _ENRICH_MAX_ARCA_FALLIDOS:
+                _pausa_seg = _ENRICH_PAUSA_LARGA_SEG
+                _motivo = (
+                    f"ARCA sin datos reales en {_arca_fail_consec} CUITs seguidos "
+                    f"(posible bloqueo)"
+                )
+            elif _err_consec >= _ENRICH_MAX_ERRORES:
+                _pausa_seg = _ENRICH_PAUSA_CORTA_SEG
+                _motivo = f"{_err_consec} errores consecutivos"
+
+            if _pausa_seg:
+                _enrich_estado["pausas"] += 1
+                if _enrich_estado["pausas"] > _ENRICH_MAX_PAUSAS:
+                    _enrich_estado["mensaje"] = (
+                        f"ABORTADO tras {_ENRICH_MAX_PAUSAS} pausas — revisar canal ARCA. "
+                        f"Progreso guardado: al relanzar no se repiten los verificados."
+                    )
+                    print(f"[enrich] {_enrich_estado['mensaje']}", flush=True)
+                    break
+                _hasta = time.time() + _pausa_seg
+                _enrich_estado["pausado"] = True
+                _enrich_estado["pausa_hasta"] = _hasta
+                _enrich_estado["mensaje"] = (
+                    f"PAUSA {int(_pausa_seg / 60)} min — {_motivo}. Reanuda a las "
+                    f"{time.strftime('%H:%M', time.localtime(_hasta))}."
+                )
+                print(f"[enrich] {_enrich_estado['mensaje']}", flush=True)
+                while time.time() < _hasta and not _enrich_stop.is_set():
+                    time.sleep(15)
+                _enrich_estado["pausado"] = False
+                _enrich_estado["pausa_hasta"] = 0
+                _err_consec, _arca_fail_consec = 0, 0
+                if _enrich_stop.is_set():
+                    _enrich_estado["mensaje"] = "Detenido manualmente"
+                    break
+                continue  # tras una pausa no hace falta delay adicional
+
+            # ── Delay entre CUITs (interrumpible en bloques de 5 s) ──────────
+            _fin_delay = time.time() + delay_seg
+            while time.time() < _fin_delay and not _enrich_stop.is_set():
+                time.sleep(min(5.0, max(0.1, _fin_delay - time.time())))
+
+    except Exception as _e_w:
+        _enrich_estado["mensaje"] = f"Error fatal del worker: {_e_w}"
+        print(f"[enrich] ERROR FATAL: {_e_w}", flush=True)
+    finally:
+        _enrich_estado["corriendo"] = False
+        _enrich_estado["pausado"] = False
+        _enrich_estado["fin"] = time.strftime('%d/%m/%Y %H:%M')
+        if not _enrich_estado["mensaje"].startswith(("ABORTADO", "Detenido", "Error fatal")):
+            _enrich_estado["mensaje"] = (
+                f"Completado: {_enrich_estado['exitosos']} verificados, "
+                f"{_enrich_estado['errores_total']} errores, "
+                f"ARCA real en {_enrich_estado['arca_reales']}"
+            )
+        print(f"[enrich] {_enrich_estado['mensaje']}", flush=True)
+
+
+@app.route("/enriquecer-scores", methods=["POST"])
+@require_login
+def iniciar_enriquecer_scores():
+    """Lanza la verificación profunda mensual en un hilo de fondo.
+    Body opcional: {"delay": 120} — segundos entre CUITs (mínimo 60)."""
+    if _enrich_estado.get('corriendo'):
+        return jsonify({"error": "en_curso", "estado": _enrich_estado}), 409
+    body  = request.get_json(silent=True) or {}
+    try:
+        delay = max(60.0, float(body.get('delay', 120)))
+    except (TypeError, ValueError):
+        delay = 120.0
+    _enrich_stop.clear()
+    threading.Thread(target=_enriquecer_scores_worker, args=(delay,), daemon=True).start()
+    return jsonify({
+        "estado": "iniciado", "delay_seg": delay,
+        "progreso_url": "/enriquecer-scores/progreso",
+    })
+
+
+@app.route("/enriquecer-scores/progreso")
+def progreso_enriquecer_scores():
+    """Estado en tiempo real de la verificación profunda."""
+    resp = jsonify(_enrich_estado)
+    resp.headers['Cache-Control'] = 'no-store'
+    return resp
+
+
+@app.route("/enriquecer-scores/detener", methods=["POST"])
+@require_login
+def detener_enriquecer_scores():
+    """Solicita la detención ordenada del worker (termina el CUIT en curso)."""
+    _enrich_stop.set()
+    return jsonify({"estado": "detencion_solicitada"})
 
 
 @app.route("/todos-los-clientes")
