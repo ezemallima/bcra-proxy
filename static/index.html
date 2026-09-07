@@ -1194,6 +1194,43 @@
       </div>
     </div>
 
+    <!-- ── VERIFICACIÓN PROFUNDA — enriquecimiento mensual con ARCA en vivo ── -->
+    <div class="card" style="border-left:4px solid #7c3aed;margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:240px;">
+          <div class="card-title" style="color:#6d28d9;margin-bottom:4px;">Verificación Profunda <span style="font-size:11px;font-weight:600;color:#94a3b8;">· mensual</span></div>
+          <div style="font-size:12px;color:#64748b;line-height:1.5;">
+            Recalcula cada score con datos fiscales ARCA reales (como la consulta individual). Un cliente cada 2 minutos para evitar bloqueos — tarda 1 a 2 días. Ejecutar después de actualizar el bulk BCRA (día 1 de cada mes).
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button id="btn-verif-profunda" onclick="iniciarVerifProfunda()"
+            style="background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border:none;border-radius:10px;padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">
+            Iniciar verificación →
+          </button>
+          <button id="btn-verif-detener" onclick="detenerVerifProfunda()" style="display:none;font-size:12px;color:#991b1b;padding:9px 14px;border-radius:8px;border:1px solid #fecaca;background:#fff5f5;cursor:pointer;font-weight:600;">
+            Detener
+          </button>
+        </div>
+      </div>
+      <div id="verif-profunda-wrap" style="display:none;margin-top:12px;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:#475569;margin-bottom:4px;">
+          <span id="vp-msg">Iniciando...</span>
+          <span id="vp-pct" style="font-weight:700;color:#7c3aed;">0%</span>
+        </div>
+        <div style="background:#e2e8f0;border-radius:6px;height:10px;overflow:hidden;margin-bottom:6px;">
+          <div id="vp-bar" style="height:100%;background:linear-gradient(90deg,#7c3aed,#a78bfa);border-radius:6px;width:0%;transition:width 0.4s;"></div>
+        </div>
+        <div style="display:flex;gap:16px;font-size:11px;color:#64748b;flex-wrap:wrap;">
+          <span>Verificados: <b id="vp-exitosos">0</b></span>
+          <span title="Clientes puntuados con perfil fiscal ARCA/AFIP real.">ARCA real: <b id="vp-arca" style="color:#059669;">0</b></span>
+          <span>Errores: <b id="vp-errores" style="color:#dc2626;">0</b></span>
+          <span title="Pausas automáticas del circuit breaker por bloqueo o errores.">Pausas: <b id="vp-pausas" style="color:#ea580c;">0</b></span>
+          <span>Total: <b id="vp-total">0</b></span>
+        </div>
+      </div>
+    </div>
+
     <div id="alertas-counters" class="alr-counters">
       <div class="alr-counter critico" onclick="toggleAlertaFilter('critico')" id="filter-critico">
         <div class="alr-ico-wrap critico"><svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
@@ -3538,6 +3575,7 @@ async function cargarCarteraServidor() {
               cartera[idx].scoreRango    = c.scoreRango;
               cartera[idx].scoreColor    = c.scoreColor;
               cartera[idx].scoreEmoji    = c.scoreEmoji;
+              cartera[idx].score_verificado = c.score_verificado || false;
             }
           }
         });
@@ -3556,12 +3594,13 @@ async function cargarCarteraServidor() {
       cartera.forEach(function(c) {
         if (c.ultimaSit || c.ultimaVerif || c.scoreCompleto) {
           sitMap[c.cuit] = {
-            ultimaSit:     c.ultimaSit,
-            ultimaVerif:   c.ultimaVerif,
-            scoreCompleto: c.scoreCompleto,
-            scoreRango:    c.scoreRango,
-            scoreColor:    c.scoreColor,
-            scoreEmoji:    c.scoreEmoji,
+            ultimaSit:        c.ultimaSit,
+            ultimaVerif:      c.ultimaVerif,
+            scoreCompleto:    c.scoreCompleto,
+            scoreRango:       c.scoreRango,
+            scoreColor:       c.scoreColor,
+            scoreEmoji:       c.scoreEmoji,
+            score_verificado: c.score_verificado || false,
           };
         }
       });
@@ -7463,6 +7502,95 @@ async function _pollProcesoIntegral() {
   } catch(e) { /* ignorar errores de red transitorios */ }
 }
 
+// ── Verificación Profunda — enriquecimiento mensual con ARCA en vivo ────────
+var _verifProfundaInterval = null;
+
+async function iniciarVerifProfunda() {
+  if (!confirm('Verificación profunda de toda la cartera con datos fiscales ARCA reales.\n\nUn cliente cada 2 minutos para evitar bloqueos — tarda 1 a 2 días en completarse. Podés cerrar la app: el proceso sigue en el servidor.\n\n¿Iniciar ahora?')) return;
+  try {
+    var r = await fetch('/enriquecer-scores', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({delay: 120})
+    });
+    var d = await r.json();
+    if (d.error === 'en_curso') {
+      console.log('[verif-profunda] ya en curso');
+    } else if (d.error) {
+      alert('No se pudo iniciar: ' + d.error);
+      return;
+    }
+    _mostrarPanelVerifProfunda();
+  } catch(e) {
+    alert('Error de conexión al iniciar la verificación profunda.');
+  }
+}
+
+async function detenerVerifProfunda() {
+  if (!confirm('¿Detener la verificación profunda?\n\nEl progreso queda guardado: al relanzar no se repiten los clientes ya verificados.')) return;
+  try {
+    await fetch('/enriquecer-scores/detener', {method: 'POST'});
+  } catch(e) {}
+}
+
+function _mostrarPanelVerifProfunda() {
+  var wrap = document.getElementById('verif-profunda-wrap');
+  var btn  = document.getElementById('btn-verif-profunda');
+  var btnD = document.getElementById('btn-verif-detener');
+  if (wrap) wrap.style.display = 'block';
+  if (btn)  { btn.disabled = true; btn.textContent = 'Verificando...'; }
+  if (btnD) btnD.style.display = 'inline-block';
+  if (!_verifProfundaInterval) {
+    _verifProfundaInterval = setInterval(_pollVerifProfunda, 20000);
+    _pollVerifProfunda();
+  }
+}
+
+async function _pollVerifProfunda() {
+  try {
+    var r = await fetch('/enriquecer-scores/progreso');
+    var d = await r.json();
+    var msg = document.getElementById('vp-msg');
+    var pct = document.getElementById('vp-pct');
+    var bar = document.getElementById('vp-bar');
+    var p = d.total > 0 ? Math.round((d.procesados || 0) / d.total * 100) : 0;
+    if (msg) {
+      msg.textContent = d.mensaje || 'Procesando...';
+      msg.style.color = d.pausado ? '#ea580c' : '#475569';
+    }
+    if (pct) pct.textContent = p + '%';
+    if (bar) {
+      bar.style.width = p + '%';
+      bar.style.background = d.pausado ? 'linear-gradient(90deg,#ea580c,#f59e0b)' : 'linear-gradient(90deg,#7c3aed,#a78bfa)';
+    }
+    var ids = {exitosos: 'vp-exitosos', arca_reales: 'vp-arca', errores_total: 'vp-errores', pausas: 'vp-pausas', total: 'vp-total'};
+    Object.keys(ids).forEach(function(k) {
+      var el = document.getElementById(ids[k]);
+      if (el) el.textContent = d[k] || 0;
+    });
+    if (!d.corriendo && (d.procesados > 0 || d.fin)) {
+      clearInterval(_verifProfundaInterval);
+      _verifProfundaInterval = null;
+      var btn  = document.getElementById('btn-verif-profunda');
+      var btnD = document.getElementById('btn-verif-detener');
+      if (btn)  { btn.disabled = false; btn.textContent = 'Iniciar verificación →'; }
+      if (btnD) btnD.style.display = 'none';
+      if (bar && !d.mensaje.startsWith('ABORTADO')) bar.style.background = 'linear-gradient(90deg,#16a34a,#22c55e)';
+      _alertasLastLoad = 0;
+      cargarCarteraServidor(); // refresca cartera con los scores verificados
+    }
+  } catch(e) { /* errores de red transitorios */ }
+}
+
+// Al cargar la app: si hay una verificación profunda corriendo en el servidor, retomar el panel
+setTimeout(async function() {
+  try {
+    var r = await fetch('/enriquecer-scores/progreso');
+    var d = await r.json();
+    if (d.corriendo) _mostrarPanelVerifProfunda();
+  } catch(e) {}
+}, 3500);
+
 async function cargarAlertasMora() {
   try {
     var r = await fetch('/api/alertas-mora');
@@ -7870,7 +7998,11 @@ function renderBuscador(filtro) {
     html += '<div class="ficha-avatar" style="background:linear-gradient(135deg,' + avatarBg + ',' + avatarBg + 'cc);">' + initials + '</div>';
     html += '<div class="ficha-header-info"><div class="ficha-nombre">' + c.nombre + '</div><div class="ficha-cuit-tag">CUIT: ' + c.cuit + (c.ciudad ? ' · ' + c.ciudad : '') + '</div></div>';
     html += '<div class="ficha-header-right">';
-    if (scoreNum) html += '<div class="ficha-score-preview" style="color:' + scoreColor + ';">' + scoreNum + '</div>';
+    if (scoreNum) {
+      html += '<div class="ficha-score-preview" style="color:' + scoreColor + ';">' + scoreNum;
+      if (c.score_verificado) html += ' <span title="Score verificado con datos fiscales ARCA reales" style="font-size:12px;color:#059669;vertical-align:middle;">✓</span>';
+      html += '</div>';
+    }
     if (trendHtml) html += trendHtml;
     html += sitBadge;
     html += '<svg class="ficha-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
@@ -7883,6 +8015,9 @@ function renderBuscador(filtro) {
       html += '<div class="ficha-cell-val" style="color:' + scoreColor + ';font-size:2rem;letter-spacing:-1px;">' + scoreNum + '</div>';
       html += scoreBarHtml(scoreNum);
       if (sd) html += '<div class="ficha-cell-sub">' + sd.emoji + ' ' + sd.rango + '</div>';
+      html += c.score_verificado
+        ? '<div class="ficha-cell-sub" style="color:#059669;font-weight:600;">✓ Verificado con datos fiscales reales</div>'
+        : '<div class="ficha-cell-sub" style="color:#94a3b8;">~ Estimado (verificación masiva)</div>';
     } else {
       html += '<div class="ficha-cell-sub" style="color:#94a3b8;">Sin score calculado</div>';
     }
