@@ -4856,8 +4856,9 @@ def _bulk_bcra_from_historial(cuit: str, nombre: str = '') -> dict:
     """BCRA data del periodo más reciente desde historial_detalle (datos reales per-entidad).
     Usa sit_01/monto_01 de cada entidad — misma fuente que _bulk_to_hist_data() pero
     devuelve solo el periodo actual en formato compatible con /deudas/{cuit}.
-    A diferencia de _bulk_to_bcra_data(), NO distribuye sit_max a todas las entidades:
-    cada entidad tiene su situación y monto real del último periodo del bulk."""
+    A diferencia de _bulk_to_bcra_data() (una sola situación distribuida a todas
+    las entidades), acá cada entidad tiene su situación y monto real del último
+    periodo del bulk."""
     filas = _historial_detalle_rows(cuit)
     if not filas:
         return {}
@@ -4888,8 +4889,15 @@ def _bulk_bcra_from_historial(cuit: str, nombre: str = '') -> dict:
 
 
 def _bulk_to_bcra_data(nombre: str, deuda: dict) -> dict:
-    """Respuesta BCRA sintética desde datos del padrón offline."""
-    sit    = deuda.get('sit_max', 1)
+    """Respuesta BCRA sintética desde datos del padrón offline.
+
+    Usa sit_padron (mes vigente, sit_01) y NUNCA sit_max: esta respuesta se
+    consume como "situación actual" del cliente (periodos[0] → max_sit →
+    ultimaSit → alertas). Estampar aquí el peor de 12 meses clasificaba como
+    morosos a clientes que ya regularizaron (ver Lección #1 en CLAUDE.md).
+    La mora histórica no se pierde: entra al motor por hist_data
+    (_bulk_to_hist_data, 12 meses reales)."""
+    sit    = deuda.get('sit_padron', 1)
     monto  = deuda.get('monto_total') or deuda.get('monto_max') or 0
     ent_cods = [c.strip() for c in (deuda.get('entidades_cod') or '').split(',') if c.strip()]
     n_ents = max(1, len(ent_cods)) if ent_cods else 1
@@ -7407,7 +7415,7 @@ def _ejecutar_proceso_integral(cartera_data: list, modo_rapido: bool = False):
             #   1. bcra_cache.json        — datos reales de consultas individuales previas
             #   2. historial_detalle      — bulk mensual BCRA per-entidad, sit_01/monto_01
             #   3. Padrón local SQLite    — fallback para CUITs consultados individualmente
-            #   4. _bulk_to_bcra_data()   — sintético, sit_max; último recurso
+            #   4. _bulk_to_bcra_data()   — sintético, sit_padron (mes vigente); último recurso
             _cheq_cdi_pi   = None
             _deuda_bulk_pi = _bulk_deudas_pi.get(cuit)
             bcra_data      = None
