@@ -297,12 +297,6 @@
   .hero-verdict-wrap .vc-text { color: #fff !important; }
 
 
-  /* ── ALERTAS PROMPT ── */
-  .alertas-prompt { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 3rem 1rem; text-align: center; }
-  .alertas-prompt-icon { font-size: 32px; margin-bottom: 10px; line-height: 1; }
-  .alertas-prompt-text { font-size: 14px; font-weight: 600; color: #64748b; }
-  .alertas-prompt-sub { font-size: 12px; color: #94a3b8; margin-top: 4px; }
-
   /* ── DECISION HEADER v30 ── */
   .decision-header { display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
   .decision-avatar { width: 54px; height: 54px; border-radius: 14px; color: #fff; font-size: 22px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; letter-spacing: -1px; }
@@ -333,20 +327,6 @@
   .resource-btn svg { width: 13px; height: 13px; flex-shrink: 0; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .resource-panel { display: none; padding-top: 14px; border-top: 1px solid #f1f5f9; margin-top: 12px; }
   .resource-panel.open { display: block; }
-
-  /* ── NOTIFICATION CARDS (alertas-nuevas) ── */
-  .notif-card { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: #fff; border-radius: 12px; border: 1px solid #fca5a5; border-left: 4px solid #ef4444; box-shadow: 0 2px 8px rgba(239,68,68,0.07); margin-bottom: 8px; cursor: pointer; transition: all 0.15s; }
-  .notif-card:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(239,68,68,0.12); }
-  .notif-card.bodegas { border-color: #fde047; border-left-color: #f59e0b; box-shadow: 0 2px 8px rgba(245,158,11,0.07); }
-  .notif-card.cheque  { border-color: #fca5a5; border-left-color: #b91c1c; box-shadow: 0 2px 8px rgba(185,28,28,0.10); }
-  .notif-avatar { width: 36px; height: 36px; border-radius: 9px; color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: linear-gradient(135deg, #dc2626, #7f1d1d); }
-  .notif-avatar.bodegas { background: linear-gradient(135deg, #f59e0b, #d97706); }
-  .notif-avatar.cheque  { background: linear-gradient(135deg, #b91c1c, #450a0a); }
-  .notif-body { flex: 1; min-width: 0; }
-  .notif-nombre { font-size: 13px; font-weight: 700; color: var(--texto); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .notif-meta { font-size: 11px; color: #94a3b8; margin-top: 1px; }
-  .notif-sit { font-size: 11px; font-weight: 700; color: #991b1b; margin-top: 3px; }
-  .notif-right { flex-shrink: 0; text-align: right; }
 
   /* ── FILTER BUTTON ACTIVE STATE ── */
   .alr-counter { cursor: pointer; transition: box-shadow 0.15s, transform 0.15s; }
@@ -391,19 +371,39 @@
   .alr-card.mora { border-left-color: #991b1b; }
   .alr-card.exceso { border-left-color: #f97316; background: #fffcf9; }
   .alr-card.normal { border-left-color: #22c55e; }
+  .alr-card.cheque { border-left-color: #b91c1c; background: #fef2f2; }
   .alr-card-avatar { width: 34px; height: 34px; border-radius: 9px; color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; letter-spacing: -0.5px; background: linear-gradient(135deg, #64748b, #475569); }
   .alr-card-avatar.critico { background: linear-gradient(135deg, #dc2626, #991b1b); }
   .alr-card-avatar.advertencia { background: linear-gradient(135deg, #f59e0b, #d97706); }
   .alr-card-avatar.exceso { background: linear-gradient(135deg, #f97316, #ea580c); }
+  .alr-card-avatar.cheque { background: linear-gradient(135deg, #b91c1c, #450a0a); }
   .alr-card-body { flex: 1; min-width: 0; }
   .alr-card-status { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 2px; }
   .alr-card-status.critico { color: #991b1b; }
   .alr-card-status.advertencia { color: #92400e; }
   .alr-card-status.exceso { color: #9a3412; }
   .alr-card-status.mora { color: #991b1b; }
+  .alr-card-status.cheque { color: #b91c1c; }
   .alr-card-nombre { font-size: 13px; font-weight: 600; color: var(--texto); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .alr-card-meta { font-size: 11px; color: var(--texto-suave); margin-top: 1px; }
   .alr-card-right { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; text-align: right; }
+
+  /* ── Feed unificado de alertas — grupos por severidad ── */
+  .alr-grupo { margin-bottom: 20px; }
+  .alr-grupo-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; padding-left: 2px; }
+  .alr-grupo-titulo { font-size: 13px; font-weight: 800; letter-spacing: 0.2px; }
+  .alr-grupo-titulo.critico { color: #991b1b; }
+  .alr-grupo-titulo.advertencia { color: #92400e; }
+  .alr-grupo-titulo.moroso { color: #9a3412; }
+  .alr-grupo-titulo.cheque { color: #b91c1c; }
+  .alr-grupo-count { font-size: 11px; font-weight: 700; color: #fff; background: #94a3b8; border-radius: 10px; padding: 1px 8px; }
+  .alr-grupo-header.critico .alr-grupo-count { background: #dc2626; }
+  .alr-grupo-header.advertencia .alr-grupo-count { background: #d97706; }
+  .alr-grupo-header.moroso .alr-grupo-count { background: #ea580c; }
+  .alr-grupo-header.cheque .alr-grupo-count { background: #b91c1c; }
+  .alr-grupo-empty { text-align: center; padding: 14px; color: #16a34a; font-size: 12px; font-weight: 600; background: #f0fdf4; border-radius: 10px; border: 1px dashed #bbf7d0; }
+  .alr-card-leida-btn { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 6px; border: 1px solid #e2e8f0; background: #fff; color: #475569; cursor: pointer; margin-top: 4px; }
+  .alr-card-leida-btn:hover { background: #F5F7FA; }
 
   /* ── ACORDEÓN FACTURAS en tarjetas de alertas ── */
   .alr-wrap { margin-bottom: 7px; }
@@ -1201,28 +1201,28 @@
     </div>
 
     <div id="alertas-counters" class="alr-counters">
-      <div class="alr-counter critico" onclick="toggleAlertaFilter('critico')" id="filter-critico">
+      <div class="alr-counter critico" onclick="_scrollAlrGrupo('critico')" id="filter-critico">
         <div class="alr-ico-wrap critico"><svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
         <div class="alr-counter-info">
           <div class="alr-counter-num" id="cnt-criticos">—</div>
           <div class="alr-counter-label">Críticos</div>
         </div>
       </div>
-      <div class="alr-counter advertencia" onclick="toggleAlertaFilter('advertencia')" id="filter-advertencia">
+      <div class="alr-counter advertencia" onclick="_scrollAlrGrupo('advertencia')" id="filter-advertencia">
         <div class="alr-ico-wrap advertencia"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
         <div class="alr-counter-info">
           <div class="alr-counter-num" id="cnt-advertencias">—</div>
           <div class="alr-counter-label">Advertencias</div>
         </div>
       </div>
-      <div class="alr-counter exceso" onclick="toggleAlertaFilter('exceso')" id="filter-exceso">
+      <div class="alr-counter exceso" onclick="_scrollAlrGrupo('moroso')" id="filter-exceso">
         <div class="alr-ico-wrap exceso"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
         <div class="alr-counter-info">
           <div class="alr-counter-num" id="cnt-excesos">—</div>
           <div class="alr-counter-label">Clientes Morosos</div>
         </div>
       </div>
-      <div class="alr-counter cheque" onclick="toggleAlertaFilter('cheque')" id="filter-cheque">
+      <div class="alr-counter cheque" onclick="_scrollAlrGrupo('cheque')" id="filter-cheque">
         <div class="alr-ico-wrap cheque"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></div>
         <div class="alr-counter-info">
           <div class="alr-counter-num" id="cnt-cheques">—</div>
@@ -1231,36 +1231,21 @@
       </div>
     </div>
 
-    <!-- ── Panel de alertas automáticas post-upload ── -->
-    <div id="alertas-auto-panel" style="margin-top:14px;margin-bottom:14px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-        <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;">
-          Detección automática
-        </div>
-        <div style="display:flex;gap:6px;">
-          <button onclick="verificarChequesCartera(this)"
-            style="font-size:11px;padding:5px 11px;border-radius:7px;border:1px solid #e2e8f0;background:#fff;cursor:pointer;color:#475569;font-weight:600;">
-            Verificar cheques hoy
-          </button>
-          <button onclick="marcarTodasAlertasLeidas()"
-            style="font-size:11px;padding:5px 11px;border-radius:7px;border:1px solid #e2e8f0;background:#fff;cursor:pointer;color:#475569;font-weight:600;">
-            Marcar todas leídas
-          </button>
-        </div>
-      </div>
-      <div id="alertas-auto-lista" style="max-height:340px;overflow-y:auto;padding-right:2px;"></div>
-      <div id="alertas-auto-empty" style="display:none;text-align:center;padding:28px;color:#94a3b8;font-size:13px;background:#F5F7FA;border-radius:10px;border:1px dashed #e2e8f0;">
-        Sin alertas automáticas pendientes
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:10px 2px 14px;flex-wrap:wrap;gap:8px;">
+      <div id="alertas-periodo-vigente" style="font-size:11px;color:#64748b;"></div>
+      <div style="display:flex;gap:6px;">
+        <button onclick="verificarChequesCartera(this)"
+          style="font-size:11px;padding:5px 11px;border-radius:7px;border:1px solid #e2e8f0;background:#fff;cursor:pointer;color:#475569;font-weight:600;">
+          Verificar cheques hoy
+        </button>
+        <button onclick="marcarTodasAlertasLeidas()"
+          style="font-size:11px;padding:5px 11px;border-radius:7px;border:1px solid #e2e8f0;background:#fff;cursor:pointer;color:#475569;font-weight:600;">
+          Marcar todo leído
+        </button>
       </div>
     </div>
 
-    <div id="alertas-nuevas" style="display:none;margin-bottom:12px;margin-top:4px;">
-      <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;padding-left:2px;">Cambios recientes</div>
-      <div id="alertas-lista"></div>
-    </div>
-
-    <div id="morosos-lista" style="display:none;"></div>
-    <div id="cartera-bcra-lista"></div>
+    <div id="alertas-feed"></div>
   </div>
 
   <div id="buscador" class="section">
@@ -3498,7 +3483,6 @@ async function init() {
 }
 
 var _kpiCache = { total: '—', criticos: '0', mora: '0', dso: '—' };
-var _bcraVerifiedMap = {}; // cuit → {ultimaSit, ultimaVerif} — fuente de verdad para contadores alertas
 
 function actualizarMetricas() {
   if (document.getElementById('consulta') && document.getElementById('consulta').classList.contains('active')) return;
@@ -3523,14 +3507,8 @@ async function cargarCarteraServidor() {
       if (data.ultima_verif) {
         localStorage.setItem('piat_ultima_verif', data.ultima_verif);
       }
+      if (data.periodo_bulk_label) _periodoBulkLabel = data.periodo_bulk_label;
       if (data.cartera && data.cartera.length > 0) {
-        // Poblar _bcraVerifiedMap antes del merge (fuente de verdad para contadores)
-        _bcraVerifiedMap = {};
-        data.cartera.forEach(function(c) {
-          if (c.cuit && (c.ultimaSit || c.ultimaVerif)) {
-            _bcraVerifiedMap[c.cuit] = {ultimaSit: c.ultimaSit, ultimaVerif: c.ultimaVerif};
-          }
-        });
         // Fusionar situaciones verificadas Y scores del servidor con cartera local
         // Bug fix: antes solo mergeaba ultimaSit/ultimaVerif → scores borrados al recargar
         data.cartera.forEach(function(c) {
@@ -3646,8 +3624,9 @@ function buscarEnMoras(cuit) { return morasIndex ? morasIndex[cuit.replace(/-/g,
 
 var _pageTitles = {consulta:'Consultar CUIT', buscador:'Cartera', cartera:'Cartera', portfolio:'Saldos de Cartera', dso:'Subir Saldos', alertas:'Alertas BCRA', red:'Red de Bodegas', configuracion:'Configuración', echeq:'eCheq'};
 
-var _alertasFilter  = null; // 'critico' | 'advertencia' | 'exceso' | null
 var _alertasMoraData = null; // cache de /api/alertas-mora
+var _alertasAutoData = [];   // cache de /api/alertas (score_drop, dso, límite, deuda antigua...)
+var _periodoBulkLabel = '';  // "Julio 2026" — de qué mes es la situación BCRA vigente
 
 function toggleResource(panelId, btnId) {
   var panel = document.getElementById(panelId);
@@ -3660,31 +3639,9 @@ function toggleResource(panelId, btnId) {
   if (!isOpen) { panel.classList.add('open'); if (btn) btn.classList.add('active'); }
 }
 
-function toggleAlertaFilter(tipo) {
-  // PRIMERÍSIMAS LÍNEAS — limpiar los tres contenedores sin condición
-  document.getElementById('morosos-lista').innerHTML = '';
-  document.getElementById('morosos-lista').style.display = 'none';
-
-  var wasActive = _alertasFilter === tipo;
-  _alertasFilter = wasActive ? null : tipo;
-
-  // Cambios recientes: visible solo cuando no hay filtro activo
-  var _recientesEl = document.getElementById('alertas-nuevas');
-  if (_recientesEl) _recientesEl.style.display = _alertasFilter ? 'none' : '';
-
-  var _bcraEl = document.getElementById('cartera-bcra-lista');
-  if (_bcraEl) { _bcraEl.innerHTML = ''; _bcraEl.style.display = 'block'; }
-
-  if (_alertasFilter === 'exceso') {
-    document.getElementById('morosos-lista').style.display = 'block';
-    if (_bcraEl) _bcraEl.style.display = 'none';
-  }
-
-  ['critico','advertencia','exceso','cheque'].forEach(function(t){
-    var el = document.getElementById('filter-' + t);
-    if (el) el.classList.toggle('filter-on', _alertasFilter === t);
-  });
-  _renderAlertasList();
+function _scrollAlrGrupo(tipo) {
+  var el = document.getElementById('alr-grupo-' + tipo);
+  if (el) el.scrollIntoView({behavior: 'smooth', block: 'start'});
 }
 
 function switchTab(tab, el) {
@@ -3702,11 +3659,6 @@ function switchTab(tab, el) {
   if (tab === 'configuracion') cargarEstadoFacturasDrive();
   if (tab === 'buscador') renderBuscador('');
   if (tab === 'alertas') {
-    _alertasFilter = null;
-    var _mL = document.getElementById('morosos-lista');
-    var _bL = document.getElementById('cartera-bcra-lista');
-    if (_mL) { _mL.style.display = 'none';  _mL.innerHTML = ''; }
-    if (_bL) { _bL.style.display = 'block'; _bL.innerHTML = ''; }
     cargarCarteraServidor(); autoCargarScoresServidor(); cargarAlertasMora();
     cargarAlertasAuto();
   }
@@ -7564,252 +7516,210 @@ async function cargarAlertasMora() {
   try {
     var r = await fetch('/api/alertas-mora');
     if (!r.ok) throw new Error('HTTP ' + r.status);
-    var data = await r.json();
-    _alertasMoraData = data;
-    var cnt = (data.alertas || []).length;
-    var cntE = document.getElementById('cnt-excesos');
-    if (cntE) cntE.textContent = cnt;
-    // Si el filtro ya está activo, re-renderizar en su contenedor exclusivo
-    if (_alertasFilter === 'exceso') {
-      var morososEl = document.getElementById('morosos-lista');
-      if (morososEl) _renderMorasTable(morososEl);
-    }
+    _alertasMoraData = await r.json();
   } catch(e) {
     _alertasMoraData = { alertas: [], total_monto_vencido: 0, _error: e.message };
   }
+  renderAlertasFeedUnificado();
 }
 
-function _renderMorasTable(listaEl) {
-  // Guardia estricta: si el filtro ya cambió, no escribir nada en el DOM
-  if (_alertasFilter !== 'exceso') return;
-  if (!_alertasMoraData) {
-    listaEl.innerHTML = '<div style="text-align:center;padding:24px;color:#94a3b8;font-size:13px;">Cargando clientes morosos...</div>';
-    cargarAlertasMora();
-    return;
-  }
-  if (_alertasMoraData._error) {
-    listaEl.innerHTML = '<div style="font-size:12px;color:#94a3b8;padding:16px 0;text-align:center;">No se pudo cargar (' + _alertasMoraData._error + ').</div>';
-    return;
-  }
-  var alertas = _alertasMoraData.alertas || [];
-  if (!alertas.length) {
-    listaEl.innerHTML = '<div style="padding:28px;text-align:center;color:#16a34a;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Sin clientes con facturas vencidas hace más de 30 días.</div>';
-    return;
-  }
+function _moraCardHtml(a) {
   var fmt = function(n) { return n >= 1e6 ? '$'+(n/1e6).toFixed(1)+'M' : n >= 1e3 ? '$'+(Math.round(n/1000))+'K' : '$'+Math.round(n).toLocaleString('es-AR'); };
-  var totalVencido = _alertasMoraData.total_monto_vencido || 0;
-  var html = '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#fff1f2;border-radius:8px;margin-bottom:10px;border:1px solid #fca5a5;">'
-    + '<div style="font-size:12px;font-weight:700;color:#991b1b;">' + alertas.length + ' clientes con deuda vencida +30 días</div>'
-    + '<div style="font-size:14px;font-weight:800;color:#dc2626;font-family:\'Syne\',sans-serif;">' + fmt(totalVencido) + ' total vencido</div>'
+  var diasColor = a.dias_max_atraso > 90 ? '#7f1d1d' : a.dias_max_atraso > 60 ? '#dc2626' : '#ca8a04';
+  var diasBg    = a.dias_max_atraso > 90 ? 'rgba(127,29,29,0.08)' : a.dias_max_atraso > 60 ? 'rgba(220,38,38,0.08)' : 'rgba(202,138,4,0.08)';
+  var cuitRow   = 'moroso-' + (a.cuit||'').replace(/-/g,'').replace(/\s/g,'');
+  var html = '<div class="alr-wrap" id="alr-wrap-'+cuitRow+'">';
+  html += '<div class="alert-card collapsed" id="alr-card-'+cuitRow+'" onclick="toggleAlrAccordion(\''+cuitRow+'\')" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 14px;flex-wrap:wrap;margin-bottom:0;border-radius:12px 12px 0 0;transition:border-radius 0.15s;">';
+  html += '<div style="flex:1;min-width:0;">'
+    + '<div style="font-weight:700;font-size:14px;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(a.nombre) + '</div>';
+  if (a.cuit) html += '<div style="font-size:11px;color:#64748b;font-family:monospace;margin-top:1px;">' + a.cuit + '</div>';
+  html += '<div style="font-size:11px;color:#94a3b8;margin-top:2px;">' + a.cantidad_facturas + ' factura' + (a.cantidad_facturas !== 1 ? 's' : '') + ' vencida' + (a.cantidad_facturas !== 1 ? 's' : '') + '</div>'
     + '</div>';
-  alertas.forEach(function(a) {
-    var diasColor = a.dias_max_atraso > 90 ? '#7f1d1d' : a.dias_max_atraso > 60 ? '#dc2626' : '#ca8a04';
-    var diasBg    = a.dias_max_atraso > 90 ? 'rgba(127,29,29,0.08)' : a.dias_max_atraso > 60 ? 'rgba(220,38,38,0.08)' : 'rgba(202,138,4,0.08)';
-    var cuitRow   = (a.cuit||'').replace(/-/g,'').replace(/\s/g,'');
-    html += '<div class="alr-wrap" id="alr-wrap-'+cuitRow+'">';
-    html += '<div class="alert-card collapsed" id="alr-card-'+cuitRow+'" onclick="toggleAlrAccordion(\''+cuitRow+'\')" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 14px;flex-wrap:wrap;margin-bottom:0;border-radius:12px 12px 0 0;transition:border-radius 0.15s;">';
-    html += '<div style="flex:1;min-width:0;">'
-      + '<div style="font-weight:700;font-size:14px;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(a.nombre) + '</div>';
-    if (a.cuit) html += '<div style="font-size:11px;color:#64748b;font-family:monospace;margin-top:1px;">' + a.cuit + '</div>';
-    html += '<div style="font-size:11px;color:#94a3b8;margin-top:2px;">' + a.cantidad_facturas + ' factura' + (a.cantidad_facturas !== 1 ? 's' : '') + ' vencida' + (a.cantidad_facturas !== 1 ? 's' : '') + '</div>'
-      + '</div>';
-    html += '<div style="text-align:right;flex-shrink:0;">'
-      + '<div style="font-weight:700;font-size:15px;color:#dc2626;">' + fmt(a.monto_vencido_30d) + '</div>'
-      + '<div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;">vencido</div>'
-      + '</div>';
-    html += '<div style="text-align:center;background:' + diasBg + ';border-radius:8px;padding:7px 12px;flex-shrink:0;">'
-      + '<div style="font-weight:800;font-size:22px;color:' + diasColor + ';font-family:\'Syne\',sans-serif;line-height:1;">' + a.dias_max_atraso + '</div>'
-      + '<div style="font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;margin-top:1px;">días</div>'
-      + '</div>';
-    html += '<div style="display:flex;align-items:center;gap:6px;">';
-    if (a.cuit) html += '<button onclick="event.stopPropagation();verCliente(\'' + a.cuit + '\')" style="font-size:11px;font-weight:600;padding:4px 10px;background:#dc2626;color:#fff;border:none;border-radius:6px;cursor:pointer;letter-spacing:0.2px;">🔍 Ver</button>';
-    html += '<svg id="alr-chev-'+cuitRow+'" class="alr-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
-    html += '</div>';
-    html += '</div>';
-    html += '<div class="alr-acc" id="alr-acc-'+cuitRow+'" style="display:none"></div>';
-    html += '</div>';
-  });
-  listaEl.innerHTML = html;
+  html += '<div style="text-align:right;flex-shrink:0;">'
+    + '<div style="font-weight:700;font-size:15px;color:#dc2626;">' + fmt(a.monto_vencido_30d) + '</div>'
+    + '<div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;">vencido</div>'
+    + '</div>';
+  html += '<div style="text-align:center;background:' + diasBg + ';border-radius:8px;padding:7px 12px;flex-shrink:0;">'
+    + '<div style="font-weight:800;font-size:22px;color:' + diasColor + ';font-family:\'Syne\',sans-serif;line-height:1;">' + a.dias_max_atraso + '</div>'
+    + '<div style="font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;margin-top:1px;">días</div>'
+    + '</div>';
+  html += '<div style="display:flex;align-items:center;gap:6px;">';
+  if (a.cuit) html += '<button onclick="event.stopPropagation();verCliente(\'' + a.cuit + '\')" style="font-size:11px;font-weight:600;padding:4px 10px;background:#dc2626;color:#fff;border:none;border-radius:6px;cursor:pointer;letter-spacing:0.2px;">🔍 Ver</button>';
+  html += '<svg id="alr-chev-'+cuitRow+'" class="alr-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+  html += '</div>';
+  html += '</div>';
+  html += '<div class="alr-acc" id="alr-acc-'+cuitRow+'" style="display:none"></div>';
+  html += '</div>';
+  return html;
 }
 
 function renderAlertas() {
-  // Notification cards — cambios recientes
-  const alertasEl = document.getElementById('alertas-lista');
-  const alertasNuevasDiv = document.getElementById('alertas-nuevas');
-  if (alertas.length) {
-    alertasNuevasDiv.style.display = 'block';
-    alertasEl.innerHTML = alertas.map(function(a) {
-      var isBodegas = a.tipo === 'bodegas';
-      var isCheque  = a.tipo === 'cheque';
-      var initials = (a.nombre||'?').trim().split(/\s+/).slice(0,2).map(function(w){ return w[0]; }).join('').toUpperCase();
-      var sitArrow = a.tipo === 'bcra' && a.sitAnterior != null && a.sitActual != null
-        ? 'Sit. ' + a.sitAnterior + ' → Sit. ' + a.sitActual + (a.sitActual >= 3 ? ' 🚩' : a.sitActual === 2 ? ' ⚠️' : ' ✅')
-        : isBodegas ? '⚠️ Comentarios negativos en bodegas'
-        : isCheque  ? '🔴 Cheques rechazados: ' + (a.nroCheques || 1) + ' activo' + (a.nroCheques > 1 ? 's' : '') + (a.totalCheques && a.totalCheques !== a.nroCheques ? ' / ' + a.totalCheques + ' total' : '')
-        : '';
-      var html = '<div class="notif-card' + (isBodegas?' bodegas':isCheque?' cheque':'') + '" onclick="verCliente(\'' + a.cuit + '\')">';
-      html += '<div class="notif-avatar' + (isBodegas?' bodegas':isCheque?' cheque':'') + '">' + initials + '</div>';
-      html += '<div class="notif-body">';
-      html += '<div class="notif-nombre">' + a.nombre + '</div>';
-      html += '<div class="notif-meta">CUIT: ' + a.cuit + (a.fecha ? ' · ' + a.fecha : '') + '</div>';
-      if (sitArrow) html += '<div class="notif-sit">' + sitArrow + '</div>';
-      html += '</div>';
-      html += '<div class="notif-right">';
-      if (a.scoreCompleto) {
-        html += '<div style="font-size:14px;font-weight:800;color:'+a.scoreColor+';">'+a.scoreCompleto+'</div>';
-        html += '<div style="font-size:10px;color:'+a.scoreColor+';">'+a.scoreEmoji+' '+a.scoreRango+'</div>';
-      }
-      html += '</div></div>';
-      return html;
-    }).join('');
-  } else {
-    alertasNuevasDiv.style.display = 'none';
-  }
-
-  // Update counters — usar _bcraVerifiedMap si disponible (evita race condition del merge)
-  var _vmVals = Object.values(_bcraVerifiedMap);
-  var nCrit = _vmVals.length > 0
-    ? _vmVals.filter(function(v){ return v.ultimaSit && v.ultimaSit >= 3; }).length
-    : cartera.filter(function(c){ return c.ultimaSit && c.ultimaSit >= 3; }).length;
-  var nAdv = _vmVals.length > 0
-    ? _vmVals.filter(function(v){ return v.ultimaSit === 2; }).length
-    : cartera.filter(function(c){ return c.ultimaSit === 2; }).length;
-  var nCheq = alertas.filter(function(a){ return a.tipo === 'cheque'; }).length;
-  var cntC = document.getElementById('cnt-criticos');    if(cntC) cntC.textContent = nCrit;
-  var cntA = document.getElementById('cnt-advertencias'); if(cntA) cntA.textContent = nAdv;
-  var cntCh = document.getElementById('cnt-cheques');    if(cntCh) cntCh.textContent = nCheq;
-  // Sincronizar hero stats con los contadores recién actualizados
   if (typeof cargarHeroStats === 'function') cargarHeroStats();
-  // cnt-excesos se actualiza en cargarAlertasMora() desde /api/alertas-mora
-  // Sincronizar estado visual del filtro cheques
-  ['critico','advertencia','exceso','cheque'].forEach(function(t) {
-    var el = document.getElementById('filter-' + t);
-    if (el) el.classList.toggle('filter-on', _alertasFilter === t);
-  });
-  _renderAlertasList();
+  renderAlertasFeedUnificado();
 }
 
-function _renderAlertasList() {
-  // BLOQUEO ABSOLUTO — primerísimas líneas, sin condición
-  const contenedorMorosos = document.getElementById('morosos-lista');
-  if (contenedorMorosos) {
-    contenedorMorosos.innerHTML = '';
-    contenedorMorosos.style.display = 'none';
+// ── Feed unificado de alertas — un solo listado agrupado por severidad ───────
+// Reemplaza los 4 contenedores viejos (detección automática / cambios
+// recientes / lista filtrada / morosos) que obligaban a hacer clic en un
+// filtro para ver algo. Acá se ve todo de entrada, ordenado por urgencia.
+var _ALERTA_AUTO_SEVERIDAD = {
+  score_drop:      function(a){ return (a.score_nuevo != null && a.score_nuevo < 400) ? 'critico' : 'advertencia'; },
+  deterioro_bcra:  function(){ return 'critico'; },
+  limite_excedido: function(){ return 'critico'; },
+  dso_deteriora:   function(){ return 'advertencia'; },
+  deuda_antigua:   function(){ return 'advertencia'; },
+};
+
+function renderAlertasFeedUnificado() {
+  var periodoEl = document.getElementById('alertas-periodo-vigente');
+  if (periodoEl) {
+    periodoEl.textContent = _periodoBulkLabel
+      ? 'Situación BCRA al mes vigente (' + _periodoBulkLabel + ')'
+      : '';
   }
 
-  const bcraEl    = document.getElementById('cartera-bcra-lista');
-  const morososEl = contenedorMorosos;
-  if (!bcraEl) return;
-  bcraEl.innerHTML = '';
+  var grupos = { critico: [], advertencia: [], cheque: [] };
+  var _nc = function(s){ return String(s||'').replace(/-/g,'').replace(/\s/g,''); };
 
-  if (_alertasFilter === null) {
-    bcraEl.innerHTML = '<div class="alertas-prompt"><div class="alertas-prompt-icon">🔎</div><div class="alertas-prompt-text">Seleccioná un filtro para ver los clientes</div><div class="alertas-prompt-sub">Hacé clic en Críticos, Advertencias, Morosos o Cheques Rechazados</div></div>';
-    return;
-  }
-
-  // Clientes Morosos — tabla desde /api/alertas-mora en contenedor exclusivo
-  if (_alertasFilter === 'exceso') {
-    if (morososEl) { morososEl.style.display = 'block'; _renderMorasTable(morososEl); }
-    return;
-  }
-
-  // Cheques rechazados — lista desde alertas del servidor
-  if (_alertasFilter === 'cheque') {
-    var cheqAlertas = alertas.filter(function(a){ return a.tipo === 'cheque'; });
-    if (!cheqAlertas.length) {
-      bcraEl.innerHTML = '<div class="empty-state" style="padding:2rem;">Sin alertas de cheques rechazados.</div>';
-      return;
-    }
-    bcraEl.innerHTML = cheqAlertas.map(function(a) {
-      var initials = (a.nombre||'?').trim().split(/\s+/).slice(0,2).map(function(w){ return w[0]; }).join('').toUpperCase();
-      var html = '<div class="alr-card critico" style="border-left-color:#b91c1c;background:#fef2f2;" onclick="verCliente(\'' + a.cuit + '\')">';
-      html += '<div class="alr-card-avatar critico" style="background:linear-gradient(135deg,#b91c1c,#450a0a);">' + initials + '</div>';
-      html += '<div class="alr-card-body">';
-      html += '<div class="alr-card-status critico">🔴 ' + (a.nroCheques || 1) + ' cheque' + ((a.nroCheques || 1) > 1 ? 's' : '') + ' rechazado' + ((a.nroCheques || 1) > 1 ? 's' : '') + ' activo' + ((a.nroCheques || 1) > 1 ? 's' : '') + (a.totalCheques && a.totalCheques !== a.nroCheques ? ' / ' + a.totalCheques + ' total' : '') + '</div>';
-      html += '<div class="alr-card-nombre">' + (a.nombre || 'Sin nombre') + '</div>';
-      html += '<div class="alr-card-meta">CUIT: ' + a.cuit + (a.fecha ? ' · ' + a.fecha : '') + '</div>';
-      html += '</div>';
-      html += '<div class="alr-card-right">';
-      if (a.scoreCompleto) {
-        html += '<div style="font-size:14px;font-weight:800;color:' + (a.scoreColor||'#dc2626') + ';letter-spacing:-0.5px;">' + a.scoreCompleto + '</div>';
-        html += '<div style="font-size:10px;color:' + (a.scoreColor||'#dc2626') + ';">' + (a.scoreEmoji||'') + ' ' + (a.scoreRango||'') + '</div>';
-      }
-      html += '<button onclick="event.stopPropagation();verCliente(\'' + a.cuit + '\')" style="font-size:11px;font-weight:600;padding:4px 10px;background:#b91c1c;color:#fff;border:none;border-radius:6px;cursor:pointer;margin-top:6px;">🔍 Ver</button>';
-      html += '</div></div>';
-      return html;
-    }).join('');
-    return;
-  }
-
-  if (!cartera.length) {
-    bcraEl.innerHTML = '<div class="empty-state">No hay clientes en la cartera.<br>Agregá clientes en la pestaña Cartera.</div>';
-    return;
-  }
-
-  var carteraOrdenada = cartera.slice().sort(function(a, b) {
-    var sitA = a.ultimaSit || 0, sitB = b.ultimaSit || 0;
-    var moraA = buscarEnMoras(a.cuit) ? 1 : 0, moraB = buscarEnMoras(b.cuit) ? 1 : 0;
-    if (sitA >= 3 && sitB < 3) return -1;
-    if (sitB >= 3 && sitA < 3) return 1;
-    if (moraA && !moraB) return -1;
-    if (moraB && !moraA) return 1;
-    if (sitA === 2 && sitB !== 2) return -1;
-    if (sitB === 2 && sitA !== 2) return 1;
-    return 0;
+  // 1. BCRA — alertas explícitas (con delta sitAnterior→sitActual) primero
+  var bcraCuitsConAlerta = {};
+  alertas.filter(function(a){ return a.tipo === 'bcra'; }).forEach(function(a) {
+    bcraCuitsConAlerta[_nc(a.cuit)] = true;
+    grupos[a.sitActual >= 3 ? 'critico' : 'advertencia'].push({
+      cuit: a.cuit, nombre: a.nombre, fecha: a.fecha,
+      titulo: 'Sit. ' + a.sitAnterior + ' → Sit. ' + a.sitActual,
+      score: a.scoreCompleto, scoreColor: a.scoreColor, scoreEmoji: a.scoreEmoji, scoreRango: a.scoreRango,
+    });
+  });
+  // Clientes con ultimaSit >= 2 sin alerta explícita este ciclo (verificados
+  // en un ciclo previo, situación sin cambios pero todavía no normalizada)
+  cartera.forEach(function(c) {
+    if (!c.ultimaSit || c.ultimaSit < 2 || bcraCuitsConAlerta[_nc(c.cuit)]) return;
+    var sd = _alrScoreData(c);
+    grupos[c.ultimaSit >= 3 ? 'critico' : 'advertencia'].push({
+      cuit: c.cuit, nombre: c.nombre, fecha: c.ultimaVerif,
+      titulo: sitNombre(c.ultimaSit) + ' (Sit. ' + c.ultimaSit + ')',
+      score: sd ? sd.num : null, scoreColor: sd ? sd.color : null,
+      scoreEmoji: sd ? sd.emoji : null, scoreRango: sd ? sd.rango : null,
+    });
   });
 
-  // Apply active filter
-  if (_alertasFilter === 'critico') {
-    carteraOrdenada = carteraOrdenada.filter(function(c){ return c.ultimaSit && c.ultimaSit >= 3; });
-  } else if (_alertasFilter === 'advertencia') {
-    carteraOrdenada = carteraOrdenada.filter(function(c){ return c.ultimaSit === 2; });
-  }
+  // 2. Cheques rechazados activos (verificación profunda mensual)
+  var chequeCuitsConAlerta = {};
+  alertas.filter(function(a){ return a.tipo === 'cheque'; }).forEach(function(a) {
+    chequeCuitsConAlerta[_nc(a.cuit)] = true;
+    grupos.cheque.push({
+      cuit: a.cuit, nombre: a.nombre, fecha: a.fecha,
+      titulo: (a.nroCheques||1) + ' cheque(s) rechazado(s) activo(s)' + (a.totalCheques && a.totalCheques !== a.nroCheques ? ' / ' + a.totalCheques + ' total' : ''),
+      score: a.scoreCompleto, scoreColor: a.scoreColor, scoreEmoji: a.scoreEmoji, scoreRango: a.scoreRango,
+    });
+  });
 
-  if (!carteraOrdenada.length) {
-    bcraEl.innerHTML = '<div class="empty-state" style="padding:2rem;">Sin clientes en esta categoría.</div>';
-    return;
-  }
+  // 3. Automáticas — score_drop, dso, límite excedido, deterioro, deuda antigua,
+  //    y cheques detectados por "Verificar cheques hoy" (fuente separada: se
+  //    deduplica contra los de arriba para no mostrar el mismo cliente 2 veces)
+  (_alertasAutoData || []).forEach(function(a) {
+    if (a.tipo === 'cheque') {
+      if (chequeCuitsConAlerta[_nc(a.cuit)]) return;
+      grupos.cheque.push({
+        cuit: a.cuit, nombre: a.nombre, fecha: a.fecha,
+        titulo: (a.nroCheques||1) + ' cheque(s) rechazado(s) activo(s)' + (a.totalCheques && a.totalCheques !== a.nroCheques ? ' / ' + a.totalCheques + ' total' : ''),
+        score: null, scoreColor: null, scoreEmoji: null, scoreRango: null,
+        leidaBtn: { cuit: a.cuit, tipo: a.tipo, fecha: a.fecha },
+      });
+      return;
+    }
+    var sevFn = _ALERTA_AUTO_SEVERIDAD[a.tipo];
+    var sev = sevFn ? sevFn(a) : 'advertencia';
+    var sNum = a.score_nuevo;
+    var sColor = sNum ? (sNum>=700?'#166534':sNum>=400?'#854d0e':'#991b1b') : null;
+    var etiqueta = (_ALERTA_COLORES[a.tipo] || {}).label || a.tipo;
+    grupos[sev].push({
+      cuit: a.cuit, nombre: a.nombre, fecha: a.fecha,
+      titulo: etiqueta + ': ' + a.detalle,
+      score: sNum, scoreColor: sColor, scoreEmoji: null, scoreRango: a.rango,
+      leidaBtn: { cuit: a.cuit, tipo: a.tipo, fecha: a.fecha },
+    });
+  });
 
-  bcraEl.innerHTML = carteraOrdenada.map(function(c) {
-    var mora = buscarEnMoras(c.cuit);
-    var esCritico = c.ultimaSit && c.ultimaSit >= 3;
-    var esAtencion = c.ultimaSit === 2;
-    var esExceso = c.saldoActual && c.limiteCreditoARS && Number(c.saldoActual) > Number(c.limiteCreditoARS);
-    var cardClass = esCritico ? 'critico' : esAtencion ? 'advertencia' : mora ? 'mora' : esExceso ? 'exceso' : 'normal';
-    var avatarClass = esCritico ? 'critico' : esAtencion ? 'advertencia' : esExceso ? 'exceso' : '';
-    var initials = c.nombre.trim().split(/\s+/).slice(0,2).map(function(w){ return w[0]; }).join('').toUpperCase();
-    var statusTxt = esCritico ? '⚠ Situación crítica BCRA' : esAtencion ? '⚠ Atraso bancario' : mora ? '⚠ Mora registrada' : esExceso ? '⚠ Exceso de límite' : '✓ Normal';
-    var statusClass = esCritico ? 'critico' : esAtencion ? 'advertencia' : mora ? 'mora' : esExceso ? 'exceso' : '';
-    var verificadoTxt = c.ultimaVerif ? c.ultimaVerif : 'Sin verificar';
-    var sd = _alrScoreData(c);
-    var _cuitRow = c.cuit.replace(/-/g,'');
+  // 4. Morosos — desde /api/alertas-mora, con su propia tarjeta (con acordeón)
+  var moraAlertas = (_alertasMoraData && !_alertasMoraData._error) ? (_alertasMoraData.alertas || []) : [];
+
+  var setCnt = function(id, n) { var el = document.getElementById(id); if (el) el.textContent = n; };
+  setCnt('cnt-criticos', grupos.critico.length);
+  setCnt('cnt-advertencias', grupos.advertencia.length);
+  setCnt('cnt-cheques', grupos.cheque.length);
+  setCnt('cnt-excesos', moraAlertas.length);
+
+  var feedEl = document.getElementById('alertas-feed');
+  if (!feedEl) return;
+
+  var _iconos  = { critico: '🔴', advertencia: '🟡', moroso: '💰', cheque: '📄' };
+  var _titulos = { critico: 'Críticos', advertencia: 'Advertencias', moroso: 'Clientes Morosos', cheque: 'Cheques Rechazados' };
+  var _vacios  = {
+    critico: 'Sin clientes en situación crítica',
+    advertencia: 'Sin advertencias pendientes',
+    moroso: 'Sin clientes con deuda vencida hace más de 30 días',
+    cheque: 'Sin cheques rechazados activos',
+  };
+
+  function cardHtml(item, grupo) {
+    var initials = (item.nombre||'?').trim().split(/\s+/).slice(0,2).map(function(w){ return w[0]; }).join('').toUpperCase();
+    var _cuitRow = grupo + '-' + _nc(item.cuit);
+    var _btnBg = grupo === 'cheque' ? '#b91c1c' : '#3B82F6';
     var html = '<div class="alr-wrap" id="alr-wrap-'+_cuitRow+'">';
-    html += '<div class="alr-card ' + cardClass + ' collapsed" id="alr-card-'+_cuitRow+'" onclick="toggleAlrAccordion(\''+_cuitRow+'\')">';
-    html += '<div class="alr-card-avatar ' + avatarClass + '">' + initials + '</div>';
+    html += '<div class="alr-card ' + grupo + ' collapsed" id="alr-card-'+_cuitRow+'" onclick="toggleAlrAccordion(\''+_cuitRow+'\')">';
+    html += '<div class="alr-card-avatar ' + grupo + '">' + initials + '</div>';
     html += '<div class="alr-card-body">';
-    if (statusClass) html += '<div class="alr-card-status ' + statusClass + '">' + statusTxt + '</div>';
-    html += '<div class="alr-card-nombre">' + c.nombre + '</div>';
-    html += '<div class="alr-card-meta">CUIT: ' + c.cuit + ' · ' + verificadoTxt + '</div>';
-    html += '</div>';
-    html += '<div class="alr-card-right">';
-    html += '<div id="score-cell-' + _cuitRow + '" style="text-align:right;">';
-    if (sd) {
-      html += '<div style="font-size:14px;font-weight:800;color:'+sd.color+';letter-spacing:-0.5px;">'+sd.num+'</div>';
-      html += scoreBarHtml(sd.num);
-    } else {
-      html += '<span style="font-size:11px;color:#94a3b8;">Sin score</span>';
+    html += '<div class="alr-card-nombre">' + esc(item.nombre || 'Sin nombre') + '</div>';
+    html += '<div class="alr-card-meta">CUIT: ' + (item.cuit||'—') + (item.fecha ? ' · ' + item.fecha : '') + '</div>';
+    html += '<div class="alr-card-status ' + grupo + '" style="margin-top:3px;">' + esc(item.titulo) + '</div>';
+    if (item.leidaBtn) {
+      html += '<button class="alr-card-leida-btn" onclick="event.stopPropagation();marcarAlertaLeidaItem(\''+item.leidaBtn.cuit+'\',\''+item.leidaBtn.tipo+'\',\''+item.leidaBtn.fecha+'\')">Marcar leída</button>';
     }
     html += '</div>';
-    if (c.ultimaSit) html += getBadge(c.ultimaSit);
-    html += '<div style="display:flex;align-items:center;gap:6px;margin-top:6px;">';
-    html += '<button onclick="event.stopPropagation();verCliente(\''+c.cuit+'\')" style="font-size:11px;font-weight:600;padding:4px 10px;background:#3B82F6;color:#fff;border:none;border-radius:6px;cursor:pointer;letter-spacing:0.2px;">🔍 Ver</button>';
+    html += '<div class="alr-card-right">';
+    if (item.score) {
+      html += '<div style="font-size:14px;font-weight:800;color:'+(item.scoreColor||'#64748b')+';letter-spacing:-0.5px;">'+item.score+'</div>';
+      if (item.scoreEmoji || item.scoreRango) html += '<div style="font-size:10px;color:'+(item.scoreColor||'#64748b')+';">'+(item.scoreEmoji||'')+' '+(item.scoreRango||'')+'</div>';
+    }
+    html += '<div style="display:flex;align-items:center;gap:6px;margin-top:4px;">';
+    html += '<button onclick="event.stopPropagation();verCliente(\''+item.cuit+'\')" style="font-size:11px;font-weight:600;padding:4px 10px;background:'+_btnBg+';color:#fff;border:none;border-radius:6px;cursor:pointer;letter-spacing:0.2px;">🔍 Ver</button>';
     html += '<svg id="alr-chev-'+_cuitRow+'" class="alr-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
     html += '</div>';
     html += '</div></div>';
     html += '<div class="alr-acc" id="alr-acc-'+_cuitRow+'" style="display:none"></div>';
     html += '</div>';
     return html;
-  }).join('');
+  }
+
+  var html = '';
+  ['critico','advertencia','moroso','cheque'].forEach(function(grupo) {
+    var lista = grupo === 'moroso' ? moraAlertas : grupos[grupo];
+    html += '<div class="alr-grupo" id="alr-grupo-' + grupo + '">';
+    html += '<div class="alr-grupo-header ' + grupo + '"><span>' + _iconos[grupo] + '</span>'
+      + '<span class="alr-grupo-titulo ' + grupo + '">' + _titulos[grupo] + '</span>'
+      + '<span class="alr-grupo-count">' + lista.length + '</span></div>';
+    if (!lista.length) {
+      html += '<div class="alr-grupo-empty">✓ ' + _vacios[grupo] + '</div>';
+    } else if (grupo === 'moroso') {
+      html += lista.map(_moraCardHtml).join('');
+    } else {
+      html += lista.map(function(item){ return cardHtml(item, grupo); }).join('');
+    }
+    html += '</div>';
+  });
+  feedEl.innerHTML = html;
+}
+
+async function marcarAlertaLeidaItem(cuit, tipo, fecha) {
+  try {
+    await fetch('/api/alertas/marcar-leida', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({cuit: cuit, tipo: tipo, fecha: fecha})
+    });
+  } catch(e) {}
+  await cargarAlertasAuto();
 }
 
 // ── Acordeón de comprobantes — caché en sesión, se invalida al recargar ──────
@@ -7883,8 +7793,12 @@ async function toggleAlrAccordion(cuitRow) {
   if (chev) chev.classList.add('open');
   if (_alrAccCache[cuitRow]) { acc.innerHTML = _alrAccCache[cuitRow]; return; }
   acc.innerHTML = '<div class="alr-acc-msg">Cargando comprobantes...</div>';
+  // El feed unificado prefija cuitRow con el grupo (critico-/advertencia-/
+  // cheque-/moroso-) para que un mismo cliente en varios grupos no choque de
+  // id — hay que sacar ese prefijo para pegarle a /saldos-cuit con el CUIT real.
+  var cuitReal = cuitRow.replace(/^(critico|advertencia|cheque|moroso)-/, '');
   try {
-    var r = await fetch('/saldos-cuit/' + cuitRow, { signal: AbortSignal.timeout(8000) });
+    var r = await fetch('/saldos-cuit/' + cuitReal, { signal: AbortSignal.timeout(8000) });
     var d = await r.json();
     var html = _buildFacTableHtml(d.facturas);
     _alrAccCache[cuitRow] = html;
@@ -8618,45 +8532,20 @@ async function cargarAlertasAuto() {
   try {
     var r = await fetch('/api/alertas');
     var data = await r.json();
-    var alertas = data.alertas || [];
+    _alertasAutoData = data.alertas || [];
 
-    // Badge en sidebar
+    // Badge en sidebar — cuenta alertas automáticas no leídas (independiente
+    // de los grupos del feed unificado, que no tienen concepto de "leída")
     var badge = document.getElementById('alertas-badge');
     if (badge) {
-      if (alertas.length) { badge.textContent = alertas.length; badge.style.display = ''; }
+      if (_alertasAutoData.length) { badge.textContent = _alertasAutoData.length; badge.style.display = ''; }
       else badge.style.display = 'none';
     }
-
-    var lista  = document.getElementById('alertas-auto-lista');
-    var empty  = document.getElementById('alertas-auto-empty');
-    if (!lista) return;
-
-    if (!alertas.length) {
-      lista.innerHTML = '';
-      if (empty) empty.style.display = '';
-      return;
-    }
-    if (empty) empty.style.display = 'none';
-
-    lista.innerHTML = alertas.map(function(a) {
-      var c = _ALERTA_COLORES[a.tipo] || { bg:'#F5F7FA', border:'#94a3b8', txt:'#64748b', ico:'!', label:'' };
-      var etiqueta = c.label || a.tipo;
-      return '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 13px;background:' + c.bg + ';border-radius:9px;border-left:3px solid ' + c.border + ';margin-bottom:6px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">' +
-        '<div style="width:22px;height:22px;background:' + c.border + ';border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:900;flex-shrink:0;">' + c.ico + '</div>' +
-        '<div style="flex:1;min-width:0;">' +
-          '<div style="display:flex;align-items:center;gap:6px;margin-bottom:1px;">' +
-            '<span style="font-size:13px;font-weight:700;color:#1e293b;">' + (a.nombre || a.cuit) + '</span>' +
-            '<span style="font-size:10px;font-weight:700;color:' + c.txt + ';background:' + c.border + '1a;padding:1px 6px;border-radius:8px;">' + etiqueta + '</span>' +
-          '</div>' +
-          '<div style="font-size:12px;color:#475569;line-height:1.4;">' + a.detalle + '</div>' +
-          '<div style="font-size:10px;color:#94a3b8;margin-top:3px;">' + a.fecha + '</div>' +
-        '</div>' +
-      '</div>';
-    }).join('');
-
   } catch(e) {
     console.error('[alertas-auto]', e);
+    _alertasAutoData = [];
   }
+  renderAlertasFeedUnificado();
 }
 
 async function marcarTodasAlertasLeidas() {
