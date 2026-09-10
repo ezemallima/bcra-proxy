@@ -3650,11 +3650,15 @@ function toggleResource(panelId, btnId) {
 var _alrGrupoExpandido = { critico: false, advertencia: false, moroso: false, cheque: false };
 
 function _toggleAlrGrupo(grupo) {
-  _alrGrupoExpandido[grupo] = !_alrGrupoExpandido[grupo];
-  var content = document.getElementById('alr-grupo-content-' + grupo);
-  var chev = document.getElementById('alr-grupo-chev-' + grupo);
-  if (content) content.style.display = _alrGrupoExpandido[grupo] ? 'block' : 'none';
-  if (chev) chev.classList.toggle('open', _alrGrupoExpandido[grupo]);
+  // Acordeón exclusivo: abrir un grupo cierra cualquier otro que estuviera abierto.
+  var abrir = !_alrGrupoExpandido[grupo];
+  Object.keys(_alrGrupoExpandido).forEach(function(g) {
+    _alrGrupoExpandido[g] = (g === grupo) && abrir;
+    var content = document.getElementById('alr-grupo-content-' + g);
+    var chev = document.getElementById('alr-grupo-chev-' + g);
+    if (content) content.style.display = _alrGrupoExpandido[g] ? 'block' : 'none';
+    if (chev) chev.classList.toggle('open', _alrGrupoExpandido[g]);
+  });
 }
 
 function _scrollAlrGrupo(tipo) {
