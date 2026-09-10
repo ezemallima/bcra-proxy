@@ -402,6 +402,7 @@
   .alr-grupo-header.moroso .alr-grupo-count { background: #ea580c; }
   .alr-grupo-header.cheque .alr-grupo-count { background: #b91c1c; }
   .alr-grupo-empty { text-align: center; padding: 14px; color: #16a34a; font-size: 12px; font-weight: 600; background: #f0fdf4; border-radius: 10px; border: 1px dashed #bbf7d0; }
+  .alr-grupo-body { max-height: 400px; overflow-y: auto; padding-right: 4px; }
   .alr-card-leida-btn { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 6px; border: 1px solid #e2e8f0; background: #fff; color: #475569; cursor: pointer; margin-top: 4px; }
   .alr-card-leida-btn:hover { background: #F5F7FA; }
 
@@ -7702,10 +7703,11 @@ function renderAlertasFeedUnificado() {
       + '<span class="alr-grupo-count">' + lista.length + '</span></div>';
     if (!lista.length) {
       html += '<div class="alr-grupo-empty">✓ ' + _vacios[grupo] + '</div>';
-    } else if (grupo === 'moroso') {
-      html += lista.map(_moraCardHtml).join('');
     } else {
-      html += lista.map(function(item){ return cardHtml(item, grupo); }).join('');
+      var _cardsHtml = grupo === 'moroso'
+        ? lista.map(_moraCardHtml).join('')
+        : lista.map(function(item){ return cardHtml(item, grupo); }).join('');
+      html += '<div class="alr-grupo-body">' + _cardsHtml + '</div>';
     }
     html += '</div>';
   });
