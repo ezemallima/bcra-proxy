@@ -390,7 +390,10 @@
 
   /* ── Feed unificado de alertas — grupos por severidad ── */
   .alr-grupo { margin-bottom: 20px; }
-  .alr-grupo-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; padding-left: 2px; }
+  .alr-grupo-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; padding: 6px 8px; cursor: pointer; border-radius: 8px; user-select: none; }
+  .alr-grupo-header:hover { background: rgba(0,0,0,0.03); }
+  .alr-grupo-chevron { width: 16px; height: 16px; margin-left: auto; flex-shrink: 0; color: #94a3b8; transition: transform 0.15s; }
+  .alr-grupo-chevron.open { transform: rotate(180deg); }
   .alr-grupo-titulo { font-size: 13px; font-weight: 800; letter-spacing: 0.2px; }
   .alr-grupo-titulo.critico { color: #991b1b; }
   .alr-grupo-titulo.advertencia { color: #92400e; }
@@ -3640,7 +3643,22 @@ function toggleResource(panelId, btnId) {
   if (!isOpen) { panel.classList.add('open'); if (btn) btn.classList.add('active'); }
 }
 
+// Estado de despliegue por grupo — persiste entre re-renders del feed
+// (cargarAlertasMora/cargarAlertasAuto/renderAlertas re-renderizan cuando
+// llega cada fuente de datos; sin este estado un grupo abierto se cerraría
+// solo apenas resolviera otra fuente).
+var _alrGrupoExpandido = { critico: false, advertencia: false, moroso: false, cheque: false };
+
+function _toggleAlrGrupo(grupo) {
+  _alrGrupoExpandido[grupo] = !_alrGrupoExpandido[grupo];
+  var content = document.getElementById('alr-grupo-content-' + grupo);
+  var chev = document.getElementById('alr-grupo-chev-' + grupo);
+  if (content) content.style.display = _alrGrupoExpandido[grupo] ? 'block' : 'none';
+  if (chev) chev.classList.toggle('open', _alrGrupoExpandido[grupo]);
+}
+
 function _scrollAlrGrupo(tipo) {
+  if (!_alrGrupoExpandido[tipo]) _toggleAlrGrupo(tipo);
   var el = document.getElementById('alr-grupo-' + tipo);
   if (el) el.scrollIntoView({behavior: 'smooth', block: 'start'});
 }
@@ -7697,18 +7715,24 @@ function renderAlertasFeedUnificado() {
   var html = '';
   ['critico','advertencia','moroso','cheque'].forEach(function(grupo) {
     var lista = grupo === 'moroso' ? moraAlertas : grupos[grupo];
+    var expandido = !!_alrGrupoExpandido[grupo];
     html += '<div class="alr-grupo" id="alr-grupo-' + grupo + '">';
-    html += '<div class="alr-grupo-header ' + grupo + '"><span>' + _iconos[grupo] + '</span>'
+    html += '<div class="alr-grupo-header ' + grupo + '" onclick="_toggleAlrGrupo(\'' + grupo + '\')">'
+      + '<span>' + _iconos[grupo] + '</span>'
       + '<span class="alr-grupo-titulo ' + grupo + '">' + _titulos[grupo] + '</span>'
-      + '<span class="alr-grupo-count">' + lista.length + '</span></div>';
+      + '<span class="alr-grupo-count">' + lista.length + '</span>'
+      + '<svg id="alr-grupo-chev-' + grupo + '" class="alr-grupo-chevron' + (expandido?' open':'') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
+      + '</div>';
+    var _bodyContent;
     if (!lista.length) {
-      html += '<div class="alr-grupo-empty">✓ ' + _vacios[grupo] + '</div>';
+      _bodyContent = '<div class="alr-grupo-empty">✓ ' + _vacios[grupo] + '</div>';
     } else {
       var _cardsHtml = grupo === 'moroso'
         ? lista.map(_moraCardHtml).join('')
         : lista.map(function(item){ return cardHtml(item, grupo); }).join('');
-      html += '<div class="alr-grupo-body">' + _cardsHtml + '</div>';
+      _bodyContent = '<div class="alr-grupo-body">' + _cardsHtml + '</div>';
     }
+    html += '<div id="alr-grupo-content-' + grupo + '" style="display:' + (expandido?'block':'none') + ';margin-top:8px;">' + _bodyContent + '</div>';
     html += '</div>';
   });
   feedEl.innerHTML = html;
