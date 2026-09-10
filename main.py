@@ -5676,6 +5676,7 @@ _enrich_estado = {
     "corriendo": False, "pausado": False,
     "total": 0, "procesados": 0, "exitosos": 0, "saltados": 0,
     "errores_total": 0, "arca_reales": 0, "arca_inferidos": 0,
+    "alertas_bcra": 0, "alertas_cheque": 0,
     "pausas": 0, "pausa_hasta": 0,
     "cliente_actual": "", "mensaje": "Inactivo", "inicio": "", "fin": "",
 }
@@ -5687,6 +5688,36 @@ _ENRICH_PAUSA_CORTA_SEG   = 30 * 60     # 30 min — errores transitorios
 _ENRICH_PAUSA_LARGA_SEG   = 3 * 3600    # 3 h — bloqueo ARCA detectado
 _ENRICH_MAX_PAUSAS        = 6           # tras N pausas el ciclo aborta
 _ENRICH_SKIP_TTL_SEG      = 20 * 86400  # saltar CUITs verificados hace < 20 días
+
+
+def _upsert_alerta_evento(cuit: str, tipo: str, payload: dict = None):
+    """Reemplaza (o borra si payload=None) la alerta `tipo` de `cuit` en
+    alertas_cartera.json, preservando el resto de alertas intacto.
+
+    A diferencia del merge del viejo proceso masivo (que regeneraba TODA la
+    lista de una vez al final), esto actualiza una alerta por vez — la
+    verificación profunda tarda 1-2 días, así que cada cliente se auto-corrige
+    (aparece o desaparece de alertas) apenas se lo procesa, en lugar de esperar
+    a que termine el ciclo completo."""
+    with _alertas_file_lock:
+        try:
+            with open(ALERTAS_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except Exception:
+            data = {"alertas": [], "ultima_verif": "", "cartera": []}
+        alertas = [
+            a for a in data.get('alertas', [])
+            if not (str(a.get('cuit', '')) == cuit and a.get('tipo') == tipo)
+        ]
+        if payload:
+            alertas.append(payload)
+        data['alertas'] = alertas
+        tmp = ALERTAS_FILE + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, default=str)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, ALERTAS_FILE)
 
 
 def _solvencia_es_real(solvency: dict) -> bool:
@@ -5716,6 +5747,21 @@ def _enriquecer_scores_worker(delay_seg: float = 120.0):
         with _score_cache_lock:
             _sc_now = _score_cache_read()
 
+        # sit_anterior por CUIT — snapshot de ultimaSit ANTES de este ciclo, para
+        # poder detectar "empeoró" (sit_anterior -> max_sit) igual que hacía el
+        # proceso masivo. Se lee una sola vez: cada cliente se compara contra su
+        # estado previo al ciclo completo, no contra el de corridas parciales.
+        _sit_anterior_map: dict = {}
+        try:
+            with open(ALERTAS_FILE, 'r', encoding='utf-8') as _af0:
+                _af0_data = json.load(_af0)
+            for _c0 in _af0_data.get('cartera', []):
+                _cuit0 = str(_c0.get('cuit', '')).replace('-', '').replace(' ', '').strip()
+                if _cuit0:
+                    _sit_anterior_map[_cuit0] = int(_c0.get('ultimaSit', 1) or 1)
+        except Exception:
+            pass
+
         pendientes, saltados = [], 0
         vistos = set()
         for c in _cc_snap:
@@ -5736,6 +5782,7 @@ def _enriquecer_scores_worker(delay_seg: float = 120.0):
             "total": len(pendientes), "procesados": 0, "exitosos": 0,
             "saltados": saltados, "errores_total": 0,
             "arca_reales": 0, "arca_inferidos": 0,
+            "alertas_bcra": 0, "alertas_cheque": 0,
             "pausas": 0, "pausa_hasta": 0,
             "cliente_actual": "", "inicio": time.strftime('%d/%m/%Y %H:%M'), "fin": "",
             "mensaje": f"Iniciando: {len(pendientes)} CUITs pendientes ({saltados} ya verificados)",
@@ -5796,7 +5843,8 @@ def _enriquecer_scores_worker(delay_seg: float = 120.0):
                     _err_consec = 0
                     with _alertas_file_lock:
                         _actualizar_score_en_cartera(cuit, score_data, solvency)
-                    resp = _score_response(score_data, solvency, _cheques_cache_get(cuit))
+                    _cheq_data_cuit = _cheques_cache_get(cuit)
+                    resp = _score_response(score_data, solvency, _cheq_data_cuit)
                     resp['_ts'] = time.time()
                     resp['_enriquecido'] = True
                     with _score_cache_lock:
@@ -5804,6 +5852,47 @@ def _enriquecer_scores_worker(delay_seg: float = 120.0):
                         _sc_w[cuit] = resp
                         _score_cache_write(_sc_w)
                     _enrich_estado["exitosos"] += 1
+
+                    # ── Alerta BCRA: situación del mes vigente empeoró ────────────
+                    # max_sit ya sale del periodo más reciente (ver calcular_rating_
+                    # predictivo) — nunca de sit_max histórico (Lección #1 CLAUDE.md).
+                    _max_sit_ec = int(score_data.get('max_sit', 1) or 1)
+                    _sit_ant_ec = _sit_anterior_map.get(cuit, 1)
+                    if _max_sit_ec > _sit_ant_ec or _max_sit_ec >= 3:
+                        _upsert_alerta_evento(cuit, 'bcra', {
+                            'nombre':        nombre,
+                            'cuit':          cuit,
+                            'sitAnterior':   _sit_ant_ec,
+                            'sitActual':     _max_sit_ec,
+                            'fecha':         time.strftime('%d/%m/%Y'),
+                            'tipo':          'bcra',
+                            'scoreCompleto': score_data.get('score'),
+                            'scoreRango':    score_data.get('rango'),
+                            'scoreColor':    score_data.get('color'),
+                            'scoreEmoji':    score_data.get('emoji'),
+                        })
+                        _enrich_estado["alertas_bcra"] += 1
+                    else:
+                        _upsert_alerta_evento(cuit, 'bcra', None)
+
+                    # ── Alerta cheques: rechazados activos sin reponer ────────────
+                    _n_act_ec, _n_tot_ec, _ = _cheques_activos_de(_cheq_data_cuit)
+                    if _n_act_ec > 0:
+                        _upsert_alerta_evento(cuit, 'cheque', {
+                            'nombre':        nombre,
+                            'cuit':          cuit,
+                            'tipo':          'cheque',
+                            'nroCheques':    _n_act_ec,
+                            'totalCheques':  _n_tot_ec,
+                            'fecha':         time.strftime('%d/%m/%Y'),
+                            'scoreCompleto': score_data.get('score'),
+                            'scoreRango':    score_data.get('rango'),
+                            'scoreColor':    score_data.get('color'),
+                            'scoreEmoji':    score_data.get('emoji'),
+                        })
+                        _enrich_estado["alertas_cheque"] += 1
+                    else:
+                        _upsert_alerta_evento(cuit, 'cheque', None)
                 else:
                     _err_consec += 1
                     _enrich_estado["errores_total"] += 1
@@ -5873,6 +5962,20 @@ def _enriquecer_scores_worker(delay_seg: float = 120.0):
                 f"{_enrich_estado['errores_total']} errores, "
                 f"ARCA real en {_enrich_estado['arca_reales']}"
             )
+            # Ciclo completo (no abortado ni detenido a mano) — recién acá se
+            # considera "toda la cartera" verificada con el mes vigente.
+            try:
+                with _alertas_file_lock:
+                    with open(ALERTAS_FILE, 'r', encoding='utf-8') as _af9:
+                        _af9_data = json.load(_af9)
+                    _af9_data['ultima_verif'] = time.strftime('%d/%m/%Y %H:%M')
+                    _tmp9 = ALERTAS_FILE + '.tmp'
+                    with open(_tmp9, 'w', encoding='utf-8') as _af9w:
+                        json.dump(_af9_data, _af9w, ensure_ascii=False, default=str)
+                        _af9w.flush(); os.fsync(_af9w.fileno())
+                    os.replace(_tmp9, ALERTAS_FILE)
+            except Exception as _e9:
+                print(f"[enrich] Error actualizando ultima_verif: {_e9}", flush=True)
         print(f"[enrich] {_enrich_estado['mensaje']}", flush=True)
 
 
@@ -7043,6 +7146,22 @@ def limpiar_alertas():
     msg = "Alertas limpiadas." if eliminados else "No había alertas. La cartera está limpia."
     return jsonify({"ok": True, "mensaje": msg})
 
+_MESES_ES = ('', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio',
+             'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre')
+
+
+def _periodo_yyyymm_a_label(periodo: int) -> str:
+    """202607 -> 'Julio 2026'. Usado para mostrar de qué mes es la situación
+    BCRA vigente que reportan las alertas (evita ambigüedad con datos viejos)."""
+    s = str(periodo)
+    if len(s) != 6 or not s.isdigit():
+        return ''
+    mes = int(s[4:6])
+    if not (1 <= mes <= 12):
+        return ''
+    return f"{_MESES_ES[mes]} {s[:4]}"
+
+
 @app.route("/alertas", methods=["GET"])
 def get_alertas():
     try:
@@ -7053,6 +7172,7 @@ def get_alertas():
             data = {"alertas": [], "ultima_verif": "", "cartera": []}
     except Exception as e:
         data = {"alertas": [], "ultima_verif": "", "cartera": [], "error": str(e)}
+    data['periodo_bulk_label'] = _periodo_yyyymm_a_label(_PERIODO_BASE_BULK)
     resp = jsonify(data)
     resp.headers['Cache-Control'] = 'no-store'
     return resp
