@@ -11906,6 +11906,23 @@ def _facturas_zip_ensure_local() -> bool:
     return False
 
 
+def _factura_variante_proforma(nombre: str) -> str:
+    """Nombre canónico (espacios, sin sufijo) de un PDF que Odoo exportó como proforma.
+
+    Odoo nombra algunos PDFs 'FA-A_00016-00008976_proforma' (guion bajo en vez de
+    espacio + sufijo '_proforma') mientras que nroFactura en saldos/cartera es
+    'FA-A 00016-00008976'. Sin esta normalización el match exacto falla y el
+    botón "Ver factura PDF" no aparece pese a que el PDF sí está en el ZIP.
+    Devuelve '' si `nombre` no tiene el sufijo (no es una variante proforma).
+    """
+    base = nombre.split('/')[-1]
+    if base.lower().endswith('.pdf'):
+        base = base[:-4]
+    if not base.lower().endswith('_proforma'):
+        return ''
+    return base[:-len('_proforma')].replace('_', ' ').strip()
+
+
 def _procesar_zip_facturas(raw: bytes) -> dict:
     """Merge acumulativo: agrega los PDFs del nuevo ZIP al archivo maestro existente.
     Los PDFs de importaciones anteriores se conservan — nunca se borran.
@@ -12105,6 +12122,7 @@ def servir_factura_pdf(nombre_pdf):
     nombre_limpio = nombre_pdf.strip()
     if not nombre_limpio.lower().endswith('.pdf'):
         nombre_limpio += '.pdf'
+    nombre_sin_ext = nombre_limpio[:-4]
 
     if not _facturas_zip_ensure_local():
         return jsonify({"error": "ZIP de facturas no disponible. Por favor importalo desde la app."}), 404
@@ -12117,6 +12135,13 @@ def servir_factura_pdf(nombre_pdf):
                     (n for n in nombres_zip if n.lower() == nombre_limpio.lower()),
                     None,
                 )
+                if not match:
+                    # Fallback: variante proforma de Odoo (guion bajo + sufijo '_proforma')
+                    objetivo = nombre_sin_ext.lower()
+                    match = next(
+                        (n for n in nombres_zip if _factura_variante_proforma(n).lower() == objetivo),
+                        None,
+                    )
                 if not match:
                     return jsonify({"error": f"PDF '{nombre_limpio}' no encontrado en el ZIP"}), 404
                 pdf_bytes = zf.read(match)
@@ -12199,9 +12224,16 @@ def facturas_crear_lote():
     if len(facturas) > _LOTE_MAX_FACTURAS:
         return jsonify({"ok": False, "error": f"Máximo {_LOTE_MAX_FACTURAS} facturas por lote"}), 400
 
-    # PDFs disponibles según el meta del ZIP maestro (basenames sin extensión)
+    # PDFs disponibles según el meta del ZIP maestro (basenames sin extensión).
+    # Incluye también la variante proforma normalizada (ver _factura_variante_proforma).
     meta_zip   = _facturas_zip_meta_read()
-    pdfs_disp  = {str(n).lower() for n in meta_zip.get('nombres', [])}
+    pdfs_disp  = set()
+    for _n in meta_zip.get('nombres', []):
+        _n = str(_n)
+        pdfs_disp.add(_n.lower())
+        _variante = _factura_variante_proforma(_n)
+        if _variante:
+            pdfs_disp.add(_variante.lower())
 
     items = []
     for f in facturas:
