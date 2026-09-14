@@ -8262,6 +8262,7 @@ def _check_cheques_cartera_bg():
 
         cartera_idx = {_nc(c.get('cuit', '')): c for c in cartera if c.get('cuit')}
         alertas_nuevas = []
+        cuits_cambio_cheque = []   # CUITs cuyo conteo de rechazados subió o bajó — recalcular score
         fecha_ahora = datetime.now().strftime('%Y-%m-%d %H:%M')
 
         for cuit, cheq in cheques_actuales.items():
@@ -8271,6 +8272,9 @@ def _check_cheques_cartera_bg():
             # por eso antes esto siempre daba 0 y jamás se disparaba una alerta real.
             n_rechazados, n_total, _ = _cheques_activos_de(cheq)
             n_anterior = estado_anterior.get(cuit, {}).get('n_rechazados', 0)
+
+            if n_rechazados != n_anterior:
+                cuits_cambio_cheque.append(cuit)
 
             if n_rechazados > n_anterior:
                 cliente = cartera_idx.get(cuit, {})
@@ -8311,9 +8315,123 @@ def _check_cheques_cartera_bg():
             flush=True
         )
 
+        # Recalcular score solo de los CUITs cuyo cheque cambió — sube o baja,
+        # cubre tanto el rechazo nuevo como el que se regularizó.
+        if cuits_cambio_cheque:
+            _recalcular_scores_cheques(cuits_cambio_cheque, cheques_actuales, cartera_idx)
+
     except Exception:
         import traceback
         print(f"[cheques_check] Error:\n{traceback.format_exc()}", flush=True)
+
+
+def _recalcular_scores_cheques(cuits: list, cheques_batch: dict, cartera_idx: dict) -> None:
+    """
+    Background: recalcula el score de los CUITs cuyo n° de cheques rechazados
+    activos cambió en la actualización diaria del bulk BCRA (subida o baja).
+
+    Mismo "modo masivo" que ya usa el proceso integral (calcular_score_servidor
+    con sin_arca=True): jamás llama a la API de BCRA ni a ARCA en vivo. Solo se
+    mueve el bloque de Liquidez con el cheque nuevo — la situación BCRA (bulk
+    mensual) y el perfil fiscal ARCA quedan tal como los dejó la última
+    verificación (profunda mensual / proceso integral) durante todo el mes, que
+    es justamente la idea: que ese dato no se recalcule por esto.
+
+    Genera alerta score_drop si el score cae >=50 pts (mismo umbral que
+    _recalcular_scores_post_upload, el equivalente para subidas de saldos).
+    """
+    try:
+        moras_norm: set = set()
+        try:
+            mp = os.path.join(DATA_DIR, 'moras_piattelli.json')
+            if os.path.exists(mp):
+                with open(mp, 'r', encoding='utf-8') as f:
+                    raw = json.load(f)
+                moras_norm = {str(x or '').replace('-', '').replace(' ', '').strip()
+                              for x in (raw if isinstance(raw, list) else [])}
+        except Exception:
+            pass
+
+        bcra_cache_data: dict = {}
+        try:
+            bc_path = os.path.join(DATA_DIR, 'bcra_cache.json')
+            if os.path.exists(bc_path):
+                with open(bc_path, 'r', encoding='utf-8') as f:
+                    bcra_cache_data = json.load(f)
+        except Exception as e:
+            print(f"[recalculo-cheques] bcra_cache.json: {e}", flush=True)
+
+        with _score_cache_lock:
+            sc_anterior = _score_cache_read()
+
+        alertas_nuevas = []
+        scores_nuevos  = {}
+
+        for cuit in cuits:
+            cliente = cartera_idx.get(cuit) or {}
+            nombre  = str(cliente.get('nombre') or cliente.get('cliente') or cuit)
+            ciudad  = str(cliente.get('ciudad') or '').strip()
+
+            bcra_data = bcra_cache_data.get(cuit)
+            if isinstance(bcra_data, dict) and 'data' in bcra_data and 'ts' in bcra_data:
+                bcra_data = bcra_data.get('data') or {}
+            if not bcra_data:
+                continue   # sin BCRA en caché → score incompleto, skip (igual que post-upload)
+
+            try:
+                score_nuevo = calcular_score_servidor(
+                    cuit=cuit, bcra_data=bcra_data, en_mora=(cuit in moras_norm),
+                    ciudad=ciudad, sin_arca=True,
+                )
+            except Exception as e:
+                print(f"[recalculo-cheques] {cuit}: {e}", flush=True)
+                continue
+
+            if not score_nuevo or not score_nuevo.get('score'):
+                continue
+
+            score_nuevo_val = int(score_nuevo['score'])
+            _sc_ant       = sc_anterior.get(cuit) or {}
+            score_ant_val = _sc_ant.get('scoreCompleto') or _sc_ant.get('score')
+
+            if score_ant_val:
+                delta = score_nuevo_val - int(score_ant_val)
+                if delta <= -50:
+                    alertas_nuevas.append({
+                        'cuit':           cuit,
+                        'nombre':         nombre,
+                        'fecha':          datetime.now().strftime('%Y-%m-%d %H:%M'),
+                        'rango':          score_nuevo.get('rango', ''),
+                        'score_nuevo':    score_nuevo_val,
+                        'leida':          False,
+                        'tipo':           'score_drop',
+                        'detalle':        f"Score bajó de {score_ant_val} a {score_nuevo_val} ({delta:+d} pts) tras actualización de cheques",
+                        'score_anterior': int(score_ant_val),
+                        'delta':          delta,
+                    })
+
+            # solvency={} — igual que el resto de los flujos masivos: no pisa
+            # score_verificado, que solo debe moverlo una verificación con ARCA real.
+            solvency = {}
+            with _alertas_file_lock:
+                _actualizar_score_en_cartera(cuit, score_nuevo, solvency)
+            scores_nuevos[cuit] = _score_response(score_nuevo, solvency, cheques_batch.get(cuit))
+
+        if scores_nuevos:
+            with _score_cache_lock:
+                sc = _score_cache_read()
+                sc.update(scores_nuevos)
+                _score_cache_write(sc)
+
+        _agregar_alertas_auto(alertas_nuevas)
+        print(
+            f"[recalculo-cheques] OK — {len(scores_nuevos)}/{len(cuits)} scores recalculados · "
+            f"{len(alertas_nuevas)} alertas score_drop",
+            flush=True,
+        )
+    except Exception:
+        import traceback
+        print(f"[recalculo-cheques] Error inesperado:\n{traceback.format_exc()}", flush=True)
 
 
 # ── Endpoints de alertas automáticas ─────────────────────────────────────────
