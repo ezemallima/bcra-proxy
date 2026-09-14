@@ -390,20 +390,6 @@
 
   /* ── Feed unificado de alertas — grupos por severidad ── */
   .alr-grupo { margin-bottom: 20px; }
-  .alr-grupo-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; padding: 6px 8px; cursor: pointer; border-radius: 8px; user-select: none; }
-  .alr-grupo-header:hover { background: rgba(0,0,0,0.03); }
-  .alr-grupo-chevron { width: 16px; height: 16px; margin-left: auto; flex-shrink: 0; color: #94a3b8; transition: transform 0.15s; }
-  .alr-grupo-chevron.open { transform: rotate(180deg); }
-  .alr-grupo-titulo { font-size: 13px; font-weight: 800; letter-spacing: 0.2px; }
-  .alr-grupo-titulo.critico { color: #991b1b; }
-  .alr-grupo-titulo.advertencia { color: #92400e; }
-  .alr-grupo-titulo.moroso { color: #9a3412; }
-  .alr-grupo-titulo.cheque { color: #b91c1c; }
-  .alr-grupo-count { font-size: 11px; font-weight: 700; color: #fff; background: #94a3b8; border-radius: 10px; padding: 1px 8px; }
-  .alr-grupo-header.critico .alr-grupo-count { background: #dc2626; }
-  .alr-grupo-header.advertencia .alr-grupo-count { background: #d97706; }
-  .alr-grupo-header.moroso .alr-grupo-count { background: #ea580c; }
-  .alr-grupo-header.cheque .alr-grupo-count { background: #b91c1c; }
   .alr-grupo-empty { text-align: center; padding: 14px; color: #16a34a; font-size: 12px; font-weight: 600; background: #f0fdf4; border-radius: 10px; border: 1px dashed #bbf7d0; }
   .alr-grupo-body { max-height: 400px; overflow-y: auto; padding-right: 4px; }
   .alr-card-leida-btn { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 6px; border: 1px solid #e2e8f0; background: #fff; color: #475569; cursor: pointer; margin-top: 4px; }
@@ -3636,23 +3622,30 @@ function toggleResource(panelId, btnId) {
 // llega cada fuente de datos; sin este estado un grupo abierto se cerraría
 // solo apenas resolviera otra fuente).
 var _alrGrupoExpandido = { critico: false, advertencia: false, moroso: false, cheque: false };
+var _ALR_GRUPO_A_FILTRO = { critico: 'filter-critico', advertencia: 'filter-advertencia', moroso: 'filter-exceso', cheque: 'filter-cheque' };
 
 function _toggleAlrGrupo(grupo) {
   // Acordeón exclusivo: abrir un grupo cierra cualquier otro que estuviera abierto.
   var abrir = !_alrGrupoExpandido[grupo];
   Object.keys(_alrGrupoExpandido).forEach(function(g) {
     _alrGrupoExpandido[g] = (g === grupo) && abrir;
-    var content = document.getElementById('alr-grupo-content-' + g);
-    var chev = document.getElementById('alr-grupo-chev-' + g);
-    if (content) content.style.display = _alrGrupoExpandido[g] ? 'block' : 'none';
-    if (chev) chev.classList.toggle('open', _alrGrupoExpandido[g]);
+    var wrap = document.getElementById('alr-grupo-' + g);
+    if (wrap) wrap.style.display = _alrGrupoExpandido[g] ? 'block' : 'none';
+    var filtroEl = document.getElementById(_ALR_GRUPO_A_FILTRO[g]);
+    if (filtroEl) filtroEl.classList.toggle('filter-on', _alrGrupoExpandido[g]);
   });
 }
 
+// Las 4 tarjetas de arriba son el único control: cada clic alterna
+// mostrar/ocultar el listado de ese grupo (cierra los demás por ser acordeón
+// exclusivo). Sólo hace scroll cuando abre, no cuando cierra.
 function _scrollAlrGrupo(tipo) {
-  if (!_alrGrupoExpandido[tipo]) _toggleAlrGrupo(tipo);
-  var el = document.getElementById('alr-grupo-' + tipo);
-  if (el) el.scrollIntoView({behavior: 'smooth', block: 'start'});
+  var estabaAbierto = _alrGrupoExpandido[tipo];
+  _toggleAlrGrupo(tipo);
+  if (!estabaAbierto) {
+    var el = document.getElementById('alr-grupo-' + tipo);
+    if (el) el.scrollIntoView({behavior: 'smooth', block: 'start'});
+  }
 }
 
 function switchTab(tab, el) {
@@ -7665,8 +7658,6 @@ function renderAlertasFeedUnificado() {
   var feedEl = document.getElementById('alertas-feed');
   if (!feedEl) return;
 
-  var _iconos  = { critico: '🔴', advertencia: '🟡', moroso: '💰', cheque: '📄' };
-  var _titulos = { critico: 'Críticos', advertencia: 'Advertencias', moroso: 'Clientes Morosos', cheque: 'Cheques Rechazados' };
   var _vacios  = {
     critico: 'Sin clientes en situación crítica',
     advertencia: 'Sin advertencias pendientes',
@@ -7708,13 +7699,6 @@ function renderAlertasFeedUnificado() {
   ['critico','advertencia','moroso','cheque'].forEach(function(grupo) {
     var lista = grupo === 'moroso' ? moraAlertas : grupos[grupo];
     var expandido = !!_alrGrupoExpandido[grupo];
-    html += '<div class="alr-grupo" id="alr-grupo-' + grupo + '">';
-    html += '<div class="alr-grupo-header ' + grupo + '" onclick="_toggleAlrGrupo(\'' + grupo + '\')">'
-      + '<span>' + _iconos[grupo] + '</span>'
-      + '<span class="alr-grupo-titulo ' + grupo + '">' + _titulos[grupo] + '</span>'
-      + '<span class="alr-grupo-count">' + lista.length + '</span>'
-      + '<svg id="alr-grupo-chev-' + grupo + '" class="alr-grupo-chevron' + (expandido?' open':'') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
-      + '</div>';
     var _bodyContent;
     if (!lista.length) {
       _bodyContent = '<div class="alr-grupo-empty">✓ ' + _vacios[grupo] + '</div>';
@@ -7724,8 +7708,7 @@ function renderAlertasFeedUnificado() {
         : lista.map(function(item){ return cardHtml(item, grupo); }).join('');
       _bodyContent = '<div class="alr-grupo-body">' + _cardsHtml + '</div>';
     }
-    html += '<div id="alr-grupo-content-' + grupo + '" style="display:' + (expandido?'block':'none') + ';margin-top:8px;">' + _bodyContent + '</div>';
-    html += '</div>';
+    html += '<div class="alr-grupo" id="alr-grupo-' + grupo + '" style="display:' + (expandido?'block':'none') + '">' + _bodyContent + '</div>';
   });
   feedEl.innerHTML = html;
 }
