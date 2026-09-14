@@ -4255,7 +4255,8 @@ def _denominacion_arca(cuit: str) -> str | None:
 
 
 def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: str = '',
-                             live_primero: bool = False, sin_arca: bool = False) -> dict:
+                             live_primero: bool = False, sin_arca: bool = False,
+                             solvency_override: dict = None) -> dict:
     """
     Wrapper de calcular_rating_predictivo v9.0.
     Carga historial y cheques desde caché local (graceful degradation).
@@ -4263,6 +4264,11 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
     live_primero=True  → consulta individual: BCRA en vivo primero, bulk como fallback.
     live_primero=False → consulta masiva: bulk primero, API solo si el CUIT no figura.
     sin_arca=True      → omite el thread ARCA/solvencia (modo masivo, evita bloqueos).
+    solvency_override  → usa este perfil fiscal tal cual (dict, puede ser {} a propósito)
+                          y omite toda resolución de solvencia propia, thread incluido.
+                          Para llamadores que ya resolvieron la solvencia por su cuenta
+                          (p.ej. con un fallback en vivo acotado por timeout) y no quieren
+                          que este wrapper la vuelva a resolver.
     """
     cuit_limpio = str(cuit).replace('-', '').replace(' ', '').strip()
 
@@ -4281,7 +4287,10 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
         except Exception as _e_sv:
             print(f"[score] {cuit_limpio} solvencia paralela falló: {_e_sv}", flush=True)
 
-    if sin_arca:
+    if solvency_override is not None:
+        _th_solv = None
+        print(f"[score] {cuit_limpio} solvency_override provisto — solvencia propia omitida", flush=True)
+    elif sin_arca:
         _th_solv = None
         print(f"[score] {cuit_limpio} sin_arca=True — solvencia ARCA omitida (modo masivo)", flush=True)
     else:
@@ -4394,7 +4403,9 @@ def calcular_score_servidor(cuit: str, bcra_data: dict, en_mora=None, ciudad: st
     _bcra_disponible = bcra_data.get('bcra_disponible', not bool(bcra_data.get('error_bcra')))
 
     # ── Reunir la rama fiscal (ya venía corriendo en paralelo) ─────────────
-    if _th_solv is None:
+    if solvency_override is not None:
+        solvency_data = solvency_override
+    elif _th_solv is None:
         # sin_arca=True: no hace llamadas de red.
         # Prioridad 1: caché en disco (verif. profunda mensual o consultas previas, TTL 35d).
         #   → score idéntico al individual para clientes con solvencia cacheada este mes.
@@ -8029,6 +8040,67 @@ def _agregar_alertas_auto(nuevas: list) -> None:
             _alertas_auto_write(filtradas + existentes)
 
 
+_SOLV_MASIVO_TIMEOUT_SEG = 12   # por CUIT — no colgar el batch si ARCA está lento
+_SOLV_MASIVO_MAX_FALLOS  = 3    # circuit breaker: N fallos/timeouts seguidos → dejar de insistir en vivo esta corrida
+
+
+def _solvencia_masiva_con_fallback(cuit: str, fallos_consec: list) -> dict:
+    """
+    Solvencia para los recálculos masivos "rápidos" (cheques diario, saldos
+    2x/semana) — no deja a un cliente degradado solo porque nunca tuvo perfil
+    fiscal cacheado (nunca se verificó, o la verificación profunda le falló
+    puntualmente a ese CUIT). Reglas:
+
+      1. Si ya hay caché vigente en disco (<35 días) lo usa tal cual — un CUIT
+         con perfil fiscal NUNCA vuelve a golpear ARCA desde acá.
+      2. Si no hay caché, intenta UNA consulta ARCA en vivo, acotada por
+         _SOLV_MASIVO_TIMEOUT_SEG — si tarda más, se abandona (queda corriendo
+         en background igual; si llega a completar escribe su propio caché en
+         disco para la próxima corrida) y este ciclo sigue con {} degradado.
+      3. Circuit breaker: si _SOLV_MASIVO_MAX_FALLOS consultas en vivo seguidas
+         fallan o superan el timeout (señal de que ARCA está caído/lento),
+         deja de insistir por el resto de esta corrida — ninguna corrida
+         masiva puede terminar colgada esperando a ARCA cliente por cliente.
+
+    fallos_consec: lista de 1 entero, contador mutable compartido entre
+    llamadas de la misma corrida (para que el circuit breaker persista entre
+    CUITs del mismo batch).
+    """
+    cached = get_solvency_data(cuit, cache_only=True)
+    if isinstance(cached, dict) and cached:
+        return cached
+
+    if fallos_consec[0] >= _SOLV_MASIVO_MAX_FALLOS:
+        return {}   # circuit abierto: ARCA venía fallando/lenta, no insistir este ciclo
+
+    box: dict = {}
+
+    def _fetch():
+        try:
+            sv = get_solvency_data(cuit)   # en vivo — sin cache_only
+            if isinstance(sv, dict):
+                box['data'] = sv
+        except Exception as e:
+            print(f"[solvencia-masiva] {cuit} fetch en vivo falló: {e}", flush=True)
+
+    th = threading.Thread(target=_fetch, daemon=True)
+    th.start()
+    th.join(timeout=_SOLV_MASIVO_TIMEOUT_SEG)
+
+    if th.is_alive() or not box.get('data'):
+        fallos_consec[0] += 1
+        if fallos_consec[0] >= _SOLV_MASIVO_MAX_FALLOS:
+            print(
+                f"[solvencia-masiva] {fallos_consec[0]} fallos/timeouts seguidos — "
+                f"circuit breaker abierto por el resto de esta corrida",
+                flush=True,
+            )
+        return {}
+
+    fallos_consec[0] = 0
+    return box['data']
+
+
 def _recalcular_scores_post_upload():
     """
     Background: recalcula score de toda la cartera usando saldos recién subidos
@@ -8099,6 +8171,7 @@ def _recalcular_scores_post_upload():
         alertas_nuevas  = []
         scores_nuevos   = {}
         procesados      = 0
+        _fallos_arca    = [0]   # circuit breaker de _solvencia_masiva_con_fallback, compartido en esta corrida
 
         for cliente in cartera:
             cuit = _nc(cliente.get('cuit', ''))
@@ -8131,16 +8204,14 @@ def _recalcular_scores_post_upload():
             cheq_data  = cheques_batch.get(cuit)
             ciudad     = str(cliente.get('ciudad') or '').strip()
             en_mora    = cuit in moras_norm
-            # cache_only=True: perfil fiscal solo desde disco (35 días, lo llena la
-            # verificación profunda) — nunca dispara una consulta ARCA en vivo desde
-            # este batch masivo, igual que el resto de los flujos sin_arca=True.
-            # Ojo: si no hay caché esto da None, y calcular_rating_predictivo trata
-            # None como "no me pasaron nada" y hace SU PROPIO fetch — sin cache_only.
-            # Por eso el fallback tiene que ser {} y no None (mismo guard que usa
-            # calcular_score_servidor en su rama sin_arca=True).
-            solvency_data = get_solvency_data(cuit, cache_only=True)
-            if not isinstance(solvency_data, dict):
-                solvency_data = {}
+            # Perfil fiscal: caché en disco si ya existe (nunca vuelve a golpear
+            # ARCA para un CUIT que ya tiene perfil vigente). Si no hay caché —
+            # nunca se verificó, o la verificación profunda le falló puntualmente
+            # a este CUIT — intenta una consulta en vivo acotada por timeout en
+            # vez de dejarlo degradado indefinidamente (con circuit breaker si
+            # ARCA está caído). Nunca None: eso haría que calcular_rating_
+            # predictivo dispare SU PROPIO fetch, sin timeout ni circuit breaker.
+            solvency_data = _solvencia_masiva_con_fallback(cuit, _fallos_arca)
 
             # Limpiar session cache para forzar recálculo real
             _score_session_cache.pop(cuit, None)
@@ -8353,12 +8424,15 @@ def _recalcular_scores_cheques(cuits: list, cheques_batch: dict, cartera_idx: di
     Background: recalcula el score de los CUITs cuyo n° de cheques rechazados
     activos cambió en la actualización diaria del bulk BCRA (subida o baja).
 
-    Mismo "modo masivo" que ya usa el proceso integral (calcular_score_servidor
-    con sin_arca=True): jamás llama a la API de BCRA ni a ARCA en vivo. Solo se
-    mueve el bloque de Liquidez con el cheque nuevo — la situación BCRA (bulk
-    mensual) y el perfil fiscal ARCA quedan tal como los dejó la última
-    verificación (profunda mensual / proceso integral) durante todo el mes, que
-    es justamente la idea: que ese dato no se recalcule por esto.
+    Nunca llama a la API de BCRA en vivo (sin_arca=True). El perfil fiscal ARCA
+    sale del caché de disco si un CUIT ya tiene uno vigente — ese caso jamás
+    vuelve a golpear ARCA por esto. Si un CUIT NO tiene perfil fiscal cacheado
+    (nunca se verificó, o la verificación profunda le falló puntualmente),
+    _solvencia_masiva_con_fallback intenta una consulta en vivo acotada por
+    timeout en vez de dejarlo degradado indefinidamente — con circuit breaker
+    si ARCA está caído, para no colgar el batch. En cualquier caso, solo se
+    mueve el bloque de Liquidez con el cheque nuevo; la situación BCRA (bulk
+    mensual) queda tal como la dejó la última verificación.
 
     Genera alerta score_drop si el score cae >=50 pts (mismo umbral que
     _recalcular_scores_post_upload, el equivalente para subidas de saldos).
@@ -8389,6 +8463,7 @@ def _recalcular_scores_cheques(cuits: list, cheques_batch: dict, cartera_idx: di
 
         alertas_nuevas = []
         scores_nuevos  = {}
+        _fallos_arca   = [0]   # circuit breaker de _solvencia_masiva_con_fallback, compartido en esta corrida
 
         for cuit in cuits:
             cliente = cartera_idx.get(cuit) or {}
@@ -8401,10 +8476,12 @@ def _recalcular_scores_cheques(cuits: list, cheques_batch: dict, cartera_idx: di
             if not bcra_data:
                 continue   # sin BCRA en caché → score incompleto, skip (igual que post-upload)
 
+            solvency_data = _solvencia_masiva_con_fallback(cuit, _fallos_arca)
+
             try:
                 score_nuevo = calcular_score_servidor(
                     cuit=cuit, bcra_data=bcra_data, en_mora=(cuit in moras_norm),
-                    ciudad=ciudad, sin_arca=True,
+                    ciudad=ciudad, sin_arca=True, solvency_override=solvency_data,
                 )
             except Exception as e:
                 print(f"[recalculo-cheques] {cuit}: {e}", flush=True)
