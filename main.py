@@ -8032,8 +8032,14 @@ def _agregar_alertas_auto(nuevas: list) -> None:
 def _recalcular_scores_post_upload():
     """
     Background: recalcula score de toda la cartera usando saldos recién subidos
-    y BCRA data cacheada en disco — sin llamadas a la API de BCRA.
-    Genera alertas si score baja >50 pts o DSO deteriora >15%.
+    y BCRA data cacheada en disco — sin llamadas a la API de BCRA ni a ARCA en
+    vivo (solvencia solo desde caché de disco, modo masivo — ver sin_arca=True
+    en calcular_score_servidor). La situación BCRA y el perfil fiscal quedan
+    tal como los dejó la última verificación (profunda mensual / proceso
+    integral): esta corrida solo mueve lo que cambió en el upload (saldo/mora).
+    Persiste en alertas_cartera.json (igual que la verificación de cheques y el
+    proceso integral) para que la Cartera muestre el score recalculado, no solo
+    la alerta puntual. Genera alertas si score baja >50 pts o DSO deteriora >15%.
     """
     import time as _t
     _t.sleep(2)   # dejar que el response HTTP salga primero
@@ -8125,6 +8131,16 @@ def _recalcular_scores_post_upload():
             cheq_data  = cheques_batch.get(cuit)
             ciudad     = str(cliente.get('ciudad') or '').strip()
             en_mora    = cuit in moras_norm
+            # cache_only=True: perfil fiscal solo desde disco (35 días, lo llena la
+            # verificación profunda) — nunca dispara una consulta ARCA en vivo desde
+            # este batch masivo, igual que el resto de los flujos sin_arca=True.
+            # Ojo: si no hay caché esto da None, y calcular_rating_predictivo trata
+            # None como "no me pasaron nada" y hace SU PROPIO fetch — sin cache_only.
+            # Por eso el fallback tiene que ser {} y no None (mismo guard que usa
+            # calcular_score_servidor en su rama sin_arca=True).
+            solvency_data = get_solvency_data(cuit, cache_only=True)
+            if not isinstance(solvency_data, dict):
+                solvency_data = {}
 
             # Limpiar session cache para forzar recálculo real
             _score_session_cache.pop(cuit, None)
@@ -8132,7 +8148,7 @@ def _recalcular_scores_post_upload():
                 score_nuevo = calcular_rating_predictivo(
                     cuit=cuit, bcra_data=bcra_data,
                     hist_data=hist_data, cheq_data=cheq_data,
-                    en_mora=en_mora, ciudad=ciudad,
+                    en_mora=en_mora, solvency_data=solvency_data, ciudad=ciudad,
                 )
             except Exception as e:
                 print(f"[recalculo] {cuit}: {e}", flush=True)
@@ -8206,7 +8222,14 @@ def _recalcular_scores_post_upload():
                     'detalle': f"Facturas sin cobrar hace más de 90 días · ${_monto_90d:,.0f}",
                 })
 
-            resp = _score_response(score_nuevo, None)
+            # solvency={} — igual que el resto de los flujos masivos (proceso integral,
+            # recálculo por cheques): no pisa score_verificado, que solo debe moverlo
+            # una verificación con ARCA en vivo, aunque el cálculo de arriba sí haya
+            # usado el perfil fiscal cacheado.
+            with _alertas_file_lock:
+                _actualizar_score_en_cartera(cuit, score_nuevo, {})
+
+            resp = _score_response(score_nuevo, None, cheq_data)
             scores_nuevos[cuit] = resp
 
         # Persistir scores actualizados
