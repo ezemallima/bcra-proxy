@@ -195,7 +195,7 @@ def _token_cron_valido() -> bool:
 
 
 def _es_pagina(path: str) -> bool:
-    return request.method == 'GET' and (
+    return request.method in ('GET', 'HEAD') and (
         path == '/' or path in ('/comercial', '/supervisor', '/director', '/turismo'))
 
 

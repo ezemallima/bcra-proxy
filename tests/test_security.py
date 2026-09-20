@@ -92,6 +92,14 @@ class SinSesion(Base):
             self.assertEqual(r.status_code, 302, ruta)
             self.assertTrue(r.headers['Location'].endswith(destino), ruta)
 
+    def test_head_de_paginas_redirige_igual_que_get(self):
+        # Render chequea "HEAD /" al arrancar; antes recibía una redirección, no un 401.
+        r = self.c.head('/')
+        self.assertEqual(r.status_code, 302)
+        self.assertTrue(r.headers['Location'].endswith('/login'))
+        self.assertEqual(self.c.head('/director').status_code, 302)
+        self.assertEqual(self.c.head('/alertas').status_code, 401)
+
     def test_rutas_publicas(self):
         for ruta in ('/ping', '/health', '/login', '/logout', '/director-login',
                      '/turismo-login', '/supabase-session.js', '/f/abc123', '/f/abc123/pdf/FA-A 1'):
