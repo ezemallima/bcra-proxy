@@ -2,6 +2,7 @@
 <html lang="es" translate="no">
 <head>
 <meta charset="UTF-8">
+<script src="/static/auth-guard.js"></script>
 <meta name="google" content="notranslate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
@@ -1158,7 +1159,7 @@ async function doLogout() {
   // Timeout 2s: garantiza que la redirección ocurra aunque signOut cuelgue (red lenta)
   try {
     await Promise.race([
-      getClient().auth.signOut(),
+      Promise.all([getClient().auth.signOut(), fetch('/auth/logout', { method: 'POST' })]),
       new Promise(r => setTimeout(r, 2000))
     ]);
   } catch(_) {}

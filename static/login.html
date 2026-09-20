@@ -484,29 +484,20 @@ body {
 <script>
 document.getElementById('brand-year').textContent = new Date().getFullYear();
 
-// ── Credenciales sistema legacy (vendedores) ─────────────────────────────────
-const PIN_COMERCIAL = 'PIATTELLI2025';
-const VENDEDORES = {
-  'Adrian Arango':            '20208913604',
-  'Alejandro Valan':          '20207619923',
-  'Anabel Borrageiros':       '27308869313',
-  'Ezequiel Mallima':         '20393831821',
-  'Marcelo Fernandez':        '20251483680',
-  'Pablo Perticone':          '20224421371',
-  'Raul Maza':                '20254118959',
-  'Roberto Pascual':          '20206068834',
-  'Sergio Piatanesi':         '20217157332',
-  'Valeria Gutierrez Castex': '27224289966',
-};
-
-function rutaSegunRol(rol) {
-  if (rol === 'director') return '/director';
-  if (rol === 'admin' || rol === 'administracion') return '/';
-  return '/comercial';
-}
-
+// Las claves y la lista de usuarios viven solo en el servidor: acá no hay nada que verificar.
 function esCuit(val) {
   return /^\d{10,11}$/.test(val.replace(/\D/g, ''));
+}
+
+async function postJson(url, cuerpo) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(cuerpo),
+  });
+  let json = {};
+  try { json = await res.json(); } catch (_) {}
+  return json;
 }
 
 // ── Login híbrido ─────────────────────────────────────────────────────────────
@@ -528,39 +519,21 @@ async function handleLogin(e) {
   if (esCuit(identifier)) {
     const cuit = identifier.replace(/\D/g, '');
 
-    // ── Camino C: Admin CUIT — sesión Flask (redirige a /) ───────────────────
-    if (cuit === '30710295022') {
-      try {
-        const res  = await fetch('/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cuit, password }),
-        });
-        const json = await res.json();
-        if (json.ok) { window.location.href = '/'; return; }
-        btn.disabled = false; btn.classList.remove('loading');
-        mostrarError(json.error || 'Credenciales incorrectas.'); return;
-      } catch (_) {
-        btn.disabled = false; btn.classList.remove('loading');
-        mostrarError('Error de conexión. Intentá de nuevo.'); return;
+    // ── CUIT + clave: administrador o vendedor/supervisor, verificado en el servidor ──
+    try {
+      const json = await postJson('/auth/cuit', { cuit, password });
+      if (json.ok) {
+        if (json.usuario) localStorage.setItem('vendeSeguro_session', JSON.stringify(json.usuario));
+        else localStorage.removeItem('vendeSeguro_session');
+        window.location.replace(json.destino || '/comercial');
+        return;
       }
-    }
-
-    // ── Camino A: CUIT + PIN (vendedores / supervisores legacy) ─────────────
-    if (password !== PIN_COMERCIAL) {
       btn.disabled = false; btn.classList.remove('loading');
-      mostrarError('PIN incorrecto.'); return;
-    }
-    const nombre = Object.keys(VENDEDORES).find(k => VENDEDORES[k] === cuit);
-    if (!nombre) {
+      mostrarError(json.error || 'Credenciales incorrectas.'); return;
+    } catch (_) {
       btn.disabled = false; btn.classList.remove('loading');
-      mostrarError('CUIT no registrado en el sistema.'); return;
+      mostrarError('Error de conexión. Intentá de nuevo.'); return;
     }
-    // Supervisores y vendedores usan la misma app comercial; el rol controla la vista
-    const SUPERVISORES_CUITS = new Set(['27224289966', '20207619923']);
-    const rol = SUPERVISORES_CUITS.has(cuit) ? 'supervisor' : 'vendedor';
-    localStorage.setItem('vendeSeguro_session', JSON.stringify({ nombre, cuit, rol }));
-    window.location.replace('/comercial');
 
   } else {
     // ── Camino D: Usuario Director (no es CUIT ni email) ─────────────────────
@@ -603,8 +576,14 @@ async function handleLogin(e) {
     // ── Camino B: Email + contraseña (Supabase) ───────────────────────────────
     try {
       await loginConEmail(identifier, password);
-      const perfil = await cargarPerfil();
-      window.location.replace(rutaSegunRol(perfil.rol));
+      await cargarPerfil();
+      const { data: { session } } = await getClient().auth.getSession();
+      const json = await postJson('/auth/supabase', { access_token: session?.access_token || '' });
+      if (!json.ok) {
+        await getClient().auth.signOut();
+        throw new Error(json.error || 'No se pudo iniciar sesión.');
+      }
+      window.location.replace(json.destino || '/comercial');
     } catch (err) {
       btn.disabled = false; btn.classList.remove('loading');
       mostrarError(traducirError(err.message));

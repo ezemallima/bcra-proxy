@@ -13,6 +13,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 import random
 import traceback
+import hmac
+
+import security
 
 # Módulos de scoring fiscal e integración ARCA (guards independientes:
 # scoring_fiscal es Python puro; arca_ws requiere cryptography instalado).
@@ -47,20 +50,25 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 app = Flask(__name__, static_folder='static')
 
-# CORS: en producción restringir al dominio propio via ALLOWED_ORIGINS en Render.
-# Ejemplo: ALLOWED_ORIGINS=https://vendeseguro.onrender.com,https://tudominio.com
+# CORS: las pantallas se sirven desde este mismo dominio, así que por defecto no se
+# habilita. Solo si hace falta un origen externo: ALLOWED_ORIGINS=https://a.com,https://b.com
 _ALLOWED_ORIGINS = os.environ.get('ALLOWED_ORIGINS', '')
 if _ALLOWED_ORIGINS:
     CORS(app, origins=[o.strip() for o in _ALLOWED_ORIGINS.split(',') if o.strip()])
-else:
-    CORS(app)  # desarrollo local: permite todos los orígenes
 
 app.config['MAX_CONTENT_LENGTH'] = 512 * 1024 * 1024  # 512 MB — permite subir padrón mensual BCRA
 
-_SECRET_KEY_DEFAULT = 'vs-artel-2026-key'
-app.secret_key = os.environ.get('SECRET_KEY', _SECRET_KEY_DEFAULT)
-if app.secret_key == _SECRET_KEY_DEFAULT:
-    print('[SECURITY] SECRET_KEY usa valor default inseguro — configurar variable de entorno SECRET_KEY en Render', flush=True)
+# Clave de firma de sesiones: variable SECRET_KEY o, si falta, una clave aleatoria
+# persistida en el disco de datos. Nunca un valor fijo del repositorio.
+app.secret_key = security.clave_secreta('/data' if os.path.exists('/data') else os.getcwd())
+
+# CUIT de la empresa (dato público, figura en las facturas). Las claves NO tienen valor por defecto.
+os.environ.setdefault('ADMIN_CUIT', '30710295022')
+
+# Control de acceso global (deny by default) y login del lado del servidor.
+# _SUPERVISOR_MAP se define más abajo; se resuelve recién al atender cada request.
+security.init_app(app, lambda: _SUPERVISOR_MAP)
+app.register_blueprint(security.crear_blueprint(lambda: _SUPERVISOR_MAP))
 
 GEMINI_KEY      = os.environ.get('GEMINI_API_KEY', '')
 OPENAI_KEY      = os.environ.get('OPENAI_API_KEY', '')
@@ -151,14 +159,32 @@ def _login_rate_reset(ip: str):
     with _login_attempts_lock:
         _login_attempts.pop(ip, None)
 
-ADMIN_CUIT = '30710295022'
-ADMIN_PASS = 'Artel2026'
+# Claves de acceso: solo variables de entorno (Render). Sin valor → ese login queda
+# deshabilitado; nunca hay una clave por defecto.
+ADMIN_CUIT = os.environ['ADMIN_CUIT']
+ADMIN_PASS = os.environ.get('ADMIN_PASS', '')
 
-DIRECTOR_USER = 'DIRECTORCOMERCIAL'
-DIRECTOR_PASS = 'ARTEL2026'
+DIRECTOR_USER = os.environ.get('DIRECTOR_USER', 'DIRECTORCOMERCIAL')
+DIRECTOR_PASS = os.environ.get('DIRECTOR_PASS', '')
 
-TURISMO_USER = 'TURISMO MENDOZA'
-TURISMO_PASS = 'Turismomdz2026'
+TURISMO_USER = os.environ.get('TURISMO_USER', 'TURISMO MENDOZA')
+TURISMO_PASS = os.environ.get('TURISMO_PASS', '')
+
+for _nombre_var, _que_deshabilita in (
+        ('ADMIN_PASS', 'login de administrador'),
+        ('DIRECTOR_PASS', 'login de director'),
+        ('TURISMO_PASS', 'login de turismo'),
+        ('COMERCIAL_PIN', 'login de vendedores y supervisores'),
+        ('COMERCIAL_USERS', 'login de vendedores y supervisores'),
+        ('CRON_TOKEN', 'actualizaciones programadas (warm-padron, cheques, mipyme)')):
+    if not os.environ.get(_nombre_var):
+        print(f'[SECURITY] Falta la variable {_nombre_var}: queda deshabilitado el {_que_deshabilita}',
+              flush=True)
+
+
+def _credencial_valida(recibido: str, esperado: str) -> bool:
+    """Comparación en tiempo constante; una clave vacía nunca es válida."""
+    return bool(esperado) and hmac.compare_digest(str(recibido).encode(), esperado.encode())
 
 # ── Fuentes BCRA externas ────────────────────────────────────────────────────
 BCRA_WRAPPER_BASE = 'https://bcra-wrapper.vercel.app'   # proxy Vercel, sin rate-limit
@@ -5101,7 +5127,7 @@ def comercial():
 @app.route("/director-login", methods=["GET", "POST"])
 def director_login_page():
     if request.method == "POST":
-        ip = request.headers.get('X-Forwarded-For', request.remote_addr or 'unknown').split(',')[0].strip()
+        ip = security.ip_cliente()
         _rate_key = f'dir:{ip}'
         if not _login_rate_check(_rate_key):
             print(f'[SECURITY] Director-login bloqueado por rate limit — IP: {ip}', flush=True)
@@ -5109,8 +5135,9 @@ def director_login_page():
         data = request.get_json(silent=True) or {}
         usuario = str(data.get('usuario', '')).strip().upper()
         clave   = str(data.get('clave', '')).strip()
-        if usuario == DIRECTOR_USER and clave == DIRECTOR_PASS:
+        if _credencial_valida(usuario, DIRECTOR_USER) and _credencial_valida(clave, DIRECTOR_PASS):
             _login_rate_reset(_rate_key)
+            session.clear()
             session['director_logged_in'] = True
             session.permanent = True
             return jsonify({"ok": True})
@@ -5135,15 +5162,16 @@ def director():
 @app.route("/turismo-login", methods=["GET", "POST"])
 def turismo_login_page():
     if request.method == "POST":
-        ip = request.headers.get('X-Forwarded-For', request.remote_addr or 'unknown').split(',')[0].strip()
+        ip = security.ip_cliente()
         _rate_key = f'tur:{ip}'
         if not _login_rate_check(_rate_key):
             return jsonify({"ok": False, "error": "Demasiados intentos. Esperá 15 minutos."}), 429
         data = request.get_json(silent=True) or {}
         usuario = str(data.get('usuario', '')).strip().upper()
         clave   = str(data.get('clave', '')).strip()
-        if usuario == TURISMO_USER.upper() and clave == TURISMO_PASS:
+        if _credencial_valida(usuario, TURISMO_USER.upper()) and _credencial_valida(clave, TURISMO_PASS):
             _login_rate_reset(_rate_key)
+            session.clear()
             session['turismo_logged_in'] = True
             session.permanent = True
             return jsonify({"ok": True})
@@ -5428,22 +5456,9 @@ def api_director_data():
         'clientes':             clientes_list,
     })
 
-@app.route("/login", methods=["GET", "POST"])
+@app.route("/login", methods=["GET"])
 def login():
-    if request.method == "POST":
-        ip = request.headers.get('X-Forwarded-For', request.remote_addr or 'unknown').split(',')[0].strip()
-        if not _login_rate_check(ip):
-            print(f'[SECURITY] Login bloqueado por rate limit — IP: {ip}', flush=True)
-            return jsonify({"error": "Demasiados intentos fallidos. Esperá 15 minutos."}), 429
-        data = request.get_json(silent=True) or {}
-        cuit = str(data.get('cuit', '')).replace('-', '').replace(' ', '').strip()
-        pwd  = str(data.get('password', '')).strip()
-        if cuit == ADMIN_CUIT and pwd == ADMIN_PASS:
-            _login_rate_reset(ip)
-            session['logged_in'] = True
-            return jsonify({"ok": True})
-        print(f'[SECURITY] Login fallido — IP: {ip}', flush=True)
-        return jsonify({"error": "Credenciales incorrectas"}), 401
+    # El ingreso por CUIT (administrador y vendedores) se resuelve en POST /auth/cuit.
     return send_from_directory('static', 'login.html')
 
 @app.route("/logout")
@@ -5464,7 +5479,7 @@ def _admin_auth(req) -> bool:
     if not pwd:
         body = req.get_json(silent=True) or {}
         pwd = str(body.get('admin_pass', '') or body.get('password', ''))
-    return pwd == ADMIN_PASS
+    return _credencial_valida(pwd, ADMIN_PASS)
 
 
 @app.route("/admin/padron-info")

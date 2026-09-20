@@ -2,6 +2,7 @@
 <html lang="es" translate="no">
 <head>
 <meta charset="UTF-8">
+<script src="/static/auth-guard.js"></script>
 <meta name="google" content="notranslate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
@@ -883,9 +884,15 @@ function irAComercial() {
 }
 
 // ── Logout ────────────────────────────────────────────────────────────────────
-function doLogout() {
+async function doLogout() {
   localStorage.removeItem('vendeSeguro_session');
   localStorage.removeItem('vendeSeguro_auto_cuit');
+  try {
+    await Promise.race([
+      fetch('/auth/logout', { method: 'POST' }),
+      new Promise(r => setTimeout(r, 2000))
+    ]);
+  } catch (_) {}
   window.location.replace('/login');
 }
 

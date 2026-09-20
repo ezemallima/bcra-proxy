@@ -29,3 +29,6 @@ _tmp_*/
 __pycache__/
 *.pyc
 node_modules/
+
+# Clave de firma de sesiones generada en local (en Render vive en /data)
+.flask_secret
