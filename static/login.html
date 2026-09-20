@@ -10,6 +10,11 @@
 <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
 <link rel="icon" type="image/png" href="/static/logo.png">
 <title>Vende Seguro — Ingresar</title>
+<meta name="description" content="Vende Seguro monitorea la cartera de clientes de empresas que venden a cuenta corriente y detecta el deterioro crediticio antes de que entren en mora. Score con datos de BCRA, ARCA y cheques rechazados.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Vende Seguro — Crédito inteligente, ventas sin riesgo">
+<meta property="og:description" content="Monitoreamos tu cartera de clientes y detectamos cuándo uno empieza a deteriorarse crediticiamente, antes de que entre en mora con vos.">
+<meta property="og:image" content="https://vendeseguro.com.ar/static/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -30,6 +35,8 @@
   --error-border: rgba(239,68,68,0.3);
   --error-text: #991b1b;
   --sidebar-bg: #0B1D3A;
+  --tint-bg: #eaf1fd;
+  --tint-border: #d6e4fb;
   --radius: 12px;
 }
 
@@ -49,9 +56,9 @@ body {
   min-height: 100dvh;
 }
 
-/* Branding panel — visible solo en desktop */
+/* Panel de marca — a la izquierda en desktop; en mobile va debajo del formulario */
 .brand-panel {
-  display: none;
+  display: flex;
   flex-direction: column;
   justify-content: space-between;
   width: 420px;
@@ -59,10 +66,6 @@ body {
   background: var(--sidebar-bg);
   padding: 48px 44px;
   color: #F5F7FA;
-}
-
-@media (min-width: 768px) {
-  .brand-panel { display: flex; }
 }
 
 .brand-logo {
@@ -111,6 +114,18 @@ body {
 
 .brand-headline span {
   color: #60a5fa;
+}
+
+.brand-intro {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.brand-desc {
+  font-size: 14px;
+  line-height: 1.6;
+  color: rgba(248,250,252,0.72);
 }
 
 .brand-features {
@@ -211,6 +226,44 @@ body {
   font-size: 14px;
   color: var(--text-muted);
   margin-bottom: 28px;
+}
+
+/* ── Mobile: formulario primero, panel de marca debajo ─────────────────────── */
+.form-intro-mobile { display: none; }
+
+@media (max-width: 767px) {
+  #login-wrap { flex-direction: column; }
+
+  .form-panel { order: 1; flex: 0 0 auto; padding-bottom: 28px; }
+  .form-card { padding: 8px 0 12px; }
+  .form-logo-mobile { margin-bottom: 20px; }
+
+  .form-intro-mobile {
+    display: block;
+    margin-bottom: 28px;
+    padding: 14px 16px;
+    background: var(--tint-bg);
+    border: 1px solid var(--tint-border);
+    border-radius: 10px;
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: #334155;
+  }
+
+  .brand-panel {
+    order: 2;
+    flex: 1;
+    width: 100%;
+    justify-content: flex-start;
+    gap: 28px;
+    padding: 32px 20px 28px;
+    border-radius: 20px 20px 0 0;
+  }
+  .brand-logo { display: none; }
+  .brand-body { flex: 0 0 auto; justify-content: flex-start; gap: 24px; }
+  .brand-headline { font-size: 24px; }
+  .brand-desc { display: none; }
+  .brand-footer { margin-top: auto; }
 }
 
 .field {
@@ -337,17 +390,25 @@ body {
     </div>
 
     <div class="brand-body">
-      <div class="brand-headline">
-        Crédito inteligente,<br><span>ventas sin riesgo.</span>
+      <div class="brand-intro">
+        <div class="brand-headline">
+          Crédito inteligente,<br><span>ventas sin riesgo.</span>
+        </div>
+        <!-- Mismo texto que .form-intro-mobile: uno se ve en desktop y el otro en mobile -->
+        <p class="brand-desc">Monitoreamos tu cartera de clientes y detectamos cuándo uno empieza a deteriorarse crediticiamente, antes de que entre en mora con vos.</p>
       </div>
       <div class="brand-features">
         <div class="brand-feature">
           <div class="feature-dot"></div>
-          Score crediticio en tiempo real con datos BCRA y AFIP
+          Score de 0 a 999 con datos de BCRA, ARCA y cheques rechazados
         </div>
         <div class="brand-feature">
           <div class="feature-dot"></div>
-          Cartera de clientes con alertas automáticas de límite de crédito
+          El score suma cómo paga cada cliente en tu empresa, no solo lo que informan los bancos
+        </div>
+        <div class="brand-feature">
+          <div class="feature-dot"></div>
+          Alertas automáticas sobre tu cartera: caída de score, cheques rechazados y límite de crédito
         </div>
         <div class="brand-feature">
           <div class="feature-dot"></div>
@@ -356,7 +417,7 @@ body {
       </div>
     </div>
 
-    <div class="brand-footer">Vende Seguro &copy; 2025 &mdash; Uso interno</div>
+    <div class="brand-footer">Vende Seguro &copy; <span id="brand-year">2026</span></div>
   </div>
 
   <!-- ── Form panel ───────────────────────────────────────────────────────── -->
@@ -370,6 +431,8 @@ body {
         </div>
         <span class="form-logo-name">Vende Seguro</span>
       </div>
+
+      <p class="form-intro-mobile">Monitoreamos tu cartera de clientes y detectamos cuándo uno empieza a deteriorarse crediticiamente, antes de que entre en mora con vos.</p>
 
       <div class="form-title">Iniciar sesión</div>
       <div class="form-subtitle">Ingresá con tu cuenta de empresa</div>
@@ -419,6 +482,8 @@ body {
 </div>
 
 <script>
+document.getElementById('brand-year').textContent = new Date().getFullYear();
+
 // ── Credenciales sistema legacy (vendedores) ─────────────────────────────────
 const PIN_COMERCIAL = 'PIATTELLI2025';
 const VENDEDORES = {
