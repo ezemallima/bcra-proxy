@@ -16,6 +16,7 @@ import traceback
 import hmac
 
 import security
+import politica_nomdeu
 
 # Módulos de scoring fiscal e integración ARCA (guards independientes:
 # scoring_fiscal es Python puro; arca_ws requiere cryptography instalado).
@@ -8953,8 +8954,71 @@ def _abrir_nomdeu_conn() -> None:
         print(f"[nomdeu] Error abriendo SQLite: {e}", flush=True)
 
 
+def _r2_info_nomdeu():
+    """{'mtime': epoch, 'tam': bytes} del objeto bcra_nomdeu.db en R2; None si no se pudo consultar."""
+    if not _R2_CONFIGURADO:
+        return None
+    try:
+        import boto3
+        from botocore.config import Config
+        s3 = boto3.client(
+            service_name='s3',
+            endpoint_url=R2_ENDPOINT_URL,
+            aws_access_key_id=R2_ACCESS_KEY_ID,
+            aws_secret_access_key=R2_SECRET_ACCESS_KEY,
+            config=Config(signature_version='s3v4', connect_timeout=10, read_timeout=20,
+                          retries={'max_attempts': 2}),
+        )
+        cab = s3.head_object(Bucket=R2_BUCKET_NAME, Key='bcra_nomdeu.db')
+        return {'mtime': cab['LastModified'].timestamp(), 'tam': int(cab['ContentLength'])}
+    except Exception as e:
+        print(f"[nomdeu] No se pudo consultar R2 (head_object): {type(e).__name__}: {e}", flush=True)
+        return None
+
+
+def _limpiar_temporales_nomdeu(max_edad_seg: int = 900) -> None:
+    """Borra restos de descargas interrumpidas (bcra_nomdeu.db.<8 caracteres>).
+
+    Un reinicio a mitad de la descarga deja el temporal de boto3 en disco; sin limpiarlo,
+    dos restos (11 GB) llenaron el disco de 15 GB y ninguna descarga nueva pudo completarse.
+    Un temporal modificado hace menos de max_edad_seg se respeta: una descarga en curso
+    lo está escribiendo todo el tiempo.
+    """
+    directorio = os.path.dirname(NOMDEU_DB_PATH) or '.'
+    base = os.path.basename(NOMDEU_DB_PATH)
+    try:
+        nombres = os.listdir(directorio)
+    except OSError as e:
+        print(f"[nomdeu] No se pudo listar {directorio} para limpiar temporales: {e}", flush=True)
+        return
+    for nombre in nombres:
+        sufijo = nombre[len(base):]
+        if not (nombre.startswith(base) and len(sufijo) == 9 and sufijo[0] == '.' and sufijo[1:].isalnum()):
+            continue
+        ruta = os.path.join(directorio, nombre)
+        try:
+            if time.time() - os.path.getmtime(ruta) < max_edad_seg:
+                continue
+            tam = os.path.getsize(ruta)
+            os.remove(ruta)
+            print(f"[nomdeu] Temporal huérfano eliminado: {nombre} ({tam / 1e9:.1f} GB)", flush=True)
+        except OSError as e:
+            print(f"[nomdeu] No se pudo eliminar el temporal {nombre}: {e}", flush=True)
+
+
 def _descargar_y_abrir_nomdeu(url: str) -> None:
     """Descarga bcra_nomdeu.db y abre la conexión. Corre en hilo daemon."""
+    if _R2_CONFIGURADO:
+        info = _r2_info_nomdeu()
+        if info:
+            import shutil
+            libre = shutil.disk_usage(os.path.dirname(NOMDEU_DB_PATH) or '.').free
+            necesita = info['tam'] + politica_nomdeu.MARGEN_BYTES
+            if libre < necesita:
+                print(f"[nomdeu] Espacio insuficiente para descargar la base: libres {libre / 1e9:.1f} GB, "
+                      f"necesita {necesita / 1e9:.1f} GB en {os.path.dirname(NOMDEU_DB_PATH)}. "
+                      f"Agrandá el disco o liberá espacio; no se intenta la descarga.", flush=True)
+                return
     ok = _descargar_nomdeu(url, NOMDEU_DB_PATH)
     if not ok:
         print("[nomdeu] Descarga fallida — padrón offline no disponible", flush=True)
@@ -8965,13 +9029,11 @@ def _descargar_y_abrir_nomdeu(url: str) -> None:
 def _init_nomdeu_db() -> None:
     """Inicializa el padrón offline BCRA (bcra_nomdeu.db).
 
-    Estrategia de dos velocidades:
-    - Archivo ya existe en disco (caso habitual: Render persiste /data entre deploys):
-      abre la conexión AHORA en el hilo actual (<1s) → nomdeu disponible desde
-      la primera request, sin esperar ningún background thread.
-    - Archivo no existe o está vencido/inválido: descarga en hilo daemon y abre
-      cuando termina (~9 min primer deploy). Gunicorn arranca igual de inmediato
-      pero las consultas caen a BCRA live hasta que termine la descarga.
+    - Base válida y vigente (caso habitual: Render persiste /data): se abre AHORA (<1s).
+    - Sin base, inválida, o R2 con una más nueva: descarga en hilo daemon (~10 min); las
+      consultas usan BCRA en vivo hasta que termine.
+    Qué se reemplaza y cuándo lo decide politica_nomdeu.decidir (ver el porqué ahí): una
+    base que sirve nunca se borra solo por su edad.
     """
     url = os.environ.get('BCRA_NOMDEU_URL', '').strip()
     if not _R2_CONFIGURADO and not url:
@@ -8980,49 +9042,62 @@ def _init_nomdeu_db() -> None:
 
     periodo_esperado = os.environ.get('BCRA_NOMDEU_PERIODO', '').strip()
 
-    necesita_descarga = True
-    if os.path.exists(NOMDEU_DB_PATH):
-        edad_dias = (time.time() - os.path.getmtime(NOMDEU_DB_PATH)) / 86400
-        if edad_dias < 32 and _nomdeu_db_valida():
-            if periodo_esperado:
-                try:
-                    c = sqlite3.connect(NOMDEU_DB_PATH)
-                    _p = c.execute(
-                        "SELECT periodo FROM deudas_resumen ORDER BY periodo DESC LIMIT 1"
-                    ).fetchone()
-                    c.close()
-                    periodo_local = _p[0] if _p else ''
-                except Exception:
-                    periodo_local = ''
-                if str(periodo_local) != periodo_esperado:
-                    print(
-                        f"[nomdeu] Período local ({periodo_local}) ≠ BCRA_NOMDEU_PERIODO ({periodo_esperado})"
-                        f" — re-descargando en background", flush=True
-                    )
-                    os.remove(NOMDEU_DB_PATH)
-                else:
-                    necesita_descarga = False
-                    print(f"[nomdeu] DB existente ({edad_dias:.0f}d) período={periodo_local} — abriendo", flush=True)
-            else:
-                necesita_descarga = False
-                print(f"[nomdeu] DB existente ({edad_dias:.0f}d) — abriendo", flush=True)
-        else:
-            print(f"[nomdeu] DB stale o sin historial_detalle — re-descargando en background", flush=True)
-            try:
-                os.remove(NOMDEU_DB_PATH)
-            except Exception:
-                pass
+    if _R2_CONFIGURADO:
+        _limpiar_temporales_nomdeu()
 
-    if necesita_descarga:
-        # Descarga en background — gunicorn arranca igual, nomdeu disponible cuando termine
-        threading.Thread(
-            target=_descargar_y_abrir_nomdeu, args=(url,),
-            daemon=True, name='nomdeu-init'
-        ).start()
+    import shutil
+    existe = os.path.exists(NOMDEU_DB_PATH)
+    valida = existe and _nomdeu_db_valida()
+    mtime_local = tam_local = 0
+    edad_dias = 0.0
+    if existe:
+        mtime_local = os.path.getmtime(NOMDEU_DB_PATH)
+        tam_local = os.path.getsize(NOMDEU_DB_PATH)
+        edad_dias = (time.time() - mtime_local) / 86400
+
+    periodo_local = ''
+    if valida and periodo_esperado:
+        try:
+            c = sqlite3.connect(NOMDEU_DB_PATH)
+            _p = c.execute("SELECT periodo FROM deudas_resumen ORDER BY periodo DESC LIMIT 1").fetchone()
+            c.close()
+            periodo_local = _p[0] if _p else ''
+        except Exception:
+            periodo_local = ''
+
+    accion, motivo = politica_nomdeu.decidir(
+        existe=existe, valida=valida, edad_dias=edad_dias,
+        periodo_local=periodo_local, periodo_esperado=periodo_esperado,
+        mtime_local=mtime_local, tam_local=tam_local,
+        libre=shutil.disk_usage(os.path.dirname(NOMDEU_DB_PATH) or '.').free,
+        obtener_remoto=_r2_info_nomdeu, remoto_verificable=_R2_CONFIGURADO,
+    )
+
+    if accion == politica_nomdeu.ABRIR:
+        if motivo == 'vigente':
+            extra = f" período={periodo_local}" if periodo_esperado else ""
+            print(f"[nomdeu] DB existente ({edad_dias:.0f}d){extra} — abriendo", flush=True)
+        else:
+            print(f"[nomdeu] DB existente ({edad_dias:.0f}d): {motivo}", flush=True)
+        _abrir_nomdeu_conn()
         return
 
-    # Archivo válido en disco: abrir AHORA (rápido, sin descarga)
-    _abrir_nomdeu_conn()
+    print(f"[nomdeu] {motivo} — descargando en background", flush=True)
+    if accion == politica_nomdeu.BORRAR_Y_DESCARGAR:
+        try:
+            os.remove(NOMDEU_DB_PATH)
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            print(f"[nomdeu] No se pudo borrar la base anterior: {e}", flush=True)
+    elif accion == politica_nomdeu.REEMPLAZAR:
+        # Cabe junto a la actual: se sigue sirviendo con ella hasta que termine la descarga.
+        _abrir_nomdeu_conn()
+
+    threading.Thread(
+        target=_descargar_y_abrir_nomdeu, args=(url,),
+        daemon=True, name='nomdeu-init'
+    ).start()
 
 
 # ── MiPyME: estado de importación ─────────────────────────────────────────────
