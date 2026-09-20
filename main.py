@@ -12330,6 +12330,12 @@ def facturas_import_estado():
 
 @app.route("/api/facturas-pdf/<path:nombre_pdf>")
 def servir_factura_pdf(nombre_pdf):
+    """Uso interno (comercial/admin): security.py exige sesión. El cliente final
+    accede por /f/<token>/pdf/<nro>, autorizado por el token de su lote."""
+    return _pdf_factura_response(nombre_pdf)
+
+
+def _pdf_factura_response(nombre_pdf):
     """Extrae y sirve un PDF específico del ZIP importado.
     nombre_pdf: nombre sin extensión o con .pdf (ej: 'FA-A 00016-00007069' o 'FA-A 00016-00007069.pdf')
     """
@@ -12370,7 +12376,8 @@ def servir_factura_pdf(nombre_pdf):
             download_name=nombre_limpio,
         )
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        print(f"[facturas-pdf] error leyendo '{nombre_limpio}': {type(e).__name__}: {e}", flush=True)
+        return jsonify({"error": "No se pudo leer el PDF"}), 500
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -12543,7 +12550,8 @@ def ver_lote_facturas(token):
             if vencida else "<span class='badge ok'>Al día</span>"
         )
         btn_pdf = (
-            f"<a class='btn-pdf' href='/api/facturas-pdf/{_html.escape(_urlquote(f['nro']), quote=True)}.pdf' "
+            f"<a class='btn-pdf' href='/f/{_html.escape(_urlquote(str(token).strip()), quote=True)}"
+            f"/pdf/{_html.escape(_urlquote(f['nro']), quote=True)}.pdf' "
             f"target='_blank' rel='noopener'>Ver factura PDF</a>"
             if f.get('pdf') else ""
         )
@@ -12627,6 +12635,24 @@ def ver_lote_facturas(token):
 </div>
 </body>
 </html>"""
+
+
+@app.route("/f/<token>/pdf/<path:nro>")
+def ver_pdf_de_lote(token, nro):
+    """PDF de una factura del lote compartido. Sin login, pero solo sirve facturas que
+    pertenecen a ESE lote (token vigente): un número de factura adivinado no alcanza."""
+    lote = _lotes_read().get(str(token).strip())
+    if not lote or lote.get('ts', 0) < time.time() - _LOTE_TTL_DIAS * 86400:
+        return jsonify({"error": "Link no disponible"}), 404
+
+    def _clave(n):
+        n = str(n or '').strip().lower()
+        return n[:-4] if n.endswith('.pdf') else n
+
+    pedido = _clave(nro)
+    if not any(f.get('pdf') and _clave(f.get('nro')) == pedido for f in lote.get('facturas', [])):
+        return jsonify({"error": "Factura no incluida en este estado de cuenta"}), 404
+    return _pdf_factura_response(nro)
 
 
 @app.route("/api/alertas-vencimiento")
