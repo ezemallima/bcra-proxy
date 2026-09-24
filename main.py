@@ -8659,7 +8659,8 @@ def _calcular_score_handler(cuit: str):
             print(f"[fetch-score] {cuit_limpio} → score_cache.json hit ({_cached['score']})", flush=True)
             return jsonify(_cached)
     try:
-        bcra_data, _ = consultar_bcra_cached(cuit_limpio, live_primero=True)
+        _fresh = request.args.get('fresh') == '1'
+        bcra_data, _ = consultar_bcra_cached(cuit_limpio, skip_padron=_fresh, live_primero=True)
         _bcra_denom  = (bcra_data.get('results') or {}).get('denominacion', '').strip()
         _bcra_error  = bool(bcra_data.get('error_bcra')) or bcra_data.get('bcra_disponible') is False
 
