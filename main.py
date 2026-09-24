@@ -8793,7 +8793,16 @@ def _calcular_score_handler(cuit: str):
         score_data   = calcular_score_servidor(cuit_limpio, bcra_data or {}, live_primero=True)
         solvency     = get_solvency_data(cuit_limpio)
         if not isinstance(solvency, dict): solvency = {}
-        _actualizar_score_en_cartera(cuit_limpio, score_data, solvency)
+        # _actualizar_score_en_cartera() no toma lock propio -- todos los demás
+        # llamadores (worker, proceso integral, recalcular-scores) la envuelven en
+        # _alertas_file_lock; esta era la única excepción en todo el archivo. Sin el
+        # lock, otro escritor concurrente de ALERTAS_FILE puede leer el estado viejo
+        # (con la alerta 'bcra' todavía puesta) y reescribirlo DESPUÉS de que
+        # _upsert_alerta_evento la borre más abajo, resucitándola -- exactamente lo
+        # que le pasó a Rogelio: el log confirmaba el borrado pero la alerta
+        # reaparecía en pantalla.
+        with _alertas_file_lock:
+            _actualizar_score_en_cartera(cuit_limpio, score_data, solvency)
         # Auto-sana una alerta BCRA vieja que ya no corresponde (incidente Rogelio,
         # sept-2026: una alerta 'bcra' quedó con sitActual=3 pegada en alertas_cartera.json
         # mucho después de que el dato real volviera a Sit 1 -- solo el worker mensual la
