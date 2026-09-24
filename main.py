@@ -5974,6 +5974,7 @@ def _enriquecer_scores_worker(delay_seg: float = 120.0):
                 print(f"[enrich] Error {cuit}: {type(_e).__name__}: {_e}", flush=True)
 
             _enrich_estado["procesados"] = idx + 1
+            _enrich_checkpoint_write(True, delay_seg)   # heartbeat — ver _enrich_auto_resume()
 
             # ── Circuit breaker ──────────────────────────────────────────────
             _pausa_seg, _motivo = 0, ""
@@ -6073,7 +6074,22 @@ def iniciar_enriquecer_scores():
 @app.route("/enriquecer-scores/progreso")
 def progreso_enriquecer_scores():
     """Estado en tiempo real de la verificación profunda."""
-    resp = jsonify(_enrich_estado)
+    data = dict(_enrich_estado)
+    # parece_activo: 'corriendo' en memoria no detecta un worker colgado DENTRO del
+    # mismo proceso (sin excepción ni final de ciclo). Se apoya en el heartbeat del
+    # checkpoint (ver _enrich_checkpoint_write) — umbral de 4h porque es mayor a la
+    # pausa más larga del circuit breaker (3h, bloqueo de ARCA), así que una pausa
+    # legítima nunca se muestra como colgada.
+    if data.get('corriendo'):
+        try:
+            with open(ENRICH_CHECKPOINT_FILE, 'r', encoding='utf-8') as f:
+                _cp = json.load(f)
+            data['parece_activo'] = (time.time() - float(_cp.get('actualizado', 0))) < 4 * 3600
+        except Exception:
+            data['parece_activo'] = True  # checkpoint no legible — no alarmar de más
+    else:
+        data['parece_activo'] = None
+    resp = jsonify(data)
     resp.headers['Cache-Control'] = 'no-store'
     return resp
 
