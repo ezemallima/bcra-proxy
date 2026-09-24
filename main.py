@@ -377,6 +377,7 @@ ALERTAS_BCRA_FILE   = os.path.join(DATA_DIR, 'alertas_bcra.json')
 DATOS_FILE          = os.path.join(DATA_DIR, 'datos_bodega.json')
 SCORE_CACHE_FILE    = os.path.join(DATA_DIR, 'score_cache.json')
 NOMBRES_CUSTOM_FILE = os.path.join(DATA_DIR, 'nombres_custom.json')
+ENRICH_CHECKPOINT_FILE = os.path.join(DATA_DIR, 'enrich_checkpoint.json')
 print(f"[init] Almacenamiento en: {DATA_DIR}", flush=True)
 print(
     f"[init] ScraperAPI: {'ACTIVO — proxy rotativo habilitado' if SCRAPERAPI_KEY else 'no configurado — modo directo legacy'}",
@@ -5770,6 +5771,29 @@ def _solvencia_es_real(solvency: dict) -> bool:
     return str(solvency.get('fuente', '') or '') in _SOLV_FUENTES_REALES
 
 
+def _enrich_checkpoint_write(corriendo: bool, delay_seg: float = 0.0):
+    """Persiste en disco si el worker de verificación profunda está corriendo.
+
+    Único propósito: sobrevivir a que el proceso muera a mitad de un ciclo (gunicorn
+    --max-requests, un deploy nuestro, un crash) sin que nadie lo note durante los
+    1-2 días que dura. _enrich_auto_resume() lee esto al arrancar el proceso — si
+    dice corriendo=True es porque el proceso anterior nunca llegó al finally que lo
+    pone en False, señal de que murió en el medio."""
+    try:
+        tmp = ENRICH_CHECKPOINT_FILE + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump({
+                'corriendo':   corriendo,
+                'delay_seg':   delay_seg,
+                'actualizado': time.time(),
+            }, f)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, ENRICH_CHECKPOINT_FILE)
+    except Exception as e:
+        print(f"[enrich] Error escribiendo checkpoint: {e}", flush=True)
+
+
 def _enriquecer_scores_worker(delay_seg: float = 120.0):
     """Worker de verificación profunda. Un CUIT cada `delay_seg` segundos.
 
@@ -5829,6 +5853,7 @@ def _enriquecer_scores_worker(delay_seg: float = 120.0):
             "cliente_actual": "", "inicio": time.strftime('%d/%m/%Y %H:%M'), "fin": "",
             "mensaje": f"Iniciando: {len(pendientes)} CUITs pendientes ({saltados} ya verificados)",
         })
+        _enrich_checkpoint_write(True, delay_seg)
         print(
             f"[enrich] Verificación profunda iniciada: {len(pendientes)} CUITs, "
             f"delay {delay_seg:.0f}s (~{len(pendientes) * delay_seg / 3600:.1f} h estimadas)",
@@ -6001,6 +6026,7 @@ def _enriquecer_scores_worker(delay_seg: float = 120.0):
         _enrich_estado["corriendo"] = False
         _enrich_estado["pausado"] = False
         _enrich_estado["fin"] = time.strftime('%d/%m/%Y %H:%M')
+        _enrich_checkpoint_write(False)
         if not _enrich_estado["mensaje"].startswith(("ABORTADO", "Detenido", "Error fatal")):
             _enrich_estado["mensaje"] = (
                 f"Completado: {_enrich_estado['exitosos']} verificados, "
@@ -6058,6 +6084,38 @@ def detener_enriquecer_scores():
     """Solicita la detención ordenada del worker (termina el CUIT en curso)."""
     _enrich_stop.set()
     return jsonify({"estado": "detencion_solicitada"})
+
+
+def _enrich_auto_resume():
+    """Retoma sola la verificación profunda si el proceso anterior murió a mitad de
+    ciclo (gunicorn --max-requests, un deploy, un crash) — sin esto, un corte a mitad
+    de las ~44h que tarda la cartera completa queda parado hasta que alguien lo note
+    y lo reinicie a mano.
+
+    Se apoya en que el worker ya es idempotente por diseño: recalcula `pendientes`
+    desde _cartera_comercial y salta los CUITs verificados hace <20 días (_ts en
+    score_cache.json), así que retomar nunca repite trabajo ya hecho — solo sigue
+    donde quedó. Solo dispara si el checkpoint dice corriendo=True, es decir, si el
+    proceso anterior nunca llegó al finally que lo pone en False (ver
+    _enrich_checkpoint_write) — una detención manual o un ciclo completo ya lo
+    dejan en False, así que esos casos no reinician nada solos."""
+    try:
+        if not os.path.exists(ENRICH_CHECKPOINT_FILE):
+            return
+        with open(ENRICH_CHECKPOINT_FILE, 'r', encoding='utf-8') as f:
+            cp = json.load(f)
+        if not cp.get('corriendo'):
+            return
+        delay = float(cp.get('delay_seg') or 120.0)
+        print(
+            f"[enrich] Ciclo de verificación profunda interrumpido detectado "
+            f"(el proceso anterior no llegó a terminarlo) — retomando con delay={delay:.0f}s",
+            flush=True,
+        )
+        _enrich_stop.clear()
+        threading.Thread(target=_enriquecer_scores_worker, args=(delay,), daemon=True).start()
+    except Exception as e:
+        print(f"[enrich] Error en auto-resume: {e}", flush=True)
 
 
 @app.route("/todos-los-clientes")
@@ -13951,6 +14009,7 @@ def _cheques_auto_update_loop():
 
 threading.Thread(target=_cheques_auto_update_loop, daemon=True).start()
 threading.Thread(target=_facturas_auto_loop, daemon=True).start()
+_enrich_auto_resume()   # retoma la verificación profunda si el proceso anterior la cortó a mitad de camino
 
 # ── Turismo Mendoza — Upload y Portfolio ────────────────────────────────────
 
