@@ -372,6 +372,45 @@ body {
 }
 
 .register-link a:hover { text-decoration: underline; }
+
+/* Email visible + copiar — el link mailto: solo funciona si el dispositivo
+   tiene un cliente de correo configurado; en navegadores in-app (Instagram,
+   etc.) suele no hacer nada al tocarlo. Dejar el email como texto y un botón
+   de copiar da una salida que funciona siempre, sin depender de eso. */
+.contact-email {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.btn-copy {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--tint-bg);
+  border: 1px solid var(--tint-border);
+  border-radius: 6px;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.btn-copy:hover { background: var(--tint-border); color: var(--text); }
+
+.btn-copy.copied { background: #dcfce7; border-color: #bbf7d0; color: #15803d; }
+
+.copy-feedback {
+  display: none;
+  font-size: 12px;
+  margin-top: 6px;
+  color: #15803d;
+}
+
+.copy-feedback.visible { display: block; }
 </style>
 </head>
 <body>
@@ -430,8 +469,12 @@ body {
       </form>
 
       <div class="register-link">
-        ¿Tu empresa no tiene cuenta?
-        <a href="mailto:ezequielmallima@hotmail.com">Contactar administrador</a>
+        <div>¿Tu empresa no tiene cuenta? Escribinos:</div>
+        <div class="contact-email">
+          <a href="mailto:ezequielmallima@hotmail.com">ezequielmallima@hotmail.com</a>
+          <button type="button" class="btn-copy" onclick="copiarEmailAdmin()">Copiar</button>
+        </div>
+        <div id="copy-feedback" class="copy-feedback"></div>
       </div>
 
     </div>
@@ -589,6 +632,48 @@ async function handleLogin(e) {
       btn.disabled = false; btn.classList.remove('loading');
       mostrarError(traducirError(err.message));
     }
+  }
+}
+
+// Copia el email de contacto al portapapeles. Fallback a execCommand porque
+// navigator.clipboard.writeText puede fallar silenciosamente (permiso denegado
+// sin prompt) en navegadores in-app como el de Instagram.
+async function copiarEmailAdmin() {
+  const email = 'ezequielmallima@hotmail.com';
+  let ok = false;
+  try {
+    await navigator.clipboard.writeText(email);
+    ok = true;
+  } catch (_) {
+    try {
+      const tmp = document.createElement('textarea');
+      tmp.value = email;
+      tmp.style.position = 'fixed';
+      tmp.style.opacity = '0';
+      document.body.appendChild(tmp);
+      tmp.focus();
+      tmp.select();
+      ok = document.execCommand('copy');
+      document.body.removeChild(tmp);
+    } catch (_e2) { ok = false; }
+  }
+  const btn = document.querySelector('.btn-copy');
+  const feedback = document.getElementById('copy-feedback');
+  if (ok) {
+    if (btn) { btn.textContent = '✓ Copiado'; btn.classList.add('copied'); }
+    if (feedback) {
+      feedback.textContent = '¡Copiado! Pegalo en tu app de mail.';
+      feedback.style.color = '#15803d';
+      feedback.classList.add('visible');
+    }
+    setTimeout(() => {
+      if (btn) { btn.textContent = 'Copiar'; btn.classList.remove('copied'); }
+      if (feedback) feedback.classList.remove('visible');
+    }, 2500);
+  } else if (feedback) {
+    feedback.textContent = 'No se pudo copiar — seleccioná el texto a mano.';
+    feedback.style.color = 'var(--error-text)';
+    feedback.classList.add('visible');
   }
 }
 
