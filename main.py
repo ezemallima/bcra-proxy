@@ -584,6 +584,21 @@ def consultar_padron_local(cuit_limpio):
         conn.close()
         if row is None:
             return None
+        # Fila más vieja que el bulk vigente: ya existe una foto más nueva de este
+        # CUIT en historial_detalle — no servir esta (incidente Rogelio, sept-2026:
+        # una fila de padrón local sin TTL dejaba el motor de scoring congelado en
+        # una situación de meses atrás, incluso con fresh=1). Cae a bulk/vivo, que
+        # sí reflejan el período vigente. Ver Lección #3 CLAUDE.md.
+        try:
+            if row['periodo'] and int(row['periodo']) < _PERIODO_BASE_BULK:
+                print(
+                    f"[padron] {cuit_limpio} fila vieja (periodo={row['periodo']} "
+                    f"< bulk vigente={_PERIODO_BASE_BULK}) — descartada, cae a bulk/vivo",
+                    flush=True,
+                )
+                return None
+        except (TypeError, ValueError):
+            pass
         detalle = json.loads(row['detalle'] or '[]')
         # Entradas sin entidades son basura de pre-cacheo con 404 falso (Sit 1 sin mora).
         # Retornar None obliga a una consulta en vivo en lugar de servir datos vacíos.
@@ -5860,7 +5875,10 @@ def _enriquecer_scores_worker(delay_seg: float = 120.0):
 
                 # 2. BCRA desde bulk local + score con la misma profundidad que
                 #    la consulta individual (solvencia recién cacheada incluida).
-                bcra_data, _ = consultar_bcra_cached(cuit, live_primero=False)
+                #    skip_padron=True: esta es la reverificación mensual autoritativa,
+                #    el bulk vigente es la fuente (ver docstring del worker) — nunca debe
+                #    reconfirmar una foto de padrón local de un ciclo anterior.
+                bcra_data, _ = consultar_bcra_cached(cuit, skip_padron=True, live_primero=False)
                 score_data = calcular_score_servidor(
                     cuit, bcra_data or {}, ciudad=ciudad,
                     live_primero=False, sin_arca=False,
@@ -8718,7 +8736,9 @@ def _calcular_score_handler(cuit: str):
         # Fallback: intentar score solo con datos BCRA (sin solvencia/AFIP) para no
         # devolver null al frontend — un score parcial es mejor que un error en blanco.
         try:
-            bcra_fb, _ = consultar_bcra_cached(cuit_limpio, live_primero=True)
+            bcra_fb, _ = consultar_bcra_cached(
+                cuit_limpio, skip_padron=(request.args.get('fresh') == '1'), live_primero=True,
+            )
             sd_fb = calcular_rating_predictivo(
                 cuit=cuit_limpio, bcra_data=bcra_fb or {},
                 solvency_data={},  # evita consultas fiscales en el camino de fallback
