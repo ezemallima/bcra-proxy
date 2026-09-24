@@ -8802,8 +8802,10 @@ def _calcular_score_handler(cuit: str):
         # sit>=3) dispara una alerta 'bcra' para un cliente en Sit 1 limpio, así que si sigue
         # habiendo una acá es vieja y hay que borrarla ya, sin esperar al próximo ciclo. Nunca
         # dispara una alerta nueva -- eso es del worker, que sabe la situación anterior real.
-        if int(score_data.get('max_sit', 1) or 1) <= 1:
+        _max_sit_indiv = int(score_data.get('max_sit', 1) or 1)
+        if _max_sit_indiv <= 1:
             _upsert_alerta_evento(cuit_limpio, 'bcra', None)
+            print(f"[fetch-score] {cuit_limpio} max_sit=1 confirmado — alerta bcra vieja limpiada (si había)", flush=True)
         cheq_cached  = _cheques_cache_get(cuit_limpio)
         _resp_indiv  = _score_response(score_data, solvency, cheq_cached)
         # Persistir en score_cache.json con _ts → proceso integral reutiliza este score
