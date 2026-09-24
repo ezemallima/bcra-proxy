@@ -7298,13 +7298,31 @@ def get_alertas():
 
 @app.route("/alertas", methods=["POST"])
 def save_alertas():
+    """Sincroniza scores calculados en el cliente hacia alertas_cartera.json.
+
+    'bcra' y 'cheque' son tipos autoritativos del servidor (los escribe únicamente
+    _upsert_alerta_evento, desde el worker de verificación profunda o el autosanado
+    de la consulta individual) — nunca se aceptan del frontend acá. Su copia local
+    de `alertas` se carga una vez al entrar a la pestaña y no se revalida contra el
+    servidor antes de reenviarla con este POST, así que sin este resguardo puede
+    resucitar una alerta que el servidor ya había corregido (incidente Rogelio,
+    sept-2026: el fix del backend borraba la alerta y este endpoint la traía de
+    vuelta segundos después, con la copia vieja que el frontend tenía en memoria).
+    El frontend sigue pudiendo sincronizar los campos de score sobre esas alertas,
+    y cualquier otro tipo que llegue en el payload se conserva tal cual.
+    """
     try:
         data = request.get_json(force=True)
-        # Si viene cartera con scores, mergear con la existente
-        if data.get('cartera') and os.path.exists(ALERTAS_FILE):
+        with _alertas_file_lock:
             try:
                 with open(ALERTAS_FILE, 'r', encoding='utf-8') as f:
                     existing = json.load(f)
+            except Exception:
+                existing = {"alertas": [], "ultima_verif": "", "cartera": []}
+
+            alertas_servidor = [a for a in existing.get('alertas', []) if a.get('tipo') in ('bcra', 'cheque')]
+
+            if data.get('cartera'):
                 # Actualizar scores en la cartera existente
                 score_map = {c['cuit']: c for c in data['cartera'] if c.get('scoreCompleto')}
                 for c in existing.get('cartera', []):
@@ -7314,25 +7332,28 @@ def save_alertas():
                         c['scoreRango'] = sc.get('scoreRango')
                         c['scoreColor'] = sc.get('scoreColor')
                         c['scoreEmoji'] = sc.get('scoreEmoji')
-                # Actualizar scores en alertas existentes
-                for a in existing.get('alertas', []):
+                # Actualizar scores en las alertas bcra/cheque del servidor (no su
+                # sitAnterior/sitActual/nroCheques — esos solo los toca el worker)
+                for a in alertas_servidor:
                     if a.get('cuit') in score_map:
                         sc = score_map[a['cuit']]
                         a['scoreCompleto'] = sc.get('scoreCompleto')
                         a['scoreRango'] = sc.get('scoreRango')
                         a['scoreColor'] = sc.get('scoreColor')
                         a['scoreEmoji'] = sc.get('scoreEmoji')
-                # Reemplazar alertas si vienen nuevas
-                if data.get('alertas') is not None:
-                    existing['alertas'] = data['alertas']
-                with open(ALERTAS_FILE, 'w', encoding='utf-8') as f:
-                    json.dump(existing, f, ensure_ascii=False, indent=2)
-                return jsonify({"ok": True})
-            except: pass
-        with open(ALERTAS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+
+            alertas_otras = [a for a in (data.get('alertas') or []) if a.get('tipo') not in ('bcra', 'cheque')]
+            existing['alertas'] = alertas_servidor + alertas_otras
+
+            tmp = ALERTAS_FILE + '.tmp'
+            with open(tmp, 'w', encoding='utf-8') as f:
+                json.dump(existing, f, ensure_ascii=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, ALERTAS_FILE)
         return jsonify({"ok": True})
     except Exception as e:
+        print(f"[alertas] Error guardando: {e}", flush=True)
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/cartera/eliminar-cliente", methods=["POST"])
@@ -8928,15 +8949,30 @@ def recalcular_scores():
         except Exception as e_r:
             print(f"[recalcular] Error {cuit}: {e_r}", flush=True)
 
-    existente['cartera']      = cartera
-    existente['ultima_verif'] = time.strftime('%d/%m/%Y %H:%M') + ' (recalc v9.0)'
-    try:
-        with open(ALERTAS_FILE, 'w', encoding='utf-8') as _f:
-            json.dump(existente, _f, ensure_ascii=False)
-        print(f"[recalcular] {recalc} scores actualizados, {sin_cache} sin caché BCRA", flush=True)
-        return jsonify({"ok": True, "recalculados": recalc, "sin_cache": sin_cache})
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+    with _alertas_file_lock:
+        # Releer 'alertas' fresco antes de escribir: este loop puede tardar (una
+        # get_solvency_data por cliente) y en el medio el worker de verificación
+        # profunda o una consulta individual puede haber tocado alertas bcra/cheque
+        # -- no pisarlas con la copia leída al principio de esta función.
+        try:
+            with open(ALERTAS_FILE, 'r', encoding='utf-8') as _f:
+                existente['alertas'] = json.load(_f).get('alertas', existente.get('alertas', []))
+        except Exception as e_re:
+            print(f"[recalcular] No se pudo releer alertas antes de escribir: {e_re}", flush=True)
+        existente['cartera']      = cartera
+        existente['ultima_verif'] = time.strftime('%d/%m/%Y %H:%M') + ' (recalc v9.0)'
+        try:
+            tmp = ALERTAS_FILE + '.tmp'
+            with open(tmp, 'w', encoding='utf-8') as _f:
+                json.dump(existente, _f, ensure_ascii=False, default=str)
+                _f.flush()
+                os.fsync(_f.fileno())
+            os.replace(tmp, ALERTAS_FILE)
+            print(f"[recalcular] {recalc} scores actualizados, {sin_cache} sin caché BCRA", flush=True)
+            return jsonify({"ok": True, "recalculados": recalc, "sin_cache": sin_cache})
+        except Exception as e:
+            print(f"[recalcular] Error escribiendo: {e}", flush=True)
+            return jsonify({"ok": False, "error": str(e)}), 500
 
 
 # ── PADRÓN OFICIAL BCRA LOCAL (bcra_nomdeu.db) ───────────────────────────────
