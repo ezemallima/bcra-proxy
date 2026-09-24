@@ -8794,6 +8794,16 @@ def _calcular_score_handler(cuit: str):
         solvency     = get_solvency_data(cuit_limpio)
         if not isinstance(solvency, dict): solvency = {}
         _actualizar_score_en_cartera(cuit_limpio, score_data, solvency)
+        # Auto-sana una alerta BCRA vieja que ya no corresponde (incidente Rogelio,
+        # sept-2026: una alerta 'bcra' quedó con sitActual=3 pegada en alertas_cartera.json
+        # mucho después de que el dato real volviera a Sit 1 -- solo el worker mensual la
+        # tocaba, así que una alerta rota podía quedar visible hasta un mes). max_sit==1 es
+        # inequívoco: ninguna combinación de la lógica del worker (empeoró vs. anterior, o
+        # sit>=3) dispara una alerta 'bcra' para un cliente en Sit 1 limpio, así que si sigue
+        # habiendo una acá es vieja y hay que borrarla ya, sin esperar al próximo ciclo. Nunca
+        # dispara una alerta nueva -- eso es del worker, que sabe la situación anterior real.
+        if int(score_data.get('max_sit', 1) or 1) <= 1:
+            _upsert_alerta_evento(cuit_limpio, 'bcra', None)
         cheq_cached  = _cheques_cache_get(cuit_limpio)
         _resp_indiv  = _score_response(score_data, solvency, cheq_cached)
         # Persistir en score_cache.json con _ts → proceso integral reutiliza este score
